@@ -23,11 +23,11 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 17 | Texture Artist | `project_concept.py` sau khi sửa: nhận 8 view, trọng số theo góc nhìn, loại vùng bị che, lấp vùng khuất trong 3D theo normal | texture-artist.md §4 | |
 | 18 | Texture Artist | `crop_edit.py`: ảnh Codex trả về có cùng kích thước với crop gửi đi; pixel ngoài vùng sửa không đổi sau khi ghép | texture-artist.md §5 | |
 | 19 | Texture Artist | `tex_measure.py` đọc vùng vật liệu từ ID map (không gắn nhãn cứng); chạy được trên một asset khác Warehouse | texture-artist.md §6 | |
-| 20 | Mọi agent | Quy tắc dừng sớm và hoàn tác (D11) chạy đúng: đếm lỗi `blocker` + `major` từ report reviewer (contract) qua các vòng | D11 | |
-| 21 | Project Setup | `check_profile.py` báo đúng khi thiếu trường bắt buộc, sai kiểu, hoặc preset không tồn tại; thiếu `has_map` cũng là thiếu trường bắt buộc; agent dừng khi profile không hợp lệ | project-profile.md §5 | |
-| 22 | Mọi agent | Đọc thông số đúng thứ tự mặc định → preset → profile → thẻ asset; ghi hash profile vào báo cáo | project-profile.md §1, §3 | |
-| 23 | Producer | Resume worker cũ trên Codex qua `collaboration.send_message` / `followup_task`: worker còn context, không đọc lại file | D14.1, producer.md §14 | |
-| 24 | Producer | Gate `review_human`: reviewer PASS → `waiting_human`; `approvals: reviewer` tự duyệt khi không còn `major`/`unclear`; `assemble` không đổi được | producer.md §3–4 | |
+| 20 | Mọi agent | **[Sửa theo D21.1]** Tiến bộ đo theo finding có id: reviewer ghi `PRIOR` cho mọi finding đang mở; vòng không giải quyết được finding `blocker`/`major` cũ nào → `waiting_human` từ vòng 2; bản tốt nhất (D11.3) | D11, D21.1 | |
+| 21 | Project Setup | `check_profile.py` báo đúng khi thiếu trường bắt buộc, sai kiểu, hoặc preset không tồn tại; thiếu `has_map` cũng là thiếu trường bắt buộc; có `approvals` hay `review_board` trong profile là lỗi (D21.3); script không sinh brief khi profile không hợp lệ (D21.5) | project-profile.md §5 | |
+| 22 | Mọi agent | Đọc thông số đúng thứ tự mặc định → preset → profile → thẻ asset; **[Sửa theo D21.3, D21.5]** chép `PROFILE_HASH` từ brief vào báo cáo, không tự tính | project-profile.md §1, §3 | |
+| 23 | Producer | Resume worker cũ trên Codex qua `collaboration.send_message` / `followup_task`: worker còn context, không đọc lại file | D14.1, producer.md §16 | |
+| 24 | Producer | Gate `review_human`: reviewer PASS → `waiting_human`; `approvals: reviewer` tự duyệt khi không còn `major`/`unclear`; **[Sửa theo D21.6]** `assemble` dùng gate `checks_human` | producer.md §3–4 | |
 | 25 | Producer | Contract reviewer mới (`COUNTS`, `TOP_FIX` theo bước) được `ingest` đọc đúng; loại `TOP_FIX` sai bước bị từ chối | producer.md §6 | |
 | 26 | Producer | Dừng sớm và bản tốt nhất: brief vòng sửa trỏ tới bản tốt nhất, không phải bản mới nhất | producer.md §7 | |
 | 27 | Producer | Duyệt một bước: chuyển version khác sang `_rejected/`. Chỉ khi duyệt `assemble` mới chép `final/` sang `deliver/<id>/`; duyệt bước khác không chép gì sang `deliver/`; làm lại sau DUYỆT 2 đánh dấu README | producer.md §8, D20.2 | |
@@ -40,15 +40,31 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 34 | Review Board | `P board prepare` + đẩy lên + kéo về: Producer không mở ảnh; `P feedback` nhận đường dẫn ảnh khoanh; brief vòng sau có danh sách vùng | review-board.md §6 | |
 | 35 | Producer | `has_map: true` mà thiếu `<id>.layout.md` → intake từ chối; `has_map: false` mà thẻ thiếu `size_m` hoặc `size_m` sai dạng `{w, d, h}` → `check_card.py` báo lỗi, intake từ chối; `has_map: false` và có `size_m` → intake nhận, Blockout lấy W×D×H từ `size_m` | producer.md §9, D20.1, D20.9 | |
 | 36 | Producer | Brief bước `texture` có mục `ISSUES` chép đúng từ report `model` đã duyệt; trỏ tới `final/` đã duyệt của `blockout`, `model`, `views_rest`; không có file handoff | producer.md §6, D20.3, D20.10 | |
-| 37 | Producer | `TOP_FIX: repaint` ở `assemble` chạy `redo --step texture`; bộ đếm vòng `texture` không đặt lại; `assemble` tự chạy lại khi `texture` duyệt lại | producer.md §6, D20.4 | |
+| 37 | Producer | **[Thay bằng D21.6]** ~~`TOP_FIX: repaint` ở `assemble` chạy `redo --step texture`~~ Cần sửa ở `assemble`: trang duyệt hỏi bước (`texture` / `model`); script chạy `redo --step <bước>`; bộ đếm đặt lại theo D11.4 | producer.md §7, D21.6 | |
 | 38 | Producer | Hết vòng 3 vẫn FIX: script quay về bản tốt nhất và đặt `waiting_human`; trang duyệt hiện bản đó và finding còn mở | producer.md §7, D20.5 | |
 | 39 | Producer | `VERDICT: ESCALATE` đặt `waiting_human` ngay, không chạy thêm vòng; trang duyệt hiện lý do | producer.md §7, D20.5 | |
 | 40 | Producer | Vòng `need_evidence` không tính vào 3 vòng; cùng bước xin `need_evidence` lần thứ hai → `waiting_human`; bộ đếm này đặt lại khi anh gửi feedback (`redo`) | producer.md §7, D20.5, D20.15 | |
-| 41 | Producer | `TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes` → script đặt `waiting_human`, không tự cho gọi Meshy lần hai; chỉ sau khi anh duyệt, brief tiếp theo mới ghi "được gọi Meshy thêm một lần" | producer.md §6, D20.14 | |
+| 41 | Producer | `TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes` → script đặt `waiting_human`, không tự cho gọi Meshy lần hai; chỉ sau khi anh duyệt, script tăng `allowed` trong `budget.json` và brief tiếp theo ghi số lần còn được gọi | producer.md §6.3, D20.14, D21.2 | |
 | 42 | Producer | Duyệt `model`: script ghi hash `<tên>-untextured.glb` vào `status.json`; `assemble` báo `BLOCKED` khi hash lệch | 3d-artist.md §3, D20.7 | |
-| 43 | Producer | `approvals` có khóa lạ (ví dụ `views`, `views_front`) → script từ chối; `P approvals set` cũng từ chối | producer.md §4, D20.8 | |
-| 44 | Producer | Report worker thiếu `PROFILE_HASH` → `ingest` báo lỗi định dạng; hash khớp profile đang dùng | producer.md §6 | |
-| 45 | Producer | Report Texture Artist thiếu `MESHY_CALLS` → `ingest` báo lỗi định dạng; `MESHY_CALLS` vượt số lần được phép → script báo lệch | producer.md §6, D20.14 | |
-| 46 | Texture Artist | Lỗi kỹ thuật khi gọi Meshy (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tăng `MESHY_CALLS`; thử lại tối đa 3 lần, rồi `STATUS: BLOCKED` | texture-artist.md §2.2, D20.14 | |
+| 43 | Producer | `approvals` trong `policy.yaml` có khóa lạ (ví dụ `views`, `views_front`, `assemble`) → script từ chối; `P approvals set` cũng từ chối | producer.md §4, D20.8, D21.3 | |
+| 44 | Producer | Report worker thiếu `PROFILE_HASH` → `ingest` báo lỗi định dạng; hash phải khớp hash script ghi trong brief | producer.md §6.2, D21.5 | |
+| 45 | Producer | **[Thay bằng D21.2]** ~~Report Texture Artist thiếu `MESHY_CALLS`…~~ `gen_api.py` từ chối gọi khi `used >= allowed` của hash mesh hiện tại; script đọc `budget.json`, không đọc số worker khai | producer.md §6.3, D21.2 | |
+| 46 | Texture Artist | Lỗi kỹ thuật khi gọi Meshy (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tăng `used` trong `budget.json`; thử lại tối đa 3 lần, rồi `STATUS: BLOCKED` | texture-artist.md §2.2, D20.14, D21.2 | |
 | 47 | Blockout | `has_map: false`: `sources.json` lấy W×D×H từ `size_m`, `character_h` từ `scale_refs`, `door_h` từ `scale_overrides` hoặc đo trên concept (có ghi cách đo); `files.layout` trỏ tới `asset-card.yaml`; `check_layout.py` so bbox với `size_m` | blockout.md §2, §5, D20.12 | |
 | 48 | Review Board | `views_front` và `texture` ở `waiting_human` hiện đúng tóm tắt (`VIEWS.md`, `texture/notes.md`) và lý do gửi anh (từ report reviewer, hoặc report worker khi `BLOCKED` / `UNFIXABLE`) | review-board.md §2, D20.16 | |
+| 49 | Producer | Reviewer ghi đủ `PRIOR` cho mọi finding đang mở. Thử trên một asset thật, đo tỉ lệ thiếu dòng; nếu cao, đưa danh sách finding vào brief dưới dạng mẫu điền sẵn | producer.md §6.1, D21.1 | |
+| 50 | Producer | `TOP_FIX` kiểu đơn có đúng một id; kiểu lô có đủ mọi finding đang mở cùng loại; sai thì `ingest` báo lỗi | producer.md §6.1, D21.1 | |
+| 51 | Blockout | Sửa theo lô loại `param`: `check_fix.py` chạy sau từng finding, không chỉ một lần cuối vòng | blockout.md §3, D21.1 | |
+| 52 | Producer | Mesh đổi sau khi đã gọi Meshy: hash mới có entry `allowed: 0`; script đặt `waiting_human` với câu hỏi gọi lại Meshy hay VẼ MỚI | producer.md §6.3, D21.2 | |
+| 53 | Producer | Hash profile: chuẩn hóa YAML (sắp xếp khóa, bỏ `paths` và khóa `_`); đổi `_source` hay `paths` không đổi hash; `approvals set` không bật cảnh báo | producer.md §10, D21.3 | |
+| 54 | Producer | `need_evidence` ghi vào `vN/review/evidence-<k>/`, không tạo version; reviewer chấm lại chính `vN`; không được dùng khi còn `blocker`/`major` | producer.md §7, D21.4 | |
+| 55 | Producer | `inputs` mỗi version; blockout lên version thì view và model dựng từ bản cũ hiện nhãn "cũ" trên trang duyệt mà Producer không làm gì | producer.md §11, D21.5 | |
+| 56 | Producer | `texture-log.jsonl`: một dòng mỗi lần duyệt bước texture; hai asset duyệt cùng lúc không ghi đè nhau | producer.md §8, D21.5 | |
+| 57 | 3D Artist | `check_assemble.py`: 1 mesh / 1 node / 1 material, unlit, độ phân giải texture, hash mesh, đủ file gói; fail → một vòng sửa | 3d-artist.md §9, D21.6 | |
+| 58 | Producer | `pilot_asset: null`: `intake --all` từ chối; so với pilot ghi `not_checked` ở review-clay và `tex_measure.py`, không lỗi | producer.md §9, D21.7 | |
+| 59 | Producer | `approvals set model reviewer` không có `--confirm-spend` → từ chối | producer.md §4, D21.8 | |
+| 60 | Producer | `[limits]`: đếm slot theo tiến trình đang chạy thật, không theo trạng thái `running` (asset `running` có thể đang chờ reviewer, không giữ Blender) | producer.md §12, D21.9 | |
+| 61 | Producer | Claude Code: lời gọi subagent nhận `model` theo từng lần giao, để `pipeline.toml` quyết model | producer.md §16, D16.5 | |
+| 62 | Producer | A/B: `P ab board` không lộ tên runtime ở đâu trên trang, kể cả đường dẫn ảnh và tên file tải về; `P compare --reveal` chỉ chạy khi đã duyệt hết lô | review-board.md §8, D21.10 | |
+| 63 | Producer | A/B: mỗi runtime có báo được token đã dùng theo model không; nếu không, `P compare` ghi "không có số" thay vì 0 | producer.md §16, D21.10 | |
+| 64 | Review Board | Trang local chạy đủ tính năng với `model-viewer@3.5.0` (trước dùng 4.0.0) | review-board.md §5, D21.11 | |

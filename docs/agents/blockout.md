@@ -1,8 +1,8 @@
-# Spec — sub-agent Blockout (v1.1)
+# Spec — sub-agent Blockout (v1.2)
 
 Tên kỹ thuật: `zps-3dp-blockout`. Tên hiển thị: ZPS-3DP - Blockout. Reviewer: `zps-3dp-review-blockout` (D6.5).
 
-Duyệt: 2026-11-08. Sửa v1.1 cùng ngày (D5). Quyết định nền: `docs/decisions.md` (D1–D5).
+Duyệt: 2026-11-08. Sửa v1.1 cùng ngày (D5). v1.2: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D1–D5, D21).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist, zps-concept-views).
 
 ---
@@ -73,7 +73,7 @@ Số trong ví dụ chỉ để minh họa định dạng. Khi `has_map: false`,
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
 | 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
 | 8 | Render bộ review (mục 6). Ghi báo cáo contract (`STATUS / OUTPUT / RUBRIC / ISSUES`), rồi dừng | — |
-| 9 | Producer giao review-blockout (D14.1). Nếu FIX, Producer giao lại Blockout: sửa đúng một `TOP_FIX` bằng `apply_edit.py`, rồi chạy `check_fix.py` | Reviewer, `check_fix.py` |
+| 9 | Producer giao review-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Mỗi finding một lần `apply_edit.py`, chạy `check_fix.py` sau mỗi lần. Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
 | 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash | Anh hoặc chính sách |
 
 Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc file và thư mục brief chỉ định.
@@ -149,16 +149,16 @@ final/
 
 - Reviewer không tự đo. Reviewer đọc số từ JSON.
 - Nếu một chi tiết nhỏ không rõ, reviewer trả `unclear` và xin crop.
-- Output theo contract reviewer (D14.10, `docs/producer.md` §6): `VERDICT`, `RUBRIC`, `COUNTS`, `TOP_FIX` (loại `structure`, `param`, `need_evidence`), `FINDINGS`.
-- Duyệt theo ủy quyền (D1.5) chỉ khi không còn `blocker`, `major` hay `unclear`. Lỗi `minor` ghi vào `blockout.md` và không chặn duyệt.
+- Output theo contract reviewer (D14.10, D21.1, `docs/producer.md` §6.1): `VERDICT`, `RUBRIC`, `COUNTS`, `TOP_FIX` (loại `structure` kiểu đơn, `param` kiểu lô, `need_evidence`), `FINDINGS` có id, `PRIOR` cho mọi finding đang mở.
+- Duyệt theo ủy quyền (D1.5) chỉ khi không còn finding `blocker`, `major` hay `unclear` đang mở. Lỗi `minor` ghi vào `blockout.md` và không chặn duyệt.
 
 ## 7. Đổi version
 
-1. Producer gọi lại Blockout, kèm lý do đổi.
+1. Anh yêu cầu làm lại (Producer chạy `P feedback <id> "<nguyên văn>" --action redo --step blockout`), hoặc Producer quyết và ghi `P rule`. Lý do đổi nằm trong `feedback.md`, brief trỏ tới.
 2. Blockout tạo version mới (`v01` → `v02`) và giữ nguyên version cũ.
 3. `blockout.md` ghi mục "Thay đổi so với version trước": part nào đổi, param nào đổi, vì sao.
 4. Version mới đi lại đủ các bước: tự kiểm, review, duyệt.
-5. Producer đánh dấu các view và model dựng từ version cũ là "cũ".
+5. Script tự đánh dấu các view và model dựng từ version cũ là "cũ", dựa trên `inputs` của từng version (D21.5, `docs/producer.md` §11). Producer không đánh dấu tay.
 
 Nếu Blockout thấy kích thước trong MAP-LAYOUT có vấn đề, Blockout chỉ báo Producer, không tự sửa (D3.2).
 

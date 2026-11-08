@@ -1,7 +1,7 @@
-# Spec — sub-agent Texture Artist (v1)
+# Spec — sub-agent Texture Artist (v1.1)
 
 Tên kỹ thuật: `zps-3dp-texture-artist`. Tên hiển thị: ZPS-3DP - Texture Artist. Reviewer: `zps-3dp-review-texture`.
-Duyệt: 2026-11-08. Quyết định nền: `docs/decisions.md` (D1, D6, D7, D8, D10, D11).
+Duyệt: 2026-11-08. v1.1: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D1, D6, D7, D8, D10, D11, D21).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, zps-texture-review, zps-3d-artist `project_concept.py`).
 
 ---
@@ -50,21 +50,22 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 
 - Ca giáp ranh: Texture Artist nhìn concept và quyết định, ghi lý do một dòng vào `texture_spec.json`.
 - Script ghi đề xuất và điểm số vào `texture_spec.json` (trong `texture/vN/final/`). Texture Artist không ghi vào `spec.json` của 3D Artist (D20.11).
-- Sau mỗi asset, ghi vào sổ của dự án: điểm số, cách đã dùng, số vòng sửa, anh có duyệt ngay lần đầu không. Dùng sổ này để xem lại ngưỡng sau vài chục asset.
+- Texture Artist ghi điểm số, chế độ đề xuất và chế độ đã dùng vào `texture_spec.json`. Texture Artist **không** ghi ra ngoài thư mục version (D21.5). Khi bước `texture` được duyệt, script đọc `texture_spec.json`, cộng số vòng sửa, và ghi một dòng vào `production/texture-log.jsonl`; khi DUYỆT 2 xong, script ghi thêm anh có duyệt ngay lần đầu không. Dùng sổ này để xem lại ngưỡng sau vài chục asset (D10).
 
 ## 2.2 Gọi Meshy retexture
 
 - Chỉ dùng **retexture** trên mesh đã khóa, gửi kèm `enable_original_uv: true`. **Không dùng Meshy remesh.**
 - Ảnh tham chiếu style: concept albedo.
-- Trước mỗi lần gọi: chạy `--dry-run` để xem giá. Không gọi song song trên cùng một budget file.
-- `budget.json` của công trình: `max_credits` = số lần được phép × giá một lần gọi (lấy từ dry-run). Mặc định một lần. Khi anh duyệt lần hai, brief ghi số lần được phép là 2.
+- Trước mỗi lần gọi: chạy `--dry-run` để xem giá.
+- **Budget gắn với hash mesh** (D21.2, `production/assets/<id>/texture/budget.json`, `docs/producer.md` §6.3). `gen_api.py` đọc budget của hash mesh hiện tại, từ chối gọi khi `used >= allowed`, và tự ghi `used`, `credits` sau mỗi lần gọi có trừ credit. Mặc định `allowed: 1` cho mesh đầu tiên. Script tăng `allowed` khi anh duyệt lần gọi thêm. Giới hạn `meshy = 1` trong `[limits]` bảo đảm không gọi song song.
 - Sau khi Meshy trả file: chạy `uv_check` và `mesh_check`. Nếu UV hoặc số tam giác đổi, loại file đó.
-- **Gọi một lần** (D20.14). Texture Artist là agent duy nhất gọi Meshy.
+- **Gọi một lần cho mỗi mesh** (D20.14, D21.2). Texture Artist là agent duy nhất gọi Meshy.
+- **Mesh đổi** (sau `fix_uv_mesh` hoặc anh làm lại `model`): texture Meshy cũ làm trên UV cũ, không dùng được. Script hỏi anh gọi lại Meshy hay VẼ MỚI trước khi giao bước `texture`. Brief ghi chỉ định đó.
 - **Lỗi kỹ thuật** (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Texture Artist thử lại, tối đa 3 lần (như D8.3). Sau 3 lần lỗi: `STATUS: BLOCKED` kèm lỗi. Producer hỏi anh.
 - Lỗi sửa được (bóng bake, chi tiết thừa, lệch tông, seam, hoa văn lem): chế độ SỬA trên lớp Meshy, qua các vòng review thường.
 - **Không sửa được:** review-texture trả `TOP_FIX: meshy_regen`, hoặc Texture Artist ghi `UNFIXABLE: yes` kèm lý do. Script đặt `waiting_human`. Anh duyệt lần gọi thứ hai. Chỉ khi brief tiếp theo ghi "được gọi Meshy thêm một lần", Texture Artist mới gọi lại. Script không tự cho.
 - Nếu lần hai vẫn không dùng được: chế độ VẼ MỚI.
-- Ghi `MESHY_CALLS: <n>` vào report: số lần gọi có trừ credit, cộng dồn cho asset. Script so số này với số lần được phép.
+- Không tự khai số lần gọi trong báo cáo (D21.2, thay `MESHY_CALLS` của D20.14). Script đọc `budget.json`.
 - Ghi số lần gọi, số lần thử lại do lỗi kỹ thuật và credit đã dùng vào `texture/notes.md`.
 
 ## 3. Chế độ SỬA (trên lớp Meshy)
@@ -106,7 +107,7 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 | Nhóm | Nguyên tắc | Đo |
 |---|---|---|
 | 1. Quy ước ánh sáng | Ánh sáng trong albedo đúng quy ước của style, đồng nhất trên mọi mặt | Chia mặt theo normal. 4 mặt bên cùng tông (chênh ≤ 3 L*). Mặt trên so với mặt bên đúng `top_vs_side_L`. Vùng bị che không tối hơn quy ước. Không AO, glow, highlight cố định |
-| 2. Đúng vật liệu | Mỗi vật liệu giống concept và giống asset đã duyệt cùng bộ | dE theo từng mã vật liệu so với concept (≤ 3) và so với asset pilot cùng mã. Mỗi mã đo riêng |
+| 2. Đúng vật liệu | Mỗi vật liệu giống concept và giống asset đã duyệt cùng bộ | dE theo từng mã vật liệu so với concept (≤ 3) và so với asset pilot cùng mã. Mỗi mã đo riêng. Chưa có `pilot_asset` (D21.7): phần so với pilot ghi `not_checked` |
 | 3. Đọc được ở kích thước thật | Ở camera game, vật liệu tách nhau rõ; chi tiết không thành nhiễu | Thu render về cỡ màn hình: chênh L* giữa vật liệu kề nhau, năng lượng nhiễu tần số cao. Nét chi tiết ≥ 4–6 px ở 2048 |
 | 4. Liền mạch | Không lộ seam, không texel trống, không lem ở mip | Seam đo trong 3D (p90 ≤ 4). Đếm texel chưa vẽ hoặc đen. Kiểm padding |
 
@@ -122,7 +123,7 @@ Quy tắc riêng của dự án (ví dụ New Last Order: mái là ngói xếp l
 
 ## 7. Reviewer `zps-3dp-review-texture`
 
-Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1). Producer giao reviewer ở bước `texture` và ở bước `assemble` (bản cuối trên model) (D14.1).
+Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1). Producer giao reviewer ở bước `texture` (D14.1). Bước `assemble` không có reviewer; script `check_assemble.py` kiểm và anh duyệt (D21.6).
 
 **Reviewer nhận:**
 - Render có texture, có ánh sáng: 3/4 trước, cận trước, 3/4 sau, camera game.
@@ -144,21 +145,21 @@ Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1).
 
 **Chẩn đoán trước khi đề xuất sửa** (theo kit). Lỗi đen hoặc sai màu: kiểm color space, alpha, normal trước khi vẽ lại. Lỗi seam: kiểm UV và padding trước khi làm mờ. Nếu không tách được do map hay do UV, ghi cả hai giả thuyết.
 
-**Output:** contract reviewer (D14.10, `docs/producer.md` §6). `TOP_FIX` thuộc đúng một loại:
+**Output:** contract reviewer (D14.10, D21.1, `docs/producer.md` §6.1), finding có id, `PRIOR` cho mọi finding đang mở. `TOP_FIX` thuộc đúng một loại:
 
 | Loại | Ai sửa | Khi nào |
 |---|---|---|
-| `repaint: <vùng>, lỗi: <mô tả>` | Texture Artist, sửa theo crop | Lỗi vẽ, sửa được |
+| `repaint: F<n>, F<m> …` | Texture Artist, sửa theo crop. Kiểu lô (D21.1): mọi finding `repaint` đang mở; mỗi finding ghi rõ vùng và lỗi | Lỗi vẽ, sửa được |
 | `fix_uv_mesh: <mô tả>` | Script chạy `redo --step model` (D14.10). DUYỆT 1 lại | Lỗi do UV, mesh, normal |
-| `meshy_regen: <lý do>` | Script đặt `waiting_human`. Anh duyệt lần gọi Meshy thứ hai; chỉ khi đó brief tiếp theo cho Texture Artist gọi thêm một lần (mục 2.2, D20.14) | `blocker`: hỏng cả style hoặc phần lớn bề mặt, không sửa được |
-| `need_evidence: <ảnh cần thêm>` | Texture Artist, vòng ngắn chỉ render ảnh xin thêm. Không tính vào 3 vòng (`docs/producer.md` §7) | Có tiêu chí `unclear` |
+| `meshy_regen: <lý do>` | Script đặt `waiting_human`. Anh duyệt lần gọi Meshy thứ hai; script tăng `allowed` trong `budget.json`, brief tiếp theo ghi số lần còn được gọi (mục 2.2, D20.14, D21.2) | `blocker`: hỏng cả style hoặc phần lớn bề mặt, không sửa được |
+| `need_evidence: <ảnh cần thêm>` | Texture Artist, vòng ngắn chỉ render ảnh xin thêm vào `vN/review/evidence-<k>/`, không tạo version mới (D21.4). Không tính vào 3 vòng (`docs/producer.md` §7) | Chỉ còn tiêu chí `unclear`, không còn `blocker`, `major` |
 | `note: <nội dung>` | Ghi vào `texture/notes.md` | `minor`, không chặn |
 
-Duyệt theo ủy quyền (D1.5) chỉ khi không còn `blocker`, `major` hay `unclear`.
+Bước `texture` có gate `review`: reviewer PASS (không còn finding `blocker`, `major`, `unclear` đang mở) thì sang `assemble`.
 
 ## 8. Vòng sửa (D11)
 
-Script của Producer làm (D14.10): tối đa 3 vòng; dừng sớm khi `blocker` + `major` không giảm; giữ bản tốt nhất; feedback của anh đặt lại bộ đếm. Ở mỗi vòng sửa, Texture Artist sửa đúng `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất).
+Script của Producer làm (D11, D14.10, D21.1, `docs/producer.md` §7): tối đa 3 vòng; tiến bộ đo theo finding có id; dừng sớm khi một vòng không giải quyết được finding `blocker` hay `major` cũ nào; giữ bản tốt nhất; feedback của anh đặt lại bộ đếm. Ở mỗi vòng sửa, Texture Artist sửa đúng các finding liệt kê trong `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất), và ghi `FIXED:`.
 
 ## 9. Đầu ra
 
@@ -172,7 +173,7 @@ Ghi vào `production/assets/<id>/texture/vN/final/`:
 - Chế độ SỬA: nếu lỗi không sửa được, báo cáo có dòng `UNFIXABLE: yes` và lý do. Script đặt `waiting_human`; anh quyết có gọi Meshy lần 2 không (D20.14).
 - Ghi chú cài đặt material cho người nhập vào engine: unlit, base color only.
 
-Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES`, thêm `UNFIXABLE: yes|no` và `MESHY_CALLS: <n>`) theo `docs/producer.md` §6.
+Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES / PROFILE_HASH`, thêm `UNFIXABLE: yes|no`, và `FIXED:` ở vòng sửa) theo `docs/producer.md` §6.2. Không có `MESHY_CALLS` (D21.2).
 
 ## 10. Tool
 
@@ -180,7 +181,7 @@ Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES`, thêm `UNF
 - `project_concept.py` (zps-3d-artist), **có sửa**: 8 view, trọng số theo góc nhìn, loại vùng bị che, lấp vùng khuất trong 3D. Ghi phần sửa trong `SOURCE.md`.
 - `render_model.py`, `inspect_model.py`, `palette_report.py` (`.art-production-support/shared/scripts`).
 
-- `gen/gen_api.py` (zps-3d-artist), chỉ lệnh `texture` cho Meshy retexture.
+- `gen/gen_api.py` (zps-3d-artist), chỉ lệnh `texture` cho Meshy retexture, **có sửa** (D21.2): đọc và ghi `budget.json` theo hash mesh, từ chối gọi khi hết lượt. Ghi phần sửa trong `SOURCE.md`.
 
 **Mới:** `base_fill.py`, `render_paint_views.py`, `seam_fix.py`, `crop_edit.py`, `tex_measure.py`, `texture_complexity.py`, `tone_fix.py`.
 

@@ -1,6 +1,6 @@
-# Spec — Project Profile, thẻ asset và skill Project Setup (v1)
+# Spec — Project Profile, thẻ asset và skill Project Setup (v2)
 
-Duyệt: 2026-11-08. Quyết định nền: `docs/decisions.md` (D13).
+v1 duyệt: 2026-11-08. v2: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D13, D21).
 
 ---
 
@@ -40,7 +40,7 @@ project: <tên>
 preset: topdown-mobile-lowpoly
 paths: {approved: "<thư mục concept>/_approved", production: "production", deliver: "deliver"}
 has_map: true                                # true: intake bắt buộc có <id>.layout.md; false: W×D×H lấy từ size_m của thẻ asset
-pilot_asset: <mã asset pilot đã duyệt>      # dùng để so tris/m² và màu vật liệu
+pilot_asset: null                            # mã asset pilot đã duyệt; null = chưa có pilot (D21.7)
 scale_refs:                                  # danh sách mở; mỗi dự án tự đặt tên
   - {name: nhân vật, height_m: 1.6, _source: "..."}
 hidden_side_rules:                           # chữ tự do
@@ -49,12 +49,6 @@ style:
   light_convention: unlit_flat | painted_top_light
   top_vs_side_L: 0
   view_bg: null                              # null = pick_bg.py tự chọn
-approvals:                                   # ai duyệt sau khi reviewer PASS (D14.4)
-  blockout: human                            # human | reviewer
-  views_rest: human
-  model: human
-  assemble: human                            # luôn human
-review_board: local                          # local | local+remote (D19)
 detail_examples:                             # có sau pilot
   geometry: [...]
   texture_only: [...]
@@ -65,7 +59,9 @@ overrides: {}                                # chỉ khi cần đổi số của
 ```
 
 - Mỗi giá trị có thể kèm `_source`: "anh chốt <ngày>", "từ pilot <mã>", "mặc định".
-- Mọi agent ghi **hash của profile** đã dùng vào báo cáo. Khi profile đổi, Producer biết asset nào làm theo bản cũ.
+- **Không có** `approvals` và `review_board`: hai mục này nằm trong `production/policy.yaml` (D21.3, `docs/producer.md` §4). Đổi người duyệt không phải đổi cách dựng asset, nên không được làm đổi hash profile.
+- **Hash profile** (D21.3): script tính trên nội dung đã chuẩn hóa, bỏ `paths` và mọi khóa bắt đầu bằng `_`. Script ghi hash vào brief; agent chép vào báo cáo (`PROFILE_HASH`); `ingest` so hai số. Khi profile đổi, script biết asset nào làm theo bản cũ (`docs/producer.md` §11).
+- **`pilot_asset: null`** (D21.7): chỉ đăng ký từng asset một (`docs/producer.md` §9). Các phép so với pilot (tris/m², dE vật liệu so với pilot) ghi `not_checked`. Khi pilot được duyệt, Project Setup đề xuất ghi mã vào đây.
 
 ## 4. Thẻ asset
 
@@ -94,9 +90,10 @@ Tên kỹ thuật: `zps-3dp-project-setup`. Đây là **skill chạy trong phiê
 
 | Việc | Cách làm |
 |---|---|
-| Tạo profile | Chọn preset. Hỏi anh các trường riêng của dự án: thước tỉ lệ, quy ước style, quy tắc phần khuất, đường dẫn, dự án có map hay không (`has_map`; `false` thì mọi thẻ asset phải có `size_m`), và **ai duyệt từng điểm duyệt** (`approvals`; gợi ý: pilot để `human` hết). Ghi `PROJECT-PROFILE.yaml` |
+| Tạo profile | Chọn preset. Hỏi anh các trường riêng của dự án: thước tỉ lệ, quy ước style, quy tắc phần khuất, đường dẫn, dự án có map hay không (`has_map`; `false` thì mọi thẻ asset phải có `size_m`). Ghi `PROJECT-PROFILE.yaml` |
+| Tạo chính sách | Hỏi anh **ai duyệt từng điểm duyệt** (`approvals`; gợi ý: pilot để `human` hết) và trang duyệt (`review_board`). Ghi `production/policy.yaml` (D21.3). Sau đó chỉ đổi qua `P approvals set` |
 | Cập nhật sau pilot | Agent **đề xuất** nội dung mới (`detail_examples`, `pilot_asset`). Anh duyệt, rồi skill ghi. Agent không tự sửa profile |
-| Kiểm định dạng | `check_profile.py`: đủ trường bắt buộc, đúng kiểu, preset tồn tại. Mọi agent chạy script này trước khi làm việc |
+| Kiểm định dạng | `check_profile.py`: đủ trường bắt buộc, đúng kiểu, preset tồn tại, không có `approvals` hay `review_board`. Script của Producer chạy khi `intake` và khi sinh brief (D21.5). Agent không chạy lại |
 
 MapLayout (ngoài scope) đọc thước tỉ lệ từ profile, không tự giữ thước riêng.
 
@@ -106,7 +103,7 @@ MapLayout (ngoài scope) đọc thước tỉ lệ từ profile, không tự gi�
 2. Producer chạy `check_profile.py`.
    - **Chưa có hoặc thiếu trường bắt buộc:** Producer vào chế độ khởi tạo, nạp skill Project Setup trong phiên chính, và làm cùng anh.
    - **Đã đủ:** Producer vào chế độ điều phối.
-3. Khi đủ thông tin: Project Setup ghi `PROJECT-PROFILE.yaml`, chạy lại `check_profile.py`.
+3. Khi đủ thông tin: Project Setup ghi `PROJECT-PROFILE.yaml` và `production/policy.yaml`, chạy lại `check_profile.py`.
 4. **Producer nhắc anh xóa context và mở phiên mới**, với đúng câu lệnh của runtime (lấy từ adapter):
    - Claude Code: "Profile đã xong. Anh gõ `/clear` (hoặc mở phiên mới), rồi gọi lại `/zps-3dp-producer` để bắt đầu với context sạch."
    - Codex: "Profile đã xong. Anh gõ `/new`, rồi gọi lại Producer để bắt đầu với context sạch."
@@ -119,7 +116,15 @@ MapLayout (ngoài scope) đọc thước tỉ lệ từ profile, không tự gi�
 ## 7. Sửa theo D14
 
 - `visual_checks` bỏ khỏi profile, chuyển vào rubric theo loại (`production/rubrics/<loại>.md`), chia mục theo bước.
-- Thêm `approvals`. Đổi bằng `P approvals set` (script), không cần Project Setup và không cần phiên mới.
+- ~~Thêm `approvals` vào profile.~~ **[Thay bằng D21.3]** `approvals` và `review_board` nằm trong `production/policy.yaml`. Đổi bằng `P approvals set`, không cần Project Setup, không cần phiên mới, không bật cảnh báo.
+
+## 7b. Sửa theo D21
+
+- `approvals`, `review_board` chuyển sang `production/policy.yaml` (D21.3).
+- Hash profile bỏ `paths` và khóa `_`; script tính, agent chép (D21.3, D21.5).
+- `pilot_asset: null` có quy tắc riêng (D21.7).
+- `check_profile.py` do script chạy, agent không chạy lại (D21.5).
+- Khi so A/B: mỗi runtime một thư mục làm việc và kết quả riêng (D21.10, `docs/producer.md` §16).
 - Đường dẫn: `_approved/` (đầu vào), `production/` (làm việc), `deliver/` (kết quả đã duyệt).
 
 ## 8. Việc cần kiểm khi viết code

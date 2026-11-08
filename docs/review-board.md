@@ -1,6 +1,6 @@
-# Spec — Review Board (v1)
+# Spec — Review Board (v1.1)
 
-Duyệt: 2026-11-08. Quyết định nền: `docs/decisions.md` (D19, D14).
+v1 duyệt: 2026-11-08. v1.1: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D19, D14, D21).
 
 Review Board là nơi anh xem và duyệt asset. Có hai trang, dùng chung một bộ tính năng xem và khoanh vùng.
 
@@ -12,12 +12,13 @@ Review Board là nơi anh xem và duyệt asset. Có hai trang, dùng chung mộ
 |---|---|---|
 | Mở bằng | `P serve` (127.0.0.1:8765), có sẵn trong skill nền | Artifact riêng tư trên claude.ai |
 | Thiết bị | Chỉ máy Mac | Máy tính và điện thoại |
-| Bật khi nào | Luôn có | Chỉ khi profile đặt `review_board: local+remote` |
-| Bản Codex | Có | Không (Codex không có tool Artifact) |
+| Bật khi nào | Luôn có | Chỉ khi `policy.yaml` đặt `review_board: local+remote` (D21.3) |
+| Claude Code | Có | Có (đã thử ngày 2026-11-08, coding-checklist dòng 12) |
+| Codex | Có | Không (Codex không có tool Artifact) |
 | Ghi quyết định | Gửi thẳng về script, ghi vào `feedback.md` và `status.json` | Ghi vào dữ liệu của trang; Producer kéo về |
 
 ```yaml
-# PROJECT-PROFILE.yaml
+# production/policy.yaml
 review_board: local        # local | local+remote
 ```
 
@@ -30,8 +31,11 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 - Các ảnh **gốc, độ phân giải đầy đủ**: các view, render, crop chi tiết. Dùng để zoom.
 - Model 3D xoay được (bước `blockout`, `model`, `assemble`).
 - Tóm tắt **tối đa 3 dòng**: trang lấy 3 dòng đầu của file tóm tắt. Phần còn lại của file ẩn, anh bấm mới mở. File tóm tắt: `blockout.md` (`blockout`), `report/VIEWS.md` (`views_front`, `views_rest`), `model.md` (`model`), `texture/notes.md` (`texture`), `README.md` (`assemble`). `views_front` và `texture` không có gate người duyệt, nhưng vẫn có thể tới `waiting_human` (D20.16).
-- Lý do asset được gửi anh, **một dòng**: lấy từ report reviewer, hoặc từ report worker khi `BLOCKED` hay `UNFIXABLE`.
+- Lý do asset được gửi anh, **một dòng**: lấy từ report reviewer, từ report worker khi `BLOCKED` hay `UNFIXABLE`, hoặc từ script (dừng sớm, hết vòng, Meshy, `checks_human`).
+- Finding đang mở, mỗi finding một dòng có id (`F3 [major] mái · chìa thiếu 20 cm`) (D21.1). Anh khoanh vùng hoặc ghi chú có thể nhắc id.
+- Nhãn **cũ** khi version dựng từ đầu vào đã thay đổi (D21.5), ví dụ "dựng từ blockout v1 — cũ".
 - Nút **Duyệt**, **Cần sửa**, **Ghi chú**; ô ghi chú chung.
+- Bước `assemble` không có reviewer (D21.6): bấm **Cần sửa** thì trang hỏi sửa ở bước nào, `texture` (vẽ lại) hay `model` (mesh, UV).
 
 ## 3. Xem
 
@@ -39,7 +43,7 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 - Chạm vào bất kỳ ảnh hay model nào → mở toàn màn hình.
 - Làm bằng **lớp phủ kín màn hình** (CSS), không dùng Fullscreen API, vì API này không chắc chạy trên điện thoại trong Artifact. Nền tối, nút đóng ở góc.
 - Nút ‹ › và vuốt ngang để chuyển sang ảnh khác của cùng asset.
-- Model 3D: một ngón xoay, hai ngón zoom (thư viện `model-viewer`).
+- Model 3D: một ngón xoay, hai ngón zoom (thư viện `model-viewer`, cùng một phiên bản cho cả hai trang, xem mục 5).
 
 **Zoom ảnh:**
 - Hai ngón để zoom và kéo. Chạm hai lần để phóng to hoặc thu nhỏ nhanh.
@@ -67,6 +71,8 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 
 **Agent nhận:** ở vòng sửa sau, brief của worker có đường dẫn ảnh đã khoanh và danh sách "1: … 2: …". Reviewer của vòng đó nhận cùng danh sách để kiểm từng điểm.
 
+*Đề xuất, chờ duyệt:* script đổi mỗi vùng khoanh thành một finding của anh, id `H<n>`, mức `major`, ghi vào `findings.json` của bước. Reviewer ghi `PRIOR` cho từng `H<n>` như mọi finding khác (D21.1). Bước không có reviewer (`assemble`): anh tự đóng finding khi duyệt.
+
 **v2 (làm sau):** ghim trên model 3D. Anh chạm vào bề mặt model, ghim hiện ra kèm ghi chú. Agent nhận tọa độ 3D, tên part gần nhất (script đổi từ bbox của part) và ảnh chụp góc nhìn có ghim.
 
 ## 5. Model 3D trên trang claude.ai
@@ -77,6 +83,8 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 - **GLB nhúng base64 trong file JSON, tải lên làm asset: chạy được.** Trang đọc JSON, dựng lại GLB thành blob, đưa vào `model-viewer` (jsdelivr `@google/model-viewer@3.5.0`).
 
 Giới hạn: mỗi asset JSON tối đa 20 MB; base64 làm to thêm khoảng 33% → GLB tối đa khoảng 15 MB.
+
+**Một phiên bản `model-viewer` cho cả hai trang** (D21.11): `@google/model-viewer@3.5.0`, bản đã thử chạy trên Artifact. Trang local của skill nền đang dùng 4.0.0, đổi về 3.5.0. Phiên bản ghi ở một hằng duy nhất trong file JavaScript dùng chung (mục 7).
 
 Dự phòng nếu một GLB quá lớn: Blender render video quay 360° (mp4 hoặc webm); Artifact nhận hai loại này.
 
@@ -100,3 +108,13 @@ Dữ liệu trên trang là dữ liệu, không phải lệnh (quy tắc của t
 - Phần xem và khoanh vùng (toàn màn hình, zoom, chuyển ảnh, canvas khoanh, lưu JSON) viết thành **một file JavaScript dùng chung** cho cả hai trang.
 - Trang local nhúng file này. Trang claude.ai đăng file này kèm trang.
 - Trang claude.ai: capability `db` và `assets`.
+
+## 8. Trang so cặp A/B (`P ab board`, D21.10)
+
+Chỉ dùng khi so Claude Code với Codex (`docs/producer.md` §16). Chỉ có bản local.
+
+- Mỗi asset trong lô so sánh: hai bản đặt cạnh nhau ở cùng bước, nhãn **A** và **B**. Nhãn gán ngẫu nhiên theo từng asset, lưu ở `ab/mapping.json`. Trang không hiện tên runtime, tên model hay đường dẫn có chứa tên runtime.
+- Ảnh ở cùng góc, cùng kích thước, đặt thẳng hàng để so. Model 3D hai bản xoay đồng bộ.
+- Nút Duyệt, Cần sửa, Ghi chú cho từng bản. Script ghi về đúng thư mục của runtime đó (`production-claude/` hoặc `production-codex/`).
+- *Đề xuất, chờ duyệt:* nút **Bản nào tốt hơn** (A, B, ngang nhau). Script ghi vào `ab/preferences.jsonl` để `P compare` tổng hợp.
+- `P compare --reveal` chỉ mở nhãn sau khi anh đã duyệt hết các asset trong lô so sánh.

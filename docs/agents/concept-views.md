@@ -1,7 +1,7 @@
-# Spec — sub-agent Concept Views (v1)
+# Spec — sub-agent Concept Views (v1.1)
 
 Tên kỹ thuật: `zps-3dp-concept-views`. Tên hiển thị: ZPS-3DP - Concept Views. Reviewer: `zps-3dp-review-views`.
-Duyệt: 2026-11-08. Quyết định nền: `docs/decisions.md` (D1–D9).
+Duyệt: 2026-11-08. v1.1: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D1–D9, D21).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-concept-views).
 
 ---
@@ -68,7 +68,7 @@ final/
 | 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
 | 2 | Đo cả bộ. Gen lại view có lỗi hình trước khi báo cáo | `measure_views.py` |
 | 3 | Tạo sheet 5 view, tóm tắt, README (mục 6) | `views_sheet.py`, `check_package.py` |
-| 4 | Ghi báo cáo. Producer giao review-views (cả bộ). Vòng sửa: chỉ gen lại view có `TOP_FIX: regen` | — |
+| 4 | Ghi báo cáo. Producer giao review-views (cả bộ). Vòng sửa: gen lại **mọi** view có trong `TOP_FIX: regen` (kiểu lô, D21.1), giữ nguyên các view khác. Ghi `FIXED:` | — |
 | 5 | Duyệt theo `approvals.views_rest` (D14.4) | Anh hoặc chính sách |
 
 Chỉ đọc file và thư mục brief chỉ định.
@@ -160,21 +160,21 @@ Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi
 4. Props đủ số và tách rời.
 5. Motif và đèn: kiểm bằng mắt.
 
-**Output:** contract reviewer (D14.10, `docs/producer.md` §6). `TOP_FIX` thuộc đúng một loại (`note_exception`, `note_texture` chỉ ghi chú, không gây FIX):
+**Output:** contract reviewer (D14.10, D21.1, `docs/producer.md` §6.1), finding có id, `PRIOR` cho mọi finding đang mở. `TOP_FIX` thuộc đúng một loại (`note_exception`, `note_texture` chỉ ghi chú, không gây FIX):
 
 | Loại | Khi nào |
 |---|---|
-| `regen: <view>, lỗi: <mô tả>` | Lỗi trong hàng "Gen lại" ở mục 5. Mức `blocker` hoặc `major` |
-| `need_evidence: <ảnh cần thêm>` | Có tiêu chí `unclear`. Concept Views làm vòng ngắn, chỉ render ảnh xin thêm. Không tính vào 3 vòng (`docs/producer.md` §7) |
+| `regen: F<n>, F<m> …` | Lỗi trong hàng "Gen lại" ở mục 5. Mức `blocker` hoặc `major`. Kiểu lô: liệt kê mọi finding `regen` đang mở; mỗi finding ghi rõ view và lỗi |
+| `need_evidence: <ảnh cần thêm>` | Chỉ còn tiêu chí `unclear`, không còn `blocker`, `major` (D21.4). Concept Views làm vòng ngắn, chỉ render ảnh xin thêm vào `vN/review/evidence-<k>/`, không tạo version mới. Không tính vào 3 vòng (`docs/producer.md` §7) |
 | `note_exception: <nội dung>` | Lệch nhỏ về vị trí hoặc số đo |
 | `note_texture: <nội dung>` | Sai màu một vùng nhỏ |
 
 ## 9. Đổi version
 
 **Blockout lên version mới:**
-1. Producer đánh dấu bộ view cũ là "cũ" (D2).
+1. Script tự đánh dấu bộ view cũ là "cũ" dựa trên `inputs` (D21.5, thay phần "Producer đánh dấu" của D2).
 2. Concept Views render lại guide.
-3. `diff_guides.py` so guide cũ với guide mới. Chỉ gen lại view có guide đổi. Giữ view đã duyệt có guide không đổi.
+3. `diff_guides.py` so guide cũ với guide mới (brief trỏ tới version đã duyệt trước đó). Chỉ gen lại view có guide đổi. Giữ view đã duyệt có guide không đổi.
 4. Sheet mới đánh dấu view nào mới, view nào giữ lại.
 5. README ghi "Thay đổi so với version trước".
 
