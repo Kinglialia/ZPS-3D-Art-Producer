@@ -17,10 +17,10 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist,
 |---|---|
 | Chép blockout đã duyệt, dựng tiếp bằng part graph | Sửa blockout gốc (việc của Blockout) |
 | Detail pass, gộp mesh, quét lỗi, UV | Gen mesh bằng AI |
-| Chuẩn bị bộ render DUYỆT 1, khóa mesh | Tự duyệt. Gọi reviewer |
+| Chuẩn bị bộ render DUYỆT 1 | Tự duyệt. Gọi reviewer. Khóa mesh (script làm khi duyệt `model`) |
 | — | Chọn Meshy hay vẽ mới, gọi Meshy, vẽ texture (việc của Texture Artist, bước `texture`) |
 | Bước `assemble`: gắn texture, xuất GLB, QA lại, render `final_lit_vs_concept`, chuẩn bị DUYỆT 2 | Thu nhỏ texture, làm LOD (việc của agent khác, làm sau) |
-| Viết README và `notes` của kết quả cuối | Chép vào `deliver/` (script làm khi duyệt, D14.8). Ghi trạng thái |
+| Viết README của kết quả cuối. Chép `texture/notes.md` của Texture Artist vào gói cuối | Viết `texture/notes.md` (việc của Texture Artist). Chép vào `deliver/` (script làm khi duyệt, D14.8). Ghi trạng thái |
 
 ## 2. Đầu vào
 
@@ -49,8 +49,22 @@ Nếu hash của blockout không khớp với hash đã khóa, 3D Artist dừng 
 | A6 | QA của kit: `mesh_check`, `uv_check`, `export_check`, `screen_tris_check` | Script |
 | A7 | Render bộ review (mục 7) | — |
 | A8 | Ghi báo cáo contract. Producer giao review-clay. Nếu FIX, Producer giao lại: sửa đúng một `TOP_FIX` | Reviewer |
-| A9 | Duyệt theo `approvals.model` (D14.4). Script chép sang `deliver/<id>/model/` | Anh hoặc chính sách |
-| A10 | **Khóa mesh**: ghi hash của `<tên>-untextured.glb`. Từ đây không ai sửa mesh hay UV. Nếu buộc phải sửa, tạo version mới và đi lại từ A6 | — |
+| A9 | Duyệt theo `approvals.model` (D14.4). Khi duyệt, script **khóa mesh**: ghi hash của `<tên>-untextured.glb` vào `status.json`, giống khóa Blockout. Từ đây không ai sửa mesh hay UV. Nếu buộc phải sửa, tạo version mới và đi lại từ A6 | Anh hoặc chính sách |
+
+**Đầu ra bước `model`:** `production/assets/<id>/model/vN/final/`
+
+```
+final/
+  <tên>-untextured.glb   ← mesh + UV
+  <tên>.blend
+  part_graph.json
+  parts_lib.py
+  spec.json              ← 3D Artist là chủ duy nhất; hướng nắng của concept (A7, dùng lại ở C4)
+  parts_*                ← ảnh part theo màu, có số (Texture Artist dùng)
+  sheet DUYỆT 1
+  model.md               ← 3 dòng đầu là tóm tắt cho anh (D20.17); phần sau cho agent
+  report                 ← báo cáo contract của worker
+```
 
 ### Bước `assemble` (tới DUYỆT 2)
 
@@ -58,12 +72,12 @@ Bước `texture` (Texture Artist) nằm giữa `model` và `assemble`. Brief c�
 
 | # | Việc | Kiểm bằng |
 |---|---|---|
-| C1 | Kiểm hash mesh khớp hash đã khóa ở A10. Nếu không khớp: `STATUS: BLOCKED` | `check_inputs.py` |
+| C1 | Kiểm hash mesh khớp hash script đã khóa khi duyệt `model` (A9, `status.json`). Nếu không khớp: `STATUS: BLOCKED` | `check_inputs.py` |
 | C2 | Gắn texture, xuất GLB cuối (1 mesh / 1 node / 1 material, unlit), lưu `.blend` | — |
 | C3 | Chạy lại QA của kit trên GLB cuối | Script |
 | C4 | Render bộ DUYỆT 2 và `final_lit_vs_concept.png` (mục 7) | — |
-| C5 | Viết README và `texture/notes.md` (mục 10). Ghi báo cáo contract | — |
-| C6 | Producer giao review-texture (bản cuối trên model). `TOP_FIX: repaint` → Producer đưa về bước `texture`; `fix_uv_mesh` → về bước `model` | Reviewer |
+| C5 | Chép `texture/notes.md` từ `final/` của `texture` vào gói cuối, không sửa. Viết README (mục 9). Ghi báo cáo contract | — |
+| C6 | Producer giao review-texture (bản cuối trên model). `TOP_FIX: repaint` → script chạy `redo --step texture`; khi `texture` được duyệt lại, `assemble` tự chạy lại; bộ đếm vòng của `texture` giữ nguyên. `fix_uv_mesh` → về bước `model` | Reviewer |
 | C7 | Duyệt theo `approvals.assemble` (luôn là anh). Script chép sang `deliver/<id>/` | Anh |
 
 ## 4. Detail pass
@@ -139,14 +153,14 @@ Một script `render_review.py`, mở Blender một lần. 3D Artist có bản r
 |---|---|---|
 | `clay_*`, `normal_*`, `overlay_*`, `parts_*` (`render_views.py` của kit) | DUYỆT 1 | Khối, normal, silhouette, số thứ tự part |
 | Clay có ánh sáng (sun + sky): 3/4 trước, cận mặt trước, 3/4 sau, camera game | DUYỆT 1 | Z-fighting, normal ngược, bóng chéo |
-| `clay_lit_concept.png`: cùng góc và hướng nắng với concept có bóng, đặt cạnh concept đó | DUYỆT 1 | Độ chìa mái, độ sâu hốc, bóng đổ chính. Không so màu. Nếu không có concept có bóng thì bỏ qua |
+| `clay_lit_concept.png`: cùng góc và hướng nắng với concept có bóng, đặt cạnh concept đó | DUYỆT 1 | Độ chìa mái, độ sâu hốc, bóng đổ chính. Không so màu |
 | Wireframe 3/4 | DUYỆT 1 | Mặt phẳng không thừa cạnh |
 | Thumbnail ở kích thước thật trên màn hình | DUYỆT 1 | Còn đọc được khối chính |
 | Lineup với nhân vật | DUYỆT 1 | Tỉ lệ |
 | Có texture, có ánh sáng, alpha bật: 3/4, cận trước, 3/4 sau, camera game | DUYỆT 2 | Lỗi texture trên model |
 | `final_lit_vs_concept.png`: model có texture, cùng góc và hướng nắng với concept có bóng, đặt cạnh concept đó | DUYỆT 2, bàn giao | Anh so sánh và duyệt |
 
-Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A7, ghi vào `spec.json`, và dùng lại ở B7.
+Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A7, ghi vào `spec.json`, và dùng lại ở C4.
 
 **review-clay** (Opus, chỉ đọc, context mới mỗi lần):
 
@@ -161,11 +175,11 @@ Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A
 
 Output theo contract reviewer (D14.10, `docs/producer.md` §6). `TOP_FIX` của bước `model`: `structure`, `param`, `need_evidence`.
 
-## 9. Báo cáo cho Producer
+## 8. Báo cáo cho Producer
 
 3D Artist không gọi agent khác (D14.1). Mỗi bước kết thúc bằng báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES`, `docs/producer.md` §6). Nếu cần anh trả lời: `STATUS: NEEDS_CONTEXT` kèm câu hỏi.
 
-## 10. Kết quả cuối (bước `assemble`)
+## 9. Kết quả cuối (bước `assemble`)
 
 3D Artist ghi vào `production/assets/<id>/assemble/vN/final/`. Khi anh duyệt DUYỆT 2, script chép sang `deliver/<id>/` (D14.8).
 
@@ -178,21 +192,21 @@ final/
     <tên>-untextured.glb ← mesh + UV đã khóa
     spec.json
   texture/
-    albedo_2048.png
-    notes.md             ← phương pháp, số lần gọi Meshy, Texture Artist đã sửa gì
+    albedo_<texture_res>.png
+    notes.md             ← Texture Artist ghi ở bước `texture`; 3D Artist chỉ chép. Phương pháp, số lần gọi Meshy, đã sửa gì
   review/
-    final_lit_vs_concept.png, sheet DUYỆT 1, sheet DUYỆT 2, crop chi tiết, JSON reviewer
+    final_lit_vs_concept.png, sheet DUYỆT 1, sheet DUYỆT 2, crop chi tiết, report reviewer (contract)
 ```
 
-- Hash của `<tên>-untextured.glb` phải khớp hash đã khóa ở A10. Nếu không khớp: `STATUS: BLOCKED`.
+- Hash của `<tên>-untextured.glb` phải khớp hash script đã khóa khi duyệt `model` (A9). Nếu không khớp: `STATUS: BLOCKED`.
 - Nếu anh hủy duyệt: ghi dòng trạng thái mới lên đầu README, không xóa dòng cũ.
 - README liệt kê những gì chưa kiểm: engine, camera chưa chốt, % tam giác nhỏ.
 
-## 11. Cảnh báo, không chặn
+## 10. Cảnh báo, không chặn
 
 - `screen_tris_check`: tam giác < 10 px ở camera game chỉ là cảnh báo. Báo cáo DUYỆT 1 ghi con số. Nếu profile có `screen_tris_max_small_ratio`, script dùng số đó để chặn.
 
-## 12. Tool
+## 11. Tool
 
 Chép từ kit v0.10.4 (khóa, không sửa): `self_build/` (giống Blockout), `asset_checks/` (`mesh_check`, `uv_check`, `export_check`, `screen_tris_check`, `render_rig`), `optimize/bake.py` (chỉ phần unwrap UV, cần xác nhận khi viết code), `finalize.py`, `report.py`.
 
@@ -202,8 +216,7 @@ Mới: `check_inputs.py`, `check_detail.py`, `check_mesh.py`, `check_uv_edge.py`
 
 Không chép: các path Meshy/Tripo/ZPS gen mesh, sweep, remesh, `project_concept.py`.
 
-## 13. Việc cần kiểm khi viết code
+## 12. Việc cần kiểm khi viết code
 
 - `bake.py` của kit ở chế độ `rebake` vừa unwrap vừa bake. Cần xem có tách riêng phần unwrap được không, hay phải viết một script unwrap mới.
-- `gen_api.py texture` cần mạng. Bản Codex phải xin phép mạng ở phiên gốc (D6).
 - Join không weld: `mesh_check` của kit có thể báo "duplicate verts" ở cạnh đã tách. Cần đặt ngưỡng trong spec cho đúng.

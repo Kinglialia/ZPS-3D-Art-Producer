@@ -30,7 +30,8 @@ Quy ước view: vật quay mặt về −Y. `left` là bên trái của chính 
 | `blockout/` đã duyệt, hash đã khóa | `part_graph.json`, `parts/`, `sources.json`, `blockout.md` |
 | Concept albedo | Màu, vật liệu, mức chi tiết. Là ảnh 1 trong mọi prompt |
 | `blockout.md` | Phần khuất, mục "Blockout tự quyết", ghi chú real/texture_only, thành phần đếm trên concept |
-| Project profile | Màu nền gen (tùy chọn), đối xứng |
+| Project profile | Màu nền gen (tùy chọn) |
+| Thẻ asset (`asset-card.yaml`) | Đối xứng (`symmetric:`) |
 
 Nếu blockout chưa duyệt hoặc hash không khớp, Concept Views dừng và báo Producer.
 
@@ -44,20 +45,31 @@ Concept Views chạy ở **hai bước** của pipeline (D14.2). Mỗi bước k
 |---|---|---|
 | 1 | Kiểm đầu vào | `check_inputs.py` |
 | 2 | Render guide và ID cho 5 view | `render_blockout_views.py` |
-| 3 | Chọn màu nền: lấy từ profile; nếu không có, chọn màu xa nhất với bảng màu concept | `pick_bg.py` |
+| 3 | Chọn màu nền: lấy từ profile; nếu không có, chọn màu xa nhất với bảng màu concept. Ghi `bg_color.json` | `pick_bg.py` |
 | 4 | Đo màu từng vật liệu trên concept albedo, ghi `concept_colors.json` (tên vật liệu = mã trong `sources.json`) | `palette_report.py` |
 | 5 | Gen **front** (mục 4) | `gen_image_codex.py` |
 | 6 | Đo front, ghi báo cáo. Producer giao review-views (chỉ front) | `measure_views.py` |
+
+**Đầu ra bước `views_front`:** `production/assets/<id>/views_front/vN/final/`
+
+```
+final/
+  front.png
+  concept_colors.json, bg_color.json
+  report/VIEWS.md   ← nếu có (Review Board dùng khi asset tới waiting_human, D20.16)
+  report            ← báo cáo contract của worker
+```
 
 **Bước `views_rest`** (gate `review_human`):
 
 | # | Việc | Kiểm bằng |
 |---|---|---|
+| 0 | Lúc bắt đầu, script chép `front.png`, `concept_colors.json`, `bg_color.json` từ `views_front/vN/final/` đã duyệt vào `work/` của `views_rest` | — |
 | 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
 | 2 | Đo cả bộ. Gen lại view có lỗi hình trước khi báo cáo | `measure_views.py` |
 | 3 | Tạo sheet 5 view, tóm tắt, README (mục 6) | `views_sheet.py`, `check_package.py` |
 | 4 | Ghi báo cáo. Producer giao review-views (cả bộ). Vòng sửa: chỉ gen lại view có `TOP_FIX: regen` | — |
-| 5 | Duyệt theo `approvals.views` (D14.4). Script chép sang `deliver/<id>/views/` | Anh hoặc chính sách |
+| 5 | Duyệt theo `approvals.views_rest` (D14.4) | Anh hoặc chính sách |
 
 Chỉ đọc file và thư mục brief chỉ định.
 
@@ -88,19 +100,20 @@ Chỉ đọc file và thư mục brief chỉ định.
 
 ## 6. Đầu ra của bộ view
 
-Bỏ thư mục `View Concept/` riêng (D14.8). Bước `views_rest` ghi vào `production/assets/<id>/views_rest/vN/final/`. Khi duyệt, script chép sang `deliver/<id>/views/`. Brief của bước sau trỏ thẳng tới đây và tới `final/` của blockout đã duyệt.
+Bỏ thư mục `View Concept/` riêng (D14.8). Bước `views_rest` ghi vào `production/assets/<id>/views_rest/vN/final/`. Brief của bước sau trỏ thẳng tới đây và tới `final/` của blockout đã duyệt.
 
 ```
 final/
   README.md
   front.png, back.png, left.png, right.png, top.png, views.json
+  concept_colors.json, bg_color.json   ← màu vật liệu đo trên concept; màu nền đã dùng
   report/       ← report.md, overlay_sheet.png, report.json, VIEWS_sheet.png
 ```
 
 **README có 9 mục.** Mục nào không có nội dung thì ghi "không có".
 
 1. Thứ tự nguồn: hình học = blockout; màu và vật liệu = concept albedo; vị trí chi tiết = views; kích thước = `sources.json`. Nếu ảnh mâu thuẫn ghi chú: làm theo ảnh mới hơn và ghi lại mâu thuẫn.
-2. Thông số và mốc chiều cao. Lấy từ blockout, không đo lại.
+2. Thông số và mốc chiều cao. Lấy từ blockout, không đo lại. Ghi hash blockout đã khóa.
 3. Phần khuất, chép từ `blockout.md`, gồm mục "Blockout tự quyết".
 4. Ghi chú real/texture_only, chép từ concept.
 5. NGOẠI LỆ.
@@ -128,11 +141,11 @@ Nếu một điều không đúng, báo cáo `STATUS: BLOCKED`.
 | 2 | Overlay từng view (blockout đỏ, ảnh gen xanh) với IoU, dE, vị trí chi tiết |
 | 3 | Crop các chỗ reviewer ghi chú (nếu có) |
 
-Kèm `report/VIEWS.md` khoảng 10 dòng: điểm số, view gen lại và vì sao, NGOẠI LỆ, TEXTURE NOTE.
+Kèm `report/VIEWS.md` ngắn. 3 dòng đầu là tóm tắt cho anh (D20.17). Phần sau: điểm số, view gen lại và vì sao, NGOẠI LỆ, TEXTURE NOTE.
 
 ## 8. Reviewer `zps-3dp-review-views`
 
-Sonnet, chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agent.
+Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agent.
 
 **Lần 1, chỉ front:**
 1. Style, chất liệu, mức chi tiết giống concept albedo.
@@ -152,6 +165,7 @@ Sonnet, chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agen
 | Loại | Khi nào |
 |---|---|
 | `regen: <view>, lỗi: <mô tả>` | Lỗi trong hàng "Gen lại" ở mục 5. Mức `blocker` hoặc `major` |
+| `need_evidence: <ảnh cần thêm>` | Có tiêu chí `unclear`. Concept Views làm vòng ngắn, chỉ render ảnh xin thêm. Không tính vào 3 vòng (`docs/producer.md` §7) |
 | `note_exception: <nội dung>` | Lệch nhỏ về vị trí hoặc số đo |
 | `note_texture: <nội dung>` | Sai màu một vùng nhỏ |
 

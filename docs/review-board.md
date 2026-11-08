@@ -23,11 +23,14 @@ review_board: local        # local | local+remote
 
 ## 2. Nội dung mỗi asset đang chờ duyệt
 
-- Tên asset, bước, version, ai cần duyệt (D14.4).
+Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ ít và ngắn.
+
+- Tên asset, bước, version, ai cần duyệt (D14.4): một dòng.
 - Ảnh sheet duyệt của bước đó.
 - Các ảnh **gốc, độ phân giải đầy đủ**: các view, render, crop chi tiết. Dùng để zoom.
 - Model 3D xoay được (bước `blockout`, `model`, `assemble`).
-- Tóm tắt ngắn (`<bước>.md`, khoảng 10 dòng).
+- Tóm tắt **tối đa 3 dòng**: trang lấy 3 dòng đầu của file tóm tắt. Phần còn lại của file ẩn, anh bấm mới mở. File tóm tắt: `blockout.md` (`blockout`), `report/VIEWS.md` (`views_front`, `views_rest`), `model.md` (`model`), `texture/notes.md` (`texture`), `README.md` (`assemble`). `views_front` và `texture` không có gate người duyệt, nhưng vẫn có thể tới `waiting_human` (D20.16).
+- Lý do asset được gửi anh, **một dòng**: lấy từ report reviewer, hoặc từ report worker khi `BLOCKED` hay `UNFIXABLE`.
 - Nút **Duyệt**, **Cần sửa**, **Ghi chú**; ô ghi chú chung.
 
 ## 3. Xem

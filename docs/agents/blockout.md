@@ -27,10 +27,18 @@ Blockout dựng khối hình học **để đo** cho từng công trình. Blocko
 | Nguồn | Lấy gì |
 |---|---|
 | Concept albedo | Hình khối và tỉ lệ để đo. Bản có bóng chỉ để đọc khối |
-| Concept brief | Phần khuất, đối xứng, ghi chú real/texture_only, kích thước (asset lẻ) |
+| Concept brief | Phần khuất, đối xứng, ghi chú real/texture_only |
+| Thẻ asset (`asset-card.yaml`) | Khi `has_map: false`: W×D×H từ `size_m`, chiều cao cửa từ `scale_overrides` |
 | File Material Handoff của công trình (và file chung của dự án, nếu có) | Mã vật liệu |
-| File MAP-LAYOUT của công trình | W×D×H, có gồm nền bậc hay không, chiều cao cửa, lệch cố ý, chiều cao nhân vật |
-| Project profile | Quy tắc phần khuất mặc định, camera game |
+| `<id>.layout.md` (MAP-LAYOUT) trong `_approved/<id>/`, chỉ khi profile có `has_map: true` | W×D×H, có gồm nền bậc hay không, chiều cao cửa, lệch cố ý, chiều cao nhân vật |
+| Project profile | Quy tắc phần khuất mặc định, camera game. Khi `has_map: false`: chiều cao nhân vật từ `scale_refs` |
+
+**Nguồn tỉ lệ khi `has_map: false`** (D20.12):
+- W×D×H lấy từ `size_m` của thẻ asset.
+- `character_h` lấy từ `scale_refs` của profile.
+- `door_h` lấy từ `scale_overrides` của thẻ asset.
+- Nếu thẻ không có cửa, Blockout đo cửa trên concept, lấy `character_h` làm thước. Blockout ghi giá trị và cách đo vào `sources.json`.
+- `files.layout` trong `sources.json` trỏ tới `asset-card.yaml`.
 
 MAP-LAYOUT và Material Handoff có **một file cho mỗi công trình**. Blockout đọc nguyên các file này.
 
@@ -40,15 +48,15 @@ MAP-LAYOUT và Material Handoff có **một file cho mỗi công trình**. Block
 {
   "files": {"layout": "<path>", "layout_sha256": "...", "material": "<path>", "material_sha256": "..."},
   "layout": {"w": 4.6, "d": 4.6, "h": 4.0, "includes_base": true, "source": "<dòng trích>"},
-  "door_h": 1.6, "character_h": 1.6,
+  "door_h": 1.6, "door_h_source": "<dòng trích, hoặc cách đo trên concept>", "character_h": 1.6,
   "materials": ["STONE", "TIMBER", "TEAL", "BRASS"],
   "camera": {"azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40}
 }
 ```
 
-Số trong ví dụ chỉ để minh họa định dạng.
+Số trong ví dụ chỉ để minh họa định dạng. Khi `has_map: false`, `files.layout` là đường dẫn `asset-card.yaml`, và `layout` lấy từ `size_m`.
 
-- Nếu thiếu concept hoặc file MAP-LAYOUT (dự án có map), Blockout dừng và báo Producer.
+- Nếu thiếu concept, hoặc thiếu `<id>.layout.md` khi `has_map: true`, Blockout dừng và báo Producer.
 - Nếu một vùng không có mã vật liệu, Blockout báo Producer. Blockout không đoán mã.
 - Nếu mô tả không có phần khuất hoặc kích thước, Blockout tự quyết theo quy tắc mặc định của dự án và ghi lại (D3.5).
 - Khi dựng lại một version, nếu hash của file nguồn không đổi, Blockout dùng lại `sources.json`.
@@ -60,13 +68,13 @@ Số trong ví dụ chỉ để minh họa định dạng.
 | 1 | Đọc nguồn, ghi `sources.json` | `check_inputs.py` |
 | 2 | Đếm thành phần trên concept. Ghi một dòng vào `blockout.md` (ví dụ "4 trụ, 1 cửa, 3 thùng") | Reviewer (tiêu chí 5) |
 | 3 | Đo trên concept riêng, không đo trên map tổng. Lấy cửa làm thước. In bảng đo: param, giá trị, nguồn, cách đo | — |
-| 4 | Viết part graph theo schema `blockout-1` (mục 9). Box, prism, cylinder. Marker nhô hoặc lõm ít nhất 2 cm. Props là part rời. Kích thước lấy từ MAP-LAYOUT nằm trong `fixed_params` | `check_schema.py` |
+| 4 | Viết part graph theo schema `blockout-1` (mục 9). Box, prism, cylinder. Marker nhô hoặc lõm ít nhất 2 cm. Props là part rời. Kích thước lấy từ MAP-LAYOUT (hoặc `size_m` của thẻ asset khi `has_map: false`) nằm trong `fixed_params` | `check_schema.py` |
 | 5 | **Khóa tỉ lệ chính trước**: dựng footprint, tường, mái, cửa, các tầng nền. Chạy gate. Chỉ khi các khối này pass mới thêm part phụ | `gates.py`, `check_layout.py` |
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
 | 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
 | 8 | Render bộ review (mục 6). Ghi báo cáo contract (`STATUS / OUTPUT / RUBRIC / ISSUES`), rồi dừng | — |
 | 9 | Producer giao review-blockout (D14.1). Nếu FIX, Producer giao lại Blockout: sửa đúng một `TOP_FIX` bằng `apply_edit.py`, rồi chạy `check_fix.py` | Reviewer, `check_fix.py` |
-| 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash và chép `final/` sang `deliver/<id>/blockout/` | Anh hoặc chính sách |
+| 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash | Anh hoặc chính sách |
 
 Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc file và thư mục brief chỉ định.
 
@@ -74,7 +82,7 @@ Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc f
 
 ## 4. Đầu ra mỗi công trình
 
-Ghi vào `production/assets/<id>/blockout/vN/final/` (D14.8). Khi duyệt, script chép sang `deliver/<id>/blockout/`.
+Ghi vào `production/assets/<id>/blockout/vN/final/` (D14.8).
 
 ```
 final/
@@ -84,7 +92,7 @@ final/
   assembled.glb
   sources.json
   blockout.md
-  review/            ← bộ render, JSON gate và script, JSON reviewer từng vòng
+  review/            ← bộ render, JSON gate và script, report reviewer (contract) từng vòng
 ```
 
 `blockout.md` gồm các mục:
@@ -92,7 +100,7 @@ final/
 1. Version, và hash của `part_graph.json` + `parts_lib.py`.
 2. Thành phần đếm trên concept (một dòng).
 3. Bảng đo: param, giá trị, nguồn, cách đo.
-4. Bbox so với MAP-LAYOUT.
+4. Bbox so với MAP-LAYOUT (khi `has_map: true`) hoặc `size_m` của thẻ asset (khi `has_map: false`).
 5. Ghi chú real/texture_only, chép nguyên từ concept.
 6. **Blockout tự quyết**: từng chỗ phần khuất hoặc kích thước mà mô tả không có, kèm lý do.
 7. Mâu thuẫn giữa các nguồn, và lựa chọn đã dùng.
@@ -109,7 +117,7 @@ final/
 | Tiếp xúc, xuyên khối, part lơ lửng, health, bbox từng part | `gates.py` | Chép từ kit |
 | Mọi part đứng trên mặt một part `tag: base` nằm trong mép part đó, cách mép ≥ 0,1 m | `check_base.py` | Mới |
 | Dưới mỗi part `tag: roof` có ít nhất một part khác chạm đáy của nó, trong khoảng 1 cm | `check_support.py` | Mới |
-| Bbox tổng khớp `sources.json` trong ±2% | `check_layout.py` | Mới |
+| Bbox tổng khớp `layout` trong `sources.json` trong ±2% (MAP-LAYOUT hoặc `size_m`) | `check_layout.py` | Mới |
 | Mọi part có mã vật liệu nằm trong `sources.json` | `check_materials.py` | Mới |
 | Marker nhô hoặc lõm ≥ 2 cm | `check_markers.py` | Mới |
 | Sau mỗi `top_fix`: `fixed_params` không đổi, bbox vẫn khớp ±2% | `check_fix.py` | Mới |
@@ -129,7 +137,7 @@ final/
   - `foot_front_left.png`, `foot_front_right.png`: crop sát góc nền–đất–chân tường, tìm theo bbox của part `tag: base`. Nếu không có part `base`, bỏ crop.
 - Concept và blockout ở cùng góc.
 
-**review-blockout** (Sonnet, chỉ đọc, context mới mỗi lần):
+**review-blockout** (model theo `pipeline.toml`, pilot dùng Opus theo D16; chỉ đọc, context mới mỗi lần):
 
 1. Khối: chỉ chấm trên clay. Khối giống ổ bánh mì hoặc hộp trơn là fail, dù IoU cao.
 2. Silhouette so với concept ở cùng góc.

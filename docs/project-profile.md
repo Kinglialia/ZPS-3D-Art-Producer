@@ -13,7 +13,7 @@ Agent đọc theo thứ tự dưới đây. Lớp sau ghi đè lớp trước.
 | 1 | **Mặc định của skill** | Số chung, không gắn với dự án nào. Ví dụ: ngưỡng pixel 3 px / 16 px, 3 vòng review (D11), 4 nhóm kiểm texture | Có sẵn trong bộ skill |
 | 2 | **Preset** theo loại game | Thông số kỹ thuật theo camera và nền tảng. Ví dụ: camera, texel tối thiểu, padding, trần tris theo hạng | Có sẵn vài preset trong bộ skill. Thêm preset mới khi cần |
 | 3 | **Profile dự án** (`PROJECT-PROFILE.yaml`) | Chỉ những gì giống nhau cho mọi asset của dự án đó | Skill Project Setup, cùng anh |
-| 4 | **Thẻ asset** (trong brief của từng concept) | Những gì khác nhau giữa các asset | Concept Artist (ngoài scope) |
+| 4 | **Thẻ asset** (file `asset-card.yaml` trong `_approved/<id>/`; brief trỏ tới file này) | Những gì khác nhau giữa các asset | Concept Artist (ngoài scope) |
 
 ## 2. Preset
 
@@ -38,7 +38,8 @@ Ngắn, khoảng 15–20 dòng. Không có trường gắn với một loại as
 ```yaml
 project: <tên>
 preset: topdown-mobile-lowpoly
-paths: {approved_concept: "...", view_concept: "...", deliver_3d: "..."}
+paths: {approved: "<thư mục concept>/_approved", production: "production", deliver: "deliver"}
+has_map: true                                # true: intake bắt buộc có <id>.layout.md; false: W×D×H lấy từ size_m của thẻ asset
 pilot_asset: <mã asset pilot đã duyệt>      # dùng để so tris/m² và màu vật liệu
 scale_refs:                                  # danh sách mở; mỗi dự án tự đặt tên
   - {name: nhân vật, height_m: 1.6, _source: "..."}
@@ -50,7 +51,7 @@ style:
   view_bg: null                              # null = pick_bg.py tự chọn
 approvals:                                   # ai duyệt sau khi reviewer PASS (D14.4)
   blockout: human                            # human | reviewer
-  views: human
+  views_rest: human
   model: human
   assemble: human                            # luôn human
 review_board: local                          # local | local+remote (D19)
@@ -68,16 +69,19 @@ overrides: {}                                # chỉ khi cần đổi số của
 
 ## 4. Thẻ asset
 
-Nằm trong brief của từng concept. Concept Artist ghi (ngoài scope, xem `out-of-scope-changes.md`).
+Thẻ asset là file `asset-card.yaml` trong `_approved/<id>/`. Brief trỏ tới file này. Concept Artist ghi (ngoài scope, xem `out-of-scope-changes.md`).
 
 ```yaml
 asset: 05-warehouse
+type: building                 # building | prop | tree | rock
 tier: standard                 # hero | standard | background
 texture_res: null              # null = 2048
 tris_max: null                 # null = theo hạng
 scale_overrides:               # ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
 symmetric: {left_right: true, front_back: true}
+size_m: null                   # {w, d, h} (mét); bắt buộc khi has_map: false; check_card.py kiểm
+hidden_sides: [...]            # thiết kế phần khuất
 real_texture_only_notes: [...]
 ```
 
@@ -90,7 +94,7 @@ Tên kỹ thuật: `zps-3dp-project-setup`. Đây là **skill chạy trong phiê
 
 | Việc | Cách làm |
 |---|---|
-| Tạo profile | Chọn preset. Hỏi anh các trường riêng của dự án: thước tỉ lệ, quy ước style, quy tắc phần khuất, đường dẫn, và **ai duyệt từng điểm duyệt** (`approvals`; gợi ý: pilot để `human` hết). Ghi `PROJECT-PROFILE.yaml` |
+| Tạo profile | Chọn preset. Hỏi anh các trường riêng của dự án: thước tỉ lệ, quy ước style, quy tắc phần khuất, đường dẫn, dự án có map hay không (`has_map`; `false` thì mọi thẻ asset phải có `size_m`), và **ai duyệt từng điểm duyệt** (`approvals`; gợi ý: pilot để `human` hết). Ghi `PROJECT-PROFILE.yaml` |
 | Cập nhật sau pilot | Agent **đề xuất** nội dung mới (`detail_examples`, `pilot_asset`). Anh duyệt, rồi skill ghi. Agent không tự sửa profile |
 | Kiểm định dạng | `check_profile.py`: đủ trường bắt buộc, đúng kiểu, preset tồn tại. Mọi agent chạy script này trước khi làm việc |
 
@@ -106,7 +110,7 @@ MapLayout (ngoài scope) đọc thước tỉ lệ từ profile, không tự gi�
 4. **Producer nhắc anh xóa context và mở phiên mới**, với đúng câu lệnh của runtime (lấy từ adapter):
    - Claude Code: "Profile đã xong. Anh gõ `/clear` (hoặc mở phiên mới), rồi gọi lại `/zps-3dp-producer` để bắt đầu với context sạch."
    - Codex: "Profile đã xong. Anh gõ `/new`, rồi gọi lại Producer để bắt đầu với context sạch."
-5. Phiên mới: Producer chỉ đọc profile và sổ trạng thái `producer/status.md`. Producer không dựa vào trí nhớ của cuộc trao đổi lúc khởi tạo.
+5. Phiên mới: Producer chỉ đọc profile và sổ trạng thái `status.json` / `dashboard.md`. Producer không dựa vào trí nhớ của cuộc trao đổi lúc khởi tạo.
 
 **Producer cũng nhắc anh mở phiên mới khi:**
 - Profile vừa được cập nhật sau pilot.
