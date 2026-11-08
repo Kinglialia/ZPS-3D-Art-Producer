@@ -1,6 +1,6 @@
 # Spec — Project Profile, thẻ asset và skill Project Setup (v2)
 
-v1 duyệt: 2026-11-08. v2: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D13, D21).
+v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21, D22). Quyết định nền: `docs/decisions.md` (D13, D21, D22).
 
 ---
 
@@ -65,7 +65,7 @@ overrides: {}                                # chỉ khi cần đổi số của
 
 ## 4. Thẻ asset
 
-Thẻ asset là file `asset-card.yaml` trong `_approved/<id>/`. Brief trỏ tới file này. Concept Artist ghi (ngoài scope, xem `out-of-scope-changes.md`).
+Thẻ asset là file `asset-card.yaml` trong `_approved/<id>/`. Brief trỏ tới file này. **Thẻ asset chính là concept brief** (D22.3): khi spec agent nói "concept brief", nghĩa là thẻ này. Concept Artist ghi (ngoài scope, xem `out-of-scope-changes.md`).
 
 ```yaml
 asset: 05-warehouse

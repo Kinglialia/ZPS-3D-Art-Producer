@@ -8,7 +8,7 @@ Bản kit đã đọc: v0.10.4, commit `905dc93`.
 
 ## 1. zps-concept-artist
 
-Producer bắt đầu từ thư mục `approved Concept/`. Mỗi công trình cần có đủ các mục dưới đây trước khi Producer gọi Blockout.
+Producer bắt đầu từ thư mục `_approved/<id>/` (D14.8, D22.3). Anh chép vào khi đã duyệt. Mỗi công trình cần có đủ các mục dưới đây trước khi Producer nhận việc (`P intake`).
 
 ### 1.1 Material Handoff (D3.1)
 
@@ -51,14 +51,15 @@ Brief của mỗi concept có một **thẻ asset** theo mẫu trong `docs/proje
 
 ### 1.8 Bàn giao
 
-- Mỗi công trình trong `approved Concept/`: concept albedo, concept có bóng (chỉ để đọc khối), brief (mục 1.2–1.4), và Material Handoff.
-- Producer kiểm danh sách này trước khi gọi Blockout. Thiếu mục nào thì Producer dừng và báo.
+- Mỗi công trình trong `_approved/<id>/`, đúng tên file theo `GUIDELINE.md`: `concept_albedo.png`, `concept_shadow.png` (chỉ để đọc khối), `asset-card.yaml`, `<id>.material.md`, và `<id>.layout.md` khi profile có `has_map: true`.
+- **Concept brief chính là `asset-card.yaml`** (D22.3). Các mục 1.2–1.4 (real/texture_only, phần khuất, đối xứng, kích thước asset lẻ) ghi vào các trường `real_texture_only_notes`, `hidden_sides`, `symmetric`, `size_m` của thẻ. Không có file brief riêng.
+- `P intake` kiểm danh sách này. Thiếu hoặc sai thì không đăng ký, Producer báo anh theo nhóm lỗi.
 
 ---
 
 ## 2. MapLayout — skill mới (D3.2)
 
-Skill này thảo luận cùng anh để cân đối các chỉ số, rồi chốt `MAP-LAYOUT.md`. Blockout chỉ đọc file này.
+Skill này thảo luận cùng anh để cân đối các chỉ số, rồi chốt layout. Blockout chỉ đọc file layout của từng công trình.
 
 Cần chốt khi làm skill: skill này có phải sub-agent của Producer không, hay anh gọi trực tiếp.
 
@@ -71,7 +72,7 @@ Cần chốt khi làm skill: skill này có phải sub-agent của Producer khô
 | Ghi "lệch cố ý" khi concept vẽ props sai tỉ lệ, kèm số cho model | Lỗi: concept vẽ đe, bếp quá to |
 | Render lineup nhà cạnh nhân vật | Kiểm tỉ lệ |
 
-Xuất **một file cho mỗi công trình** (D5.1). Tên file chứa mã công trình, ví dụ `05-warehouse.layout.md`. Các quy ước chung (chiều cao nhân vật, kích thước tham chiếu) có thể nằm trong một file chung.
+Xuất **một file cho mỗi công trình** (D5.1), tên `<id>.layout.md`, ví dụ `05-warehouse.layout.md`. Anh chép file này vào `_approved/<id>/` cùng concept (D20.1, D22.3). Quy ước chung (chiều cao nhân vật, kích thước tham chiếu) **không** nằm trong file riêng của MapLayout: MapLayout đọc chúng từ `scale_refs` của profile dự án (`docs/project-profile.md` §5).
 
 Đầu ra Blockout cần đọc, cho mỗi công trình: W×D×H, có gồm nền bậc hay không, chiều cao cửa, và các chỗ lệch cố ý. Cả dự án: chiều cao nhân vật và các kích thước tham chiếu.
 

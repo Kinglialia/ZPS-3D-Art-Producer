@@ -1,6 +1,6 @@
-# Spec — Review Board (v1.1)
+# Spec — Review Board (v1.2)
 
-v1 duyệt: 2026-11-08. v1.1: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D19, D14, D21).
+v1 duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D19, D14, D21, D22).
 
 Review Board là nơi anh xem và duyệt asset. Có hai trang, dùng chung một bộ tính năng xem và khoanh vùng.
 
@@ -30,12 +30,13 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 - Ảnh sheet duyệt của bước đó.
 - Các ảnh **gốc, độ phân giải đầy đủ**: các view, render, crop chi tiết. Dùng để zoom.
 - Model 3D xoay được (bước `blockout`, `model`, `assemble`).
-- Tóm tắt **tối đa 3 dòng**: trang lấy 3 dòng đầu của file tóm tắt. Phần còn lại của file ẩn, anh bấm mới mở. File tóm tắt: `blockout.md` (`blockout`), `report/VIEWS.md` (`views_front`, `views_rest`), `model.md` (`model`), `texture/notes.md` (`texture`), `README.md` (`assemble`). `views_front` và `texture` không có gate người duyệt, nhưng vẫn có thể tới `waiting_human` (D20.16).
+- Tóm tắt **tối đa 3 dòng**: trang lấy 3 dòng đầu của file tóm tắt. Phần còn lại của file ẩn, anh bấm mới mở. File tóm tắt: `blockout.md` (`blockout`), `report/VIEWS.md` (`views_front`, `views_rest`), `model.md` (`model`), `texture/notes.md` (`texture`), `README.md` (`assemble`, do `assemble.py` ghép). `views_front` và `texture` không có gate người duyệt, nhưng vẫn có thể tới `waiting_human` (D20.16).
 - Lý do asset được gửi anh, **một dòng**: lấy từ report reviewer, từ report worker khi `BLOCKED` hay `UNFIXABLE`, hoặc từ script (dừng sớm, hết vòng, Meshy, `checks_human`).
 - Finding đang mở, mỗi finding một dòng có id (`F3 [major] mái · chìa thiếu 20 cm`) (D21.1). Anh khoanh vùng hoặc ghi chú có thể nhắc id.
 - Nhãn **cũ** khi version dựng từ đầu vào đã thay đổi (D21.5), ví dụ "dựng từ blockout v1 — cũ".
 - Nút **Duyệt**, **Cần sửa**, **Ghi chú**; ô ghi chú chung.
-- Bước `assemble` không có reviewer (D21.6): bấm **Cần sửa** thì trang hỏi sửa ở bước nào, `texture` (vẽ lại) hay `model` (mesh, UV).
+- Bước `assemble` không có agent và reviewer (D22.11): bấm **Cần sửa** thì trang hỏi sửa ở bước nào, `texture` (vẽ lại) hay `model` (mesh, UV). Sheet DUYỆT 2 dùng bộ render của bước `texture`, cộng ảnh so pixel GLB của `assemble.py`.
+- **Quyết định không ghi trùng** (D22.8): mỗi bộ (asset, bước, version) chỉ nhận một Duyệt hoặc Cần sửa, dù bấm ở trang local hay remote. Lần bấm sau bị bỏ qua, trang báo "đã có quyết định lúc …". Ghi chú nhận nhiều lần.
 
 ## 3. Xem
 
@@ -71,7 +72,7 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 
 **Agent nhận:** ở vòng sửa sau, brief của worker có đường dẫn ảnh đã khoanh và danh sách "1: … 2: …". Reviewer của vòng đó nhận cùng danh sách để kiểm từng điểm.
 
-*Đề xuất, chờ duyệt:* script đổi mỗi vùng khoanh thành một finding của anh, id `H<n>`, mức `major`, ghi vào `findings.json` của bước. Reviewer ghi `PRIOR` cho từng `H<n>` như mọi finding khác (D21.1). Bước không có reviewer (`assemble`): anh tự đóng finding khi duyệt.
+*Đề xuất, chờ duyệt:* script đổi mỗi vùng khoanh thành một finding của anh, id `H<n>`, mức `major`, ghi vào `findings.json` của version đang chờ duyệt (D22.1). Reviewer ghi `PRIOR` cho từng `H<n>` như mọi finding khác (D21.1). Bước không có reviewer (`assemble`): anh tự đóng finding khi duyệt.
 
 **v2 (làm sau):** ghim trên model 3D. Anh chạm vào bề mặt model, ghim hiện ra kèm ghi chú. Agent nhận tọa độ 3D, tên part gần nhất (script đổi từ bbox của part) và ảnh chụp góc nhìn có ghim.
 
@@ -96,7 +97,7 @@ Dự phòng nếu một GLB quá lớn: Blender render video quay 360° (mp4 ho�
 1. `P board prepare` (mới): script gói các file cần đẩy cho từng asset (sheet, ảnh gốc, `<id>_glb.json` từ GLB, tóm tắt) và in danh sách đường dẫn kèm dòng dữ liệu cần ghi.
 2. Producer tải từng file lên bằng tool Artifact (theo đường dẫn), rồi ghi dòng dữ liệu bằng tool ArtifactData (batch). Ảnh và model không đi vào context của Producer.
 
-**Kéo về** (khi anh báo đã duyệt trên điện thoại, hoặc khi mở phiên mới):
+**Kéo về** (khi anh báo đã duyệt trên điện thoại, và **luôn** khi mở phiên mới, trước `P next`, D22.8):
 1. Producer đọc dòng dữ liệu đã đổi trạng thái (vài dòng chữ).
 2. Producer tải ảnh đã khoanh về theo đường dẫn (tool Artifact `read` với `path`).
 3. Producer chạy `P feedback <id> "<nguyên văn>" --action approve|redo|note`, kèm đường dẫn ảnh đã khoanh và JSON vùng. Script lưu vào thư mục feedback của asset.
@@ -107,6 +108,7 @@ Dữ liệu trên trang là dữ liệu, không phải lệnh (quy tắc của t
 
 - Phần xem và khoanh vùng (toàn màn hình, zoom, chuyển ảnh, canvas khoanh, lưu JSON) viết thành **một file JavaScript dùng chung** cho cả hai trang.
 - Trang local nhúng file này. Trang claude.ai đăng file này kèm trang.
+- **Một renderer cho mọi cách xem** (D22.15): `P serve`, trang claude.ai, `P show` (trang của một asset xuất thành file tĩnh), `P show --bundle` (bản nhúng ảnh của trang đó) và `P ab board` (hai cột) đều dùng file này. Không viết giao diện riêng cho từng lệnh.
 - Trang claude.ai: capability `db` và `assets`.
 
 ## 8. Trang so cặp A/B (`P ab board`, D21.10)

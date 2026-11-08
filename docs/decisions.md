@@ -138,14 +138,14 @@ Spec: `docs/project-profile.md`.
 Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, references, templates). Giữ cơ chế của skill nền: trạng thái trong file, script quyết định thứ tự, brief bằng file, contract báo cáo, `pipeline.toml`, version theo bước, resume, ruling, trang duyệt local, hook.
 
 1. **Producer sắp xếp reviewer** qua script (thay D6.2). Worker không gọi reviewer, không gọi agent khác. Resume worker cũ ở vòng 1–2, worker mới từ vòng 3. Bỏ dự phòng `review: pending`. Lý do: script đếm vòng chắc chắn, không phụ thuộc giới hạn tầng, reviewer độc lập hơn. Token gần bằng; chậm hơn khoảng 20–60 giây mỗi vòng.
-2. **Pipeline 6 bước** (thay D7.1): `blockout` → `views_front` → `views_rest` → `model` → `texture` → `assemble`. 3D Artist làm `model` và `assemble`. Texture Artist làm `texture`, gồm chọn Meshy hay vẽ mới (D10) và gọi Meshy.
+2. **Pipeline 6 bước** (thay D7.1): `blockout` → `views_front` → `views_rest` → `model` → `texture` → `assemble`. 3D Artist làm `model` ~~và `assemble`~~ **[Sửa theo D22.11: `assemble` do script làm]**. Texture Artist làm `texture`, gồm chọn Meshy hay vẽ mới (D10) và gọi Meshy.
 3. **Gate `review_human`**: reviewer PASS rồi chờ duyệt. Dùng cho `blockout`, `views_rest`, `model`, ~~`assemble`~~ **[Sửa theo D21.6: `assemble` dùng gate `checks_human`]**. `views_front`, `texture` dùng `review`. Bỏ `final_human_gate`.
 4. **Chính sách duyệt `approvals`** ~~trong profile~~ **[Sửa theo D21.3: trong `production/policy.yaml`]** (Project Setup hỏi lúc khởi tạo): mỗi điểm duyệt là `human` hoặc `reviewer`. `assemble` luôn `human`. Đổi bằng lời trong chat → Producer chạy `P approvals set`. Ngoại lệ theo lô: `P delegate`. Thứ tự: `delegate` > `approvals` > `human`. Thay một phần D1.5.
 5. **Xem kết quả:** anh nói trong chat → Producer chạy `P dashboard`, `P show <id>` (HTML), `P show --bundle` (nhúng ảnh, xem trên điện thoại), `P serve`. Producer gửi file bằng tool gửi file, không mở file.
 6. **Thông số và rubric:** số mà script dùng nằm trong YAML (D13); tài liệu style nằm trong `art-direction/` (AD giữ); tiêu chí chung của bước nằm trong agent reviewer; tiêu chí riêng theo loại nằm trong `production/rubrics/<loại>.md` (anh duyệt). `visual_checks` chuyển khỏi profile vào rubric theo loại. Loại asset lấy từ `type` trong thẻ.
 7. **GUIDELINE.md mở rộng:** mẫu `asset-card.yaml`, danh sách file bắt buộc, cách làm lúc chốt, việc của AD. `check_card.py` đi kèm. `P intake` kiểm thẻ, file bắt buộc, profile; sai thì không đăng ký.
 8. **Ba khu thư mục:** `_approved/<id>/` (đầu vào, anh ghi), `production/assets/<id>/` (làm việc, script và agent ghi), `deliver/<id>/` (kết quả đã duyệt, **[Thay bằng D20.2]** ~~script chép sau mỗi lần duyệt~~ script chép khi duyệt `assemble`). Bỏ `View Concept/` riêng; bỏ `3D/`, thay bằng `deliver/`.
-9. **Dọn version:** duyệt một bước thì các version khác chuyển sang `_rejected/`. Xóa chỉ qua `P cleanup` khi asset đã xong, dry-run trước, anh đồng ý. Agent chỉ đọc đường dẫn trong brief.
+9. **Dọn version:** **[Thay bằng D22.2]** ~~duyệt một bước thì các version khác chuyển sang `_rejected/`.~~ Đánh dấu `rejected` trong status, không di chuyển thư mục. Xóa chỉ qua `P cleanup` khi asset đã xong, dry-run trước, anh đồng ý. Agent chỉ đọc đường dẫn trong brief.
 10. **Contract reviewer:** `VERDICT`, `RUBRIC` (có `unclear`), `COUNTS` (blocker/major/minor), `TOP_FIX` (loại theo bước), `FINDINGS`. **[Mở rộng bởi D21.1: finding có id, `PRIOR`, `TOP_FIX` kiểu đơn/lô]** D11 (dừng sớm, bản tốt nhất) làm bằng script. `fix_uv_mesh` → redo `model`. **[Thay bằng D20.14]** ~~`meshy_regen` thêm một lần khi Texture Artist báo `UNFIXABLE: yes`.~~
 
 ## D15 — Model sinh ảnh và khi Codex hỏng (2026-11-08)
@@ -207,7 +207,7 @@ Spec: `docs/review-board.md`.
 10. **Đầu vào brief `texture`:** brief trỏ tới `final/` đã duyệt của `blockout` (để đọc `sources.json`), `model` và `views_rest`. `model/vN/final/` có thêm `spec.json` và ảnh `parts_*`.
 11. **`spec.json` có một chủ:** 3D Artist ghi `spec.json` trong `model/vN/final/` (A7, dùng lại ở C4). Texture Artist không ghi vào `spec.json`. Texture Artist ghi `texture_spec.json` trong `texture/vN/final/`.
 12. **Nguồn tỉ lệ khi `has_map: false`:** W×D×H lấy từ `size_m` của thẻ. `character_h` lấy từ `scale_refs` của profile. `door_h` lấy từ `scale_overrides` của thẻ. Nếu thẻ không có cửa, Blockout đo cửa trên concept, lấy `character_h` làm thước, và ghi giá trị cùng cách đo vào `sources.json`. Khi đó `files.layout` trỏ tới `asset-card.yaml`. Bbox so với `size_m`.
-13. **Chủ `texture/notes.md`:** Texture Artist ghi file này trong `texture/vN/final/`. Ở `assemble`, 3D Artist chỉ chép file vào gói cuối và viết README.
+13. **Chủ `texture/notes.md`:** Texture Artist ghi file này trong `texture/vN/final/`. Ở `assemble`, ~~3D Artist~~ **[Sửa theo D22.11: script `assemble.py`]** chỉ chép file vào gói cuối và ghép README.
 14. **Gọi Meshy** (thay D20.6):
     - Mỗi asset gọi Meshy một lần. Chỉ Texture Artist gọi Meshy.
     - Lỗi kỹ thuật (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Texture Artist thử lại, tối đa 3 lần, như D8.3. Sau 3 lần lỗi: `STATUS: BLOCKED`, Producer hỏi anh.
@@ -220,7 +220,7 @@ Spec: `docs/review-board.md`.
 
 Đã sửa thêm 15 lỗi nhỏ trong các spec (tên file, tham chiếu mục, nút duyệt, `PROFILE_HASH`, `note`, đánh dấu mục đã thay).
 
-## D21 — Sửa sau review spec lần 2, và chạy hai runtime để so sánh (2026-11-09, chờ duyệt)
+## D21 — Sửa sau review spec lần 2, và chạy hai runtime để so sánh (2026-11-09, duyệt cùng D22)
 
 Nguồn: review spec ngày 2026-11-08/09 (mục 1–14), phản biện của anh về Review Board và Codex.
 
@@ -228,24 +228,47 @@ Nguồn: review spec ngày 2026-11-08/09 (mục 1–14), phản biện của anh
 2. **Budget Meshy gắn với hash mesh** (thay phần `MESHY_CALLS` của D20.14). `gen_api.py` đọc và ghi `budget.json`, từ chối gọi khi hết lượt; worker không tự khai. Mesh đổi (sau `fix_uv_mesh` hoặc làm lại `model`) → script hỏi anh gọi lại Meshy hay VẼ MỚI. Lý do: sửa mesh làm texture Meshy cũ mất hiệu lực mà đã hết lượt gọi.
 3. **`approvals`, `review_board` nằm trong `production/policy.yaml`** (sửa D14.4, D19.1, D20.8). `assemble` luôn human, không có khóa. Hash profile bỏ `paths` và khóa bắt đầu bằng `_`. Lý do: đổi người duyệt không được bật cảnh báo "profile đổi" cho mọi asset đang chạy.
 4. **`need_evidence`** chỉ dùng khi không còn finding `blocker`/`major` đang mở. Ảnh ghi vào `vN/review/evidence-<k>/`, không tạo version mới. Lý do: thứ tự khi có cả lỗi nặng và `unclear` chưa rõ; version rỗng làm nhiễu "bản tốt nhất".
-5. **Script làm việc trạng thái** (thay phần "Producer đánh dấu" của D2, sửa D10): `inputs` mỗi version và suy ra version cũ; `PROFILE_HASH` sinh trong brief, so khi ingest; `texture-log.jsonl` ghi khi duyệt bước texture; `check_profile.py` chạy khi intake và sinh brief, agent không chạy lại. Agent không ghi ra ngoài thư mục version.
-6. **`assemble` không có reviewer** (sửa D14.3, thay D20.4). Gate mới `checks_human`: `check_assemble.py` pass → anh duyệt (DUYỆT 2). Anh bấm Cần sửa thì chọn bước `texture` hoặc `model`; feedback mở đợt mới theo D11.4. Model của `assemble` vẫn theo D16 (pilot Opus, sau pilot Sonnet hoặc Haiku). Lý do: texture đã được chấm trên model ở bước `texture`; `assemble` toàn việc xác định.
+5. **Script làm việc trạng thái** (thay phần "Producer đánh dấu" của D2, sửa D10): `inputs` mỗi version và suy ra version cũ; `PROFILE_HASH` sinh trong brief, so khi ingest; ~~`texture-log.jsonl` ghi khi duyệt bước texture~~ **[Thay bằng D22.17: `P texture-stats` tổng hợp khi cần]**; `check_profile.py` chạy khi intake và sinh brief, agent không chạy lại. Agent không ghi ra ngoài thư mục version.
+6. **`assemble` không có reviewer** (sửa D14.3, thay D20.4). Gate mới `checks_human`: ~~`check_assemble.py` pass → anh duyệt (DUYỆT 2)~~ **[Sửa theo D22.11: script `assemble.py` pass → anh duyệt; fail → `blocked`]**. Anh bấm Cần sửa thì chọn bước `texture` hoặc `model`; feedback mở đợt mới theo D11.4. ~~Model của `assemble` vẫn theo D16.~~ **[D22.11: không còn agent]** Lý do: texture đã được chấm trên model ở bước `texture`; `assemble` toàn việc xác định.
 7. **Pilot trước, lô sau.** `pilot_asset: null` → `intake --all` từ chối, chỉ đăng ký từng asset khi không có asset khác đang chạy. Các phép so với pilot ghi `not_checked`.
 8. **`approvals set model reviewer` cần `--confirm-spend`**, vì bước sau tiêu credit Meshy.
 9. **`[limits]`** trong `pipeline.toml` (`blender`, `codex_image`, `meshy`) và `uses` theo bước; `P next` chờ slot. Mỗi runtime có `[limits]` riêng.
 10. **So A/B Claude Code với Codex** (mở rộng D6.4, giữ thứ tự làm của D6.4). Một lõi chung, hai adapter. Thư mục làm việc và kết quả riêng cho mỗi runtime (`production-claude/`, `production-codex/`). Chạy lệch giờ. Chỉ 2–3 asset pilot, vì credit Meshy nhân đôi. Duyệt mù trên trang so cặp `P ab board`; `P compare` tổng hợp số vòng sửa, tỉ lệ duyệt ngay lần đầu, số lần chuyển lên anh, thời gian, chi phí, tỉ lệ pass script, số lần reviewer chấm lệch so với anh. Kết luận gộp runtime và model đi kèm.
 11. **Một phiên bản `model-viewer`** (3.5.0) cho cả trang local và trang claude.ai.
 
+## D22 — Sửa sau review spec lần 3: lỗ hổng, chỗ thừa, thứ tự code (2026-11-09)
+
+Nguồn: review lần 3, ba câu trả lời của anh (agent chỉ chạy qua Producer; bộ view chỉ pipeline đọc; README gói cuối do script ghép).
+
+1. **Finding lưu theo version** (`<bước>/vN/findings.json`). Vòng sửa lấy danh sách của bản gốc (bản tốt nhất). Khi anh `redo`, finding còn mở được chép sang đợt mới, cộng finding của anh. Lý do: một file chung cho cả bước sai khi vòng sửa quay về bản cũ.
+2. **Không di chuyển version bị loại** (thay D14.9). Đánh dấu `rejected` trong status; `cleanup` xóa `work/` của chúng khi asset xong. Lý do: brief, `inputs`, ảnh khoanh, evidence, `ab/mapping.json` đều trỏ tới đường dẫn version. Bớt code.
+3. **Concept brief = `asset-card.yaml`.** Không có file brief riêng. Sửa `out-of-scope-changes.md` theo `_approved/<id>/` và `<id>.layout.md`; quy ước tỉ lệ chung nằm trong `scale_refs` của profile.
+4. **`regen_front`** ở `views_rest`: front sai so với bộ → `redo --step views_front`. Lý do: trước đây không có đường quay lại.
+5. **Vòng evidence không được sửa `final/`.** Script so hash trước và sau. Vòng này không tính vào `resume_rounds`.
+6. **Contract reviewer:** mỗi key `unclear` phải có finding; tin nhắn trả về Producer chỉ gồm `VERDICT` và `COUNTS`.
+7. **Test D1** (quy tắc chung của 4 reviewer) cập nhật theo contract mới: finding có id, `PRIOR`, `TOP_FIX` kiểu đơn và lô.
+8. **Quyết định không ghi trùng** theo bộ (asset, bước, version), dù bấm ở trang local hay remote. Phiên mới với `local+remote`: Producer kéo dữ liệu remote về trước `P next`.
+9. **Spec agent viết trung lập với runtime.** Adapter ghi cách quy đổi `opus`, `sonnet`, `haiku` sang model thật; ledger ghi model thật đã dùng.
+10. **A/B: mỗi runtime so với pilot trong `deliver` của chính nó.**
+11. **`assemble` bằng script `assemble.py`, không có agent** (sửa D14.2, D20.13, D21.6). Gắn texture, xuất GLB, QA của kit, render một bộ nhỏ từ GLB và so pixel với render của bước `texture`, ghép gói cuối và README từ report các bước. Pass → DUYỆT 2; fail → `blocked`. Bộ render có texture và `final_lit_vs_concept.png` chuyển sang bước `texture`. Lý do: không việc nào cần phán đoán; bớt một subagent mỗi asset; so pixel GLB giữ được việc bắt lỗi khi xuất.
+12. **Chỉ script kiểm hash đầu vào**, khi sinh brief và khi ingest. `check_inputs.py` của agent chỉ kiểm file tồn tại. Lý do: agent chỉ chạy qua Producer (anh xác nhận); skill độc lập sau này sẽ viết riêng. Code agent tách lớp tool (`tools/`) khỏi lớp contract để skill độc lập dùng lại tool.
+13. **`sources.json` là nguồn duy nhất cho số hình học** sau khi blockout được duyệt. Profile, preset, thẻ chỉ dùng cho thông số không phải hình học.
+14. **Concept Views bớt chép và bớt chấm lại:** README bộ view còn 4 mục (NGOẠI LỆ, TEXTURE NOTE, lật ảnh, trạng thái) và một dòng trỏ sang `blockout.md`; bỏ bước chép front sang `views_rest`; review lần 2 chỉ chấm 4 view mới và độ đồng bộ, không chấm lại front.
+15. **Một renderer** (file JS của Review Board) cho `P serve`, trang remote, `P show`, `--bundle`, `P ab board`.
+16. **Rubric theo loại chỉ chứa tiêu chí pass/fail kèm tham chiếu tài liệu AD.** Mô tả style chỉ nằm trong `art-direction/`.
+17. **Bỏ `P explain` và `texture-log.jsonl`** (đề xuất kèm D21). Câu "vì sao" trả lời bằng lý do và finding trên trang duyệt; thống kê texture dùng `P texture-stats` lúc cần.
+18. **Thứ tự code theo lát dọc 6 giai đoạn** (`docs/producer.md` §18). GĐ 1 kiểm phần rủi ro nhất: reviewer ghi đủ `PRIOR`, vòng sửa theo finding hội tụ.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
 - Gom rubric của 4 reviewer thành file agent khi viết code (rubric đã nằm trong spec từng agent).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
-- **Đề xuất kèm D21, chờ anh duyệt** (đã viết vào spec, đánh dấu "đề xuất, chờ duyệt"):
+- **Đề xuất còn chờ anh duyệt** (đã viết vào spec, đánh dấu "đề xuất, chờ duyệt"):
   - Vùng anh khoanh trên Review Board thành finding `H<n>`, theo dõi `PRIOR` như finding của reviewer (review-board §4).
-  - `P explain`: câu "Vì sao …?" giao cho reviewer của bước đó ở chế độ giải thích (producer §5).
   - Nút "Bản nào tốt hơn" trên trang so cặp A/B (review-board §8).
   - Hash concept theo nội dung file thay cho thời gian sửa (producer §11).
-  - Danh sách cụ thể của `check_assemble.py` (3d-artist §9).
+- **Cần chạy thử mới biết** (ghi trong `coding-checklist.md`): reviewer ghi đủ `PRIOR`; Claude Code nhận model và resume theo từng lần giao; `codex exec` lồng trong phiên Codex; Meshy giữ UV và số tam giác; runtime báo token theo model.
+- **Chưa đọc code kit v0.10.4** khi review D21–D22. Nhận xét về kiểm trùng giả định tool của kit không tự kiểm hash.
 
 ## Đã đóng (ghi lại cho rõ)
 

@@ -1,7 +1,7 @@
-# Spec — sub-agent Concept Views (v1.1)
+# Spec — sub-agent Concept Views (v1.2)
 
 Tên kỹ thuật: `zps-3dp-concept-views`. Tên hiển thị: ZPS-3DP - Concept Views. Reviewer: `zps-3dp-review-views`.
-Duyệt: 2026-11-08. v1.1: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D1–D9, D21).
+Duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D1–D9, D21, D22).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-concept-views).
 
 ---
@@ -33,7 +33,7 @@ Quy ước view: vật quay mặt về −Y. `left` là bên trái của chính 
 | Project profile | Màu nền gen (tùy chọn) |
 | Thẻ asset (`asset-card.yaml`) | Đối xứng (`symmetric:`) |
 
-Nếu blockout chưa duyệt hoặc hash không khớp, Concept Views dừng và báo Producer.
+Script kiểm blockout đã duyệt và hash khớp khi sinh brief (D22.12). Concept Views chỉ kiểm các file brief chỉ định có tồn tại.
 
 ## 3. Quy trình
 
@@ -64,10 +64,9 @@ final/
 
 | # | Việc | Kiểm bằng |
 |---|---|---|
-| 0 | Lúc bắt đầu, script chép `front.png`, `concept_colors.json`, `bg_color.json` từ `views_front/vN/final/` đã duyệt vào `work/` của `views_rest` | — |
-| 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
+| 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước (brief trỏ thẳng tới `views_front/vN/final/`, không chép sang, D22.14) + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
 | 2 | Đo cả bộ. Gen lại view có lỗi hình trước khi báo cáo | `measure_views.py` |
-| 3 | Tạo sheet 5 view, tóm tắt, README (mục 6) | `views_sheet.py`, `check_package.py` |
+| 3 | Tạo sheet 5 view, tóm tắt, README 4 mục (mục 6) | `views_sheet.py`, `check_package.py` |
 | 4 | Ghi báo cáo. Producer giao review-views (cả bộ). Vòng sửa: gen lại **mọi** view có trong `TOP_FIX: regen` (kiểu lô, D21.1), giữ nguyên các view khác. Ghi `FIXED:` | — |
 | 5 | Duyệt theo `approvals.views_rest` (D14.4) | Anh hoặc chính sách |
 
@@ -110,24 +109,22 @@ final/
   report/       ← report.md, overlay_sheet.png, report.json, VIEWS_sheet.png
 ```
 
-**README có 9 mục.** Mục nào không có nội dung thì ghi "không có".
+**README có 4 mục** (D22.14). Mục nào không có nội dung thì ghi "không có". README không chép lại nội dung đã có ở `blockout.md`; chỉ pipeline đọc bộ view.
 
-1. Thứ tự nguồn: hình học = blockout; màu và vật liệu = concept albedo; vị trí chi tiết = views; kích thước = `sources.json`. Nếu ảnh mâu thuẫn ghi chú: làm theo ảnh mới hơn và ghi lại mâu thuẫn.
-2. Thông số và mốc chiều cao. Lấy từ blockout, không đo lại. Ghi hash blockout đã khóa.
-3. Phần khuất, chép từ `blockout.md`, gồm mục "Blockout tự quyết".
-4. Ghi chú real/texture_only, chép từ concept.
-5. NGOẠI LỆ.
-6. TEXTURE NOTE.
-7. Cảnh báo cố định: "Không chiếu hay bake màu từ ảnh view lên model. Màu lấy từ albedo."
-8. Lật ảnh: "right = left lật ngang", nếu có.
-9. Trạng thái duyệt và ngày.
+Dòng đầu cố định, không phải một mục: "Thông số, mốc chiều cao, phần khuất, Blockout tự quyết, ghi chú real/texture_only: xem `blockout.md` của blockout đã duyệt. Không chiếu hay bake màu từ ảnh view lên model; màu lấy từ albedo."
+
+1. NGOẠI LỆ.
+2. TEXTURE NOTE.
+3. Lật ảnh: "right = left lật ngang", nếu có.
+4. Trạng thái duyệt và ngày.
 
 Không chép vào gói: prompt, bản không chọn, log.
 
 **`check_package.py`:**
-- Hash của 5 file view khớp bản trên sheet.
-- Hash blockout ghi trong README khớp hash blockout đã khóa.
-- README có đủ 9 mục.
+- Đủ 5 file view, và sheet được dựng từ đúng 5 file đó (so hash).
+- README có đủ 4 mục và dòng trỏ đầu tiên.
+
+Hash blockout do script của Producer kiểm khi sinh brief và khi ingest (D22.12), không ghi vào README.
 
 Nếu một điều không đúng, báo cáo `STATUS: BLOCKED`.
 
@@ -153,8 +150,8 @@ Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi
 3. Ánh sáng đều, không bóng đổ, không ánh sáng một hướng, không góc tối kiểu AO.
 4. Không thêm, không bớt chi tiết so với guide.
 
-**Lần 2, cả bộ:**
-1. Bốn tiêu chí trên, cho từng view.
+**Lần 2, cả bộ** (D22.14): chỉ chấm 4 view mới. Front đã duyệt ở `views_front`, không chấm lại; front chỉ bị mở lại qua `regen_front`.
+1. Bốn tiêu chí trên, cho từng view mới.
 2. Đồng bộ: cùng vật liệu có cùng màu, texture, độ mòn như front.
 3. Phần khuất đúng `blockout.md`.
 4. Props đủ số và tách rời.
@@ -165,6 +162,7 @@ Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi
 | Loại | Khi nào |
 |---|---|
 | `regen: F<n>, F<m> …` | Lỗi trong hàng "Gen lại" ở mục 5. Mức `blocker` hoặc `major`. Kiểu lô: liệt kê mọi finding `regen` đang mở; mỗi finding ghi rõ view và lỗi |
+| `regen_front: F<n>` | Chỉ ở lần 2. Front lệch so với cả bộ đến mức không sửa được bằng cách gen lại các view kia (ví dụ màu gỗ của front sai so với concept khi đặt cạnh bộ) (D22.4). Script chạy `redo --step views_front`; `views_rest` chạy lại sau đó |
 | `need_evidence: <ảnh cần thêm>` | Chỉ còn tiêu chí `unclear`, không còn `blocker`, `major` (D21.4). Concept Views làm vòng ngắn, chỉ render ảnh xin thêm vào `vN/review/evidence-<k>/`, không tạo version mới. Không tính vào 3 vòng (`docs/producer.md` §7) |
 | `note_exception: <nội dung>` | Lệch nhỏ về vị trí hoặc số đo |
 | `note_texture: <nội dung>` | Sai màu một vùng nhỏ |

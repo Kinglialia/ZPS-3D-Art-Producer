@@ -1,15 +1,15 @@
-# Spec — sub-agent Blockout (v1.2)
+# Spec — sub-agent Blockout (v1.3)
 
 Tên kỹ thuật: `zps-3dp-blockout`. Tên hiển thị: ZPS-3DP - Blockout. Reviewer: `zps-3dp-review-blockout` (D6.5).
 
-Duyệt: 2026-11-08. Sửa v1.1 cùng ngày (D5). v1.2: 2026-11-09, chờ duyệt. Quyết định nền: `docs/decisions.md` (D1–D5, D21).
+Duyệt: 2026-11-08. Sửa v1.1 cùng ngày (D5). v1.2: 2026-11-09 (D21). v1.3: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D1–D5, D21, D22).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist, zps-concept-views).
 
 ---
 
 ## 1. Mục tiêu và phạm vi
 
-Blockout dựng khối hình học **để đo** cho từng công trình. Blockout là nguồn hình học duy nhất cho Concept Views và 3D Artist.
+Blockout dựng khối hình học **để đo** cho từng công trình. Blockout là nguồn hình học duy nhất cho Concept Views và 3D Artist. Sau khi duyệt, `sources.json` là nguồn duy nhất cho số hình học ở mọi bước sau (D22.13).
 
 **Dùng cho:** công trình, props cứng, cây và đá low-poly (dùng part `custom`).
 **Không dùng cho:** nhân vật, sinh vật (D9). Nếu gặp loại này, hoặc dáng quá phức tạp so với primitive, Blockout báo Producer.
@@ -27,7 +27,7 @@ Blockout dựng khối hình học **để đo** cho từng công trình. Blocko
 | Nguồn | Lấy gì |
 |---|---|
 | Concept albedo | Hình khối và tỉ lệ để đo. Bản có bóng chỉ để đọc khối |
-| Concept brief | Phần khuất, đối xứng, ghi chú real/texture_only |
+| Thẻ asset `asset-card.yaml` (concept brief, D22.3) | Phần khuất (`hidden_sides`), đối xứng (`symmetric`), ghi chú real/texture_only (`real_texture_only_notes`) |
 | Thẻ asset (`asset-card.yaml`) | Khi `has_map: false`: W×D×H từ `size_m`, chiều cao cửa từ `scale_overrides` |
 | File Material Handoff của công trình (và file chung của dự án, nếu có) | Mã vật liệu |
 | `<id>.layout.md` (MAP-LAYOUT) trong `_approved/<id>/`, chỉ khi profile có `has_map: true` | W×D×H, có gồm nền bậc hay không, chiều cao cửa, lệch cố ý, chiều cao nhân vật |

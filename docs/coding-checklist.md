@@ -30,7 +30,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 24 | Producer | Gate `review_human`: reviewer PASS → `waiting_human`; `approvals: reviewer` tự duyệt khi không còn `major`/`unclear`; **[Sửa theo D21.6]** `assemble` dùng gate `checks_human` | producer.md §3–4 | |
 | 25 | Producer | Contract reviewer mới (`COUNTS`, `TOP_FIX` theo bước) được `ingest` đọc đúng; loại `TOP_FIX` sai bước bị từ chối | producer.md §6 | |
 | 26 | Producer | Dừng sớm và bản tốt nhất: brief vòng sửa trỏ tới bản tốt nhất, không phải bản mới nhất | producer.md §7 | |
-| 27 | Producer | Duyệt một bước: chuyển version khác sang `_rejected/`. Chỉ khi duyệt `assemble` mới chép `final/` sang `deliver/<id>/`; duyệt bước khác không chép gì sang `deliver/`; làm lại sau DUYỆT 2 đánh dấu README | producer.md §8, D20.2 | |
+| 27 | Producer | **[Sửa theo D22.2]** Duyệt một bước: các version khác được đánh dấu `rejected` trong status, thư mục giữ nguyên. Chỉ khi duyệt `assemble` mới chép `final/` sang `deliver/<id>/`; duyệt bước khác không chép gì sang `deliver/`; làm lại sau DUYỆT 2 đánh dấu README | producer.md §8, D20.2, D22.2 | |
 | 28 | Producer | `P show --bundle`: một file HTML mở được trên điện thoại, ảnh thu về ≤ 1024 px, dung lượng hợp lý | producer.md §5 | |
 | 29 | Producer | `P intake` từ chối asset thiếu file bắt buộc hoặc `asset-card.yaml` sai (`check_card.py`); `type` lấy từ thẻ | producer.md §9 | |
 | 30 | Producer | `fix_uv_mesh` chạy `redo --step model`; `meshy_regen` hoặc `UNFIXABLE: yes` đặt `waiting_human` (xem dòng 41) | producer.md §6, D20.14 | |
@@ -45,7 +45,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 39 | Producer | `VERDICT: ESCALATE` đặt `waiting_human` ngay, không chạy thêm vòng; trang duyệt hiện lý do | producer.md §7, D20.5 | |
 | 40 | Producer | Vòng `need_evidence` không tính vào 3 vòng; cùng bước xin `need_evidence` lần thứ hai → `waiting_human`; bộ đếm này đặt lại khi anh gửi feedback (`redo`) | producer.md §7, D20.5, D20.15 | |
 | 41 | Producer | `TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes` → script đặt `waiting_human`, không tự cho gọi Meshy lần hai; chỉ sau khi anh duyệt, script tăng `allowed` trong `budget.json` và brief tiếp theo ghi số lần còn được gọi | producer.md §6.3, D20.14, D21.2 | |
-| 42 | Producer | Duyệt `model`: script ghi hash `<tên>-untextured.glb` vào `status.json`; `assemble` báo `BLOCKED` khi hash lệch | 3d-artist.md §3, D20.7 | |
+| 42 | Producer | Duyệt `model`: script ghi hash `<tên>-untextured.glb` vào `status.json`; **[Sửa theo D22.11]** `assemble.py` fail và đặt `blocked` khi hash lệch | 3d-artist.md §3, D20.7, D22.11 | |
 | 43 | Producer | `approvals` trong `policy.yaml` có khóa lạ (ví dụ `views`, `views_front`, `assemble`) → script từ chối; `P approvals set` cũng từ chối | producer.md §4, D20.8, D21.3 | |
 | 44 | Producer | Report worker thiếu `PROFILE_HASH` → `ingest` báo lỗi định dạng; hash phải khớp hash script ghi trong brief | producer.md §6.2, D21.5 | |
 | 45 | Producer | **[Thay bằng D21.2]** ~~Report Texture Artist thiếu `MESHY_CALLS`…~~ `gen_api.py` từ chối gọi khi `used >= allowed` của hash mesh hiện tại; script đọc `budget.json`, không đọc số worker khai | producer.md §6.3, D21.2 | |
@@ -59,8 +59,8 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 53 | Producer | Hash profile: chuẩn hóa YAML (sắp xếp khóa, bỏ `paths` và khóa `_`); đổi `_source` hay `paths` không đổi hash; `approvals set` không bật cảnh báo | producer.md §10, D21.3 | |
 | 54 | Producer | `need_evidence` ghi vào `vN/review/evidence-<k>/`, không tạo version; reviewer chấm lại chính `vN`; không được dùng khi còn `blocker`/`major` | producer.md §7, D21.4 | |
 | 55 | Producer | `inputs` mỗi version; blockout lên version thì view và model dựng từ bản cũ hiện nhãn "cũ" trên trang duyệt mà Producer không làm gì | producer.md §11, D21.5 | |
-| 56 | Producer | `texture-log.jsonl`: một dòng mỗi lần duyệt bước texture; hai asset duyệt cùng lúc không ghi đè nhau | producer.md §8, D21.5 | |
-| 57 | 3D Artist | `check_assemble.py`: 1 mesh / 1 node / 1 material, unlit, độ phân giải texture, hash mesh, đủ file gói; fail → một vòng sửa | 3d-artist.md §9, D21.6 | |
+| 56 | Producer | **[Thay bằng D22.17]** `P texture-stats` tổng hợp đúng từ ledger và các `texture_spec.json`; không có file `texture-log.jsonl` | producer.md §17, D22.17 | |
+| 57 | Producer | **[Thay bằng D22.11]** `assemble.py`: 1 mesh / 1 node / 1 material, unlit, độ phân giải texture, hash mesh, đủ file gói, README ghép đúng từ report; fail → `blocked`, không có vòng sửa | producer.md §6.4, D22.11 | |
 | 58 | Producer | `pilot_asset: null`: `intake --all` từ chối; so với pilot ghi `not_checked` ở review-clay và `tex_measure.py`, không lỗi | producer.md §9, D21.7 | |
 | 59 | Producer | `approvals set model reviewer` không có `--confirm-spend` → từ chối | producer.md §4, D21.8 | |
 | 60 | Producer | `[limits]`: đếm slot theo tiến trình đang chạy thật, không theo trạng thái `running` (asset `running` có thể đang chờ reviewer, không giữ Blender) | producer.md §12, D21.9 | |
@@ -68,3 +68,19 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 62 | Producer | A/B: `P ab board` không lộ tên runtime ở đâu trên trang, kể cả đường dẫn ảnh và tên file tải về; `P compare --reveal` chỉ chạy khi đã duyệt hết lô | review-board.md §8, D21.10 | |
 | 63 | Producer | A/B: mỗi runtime có báo được token đã dùng theo model không; nếu không, `P compare` ghi "không có số" thay vì 0 | producer.md §16, D21.10 | |
 | 64 | Review Board | Trang local chạy đủ tính năng với `model-viewer@3.5.0` (trước dùng 4.0.0) | review-board.md §5, D21.11 | |
+| 65 | Producer | Finding lưu theo version: vòng sửa quay về bản tốt nhất thì brief và reviewer nhận đúng danh sách finding của bản đó; khi `redo`, finding còn mở được chép sang đợt mới | producer.md §6.1, D22.1 | |
+| 66 | Producer | Vòng evidence: hash `final/` không đổi, đổi thì bỏ kết quả; không tính vào `resume_rounds` | producer.md §7, D22.5 | |
+| 67 | Producer | Mỗi key `unclear` trong `RUBRIC` có finding tương ứng, thiếu thì `ingest` báo lỗi; tin nhắn reviewer trả về chỉ có `VERDICT` và `COUNTS` | producer.md §6.1, D22.6 | |
+| 68 | Producer | `TOP_FIX: regen_front` ở `views_rest` chạy `redo --step views_front`; `views_rest` chạy lại sau khi front được duyệt lại | producer.md §6.1, concept-views.md §8, D22.4 | |
+| 69 | Concept Views | README bộ view có đủ 4 mục và dòng trỏ; không có bước chép front; reviewer lần 2 không có finding nào về front trừ `regen_front` | concept-views.md §3, §6, §8, D22.14 | |
+| 70 | Review Board | Bấm Duyệt hai lần (local rồi remote) cho cùng (asset, bước, version): lần sau bị bỏ qua và có thông báo; phiên mới kéo dữ liệu remote trước `P next` | review-board.md §2, §6, D22.8 | |
+| 71 | Mọi agent | `check_inputs.py` của agent chỉ kiểm file tồn tại; hash lệch do script bắt khi sinh brief hoặc ingest (thử: sửa một byte của `part_graph.json` đã duyệt) | producer.md §11, D22.12 | |
+| 72 | 3D Artist, Texture Artist | Số hình học chỉ đọc từ `sources.json`; đổi `size_m` trong thẻ sau khi blockout đã duyệt không làm đổi số mà 3D Artist dùng, mà bật cảnh báo đổi thẻ | producer.md §10, D22.13 | |
+| 73 | Producer | Claude Code: resume đúng subagent cũ bằng SendMessage với agent id lấy từ kết quả lần giao trước | producer.md §16 | |
+| 74 | Codex | `codex exec` gọi lồng từ bên trong một phiên Codex chạy được và lấy được ảnh; nếu không, bản Codex dùng tool ảnh có sẵn | producer.md §16, D18 | |
+| 75 | Texture Artist | Meshy retexture với `enable_original_uv: true` giữ nguyên UV và số tam giác trên một mesh thật | texture-artist.md §2.2, D21.2 | |
+| 76 | — | Đọc code kit v0.10.4: tool của kit có tự kiểm hash hay không. Nếu có, xem lại D22.12 | D22.12 | |
+| 77 | Producer | `assemble.py` so pixel GLB với render bước `texture`: chọn ngưỡng; thử với một GLB cố ý sai color space để chắc script bắt được | producer.md §6.4, D22.11 | |
+| 78 | Mọi reviewer | Test D1 kiểm 4 file reviewer có đủ quy tắc chung theo contract mới: finding có id, `PRIOR`, `TOP_FIX` kiểu đơn/lô, chỉ trả 2 dòng | D1, D22.7 | |
+| 79 | Producer | Adapter quy đổi `opus`/`sonnet`/`haiku` sang model thật; ledger ghi model thật mỗi lần giao | producer.md §16, D22.9 | |
+| 80 | Producer | A/B: mỗi runtime so tris/m² và dE với pilot trong `deliver` của chính nó | producer.md §16, D22.10 | |
