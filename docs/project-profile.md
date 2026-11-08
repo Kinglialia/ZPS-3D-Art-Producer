@@ -48,8 +48,11 @@ style:
   light_convention: unlit_flat | painted_top_light
   top_vs_side_L: 0
   view_bg: null                              # null = pick_bg.py tự chọn
-visual_checks:                               # review-texture kiểm bằng mắt
-  - "..."
+approvals:                                   # ai duyệt sau khi reviewer PASS (D14.4)
+  blockout: human                            # human | reviewer
+  views: human
+  model: human
+  assemble: human                            # luôn human
 detail_examples:                             # có sau pilot
   geometry: [...]
   texture_only: [...]
@@ -86,8 +89,8 @@ Tên kỹ thuật: `zps-3dp-project-setup`. Đây là **skill chạy trong phiê
 
 | Việc | Cách làm |
 |---|---|
-| Tạo profile | Chọn preset. Hỏi anh các trường riêng của dự án: thước tỉ lệ, quy ước style, quy tắc phần khuất, đường dẫn. Ghi `PROJECT-PROFILE.yaml` |
-| Cập nhật sau pilot | Agent **đề xuất** nội dung mới (`detail_examples`, `visual_checks`, `pilot_asset`). Anh duyệt, rồi skill ghi. Agent không tự sửa profile |
+| Tạo profile | Chọn preset. Hỏi anh các trường riêng của dự án: thước tỉ lệ, quy ước style, quy tắc phần khuất, đường dẫn, và **ai duyệt từng điểm duyệt** (`approvals`; gợi ý: pilot để `human` hết). Ghi `PROJECT-PROFILE.yaml` |
+| Cập nhật sau pilot | Agent **đề xuất** nội dung mới (`detail_examples`, `pilot_asset`). Anh duyệt, rồi skill ghi. Agent không tự sửa profile |
 | Kiểm định dạng | `check_profile.py`: đủ trường bắt buộc, đúng kiểu, preset tồn tại. Mọi agent chạy script này trước khi làm việc |
 
 MapLayout (ngoài scope) đọc thước tỉ lệ từ profile, không tự giữ thước riêng.
@@ -108,6 +111,12 @@ MapLayout (ngoài scope) đọc thước tỉ lệ từ profile, không tự gi�
 - Profile vừa được cập nhật sau pilot.
 - Context của Producer đã dài sau một lô.
 
-## 7. Việc cần kiểm khi viết code
+## 7. Sửa theo D14
+
+- `visual_checks` bỏ khỏi profile, chuyển vào rubric theo loại (`production/rubrics/<loại>.md`), chia mục theo bước.
+- Thêm `approvals`. Đổi bằng `P approvals set` (script), không cần Project Setup và không cần phiên mới.
+- Đường dẫn: `_approved/` (đầu vào), `production/` (làm việc), `deliver/` (kết quả đã duyệt).
+
+## 8. Việc cần kiểm khi viết code
 
 Ghi trong `docs/coding-checklist.md`.

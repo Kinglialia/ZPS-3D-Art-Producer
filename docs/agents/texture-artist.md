@@ -8,7 +8,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, z
 
 ## 1. Vai trò
 
-3D Artist gọi Texture Artist, gửi kèm **phần A** của handoff (mẫu `3d-texture-handoff.md` của kit). Texture Artist làm texture albedo 2048 cho một mesh đã khóa, tự gọi review-texture, rồi trả **phần B** cho 3D Artist.
+Texture Artist làm bước `texture` của pipeline (D14.2), giữa `model` và `assemble`. Brief của Producer trỏ tới mesh đã khóa (`final/` đã duyệt của `model`) và phần A của handoff do 3D Artist ghi (mẫu `3d-texture-handoff.md` của kit). Texture Artist chọn chế độ (mục 2.1), gọi Meshy khi cần, làm texture albedo theo `texture_res`, rồi ghi báo cáo contract và phần B. Producer giao review-texture và đếm vòng sửa (D14.1). Texture Artist không gọi reviewer, không gọi agent khác. Chỉ đọc file và thư mục brief chỉ định.
 
 **Dùng cho:** công trình, props cứng, cây và đá low-poly (D9). Version sau có dùng chung cho nhóm nhân vật hay không: chưa chốt.
 
@@ -16,8 +16,8 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, z
 |---|---|
 | Chế độ SỬA: sửa trên lớp Meshy | Sửa mesh, UV, tách material slot (ghi vào phần B cho 3D Artist) |
 | Chế độ VẼ MỚI: tô nền, vẽ paint view, chiếu lên UV, sửa seam | Đổi thiết kế, thêm motif mới |
-| Tự kiểm bằng `tex_measure.py`, gọi review-texture | Gắn texture vào model, xuất GLB (việc của 3D Artist) |
-| Ghi phần B | Tự duyệt. Thu nhỏ texture |
+| Chọn chế độ (D10), gọi Meshy retexture | Gắn texture vào model, xuất GLB (việc của 3D Artist, bước `assemble`) |
+| Tự kiểm bằng `tex_measure.py`, ghi báo cáo contract và phần B | Gọi reviewer. Tự duyệt. Thu nhỏ texture |
 
 ## 2. Đầu vào (phần A của handoff)
 
@@ -25,11 +25,43 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, z
 - Chế độ: SỬA hoặc VẼ MỚI. Lý do (D10, Producer chỉ định, không có key Meshy, Meshy hỏng).
 - Chế độ SỬA: lớp texture Meshy.
 - Bảng part → mã vật liệu, ảnh `parts_*`.
-- Concept albedo, `concept_colors.json`, gói View Concept (views chỉ làm ảnh tham chiếu, TEXTURE NOTE).
-- Thẻ asset: `texture_res` (mặc định 2048). Profile: quy ước ánh sáng (`style.light_convention`), `visual_checks`. Preset và mặc định skill: ngưỡng 4 nhóm (D13).
-- Lỗi cần sửa (từ review-texture hoặc từ anh), nếu đây là vòng sửa.
+- Concept albedo, `concept_colors.json`, `final/` đã duyệt của `views_rest` (views chỉ làm ảnh tham chiếu; TEXTURE NOTE trong README).
+- Thẻ asset: `texture_res` (mặc định 2048). Profile: quy ước ánh sáng (`style.light_convention`). Rubric theo loại, mục `texture` (D14.6). Preset và mặc định skill: ngưỡng 4 nhóm (D13).
+- Lỗi cần sửa (`TOP_FIX` của reviewer hoặc feedback của anh), nếu đây là vòng sửa.
 
-Nếu hash mesh không khớp, Texture Artist dừng và báo 3D Artist.
+Nếu hash mesh không khớp: `STATUS: BLOCKED`.
+
+## 2.1 Chọn chế độ: Meshy rồi SỬA, hay VẼ MỚI
+
+Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu anh hoặc Producer đã chỉ định cách làm, làm theo chỉ định đó. Nếu không có key Meshy: VẼ MỚI.
+
+`texture_complexity.py` đo 5 chỉ số:
+
+| # | Chỉ số | Nguồn |
+|---|---|---|
+| 1 | Số mã vật liệu | `sources.json` |
+| 2 | Số cụm màu chính trên concept albedo, trong vùng vật thể | `palette_report.py` |
+| 3 | Mật độ chi tiết trên bề mặt concept (chỉ báo, không dùng để quyết) | Đo cạnh trên ảnh albedo |
+| 4 | Có hoa văn, chữ, biển, motif | Ghi chú real/texture_only, TEXTURE NOTE |
+| 5 | Hạng của asset (hero / chuẩn / nền) | Profile hoặc brief |
+
+**Đơn giản** khi thỏa cả bốn điều: vật liệu ≤ 2; cụm màu ≤ 6; không có hoa văn, chữ, biển; hạng không phải hero. Ngưỡng nằm trong profile và đổi được. Ví dụ đơn giản: thùng gỗ, hòn đá.
+
+- Ca giáp ranh: Texture Artist nhìn concept và quyết định, ghi lý do một dòng vào `spec.json`.
+- Script ghi đề xuất và điểm số vào `spec.json`.
+- Sau mỗi asset, ghi vào sổ của dự án: điểm số, cách đã dùng, số vòng sửa, anh có duyệt ngay lần đầu không. Dùng sổ này để xem lại ngưỡng sau vài chục asset.
+
+## 2.2 Gọi Meshy retexture
+
+- Chỉ dùng **retexture** trên mesh đã khóa, gửi kèm `enable_original_uv: true`. **Không dùng Meshy remesh.**
+- Ảnh tham chiếu style: concept albedo.
+- Trước mỗi lần gọi: chạy `--dry-run` để xem giá. Không gọi song song trên cùng một budget file.
+- `budget.json` của công trình: `max_credits` = 2 × giá một lần gọi (lấy từ dry-run). Script của kit chặn lần gọi thứ 3.
+- Sau khi Meshy trả file: chạy `uv_check` và `mesh_check`. Nếu UV hoặc số tam giác đổi, loại file đó.
+- **Gọi một lần.** Lỗi sửa được (bóng bake, chi tiết thừa, lệch tông, seam, hoa văn lem): chế độ SỬA trên lớp Meshy.
+- **Gọi lần hai** chỉ khi có cả hai điều kiện: review-texture đánh `blocker` vì lỗi làm hỏng cả style hoặc phần lớn bề mặt, **và** Texture Artist ghi `UNFIXABLE: yes` trong báo cáo kèm lý do; Producer chỉ cho gọi lần hai khi reviewer đánh `meshy_regen` (D14.10) "không sửa được, lý do: …".
+- Nếu lần hai vẫn không dùng được: chế độ VẼ MỚI.
+- Ghi số lần gọi và credit đã dùng vào `texture/notes.md`.
 
 ## 3. Chế độ SỬA (trên lớp Meshy)
 
@@ -79,15 +111,13 @@ Nếu hash mesh không khớp, Texture Artist dừng và báo 3D Artist.
 style:
   light_convention: unlit_flat | painted_top_light
   top_vs_side_L: 0 | +8
-visual_checks:
-  - "..."    # review-texture kiểm bằng mắt
 ```
 
-Quy tắc riêng của dự án (ví dụ New Last Order: mái là ngói xếp lớp theo dốc, tường đọc ra từng viên đá, viền vàng dừng đúng mép khung) nằm trong `visual_checks`, không nằm trong agent.
+Quy tắc riêng của dự án (ví dụ New Last Order: mái là ngói xếp lớp theo dốc, tường đọc ra từng viên đá, viền vàng dừng đúng mép khung) nằm trong **rubric theo loại**, mục `texture` (`production/rubrics/<loại>.md`, D14.6), không nằm trong agent.
 
 ## 7. Reviewer `zps-3dp-review-texture`
 
-Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1). Texture Artist gọi reviewer. Nếu Texture Artist không có tool gọi agent, Texture Artist trả `review: pending` và 3D Artist gọi reviewer (D6.2).
+Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1). Producer giao reviewer ở bước `texture` và ở bước `assemble` (bản cuối trên model) (D14.1).
 
 **Reviewer nhận:**
 - Render có texture, có ánh sáng: 3/4 trước, cận trước, 3/4 sau, camera game.
@@ -95,7 +125,7 @@ Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1).
 - Thumbnail ở kích thước thật.
 - Atlas 2048 và crop các vùng đã sửa.
 - JSON của `tex_measure.py`.
-- Concept albedo, `visual_checks`, TEXTURE NOTE.
+- Concept albedo, mục `texture` của rubric theo loại, TEXTURE NOTE.
 - Chế độ SỬA: lớp Meshy gốc đặt cạnh bản đã sửa.
 
 **Tiêu chí:**
@@ -103,38 +133,35 @@ Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1).
 2. Đúng vật liệu so với concept và bộ đã duyệt.
 3. Đọc được ở thumbnail.
 4. Liền mạch: không thấy seam ở camera game; nét theo khối, không theo mép UV.
-5. Từng mục `visual_checks`.
+5. Từng mục `texture` của rubric theo loại.
 6. TEXTURE NOTE đã xử lý hết.
 7. Chế độ SỬA: chi tiết Meshy đúng vẫn còn; không sửa quá tay.
 
 **Chẩn đoán trước khi đề xuất sửa** (theo kit). Lỗi đen hoặc sai màu: kiểm color space, alpha, normal trước khi vẽ lại. Lỗi seam: kiểm UV và padding trước khi làm mờ. Nếu không tách được do map hay do UV, ghi cả hai giả thuyết.
 
-**Output:** JSON theo D1. `top_fix` thuộc đúng một loại:
+**Output:** contract reviewer (D14.10, `docs/producer.md` §6). `TOP_FIX` thuộc đúng một loại:
 
 | Loại | Ai sửa | Khi nào |
 |---|---|---|
 | `repaint: <vùng>, lỗi: <mô tả>` | Texture Artist, sửa theo crop | Lỗi vẽ, sửa được |
-| `fix_uv_mesh: <mô tả>` | 3D Artist (version mới, DUYỆT 1 lại) | Lỗi do UV, mesh, normal |
-| `meshy_regen: <lý do>` | 3D Artist gọi Meshy lần 2, chỉ khi Texture Artist cũng xác nhận "không sửa được" (D7.2) | `blocker`: hỏng cả style hoặc phần lớn bề mặt |
+| `fix_uv_mesh: <mô tả>` | Script chạy `redo --step model` (D14.10). DUYỆT 1 lại | Lỗi do UV, mesh, normal |
+| `meshy_regen: <lý do>` | Texture Artist gọi Meshy lần 2. Script chỉ cho phép khi báo cáo có `UNFIXABLE: yes` (D14.10) | `blocker`: hỏng cả style hoặc phần lớn bề mặt |
 | `note: <nội dung>` | Ghi vào `texture/notes.md` | `minor`, không chặn |
 
 Duyệt theo ủy quyền (D1.5) chỉ khi không còn `blocker`, `major` hay `unclear`.
 
 ## 8. Vòng sửa (D11)
 
-- Tối đa 3 vòng tự sửa theo reviewer trước khi trả 3D Artist.
-- Dừng sớm: nếu một vòng không giảm số lỗi `blocker` + `major` so với vòng trước, dừng và trả kết quả kèm lý do.
-- Vòng nào tệ hơn thì hoàn tác. Giữ bản tốt nhất, không giữ bản mới nhất.
-- Feedback của anh mở một đợt mới, đếm lại từ 0.
+Script của Producer làm (D14.10): tối đa 3 vòng; dừng sớm khi `blocker` + `major` không giảm; giữ bản tốt nhất; feedback của anh đặt lại bộ đếm. Ở mỗi vòng sửa, Texture Artist sửa đúng `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất).
 
 ## 9. Đầu ra (phần B của handoff)
 
 - `albedo_2048.png`.
-- Phần B: chế độ đã làm và lý do; vùng đã sửa; render trên model đã mở (ghi renderer: Blender, không phải engine); kết quả review-texture (tự kiểm hay độc lập, lỗi còn mở) hoặc `review: pending`; yêu cầu gửi 3D Artist (UV, mesh) gom trong một lần; những gì chưa kiểm.
-- Chế độ SỬA: nếu lỗi không sửa được, ghi "không sửa được, lý do: …" (điều kiện để gọi Meshy lần 2).
+- Phần B: chế độ đã làm và lý do; số lần gọi Meshy; vùng đã sửa; render trên model đã mở (ghi renderer: Blender, không phải engine); yêu cầu gửi 3D Artist (UV, mesh) gom trong một lần; những gì chưa kiểm.
+- Chế độ SỬA: nếu lỗi không sửa được, báo cáo có dòng `UNFIXABLE: yes` và lý do (điều kiện để gọi Meshy lần 2, D14.10).
 - Ghi chú cài đặt material cho người nhập vào engine: unlit, base color only.
 
-Báo cáo ngắn trả 3D Artist theo mẫu cố định (D6.3).
+Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES`, thêm `UNFIXABLE: yes|no`) theo `docs/producer.md` §6.
 
 ## 10. Tool
 
@@ -142,7 +169,9 @@ Báo cáo ngắn trả 3D Artist theo mẫu cố định (D6.3).
 - `project_concept.py` (zps-3d-artist), **có sửa**: 8 view, trọng số theo góc nhìn, loại vùng bị che, lấp vùng khuất trong 3D. Ghi phần sửa trong `SOURCE.md`.
 - `render_model.py`, `inspect_model.py`, `palette_report.py` (`.art-production-support/shared/scripts`).
 
-**Mới:** `base_fill.py`, `render_paint_views.py`, `seam_fix.py`, `crop_edit.py`, `tex_measure.py`.
+- `gen/gen_api.py` (zps-3d-artist), chỉ lệnh `texture` cho Meshy retexture.
+
+**Mới:** `base_fill.py`, `render_paint_views.py`, `seam_fix.py`, `crop_edit.py`, `tex_measure.py`, `texture_complexity.py`.
 
 **Dùng chung với Concept Views:** `gen_image_codex.py` (D8).
 

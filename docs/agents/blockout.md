@@ -63,17 +63,21 @@ Số trong ví dụ chỉ để minh họa định dạng.
 | 4 | Viết part graph theo schema `blockout-1` (mục 9). Box, prism, cylinder. Marker nhô hoặc lõm ít nhất 2 cm. Props là part rời. Kích thước lấy từ MAP-LAYOUT nằm trong `fixed_params` | `check_schema.py` |
 | 5 | **Khóa tỉ lệ chính trước**: dựng footprint, tường, mái, cửa, các tầng nền. Chạy gate. Chỉ khi các khối này pass mới thêm part phụ | `gates.py`, `check_layout.py` |
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
-| 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa và chưa gọi reviewer | Script |
-| 8 | Render bộ review (mục 6) | — |
-| 9 | review-blockout chấm. Mỗi vòng sửa đúng một `top_fix` bằng `apply_edit.py`, rồi chạy `check_fix.py`. Tối đa 3 vòng | Reviewer, `check_fix.py` |
-| 10 | Anh duyệt (hoặc reviewer duyệt theo ủy quyền, D1.5). Khóa version bằng hash. Publish | Anh |
+| 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
+| 8 | Render bộ review (mục 6). Ghi báo cáo contract (`STATUS / OUTPUT / RUBRIC / ISSUES`), rồi dừng | — |
+| 9 | Producer giao review-blockout (D14.1). Nếu FIX, Producer giao lại Blockout: sửa đúng một `TOP_FIX` bằng `apply_edit.py`, rồi chạy `check_fix.py` | Reviewer, `check_fix.py` |
+| 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash và chép `final/` sang `deliver/<id>/blockout/` | Anh hoặc chính sách |
+
+Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc file và thư mục brief chỉ định.
 
 `fit_camera.py` và `param_fit.py` không bắt buộc. Chỉ dùng chúng khi concept vẽ ở góc 3/4. Chúng không được đổi param trong `fixed_params`.
 
 ## 4. Đầu ra mỗi công trình
 
+Ghi vào `production/assets/<id>/blockout/vN/final/` (D14.8). Khi duyệt, script chép sang `deliver/<id>/blockout/`.
+
 ```
-View Concept/0X-<tên>/blockout/
+final/
   part_graph.json    ← "schema": "blockout-1", "version": "v01"
   parts_lib.py
   parts/             ← mỗi part một .glb
@@ -137,7 +141,7 @@ View Concept/0X-<tên>/blockout/
 
 - Reviewer không tự đo. Reviewer đọc số từ JSON.
 - Nếu một chi tiết nhỏ không rõ, reviewer trả `unclear` và xin crop.
-- Output là JSON: mỗi tiêu chí `pass` / `fail` / `unclear`, mỗi lỗi có mức độ `blocker` / `major` / `minor`, và đúng một `top_fix`.
+- Output theo contract reviewer (D14.10, `docs/producer.md` §6): `VERDICT`, `RUBRIC`, `COUNTS`, `TOP_FIX` (loại `structure`, `param`, `need_evidence`), `FINDINGS`.
 - Duyệt theo ủy quyền (D1.5) chỉ khi không còn `blocker`, `major` hay `unclear`. Lỗi `minor` ghi vào `blockout.md` và không chặn duyệt.
 
 ## 7. Đổi version

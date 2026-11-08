@@ -55,7 +55,7 @@ Các điểm này lộ ra khi đọc code kit, trước khi viết code. Nguyên
 ## D6 — Producer, điều phối, runtime và tên (2026-11-08)
 
 1. **Producer là skill chạy trong phiên chính.** Producer chỉ điều phối: giao việc, nhận báo cáo ngắn, ghi sổ trạng thái `producer/status.md` (mỗi công trình một dòng). Producer không mở ảnh, JSON hay file dự án. Mọi agent tự làm việc của mình, kể cả bàn giao.
-2. **Agent nào làm thì tự gọi reviewer của mình.** Blockout gọi review-blockout, Concept Views gọi review-views, 3D Artist gọi review-clay, Texture Artist gọi review-texture. Sub-agent được gọi sub-agent (Claude Code: tối đa 3 tầng dưới phiên chính; Codex 0.164: đã thử thật 3 tầng). Dự phòng: nếu agent không có tool gọi agent, agent trả `review: pending`, và agent gọi nó tự gọi reviewer. Reviewer không có tool gọi agent.
+2. **[Thay bằng D14.1]** ~~Agent nào làm thì tự gọi reviewer của mình.~~ Blockout gọi review-blockout, Concept Views gọi review-views, 3D Artist gọi review-clay, Texture Artist gọi review-texture. Sub-agent được gọi sub-agent (Claude Code: tối đa 3 tầng dưới phiên chính; Codex 0.164: đã thử thật 3 tầng). Dự phòng: nếu agent không có tool gọi agent, agent trả `review: pending`, và agent gọi nó tự gọi reviewer. Reviewer không có tool gọi agent.
 3. **Báo cáo ngắn theo mẫu cố định.** Agent trả về Producer: `asset | gate | status | sheet | summary`, vài dòng. Ảnh và chi tiết nằm trong file, không nằm trong báo cáo.
 4. **Hai runtime: Claude Code và Codex.** Một nguồn chung, không phụ thuộc runtime. Mỗi runtime có một adapter riêng (gọi agent, chạy Blender, mạng, ảnh, Review Board). Một script build xuất ra hai bản. Bảng khác biệt ghi trong `docs/EDITIONS.md`. Thứ tự làm: bản Claude, chạy thử, rồi bản Codex. Bản Codex: Blender chạy ngoài sandbox; quyền mạng và sandbox cấp ở phiên gốc, vì sub-agent Codex dùng chung quyền của phiên gốc.
 5. **Tên.** Tên kỹ thuật `zps-3dp-<vai>` (ví dụ `zps-3dp-3d-artist`). Tên hiển thị `ZPS-3DP - <Vai>`. Tiền tố này tránh trùng với skill `zps-3d-artist`, `zps-concept-views` của kit đang cài.
@@ -64,7 +64,7 @@ Các điểm này lộ ra khi đọc code kit, trước khi viết code. Nguyên
 
 Spec đã duyệt: `docs/agents/3d-artist.md`.
 
-1. **Vai trò.** 3D Artist là chủ asset từ lúc dựng tới lúc bàn giao. 3D Artist tự gọi review-clay, Meshy và Texture Artist.
+1. **[Thay bằng D14.2]** ~~Vai trò. 3D Artist là chủ asset từ lúc dựng tới lúc bàn giao. 3D Artist tự gọi review-clay, Meshy và Texture Artist.~~
 2. **Meshy.** Chỉ retexture, giữ UV, không remesh. Gọi một lần. Gọi lần hai chỉ khi review-texture đánh `blocker` và Texture Artist xác nhận không sửa được. Lần hai vẫn hỏng thì Texture Artist vẽ mới. Dùng Texture Artist ngay từ đầu nếu Producer yêu cầu hoặc không có key Meshy.
 3. **Gộp mesh.** Join và quét lỗi. Không weld, không boolean. Khóa mesh bằng hash sau DUYỆT 1. Giả định: `repair.py` của pilot chỉ dùng cho nhánh B (Meshy remesh).
 4. **UV và texture.** Làm theo `texture_res` của thẻ asset, mặc định 2048 (sửa theo D13). Đổi độ phân giải cho asset cụ thể là việc của agent khác.
@@ -133,10 +133,25 @@ Spec: `docs/project-profile.md`.
 7. Producer cũng nhắc mở phiên mới sau khi cập nhật profile, và khi context đã dài sau một lô.
 8. **Sub-agent hỏi anh** chỉ qua một đường: sub-agent dừng và ghi câu hỏi vào báo cáo ngắn; Producer chuyển câu hỏi cho anh; anh trả lời; Producer gọi lại sub-agent kèm câu trả lời.
 
+## D14 — Dùng skill `producer` của anh làm nền (2026-11-08)
+
+Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, references, templates). Giữ cơ chế của skill nền: trạng thái trong file, script quyết định thứ tự, brief bằng file, contract báo cáo, `pipeline.toml`, version theo bước, resume, ruling, trang duyệt local, hook.
+
+1. **Producer sắp xếp reviewer** qua script (thay D6.2). Worker không gọi reviewer, không gọi agent khác. Resume worker cũ ở vòng 1–2, worker mới từ vòng 3. Bỏ dự phòng `review: pending`. Lý do: script đếm vòng chắc chắn, không phụ thuộc giới hạn tầng, reviewer độc lập hơn. Token gần bằng; chậm hơn khoảng 20–60 giây mỗi vòng.
+2. **Pipeline 6 bước** (thay D7.1): `blockout` → `views_front` → `views_rest` → `model` → `texture` → `assemble`. 3D Artist làm `model` và `assemble`. Texture Artist làm `texture`, gồm chọn Meshy hay vẽ mới (D10) và gọi Meshy.
+3. **Gate `review_human`**: reviewer PASS rồi chờ duyệt. Dùng cho `blockout`, `views_rest`, `model`, `assemble`. `views_front`, `texture` dùng `review`. Bỏ `final_human_gate`.
+4. **Chính sách duyệt `approvals` trong profile** (Project Setup hỏi lúc khởi tạo): mỗi điểm duyệt là `human` hoặc `reviewer`. `assemble` luôn `human`. Đổi bằng lời trong chat → Producer chạy `P approvals set`. Ngoại lệ theo lô: `P delegate`. Thứ tự: `delegate` > `approvals` > `human`. Thay một phần D1.5.
+5. **Xem kết quả:** anh nói trong chat → Producer chạy `P dashboard`, `P show <id>` (HTML), `P show --bundle` (nhúng ảnh, xem trên điện thoại), `P serve`. Producer gửi file bằng tool gửi file, không mở file.
+6. **Thông số và rubric:** số mà script dùng nằm trong YAML (D13); tài liệu style nằm trong `art-direction/` (AD giữ); tiêu chí chung của bước nằm trong agent reviewer; tiêu chí riêng theo loại nằm trong `production/rubrics/<loại>.md` (anh duyệt). `visual_checks` chuyển khỏi profile vào rubric theo loại. Loại asset lấy từ `type` trong thẻ.
+7. **GUIDELINE.md mở rộng:** mẫu `asset-card.yaml`, danh sách file bắt buộc, cách làm lúc chốt, việc của AD. `check_card.py` đi kèm. `P intake` kiểm thẻ, file bắt buộc, profile; sai thì không đăng ký.
+8. **Ba khu thư mục:** `_approved/<id>/` (đầu vào, anh ghi), `production/assets/<id>/` (làm việc, script và agent ghi), `deliver/<id>/` (kết quả đã duyệt, script chép sau mỗi lần duyệt). Bỏ `View Concept/` riêng; bỏ `3D/`, thay bằng `deliver/`.
+9. **Dọn version:** duyệt một bước thì các version khác chuyển sang `_rejected/`. Xóa chỉ qua `P cleanup` khi asset đã xong, dry-run trước, anh đồng ý. Agent chỉ đọc đường dẫn trong brief.
+10. **Contract reviewer:** `VERDICT`, `RUBRIC` (có `unclear`), `COUNTS` (blocker/major/minor), `TOP_FIX` (loại theo bước), `FINDINGS`. D11 (dừng sớm, bản tốt nhất) làm bằng script. `fix_uv_mesh` → redo `model`. `meshy_regen` thêm một lần khi Texture Artist báo `UNFIXABLE: yes`.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
 - **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
-- Spec cho Producer. Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
+- Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
 
 - 3D Artist: 5 điểm (gộp mesh C1, project profile texture/UV C4, part graph hay archkit C6, bỏ path gen mesh trong v1, tam giác nhỏ là cảnh báo) và runtime (chỉ Claude Code, hay cả Codex).

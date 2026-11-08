@@ -17,9 +17,9 @@ Concept Views vẽ 5 view (front, back, left, right, top) của một asset. **H
 |---|---|
 | Render ảnh guide từ blockout đã duyệt | Dựng hoặc sửa blockout |
 | Gen view qua Codex (D8): front trước, rồi các mặt còn lại | Quyết định phần khuất (lấy từ blockout và brief) |
-| Đo bằng script, gen lại view bị lỗi hình, tối đa 3 vòng mỗi view | Sửa ảnh để pass. Đổi ngưỡng |
-| Gọi review-views (2 lần) | Tự duyệt |
-| Tạo sheet 5 view, đóng gói `View Concept/0X-<tên>/` | Dựng model |
+| Đo bằng script, gen lại view bị lỗi hình | Sửa ảnh để pass. Đổi ngưỡng |
+| Ghi báo cáo contract cho Producer | Gọi reviewer hay agent khác (D14.1). Tự duyệt |
+| Tạo sheet 5 view, viết README của bộ view | Dựng model |
 
 Quy ước view: vật quay mặt về −Y. `left` là bên trái của chính vật (camera ở +X). `right` là bên phải của vật (camera ở −X). Giống Blockout và 3D Artist.
 
@@ -36,22 +36,30 @@ Nếu blockout chưa duyệt hoặc hash không khớp, Concept Views dừng và
 
 ## 3. Quy trình
 
-| # | Bước | Kiểm bằng |
+Concept Views chạy ở **hai bước** của pipeline (D14.2). Mỗi bước kết thúc bằng báo cáo contract. Producer giao reviewer và vòng sửa (D14.1, D11).
+
+**Bước `views_front`** (gate `review`):
+
+| # | Việc | Kiểm bằng |
 |---|---|---|
 | 1 | Kiểm đầu vào | `check_inputs.py` |
 | 2 | Render guide và ID cho 5 view | `render_blockout_views.py` |
 | 3 | Chọn màu nền: lấy từ profile; nếu không có, chọn màu xa nhất với bảng màu concept | `pick_bg.py` |
 | 4 | Đo màu từng vật liệu trên concept albedo, ghi `concept_colors.json` (tên vật liệu = mã trong `sources.json`) | `palette_report.py` |
 | 5 | Gen **front** (mục 4) | `gen_image_codex.py` |
-| 6 | Đo front. Gọi **review-views lần 1** (chỉ front). Nếu `regen`, gen lại front | `measure_views.py`, reviewer |
-| 7 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã chấm + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
-| 8 | Đo cả bộ. Gen lại view có lỗi hình. Tối đa 3 vòng mỗi view | `measure_views.py` |
-| 9 | Gọi **review-views lần 2** (cả bộ). Xử lý `top_fix` theo loại (mục 5) | Reviewer |
-| 10 | Tạo sheet 5 view và tóm tắt | `views_sheet.py` |
-| 11 | Gửi **DUYỆT VIEWS**. Anh duyệt trên sheet 5 view, hoặc reviewer duyệt theo ủy quyền (D1.5) | Anh |
-| 12 | Đóng gói `View Concept/0X-<tên>/` và viết README (mục 6) | `check_package.py` |
+| 6 | Đo front, ghi báo cáo. Producer giao review-views (chỉ front) | `measure_views.py` |
 
-Nếu một view vẫn lỗi sau 3 vòng, Concept Views dừng gen view đó và ghi lên sheet, để anh quyết.
+**Bước `views_rest`** (gate `review_human`):
+
+| # | Việc | Kiểm bằng |
+|---|---|---|
+| 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
+| 2 | Đo cả bộ. Gen lại view có lỗi hình trước khi báo cáo | `measure_views.py` |
+| 3 | Tạo sheet 5 view, tóm tắt, README (mục 6) | `views_sheet.py`, `check_package.py` |
+| 4 | Ghi báo cáo. Producer giao review-views (cả bộ). Vòng sửa: chỉ gen lại view có `TOP_FIX: regen` | — |
+| 5 | Duyệt theo `approvals.views` (D14.4). Script chép sang `deliver/<id>/views/` | Anh hoặc chính sách |
+
+Chỉ đọc file và thư mục brief chỉ định.
 
 ## 4. Quy tắc gen view
 
@@ -78,15 +86,15 @@ Nếu một view vẫn lỗi sau 3 vòng, Concept Views dừng gen view đó và
 | Vị trí chi tiết lệch nhỏ (ví dụ dải ngang mỏng lệch 3–4%) | **Không gen lại** | NGOẠI LỆ, kèm con số |
 | Motif hai màu, đèn | Kiểm bằng mắt (reviewer). Không dùng dE | — |
 
-## 6. Gói View Concept
+## 6. Đầu ra của bộ view
+
+Bỏ thư mục `View Concept/` riêng (D14.8). Bước `views_rest` ghi vào `production/assets/<id>/views_rest/vN/final/`. Khi duyệt, script chép sang `deliver/<id>/views/`. Brief của bước sau trỏ thẳng tới đây và tới `final/` của blockout đã duyệt.
 
 ```
-View Concept/0X-<tên>/
+final/
   README.md
-  concept/      ← albedo (nguồn màu), có bóng (chỉ để đọc khối)
-  views/        ← front, back, left, right, top đã duyệt + views.json
-  blockout/     ← bản chép blockout đã khóa (Blockout publish vào đây)
-  report/       ← report.md, overlay_sheet.png, report.json, VIEWS_sheet.png, JSON reviewer
+  front.png, back.png, left.png, right.png, top.png, views.json
+  report/       ← report.md, overlay_sheet.png, report.json, VIEWS_sheet.png
 ```
 
 **README có 9 mục.** Mục nào không có nội dung thì ghi "không có".
@@ -104,11 +112,11 @@ View Concept/0X-<tên>/
 Không chép vào gói: prompt, bản không chọn, log.
 
 **`check_package.py`:**
-- Hash của 5 file view khớp bản đã duyệt trên sheet.
-- `blockout/part_graph.json` khớp hash blockout đã khóa.
+- Hash của 5 file view khớp bản trên sheet.
+- Hash blockout ghi trong README khớp hash blockout đã khóa.
 - README có đủ 9 mục.
 
-Nếu một điều không đúng, không giao gói.
+Nếu một điều không đúng, báo cáo `STATUS: BLOCKED`.
 
 ## 7. Sheet duyệt
 
@@ -139,7 +147,7 @@ Sonnet, chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agen
 4. Props đủ số và tách rời.
 5. Motif và đèn: kiểm bằng mắt.
 
-**Output:** JSON theo D1. `top_fix` thuộc đúng một loại:
+**Output:** contract reviewer (D14.10, `docs/producer.md` §6). `TOP_FIX` thuộc đúng một loại (`note_exception`, `note_texture` chỉ ghi chú, không gây FIX):
 
 | Loại | Khi nào |
 |---|---|

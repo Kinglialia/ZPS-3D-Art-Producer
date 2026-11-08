@@ -45,9 +45,9 @@ Producer bắt đầu từ thư mục `approved Concept/`. Mỗi công trình c�
 - Xuất một file Material Handoff cho mỗi công trình. Tên file chứa mã công trình, ví dụ `05-warehouse.material.md`.
 - Bảng mã vật liệu dùng chung có thể nằm trong một file chung của dự án. Blockout đọc cả file chung lẫn file của công trình.
 
-### 1.7 Thẻ asset trong brief (D13)
+### 1.7 Thẻ asset `asset-card.yaml` (D13, D14.7)
 
-Brief của mỗi concept có một **thẻ asset** theo mẫu trong `docs/project-profile.md` §4: `tier`, `texture_res` (bỏ trống = 2048), `tris_max`, `scale_overrides`, `symmetric`, `real_texture_only_notes`. Nếu thẻ thiếu `tier`, Producer dừng và báo.
+Brief của mỗi concept có một **thẻ asset** theo mẫu trong `docs/project-profile.md` §4: `tier`, `texture_res` (bỏ trống = 2048), `tris_max`, `scale_overrides`, `symmetric`, `real_texture_only_notes`. Thẻ là file `asset-card.yaml` đặt trong `_approved/<id>/`, có thêm `type` (`building | prop | tree | rock`) và `hidden_sides`. Mẫu và hướng dẫn nằm trong `GUIDELINE.md` (do `P init` sinh). Lúc anh chốt, Concept Artist soạn thẻ, hỏi anh một lần các trường còn trống kèm gợi ý, viết material handoff, chạy `check_card.py`, rồi báo anh. Trong lúc skill chưa cập nhật, anh gửi `GUIDELINE.md` ở đầu phiên Concept Artist.
 
 ### 1.8 Bàn giao
 
