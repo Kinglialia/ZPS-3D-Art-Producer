@@ -194,10 +194,12 @@ Spec: `docs/review-board.md`.
 6. Phần xem và khoanh vùng là một file JavaScript dùng chung cho hai trang.
 
 ## Chưa chốt
-- Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
-- Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
+- Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
+- Gom rubric của 4 reviewer thành file agent khi viết code (rubric đã nằm trong spec từng agent).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
 
-- 3D Artist: 5 điểm (gộp mesh C1, project profile texture/UV C4, part graph hay archkit C6, bỏ path gen mesh trong v1, tam giác nhỏ là cảnh báo) và runtime (chỉ Claude Code, hay cả Codex).
-- Màu nền gen view (C3).
-- Thư mục `upstream/`: giữ bản chép, dùng submodule, hay chỉ trỏ đường dẫn.
+## Đã đóng (ghi lại cho rõ)
+
+- 3D Artist 5 điểm và runtime: đã chốt ở D7, D6.4.
+- Màu nền gen view (C3): `style.view_bg` trong profile; không ghi thì `pick_bg.py` chọn (concept-views.md §3).
+- Thư mục `upstream/`: giữ bản chép để đọc, không đưa vào git (`.gitignore`); tạo lại từ remote `assets-kit`, commit `905dc93`.
