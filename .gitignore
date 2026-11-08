@@ -1,0 +1,8 @@
+# Read-only copy of ZPS Art Assets Kit v0.10.4 (remote assets-kit, commit 905dc93).
+# Recreate with: git archive assets-kit/main src | tar -x -C upstream/zps-art-assets-kit-v0.10.4
+upstream/
+
+**/tools/.deps/
+__pycache__/
+output/
+.DS_Store
