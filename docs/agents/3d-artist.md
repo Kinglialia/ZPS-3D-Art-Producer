@@ -10,8 +10,8 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist,
 
 3D Artist là **chủ asset** từ lúc dựng model tới lúc bàn giao. 3D Artist tự gọi reviewer và agent cần thiết. Producer chỉ giao việc và nhận báo cáo ngắn.
 
-**Dùng cho:** công trình, props cứng, vật hard-surface. Mọi asset phải có blockout đã duyệt.
-**Không dùng cho:** nhân vật, sinh vật, cây, đá (D7.6).
+**Dùng cho:** công trình, props cứng, cây và đá low-poly. Mọi asset phải có blockout đã duyệt.
+**Không dùng cho:** nhân vật, sinh vật (D9).
 
 | Làm | Không làm |
 |---|---|

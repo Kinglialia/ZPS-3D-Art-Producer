@@ -48,7 +48,7 @@ Các điểm này lộ ra khi đọc code kit, trước khi viết code. Nguyên
 
 1. **`sources.json`.** MAP-LAYOUT và Material Handoff có một file cho mỗi công trình. Blockout đọc nguyên các file này, rồi chép giá trị cần kiểm vào `sources.json`, kèm dòng trích và hash của file nguồn. Script chỉ đọc JSON.
 2. **Bỏ `inventory.json` và `check_inventory.py`.** Blockout ghi một dòng "thành phần đếm trên concept" vào `blockout.md`. Reviewer so dòng đó với concept. Lý do: script chỉ so graph với danh sách do chính Blockout viết, nên không bắt được lỗi đếm sai từ concept. Việc đếm props trên ảnh gen thuộc review-views.
-3. **Field tùy chọn `tag` (`base` | `roof`).** `check_base` và `check_support` chỉ chạy trên part có tag. Không có tag thì trả `not_checked`. Part `mirror_of` phải tự ghi `material`, `role`, `tag`. **Blockout không làm nhân vật, sinh vật, cây, đá.**
+3. **Field tùy chọn `tag` (`base` | `roof`).** `check_base` và `check_support` chỉ chạy trên part có tag. Không có tag thì trả `not_checked`. Part `mirror_of` phải tự ghi `material`, `role`, `tag`. **Blockout không làm nhân vật, sinh vật.** (Sửa theo D9: bản đầu ghi thêm "cây, đá" là sai.)
 4. **`check_fix.py` chạy sau khi sửa.** Script so graph cũ với graph mới. Nếu `fixed_params` đổi hoặc bbox lệch quá ±2%, Blockout chạy `apply_edit.py --revert`.
 5. **Gộp render thành `render_review.py`.** Một lần mở Blender cho ảnh camera game, lineup và crop chân nhà. Các ảnh `clay_*`, `normal_*`, `overlay_*`, `parts_*` vẫn dùng `render_views.py` của kit.
 
@@ -69,11 +69,27 @@ Spec đã duyệt: `docs/agents/3d-artist.md`.
 3. **Gộp mesh.** Join và quét lỗi. Không weld, không boolean. Khóa mesh bằng hash sau DUYỆT 1. Giả định: `repair.py` của pilot chỉ dùng cho nhánh B (Meshy remesh).
 4. **UV và texture.** Luôn làm và giao ở 2048. Số liệu nằm trong project profile. Thu nhỏ texture là việc của agent khác.
 5. **Cách dựng.** Part graph. Không nhắc okf_context của Gen3D trong các skill của mình.
-6. **Phạm vi v1.** Chỉ self-model. Không gen mesh bằng AI. Không làm nhân vật, sinh vật, cây, đá.
+6. **Phạm vi v1.** Chỉ self-model. Không gen mesh bằng AI. Không làm nhân vật, sinh vật. Cây và đá low-poly có làm (sửa theo D9).
 7. **Tam giác nhỏ.** Chỉ cảnh báo. LOD làm sau.
 8. **Detail pass hai lớp.** Lớp 1: quy tắc chung theo silhouette và pixel (3 px, 16 px). Lớp 2: ví dụ của dự án trong profile, có sau pilot. Thêm: mặt phẳng tối thiểu, phóng to độ sâu, test thumbnail, tris/m² so với pilot, trần tris theo hạng, bevel tùy chọn.
 9. **Review.** Render có ánh sáng, wireframe, thumbnail, lineup, `clay_lit_concept` (DUYỆT 1). Gói hoàn thành có `final_lit_vs_concept.png`, đặt cạnh concept có bóng.
 10. **Bàn giao.** 3D Artist tự chép vào `3D/0X-<tên>/` sau DUYỆT 2.
+
+## D8 — Sinh ảnh dùng Codex (2026-11-08)
+
+1. Bộ Producer bản Claude vẫn có Concept Views và Texture Artist. Bước sinh ảnh và sửa ảnh của hai agent này gọi **tool ảnh của Codex qua `codex exec`**. Bản Codex dùng tool ảnh có sẵn của Codex.
+2. Lý do: Claude không tự sinh ảnh. Codex có tính năng `image_generation`. Claude giữ việc điều phối, đo và review.
+3. **Khi Codex CLI lỗi:** nếu gọi 3 lần liên tiếp mà không ra ảnh, agent dừng và báo Producer, kèm thông báo lỗi. Ví dụ lỗi: chưa cài, chưa đăng nhập, hết hạn mức, hết thời gian chờ, không có file ảnh. Producer xin anh duyệt. Chỉ khi anh duyệt mới dùng tool ảnh phía Claude (ví dụ `generate_image` của Gen3D, có tính credit).
+4. 3 lần thử này chỉ tính **lỗi kỹ thuật**. Ảnh ra nhưng chất lượng chưa đạt thì đi theo vòng review của từng agent, không tính vào 3 lần này.
+5. Adapter của bản Claude ghi cách gọi `codex exec`, chỗ lấy ảnh đầu ra, và cách chép ảnh vào thư mục công trình.
+
+## D9 — Phạm vi v1 và một Producer (2026-11-08)
+
+1. **v1 làm:** công trình, props cứng, cây và đá low-poly. Cả bốn loại đi cùng một luồng: Blockout (part graph, part `custom` cho cây, đá) → Concept Views → 3D Artist (self-model) → Texture Artist. Nếu dáng quá phức tạp so với primitive (cây nhiều cành nhỏ, đá tả thực), agent báo Producer, không cố dựng.
+2. **v1 không làm:** nhân vật, sinh vật. Hai nhóm này có luồng khác ở mọi bước. Version sau làm bộ agent riêng `zps-3dp-char-*`.
+3. **Một Producer duy nhất.** Producer nhìn loại asset rồi giao cho đúng bộ agent. Bộ nhân vật dùng lại Producer, Review Board, mẫu báo cáo ngắn, D1 và D8.
+4. Sửa lỗi phạm vi: D5.3 và D7.6 bản đầu ghi loại trừ "cây, đá". Anh chỉ chọn loại trừ nhân vật. Đã sửa hai mục đó.
+5. Spec Concept Views v1 đã duyệt: `docs/agents/concept-views.md`.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).

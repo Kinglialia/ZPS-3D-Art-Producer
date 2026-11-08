@@ -11,8 +11,8 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist,
 
 Blockout dựng khối hình học **để đo** cho từng công trình. Blockout là nguồn hình học duy nhất cho Concept Views và 3D Artist.
 
-**Dùng cho:** công trình, props cứng, vật hard-surface.
-**Không dùng cho:** nhân vật, sinh vật, cây, đá. Nếu gặp loại này, Blockout báo Producer.
+**Dùng cho:** công trình, props cứng, cây và đá low-poly (dùng part `custom`).
+**Không dùng cho:** nhân vật, sinh vật (D9). Nếu gặp loại này, hoặc dáng quá phức tạp so với primitive, Blockout báo Producer.
 
 | Làm | Không làm |
 |---|---|

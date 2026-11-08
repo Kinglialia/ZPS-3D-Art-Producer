@@ -79,7 +79,19 @@ Xuất **một file cho mỗi công trình** (D5.1). Tên file chứa mã công 
 |---|---|---|
 | Thu nhỏ texture | Từ 2048 xuống mức thấp hơn, tùy object | D7.4 |
 | LOD | Giảm tam giác nhỏ khi đã chốt camera | D7.7 |
-| Luồng vật hữu cơ | Nhân vật, sinh vật, cây, đá: concept → gen 3D → retopo → texture, không qua Blockout | D7.6 |
+| Bộ agent nhân vật, sinh vật (`zps-3dp-char-*`, version sau) | Xem bảng ở mục 3.1 | D9 |
+
+### 3.1 Luồng nhân vật, sinh vật — khác luồng v1 ở đâu
+
+| Bước | Luồng v1 (công trình, props, cây, đá) | Luồng nhân vật, sinh vật |
+|---|---|---|
+| Blockout | Part graph | Ma-nơ-canh có tham số (chiều cao, tỉ lệ đầu/thân, tay chân, vai, hông), A-pose hoặc T-pose |
+| Concept Views | Khóa hình, IoU chặn | IoU so với ma-nơ-canh chỉ báo. Chặn bằng tỉ lệ, vị trí khớp, cặp view đối xứng, màu so với front. Reviewer kiểm "cùng một nhân vật" |
+| Phần khuất | Blockout tự quyết khi thiếu | Bắt buộc có trong brief của Concept Artist |
+| 3D | Self-model, detail pass | Gen mesh (Meshy, Tripo, ZPS 3D Gen) bằng multi-view, rồi retopo |
+| Sau 3D | Bàn giao | Thường có rig và animation |
+| Reviewer | Khối, kết cấu, chân nhà | Giải phẫu, tỉ lệ, trang phục, nét nhận diện |
+| Dùng chung | Producer, Review Board, mẫu báo cáo ngắn, D1, D8. Texture Artist: chốt khi bàn spec Texture | |
 
 ## 4. Project profile — chưa có chủ
 
