@@ -67,7 +67,7 @@ Spec đã duyệt: `docs/agents/3d-artist.md`.
 1. **Vai trò.** 3D Artist là chủ asset từ lúc dựng tới lúc bàn giao. 3D Artist tự gọi review-clay, Meshy và Texture Artist.
 2. **Meshy.** Chỉ retexture, giữ UV, không remesh. Gọi một lần. Gọi lần hai chỉ khi review-texture đánh `blocker` và Texture Artist xác nhận không sửa được. Lần hai vẫn hỏng thì Texture Artist vẽ mới. Dùng Texture Artist ngay từ đầu nếu Producer yêu cầu hoặc không có key Meshy.
 3. **Gộp mesh.** Join và quét lỗi. Không weld, không boolean. Khóa mesh bằng hash sau DUYỆT 1. Giả định: `repair.py` của pilot chỉ dùng cho nhánh B (Meshy remesh).
-4. **UV và texture.** Luôn làm và giao ở 2048. Số liệu nằm trong project profile. Thu nhỏ texture là việc của agent khác.
+4. **UV và texture.** Làm theo `texture_res` của thẻ asset, mặc định 2048 (sửa theo D13). Đổi độ phân giải cho asset cụ thể là việc của agent khác.
 5. **Cách dựng.** Part graph. Không nhắc okf_context của Gen3D trong các skill của mình.
 6. **Phạm vi v1.** Chỉ self-model. Không gen mesh bằng AI. Không làm nhân vật, sinh vật. Cây và đá low-poly có làm (sửa theo D9).
 7. **Tam giác nhỏ.** Chỉ cảnh báo. LOD làm sau.
@@ -119,6 +119,19 @@ Spec đã duyệt: `docs/agents/texture-artist.md`.
 3. Mọi lần sửa đi qua crop ≤ 1024 px. Pixel ngoài vùng sửa không được đổi.
 4. Tự kiểm theo 4 nhóm chung: quy ước ánh sáng, đúng vật liệu, đọc được ở kích thước thật, liền mạch. Quy tắc riêng của dự án nằm trong `visual_checks` của profile.
 5. review-texture (Opus) có 4 loại `top_fix`: `repaint`, `fix_uv_mesh`, `meshy_regen`, `note`.
+
+## D13 — Project Profile, thẻ asset, Project Setup (2026-11-08)
+
+Spec: `docs/project-profile.md`.
+
+1. **Bốn lớp thông số**, lớp sau ghi đè lớp trước: mặc định skill → preset theo loại game → profile dự án → thẻ asset.
+2. **Profile dự án ngắn**, không có trường gắn với một loại asset. Thước tỉ lệ, quy tắc phần khuất, `visual_checks` là danh sách mở. Số kỹ thuật nằm trong preset.
+3. **Thẻ asset** nằm trong brief của từng concept: hạng, `texture_res`, trần tris riêng, thước riêng, đối xứng, ghi chú real/texture_only. Hạng chỉ quyết định trần tris.
+4. **Texture:** làm theo thẻ asset. Nếu thẻ không ghi, mặc định 2048. Đổi cho asset cụ thể là việc của agent khác.
+5. **Skill Project Setup** (`zps-3dp-project-setup`) chạy trong phiên chính, vì phải hỏi anh. Skill tạo profile, ghi cập nhật sau pilot khi anh duyệt, và có `check_profile.py`. Agent không tự sửa profile.
+6. **Flow:** anh gọi Producer → Producer kiểm profile → nếu thiếu, làm cùng anh qua Project Setup → ghi file và kiểm → **Producer nhắc anh gõ lệnh xóa context và mở phiên mới** (Claude Code: `/clear`; Codex: `/new`) → phiên mới chỉ đọc profile và sổ trạng thái.
+7. Producer cũng nhắc mở phiên mới sau khi cập nhật profile, và khi context đã dài sau một lô.
+8. **Sub-agent hỏi anh** chỉ qua một đường: sub-agent dừng và ghi câu hỏi vào báo cáo ngắn; Producer chuyển câu hỏi cho anh; anh trả lời; Producer gọi lại sub-agent kèm câu trả lời.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).

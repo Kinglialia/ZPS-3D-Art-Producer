@@ -45,7 +45,11 @@ Producer bắt đầu từ thư mục `approved Concept/`. Mỗi công trình c�
 - Xuất một file Material Handoff cho mỗi công trình. Tên file chứa mã công trình, ví dụ `05-warehouse.material.md`.
 - Bảng mã vật liệu dùng chung có thể nằm trong một file chung của dự án. Blockout đọc cả file chung lẫn file của công trình.
 
-### 1.7 Bàn giao
+### 1.7 Thẻ asset trong brief (D13)
+
+Brief của mỗi concept có một **thẻ asset** theo mẫu trong `docs/project-profile.md` §4: `tier`, `texture_res` (bỏ trống = 2048), `tris_max`, `scale_overrides`, `symmetric`, `real_texture_only_notes`. Nếu thẻ thiếu `tier`, Producer dừng và báo.
+
+### 1.8 Bàn giao
 
 - Mỗi công trình trong `approved Concept/`: concept albedo, concept có bóng (chỉ để đọc khối), brief (mục 1.2–1.4), và Material Handoff.
 - Producer kiểm danh sách này trước khi gọi Blockout. Thiếu mục nào thì Producer dừng và báo.
@@ -93,7 +97,11 @@ Xuất **một file cho mỗi công trình** (D5.1). Tên file chứa mã công 
 | Reviewer | Khối, kết cấu, chân nhà | Giải phẫu, tỉ lệ, trang phục, nét nhận diện |
 | Dùng chung | Producer, Review Board, mẫu báo cáo ngắn, D1, D8. Texture Artist: chốt khi bàn spec Texture | |
 
-## 4. Project profile — chưa có chủ
+MapLayout đọc thước tỉ lệ chung từ `PROJECT-PROFILE.yaml` (D13), không tự giữ thước riêng.
+
+## 4. Project profile — đã có chủ (D13)
+
+Đã chốt: skill Project Setup giữ profile. Xem `docs/project-profile.md`. Phần dưới là ghi chú cũ.
 
 Nhiều skill cần cùng một file thông số của từng dự án: kích thước tham chiếu, quy tắc phần khuất mặc định, camera game, thông số texture/UV.
 

@@ -24,3 +24,5 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 18 | Texture Artist | `crop_edit.py`: ảnh Codex trả về có cùng kích thước với crop gửi đi; pixel ngoài vùng sửa không đổi sau khi ghép | texture-artist.md §5 | |
 | 19 | Texture Artist | `tex_measure.py` đọc vùng vật liệu từ ID map (không gắn nhãn cứng); chạy được trên một asset khác Warehouse | texture-artist.md §6 | |
 | 20 | Mọi agent | Quy tắc dừng sớm và hoàn tác (D11) chạy đúng: đếm lỗi `blocker` + `major` từ JSON reviewer qua các vòng | D11 | |
+| 21 | Project Setup | `check_profile.py` báo đúng khi thiếu trường bắt buộc, sai kiểu, hoặc preset không tồn tại; agent dừng khi profile không hợp lệ | project-profile.md §5 | |
+| 22 | Mọi agent | Đọc thông số đúng thứ tự mặc định → preset → profile → thẻ asset; ghi hash profile vào báo cáo | project-profile.md §1, §3 | |

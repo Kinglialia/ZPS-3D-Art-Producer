@@ -31,7 +31,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist,
 | Concept albedo | Màu, vật liệu, chi tiết |
 | Concept có bóng | Đọc khối và độ sâu. Không lấy màu |
 | Concept brief | Ghi chú real/texture_only (bắt buộc) |
-| Project profile | Trần tris theo hạng, thông số UV/texture, ngưỡng pixel, ví dụ detail pass, camera |
+| Preset, profile, thẻ asset (D13) | Hạng và trần tris, `texture_res`, thông số UV, ngưỡng pixel, ví dụ detail pass, camera |
 
 Nếu hash của blockout không khớp với hash đã khóa, 3D Artist dừng và báo Producer.
 
@@ -118,15 +118,15 @@ Cuối bảng ghi: tris blockout → tris cuối → trần theo hạng; tris/m�
 
 ## 6. UV và texture
 
-Số liệu nằm trong project profile. Nếu profile không ghi, dùng số mặc định của kit và ghi "dùng mặc định kit" trong báo cáo.
+Thứ tự đọc thông số (D13): mặc định skill → preset → profile → thẻ asset. Thông số nào lấy từ mặc định, báo cáo ghi "dùng mặc định".
 
 ```
-texture_author_res: 2048
-uv_padding_px: 16          # mỗi bên, kể cả mép atlas; tính ở 2048
-texel_min_px_per_m: 64     # tính ở 2048
+texture_res: thẻ asset; nếu không ghi = 2048
+uv.padding_px: 16          # preset; mỗi bên, kể cả mép atlas; tính ở texture_res
+uv.texel_min_px_per_m: 64  # preset; tính ở texture_res
 ```
 
-- Luôn làm và giao ở 2048. 3D Artist không thu nhỏ texture.
+- Làm và giao ở `texture_res` của thẻ asset (mặc định 2048). 3D Artist không đổi độ phân giải sau đó. Đổi cho asset cụ thể là việc của agent khác.
 - UV riêng cho từng mặt, không chồng lấn, một material (theo kit).
 - `check_uv_edge.py` (mới): khoảng cách từ đảo UV tới mép atlas ≥ padding, và texel ≥ mức tối thiểu. Script báo cả số ở 2048 và số tương ứng ở 1024.
 

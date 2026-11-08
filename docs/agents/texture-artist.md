@@ -26,7 +26,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, z
 - Chế độ SỬA: lớp texture Meshy.
 - Bảng part → mã vật liệu, ảnh `parts_*`.
 - Concept albedo, `concept_colors.json`, gói View Concept (views chỉ làm ảnh tham chiếu, TEXTURE NOTE).
-- Project profile: `texture_author_res`, quy ước ánh sáng (`style.light_convention`), ngưỡng 4 nhóm, `visual_checks`.
+- Thẻ asset: `texture_res` (mặc định 2048). Profile: quy ước ánh sáng (`style.light_convention`), `visual_checks`. Preset và mặc định skill: ngưỡng 4 nhóm (D13).
 - Lỗi cần sửa (từ review-texture hoặc từ anh), nếu đây là vòng sửa.
 
 Nếu hash mesh không khớp, Texture Artist dừng và báo 3D Artist.
