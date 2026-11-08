@@ -80,7 +80,7 @@ Anh nói trong chat. Producer chạy script và chuyển đường dẫn cho anh
 
 - Producer đưa file cho anh bằng tool gửi file (`SendUserFile`). Nội dung không vào context Producer.
 - `P show --bundle`: nhúng ảnh (thu cạnh dài về tối đa 1024 px; crop giữ nguyên) và GLB nhỏ vào một file HTML, để xem trên điện thoại. Khi anh dùng Remote Control, Producer tự thêm `--bundle`.
-- Duyệt bằng nút trên điện thoại: thuộc Review Board (chưa chốt).
+- Duyệt bằng nút, khoanh vùng, xem toàn màn hình và zoom: Review Board (`docs/review-board.md`, D19). Trên điện thoại: bật `review_board: local+remote`.
 
 ## 6. Contract của reviewer
 

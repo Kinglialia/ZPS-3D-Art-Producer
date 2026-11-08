@@ -182,9 +182,19 @@ Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, re
 4. Dự phòng: nếu Astra không lưu đúng đường dẫn, script lấy ảnh mới nhất của phiên đó trong `~/.codex/generated_images/` rồi chép sang. Kém chắc hơn, chỉ để dự phòng.
 5. Lý do: chất lượng ảnh như nhau (cùng Astra, cùng tool ảnh); hướng dẫn nằm một chỗ trong repo, có test; không phải cài thêm gì bên Codex.
 
+## D19 — Review Board (2026-11-08)
+
+Spec: `docs/review-board.md`.
+
+1. **Hai trang, cùng một bộ tính năng:** trang local `P serve` (luôn có) và trang claude.ai (tùy chọn, `review_board: local+remote` trong profile). Bản Codex chỉ có trang local.
+2. **Xem:** chạm để mở toàn màn hình (lớp phủ CSS), ‹ › hoặc vuốt để chuyển ảnh, hai ngón để zoom, chạm hai lần để zoom nhanh. Ảnh tải lên là ảnh gốc. Model 3D xoay và zoom được.
+3. **Khoanh vùng v1 trên ảnh:** chế độ Xem và chế độ Khoanh; vòng tròn, chữ nhật, nét tự do; mỗi vùng có số và ghi chú; lưu theo tọa độ ảnh gốc. Lưu ảnh đã khoanh và JSON vào thư mục feedback của asset. Brief vòng sửa và reviewer nhận danh sách vùng. **v2:** ghim trên model 3D.
+4. **GLB trên claude.ai:** nhúng base64 trong file JSON, tải lên làm asset (đã thử trên điện thoại: chạy). GLB tối đa khoảng 15 MB. Dự phòng: video quay 360°.
+5. **Đồng bộ:** `P board prepare` chuẩn bị file; Producer tải lên và ghi dữ liệu bằng tool, theo đường dẫn, không mở file. Kéo về: Producer đọc dòng đổi trạng thái, tải ảnh khoanh về, chạy `P feedback`.
+6. Phần xem và khoanh vùng là một file JavaScript dùng chung cho hai trang.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
-- **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
 - Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
 

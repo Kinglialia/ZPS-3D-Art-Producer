@@ -15,7 +15,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 9 | Concept Views, Texture Artist | `codex exec -m gpt-6-astra -s workspace-write -i …` với khung prompt cố định: Astra lưu ảnh đúng đường dẫn và ghi `result.json`; nếu không, dự phòng lấy từ `~/.codex/generated_images/`. Có tốn lượt Codex | D8, D18 | Cờ `-i` và `-m` có trong `codex exec --help` (2026-11-08) |
 | 10 | Concept Views | `measure_views.py` sau khi sửa tách nền theo màu khóa toàn ảnh: khe giữa cột không còn bị tính là vật thể | review-kit G1 | |
 | 11 | Codex | Sub-agent Codex gọi được sub-agent 3 tầng (D14.1 không còn cần, ghi lại để tham khảo) | D6.2 (đã thay bằng D14.1) | Đã thử với Codex 0.164 ngày 2026-11-08: 3 tầng chạy được |
-| 12 | Review Board | Sub-agent tải ảnh và ghi dữ liệu lên trang duyệt; anh bấm Duyệt thì agent đọc được | decisions "Chưa chốt" | Đã thử ngày 2026-11-08: chạy được. Lỗi hiển thị "Đã lưu" đã sửa ở trang thử, chưa xem lại |
+| 12 | Review Board | Sub-agent tải ảnh và ghi dữ liệu lên trang claude.ai; anh bấm Duyệt thì agent đọc được; GLB nhúng base64 trong JSON hiện được trên điện thoại | D19 | Đã thử 2026-11-08: chạy được cả ba. glTF JSON có `data:` thì lỗi |
 | 13 | Concept Views | `diff_guides.py` phát hiện đúng view nào đổi guide khi blockout lên version (thử: đổi một cửa sổ mặt sau) | concept-views.md §9 | |
 | 14 | Concept Views | `pick_bg.py` chọn màu nền không trùng màu vật liệu nào của concept (thử với bộ đá kem + gỗ tối) | concept-views.md §3 | |
 | 15 | Blockout | Part `custom` dựng được cây và đá low-poly; gate của kit chạy đúng với khối nhiều mặt | D9.1 | |
@@ -35,3 +35,6 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 29 | Producer | `P intake` từ chối asset thiếu file bắt buộc hoặc `asset-card.yaml` sai (`check_card.py`); `type` lấy từ thẻ | producer.md §9 | |
 | 30 | Producer | `fix_uv_mesh` chạy `redo --step model`; `meshy_regen` chỉ cho thêm một lần khi có `UNFIXABLE: yes` | producer.md §6 | |
 | 31 | Texture Artist | `tone_fix.py` giảm chênh tông 4 hướng và bóng dưới diềm về trong ngưỡng của `tex_measure.py`, không làm phẳng vân hay vết mòn | D17, texture-artist.md §3 | |
+| 32 | Review Board | Lớp phủ toàn màn hình, zoom hai ngón, chạm hai lần, vuốt chuyển ảnh chạy trên iPhone trong Artifact và trên trang local | review-board.md §3 | |
+| 33 | Review Board | Khoanh vùng: chế độ Xem/Khoanh không lẫn thao tác; tọa độ theo ảnh gốc đúng sau khi zoom; ảnh khoanh và JSON lưu đúng thư mục | review-board.md §4 | |
+| 34 | Review Board | `P board prepare` + đẩy lên + kéo về: Producer không mở ảnh; `P feedback` nhận đường dẫn ảnh khoanh; brief vòng sau có danh sách vùng | review-board.md §6 | |

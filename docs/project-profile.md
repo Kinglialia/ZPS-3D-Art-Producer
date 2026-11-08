@@ -53,6 +53,7 @@ approvals:                                   # ai duyệt sau khi reviewer PASS 
   views: human
   model: human
   assemble: human                            # luôn human
+review_board: local                          # local | local+remote (D19)
 detail_examples:                             # có sau pilot
   geometry: [...]
   texture_only: [...]
