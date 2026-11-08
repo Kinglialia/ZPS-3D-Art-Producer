@@ -148,6 +148,11 @@ Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, re
 9. **Dọn version:** duyệt một bước thì các version khác chuyển sang `_rejected/`. Xóa chỉ qua `P cleanup` khi asset đã xong, dry-run trước, anh đồng ý. Agent chỉ đọc đường dẫn trong brief.
 10. **Contract reviewer:** `VERDICT`, `RUBRIC` (có `unclear`), `COUNTS` (blocker/major/minor), `TOP_FIX` (loại theo bước), `FINDINGS`. D11 (dừng sớm, bản tốt nhất) làm bằng script. `fix_uv_mesh` → redo `model`. `meshy_regen` thêm một lần khi Texture Artist báo `UNFIXABLE: yes`.
 
+## D15 — Model sinh ảnh và khi Codex hỏng (2026-11-08)
+
+1. `gen_image_codex.py` luôn gọi `codex exec -m gpt-6-astra`, ghi model rõ trong lệnh, không dựa vào config mặc định của máy. Tên model và mức reasoning nằm trong preset: `image_gen: {codex_model: gpt-6-astra, reasoning: medium}`. Ảnh tham chiếu gửi bằng cờ `-i`.
+2. Khi Codex hỏng (3 lần lỗi kỹ thuật, D8.3): agent báo `STATUS: BLOCKED` kèm lỗi, Producer **hỏi anh**. Không có phương án tự động: không vẽ bằng code, không tự dùng Gen3D hay API khác. Anh chọn cách xử lý; Producer ghi lựa chọn vào ledger rồi `P retry`.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
 - **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
