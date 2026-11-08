@@ -91,10 +91,40 @@ Spec đã duyệt: `docs/agents/3d-artist.md`.
 4. Sửa lỗi phạm vi: D5.3 và D7.6 bản đầu ghi loại trừ "cây, đá". Anh chỉ chọn loại trừ nhân vật. Đã sửa hai mục đó.
 5. Spec Concept Views v1 đã duyệt: `docs/agents/concept-views.md`.
 
+## D10 — Asset texture đơn giản không qua Meshy (2026-11-08)
+
+- `texture_complexity.py` đo 5 chỉ số. Asset **đơn giản** (vật liệu ≤ 2; cụm màu ≤ 6; không hoa văn, chữ, biển; không phải hero) thì 3D Artist gọi thẳng Texture Artist vẽ mới. Asset phức tạp thì Meshy trước (D7.2).
+- Ngưỡng nằm trong profile. Ca giáp ranh do 3D Artist quyết và ghi lý do. Anh hoặc Producer được ghi đè.
+- Ghi kết quả từng asset vào sổ dự án để xem lại ngưỡng.
+- Đã ghi vào `docs/agents/3d-artist.md` (B1, mục 8.1).
+
+## D11 — Vòng sửa: 3 vòng, dừng sớm, hoàn tác, reset theo feedback (2026-11-08)
+
+Áp dụng cho mọi agent có vòng review (Blockout, Concept Views, 3D Artist, Texture Artist). D11 thay cho các dòng "tối đa 3 vòng" ở từng spec.
+
+1. **Tối đa 3 vòng** agent tự sửa theo reviewer, trước khi gửi anh.
+2. **Dừng sớm.** Nếu một vòng không giảm số lỗi `blocker` + `major` so với vòng trước, agent dừng và báo, không chạy tiếp.
+3. **Hoàn tác.** Vòng nào tệ hơn thì quay về bản trước. Gửi anh bản tốt nhất, không phải bản mới nhất.
+4. **Feedback của anh mở một đợt mới**, đếm lại từ 0. Không giới hạn số đợt. Đợt mới bắt đầu từ bản tốt nhất đã gửi anh.
+5. **Feedback của anh ưu tiên hơn rubric.** Nếu feedback làm lệch một ràng buộc (ví dụ bbox so với MAP-LAYOUT), agent làm theo anh, ghi rõ chỗ lệch, và báo Producer phần bị ảnh hưởng.
+6. **Ghi lịch sử** từng đợt (số đợt, feedback nguyên văn, số vòng) vào file trạng thái của công trình.
+7. Lý do: Self-Refine, GIER, Nexus cho thấy phần lớn cải thiện nằm ở vòng 1–3; Code-as-Room thấy 10 vòng tệ hơn 5; Huang et al. (ICLR 2024) cho thấy vòng sửa chỉ có ích khi có phản hồi bên ngoài (script, reviewer độc lập). Thiết kế của mình có phản hồi bên ngoài.
+
+## D12 — Spec Texture Artist v1 (2026-11-08)
+
+Spec đã duyệt: `docs/agents/texture-artist.md`.
+
+1. Hai chế độ: SỬA trên lớp Meshy (giữ chi tiết đúng, chỉ vẽ lại chỗ sai) và VẼ MỚI.
+2. VẼ MỚI = tô nền bằng script theo mã vật liệu + 8 paint view qua Codex + chiếu lên UV + lấp vùng khuất và sửa seam trong không gian 3D (theo MVPaint). Không vẽ thẳng lên atlas.
+3. Mọi lần sửa đi qua crop ≤ 1024 px. Pixel ngoài vùng sửa không được đổi.
+4. Tự kiểm theo 4 nhóm chung: quy ước ánh sáng, đúng vật liệu, đọc được ở kích thước thật, liền mạch. Quy tắc riêng của dự án nằm trong `visual_checks` của profile.
+5. review-texture (Opus) có 4 loại `top_fix`: `repaint`, `fix_uv_mesh`, `meshy_regen`, `note`.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
 - **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
-- Spec cho Concept Views, Texture Artist, 4 reviewer, Producer.
+- Spec cho Producer. Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
+- Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
 
 - 3D Artist: 5 điểm (gộp mesh C1, project profile texture/UV C4, part graph hay archkit C6, bỏ path gen mesh trong v1, tam giác nhỏ là cảnh báo) và runtime (chỉ Claude Code, hay cả Codex).
 - Màu nền gen view (C3).

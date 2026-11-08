@@ -14,8 +14,13 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 8 | 3D Artist | `gen_api.py texture` (Meshy) cần mạng. Bản Codex xin phép mạng ở phiên gốc | 3d-artist.md §13, D6.4 | |
 | 9 | Concept Views, Texture Artist | `codex exec` nhận ảnh tham chiếu đầu vào, và trả đường dẫn ảnh đầu ra ổn định. Có tốn lượt Codex | D8 | |
 | 10 | Concept Views | `measure_views.py` sau khi sửa tách nền theo màu khóa toàn ảnh: khe giữa cột không còn bị tính là vật thể | review-kit G1 | |
+| 11 | Codex | Sub-agent Codex vẫn gọi được sub-agent 3 tầng ở bản Codex đang dùng. Nếu không, dùng dự phòng `review: pending` | D6.2 | Đã thử với Codex 0.164 ngày 2026-11-08: 3 tầng chạy được |
+| 12 | Review Board | Sub-agent tải ảnh và ghi dữ liệu lên trang duyệt; anh bấm Duyệt thì agent đọc được | decisions "Chưa chốt" | Đã thử ngày 2026-11-08: chạy được. Lỗi hiển thị "Đã lưu" đã sửa ở trang thử, chưa xem lại |
 | 13 | Concept Views | `diff_guides.py` phát hiện đúng view nào đổi guide khi blockout lên version (thử: đổi một cửa sổ mặt sau) | concept-views.md §9 | |
 | 14 | Concept Views | `pick_bg.py` chọn màu nền không trùng màu vật liệu nào của concept (thử với bộ đá kem + gỗ tối) | concept-views.md §3 | |
 | 15 | Blockout | Part `custom` dựng được cây và đá low-poly; gate của kit chạy đúng với khối nhiều mặt | D9.1 | |
-| 11 | Codex | Sub-agent Codex vẫn gọi được sub-agent 3 tầng ở bản Codex đang dùng. Nếu không, dùng dự phòng `review: pending` | D6.2 | Đã thử với Codex 0.164 ngày 2026-11-08: 3 tầng chạy được |
-| 12 | Review Board | Sub-agent tải ảnh và ghi dữ liệu lên trang duyệt; anh bấm Duyệt thì agent đọc được | decisions "Chưa chốt" | Đã thử ngày 2026-11-08: chạy được. Lỗi hiển thị "Đã lưu" đã sửa ở trang thử, chưa xem lại |
+| 16 | 3D Artist | `texture_complexity.py` xếp đúng: thùng gỗ và hòn đá là "đơn giản", một công trình pilot là "phức tạp" | 3d-artist.md §8.1 | |
+| 17 | Texture Artist | `project_concept.py` sau khi sửa: nhận 8 view, trọng số theo góc nhìn, loại vùng bị che, lấp vùng khuất trong 3D theo normal | texture-artist.md §4 | |
+| 18 | Texture Artist | `crop_edit.py`: ảnh Codex trả về có cùng kích thước với crop gửi đi; pixel ngoài vùng sửa không đổi sau khi ghép | texture-artist.md §5 | |
+| 19 | Texture Artist | `tex_measure.py` đọc vùng vật liệu từ ID map (không gắn nhãn cứng); chạy được trên một asset khác Warehouse | texture-artist.md §6 | |
+| 20 | Mọi agent | Quy tắc dừng sớm và hoàn tác (D11) chạy đúng: đếm lỗi `blocker` + `major` từ JSON reviewer qua các vòng | D11 | |

@@ -56,8 +56,8 @@ Nếu hash của blockout không khớp với hash đã khóa, 3D Artist dừng 
 
 | # | Bước |
 |---|---|
-| B1 | Chọn cách làm texture. **Mặc định:** Meshy retexture. **Gọi Texture Artist vẽ mới** khi Producer yêu cầu hoặc khi không có key Meshy |
-| B2 | Gọi Meshy retexture **một lần** (mục 8) |
+| B1 | Chọn cách làm texture (mục 8.1). Nếu anh hoặc Producer đã chỉ định cách làm, làm theo chỉ định đó. Nếu không: chạy `texture_complexity.py`. **Đơn giản:** gọi Texture Artist vẽ mới. **Phức tạp:** Meshy retexture. Không có key Meshy: gọi Texture Artist vẽ mới |
+| B2 | Nếu B1 chọn Meshy: gọi Meshy retexture **một lần** (mục 8.2) |
 | B3 | Gọi **Texture Artist** kèm phần A của handoff: sửa trên lớp Meshy, hoặc vẽ mới. Texture Artist tự gọi review-texture |
 | B4 | Nhận phần B của handoff. Nếu có `review: pending` (Texture Artist không gọi được reviewer), 3D Artist tự gọi review-texture |
 | B5 | Nếu review chỉ ra lỗi UV hoặc mesh, 3D Artist sửa (version mới, cần DUYỆT 1 lại). Nếu là lỗi vẽ, gửi lại Texture Artist. Tối đa 3 vòng |
@@ -160,7 +160,25 @@ Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A
 
 Output theo D1: JSON, mỗi tiêu chí `pass` / `fail` / `unclear`, mức độ `blocker` / `major` / `minor`, đúng một `top_fix`.
 
-## 8. Meshy retexture
+## 8.1 Chọn Meshy hay Texture Artist vẽ mới
+
+`texture_complexity.py` đo 5 chỉ số:
+
+| # | Chỉ số | Nguồn |
+|---|---|---|
+| 1 | Số mã vật liệu | `sources.json` |
+| 2 | Số cụm màu chính trên concept albedo, trong vùng vật thể | `palette_report.py` |
+| 3 | Mật độ chi tiết trên bề mặt concept (chỉ báo, không dùng để quyết) | Đo cạnh trên ảnh albedo |
+| 4 | Có hoa văn, chữ, biển, motif | Ghi chú real/texture_only, TEXTURE NOTE |
+| 5 | Hạng của asset (hero / chuẩn / nền) | Profile hoặc brief |
+
+**Đơn giản** khi thỏa cả bốn điều: vật liệu ≤ 2; cụm màu ≤ 6; không có hoa văn, chữ, biển; hạng không phải hero. Ngưỡng nằm trong profile và đổi được. Ví dụ đơn giản: thùng gỗ, hòn đá.
+
+- Ca giáp ranh: 3D Artist nhìn concept và quyết định, ghi lý do một dòng vào `spec.json`.
+- Script ghi đề xuất và điểm số vào `spec.json`.
+- Sau mỗi asset, ghi vào sổ của dự án: điểm số, cách đã dùng, số vòng sửa, anh có duyệt ngay lần đầu không. Dùng sổ này để xem lại ngưỡng sau vài chục asset.
+
+## 8.2 Meshy retexture
 
 - Chỉ dùng **retexture** trên mesh đã khóa, gửi kèm `enable_original_uv: true`. **Không dùng Meshy remesh.**
 - Ảnh tham chiếu style: concept albedo.
@@ -218,7 +236,7 @@ Chỉ bàn giao sau khi anh duyệt DUYỆT 2.
 
 Chép từ kit v0.10.4 (khóa, không sửa): `self_build/` (giống Blockout), `asset_checks/` (`mesh_check`, `uv_check`, `export_check`, `screen_tris_check`, `render_rig`), `optimize/bake.py` (chỉ phần unwrap UV, cần xác nhận khi viết code), `gen/gen_api.py` (chỉ `texture` cho Meshy), `finalize.py`, `report.py`.
 
-Mới: `check_inputs.py`, `check_detail.py`, `check_mesh.py`, `check_uv_edge.py`, `render_review.py`.
+Mới: `check_inputs.py`, `check_detail.py`, `check_mesh.py`, `check_uv_edge.py`, `render_review.py`, `texture_complexity.py`.
 
 Không chép: các path Meshy/Tripo/ZPS gen mesh, sweep, remesh, `project_concept.py`.
 
