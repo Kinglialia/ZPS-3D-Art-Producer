@@ -169,12 +169,16 @@ Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, re
 4. Tính theo **chi phí cho mỗi asset hoàn thành**, không theo từng lần gọi. Ước lượng (chưa đo): bảng hạ ở mục 2 rẻ hơn dùng Opus hết khoảng 20–40%; nếu model rẻ thêm một vòng sửa mỗi bước thì phần tiết kiệm có thể mất hết.
 5. Model nằm trong `pipeline.toml` (`model`, `escalate_model`, `reviewer_model`). Trong file agent dùng tên chung `opus`, `sonnet`, `haiku`. Bản Codex: adapter ghi model riêng (D15).
 
+## D17 — Texture Artist: Claude điều phối, Codex chỉ vẽ; script sửa trước (2026-11-08)
+
+1. **Cách A.** Texture Artist là sub-agent Claude. Texture Artist chạy mọi script (D10, Meshy, `base_fill`, chiếu UV, sửa seam, `tex_measure`). Codex (`gpt-6-astra`) chỉ vẽ paint view và sửa crop. Lý do: phần lớn bước `texture` là script; nếu Codex hỏng thì chỉ phần vẽ bị dừng.
+2. **`tone_fix.py` chạy trước Codex** ở chế độ SỬA: cân tông theo hướng mặt, nâng vùng bị che, làm mịn seam, theo số đo của `tex_measure.py`. Chỉ lỗi script không sửa được mới gọi Codex. Lý do: rẻ hơn, ổn định hơn, giảm số lần gọi Codex.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
 - **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
 - Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
-- Texture Artist cách A (Claude điều phối, Codex chỉ vẽ ảnh) và `tone_fix.py` chạy trước Codex: đã đề xuất, chưa xác nhận.
 
 - 3D Artist: 5 điểm (gộp mesh C1, project profile texture/UV C4, part graph hay archkit C6, bỏ path gen mesh trong v1, tam giác nhỏ là cảnh báo) và runtime (chỉ Claude Code, hay cả Codex).
 - Màu nền gen view (C3).

@@ -69,7 +69,8 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 2. **Chỉ vẽ lại chỗ sai:** chi tiết thừa, bóng bake, AO, lệch tông giữa các hướng, seam, hoa văn lem, TEXTURE NOTE.
 3. **Vẽ lại cho sắc** hoa văn, đinh, sọc bị Meshy làm lem, theo concept.
 4. **Không sửa quá tay.** Giữ vân, vết mòn, muội đúng mức concept.
-5. Mỗi lần sửa đi qua **sửa theo crop** (mục 5).
+5. **Script sửa trước (D17).** Chạy `tone_fix.py` trước khi gọi Codex: cân tông các mặt bên theo hướng normal, nâng vùng bị che về mức quy ước (ví dụ dưới diềm), làm mịn seam theo số đo của `tex_measure.py`. Đo lại sau khi chạy.
+6. Chỉ những lỗi script không sửa được (chi tiết thừa, hoa văn lem, vẽ lại cho sắc, TEXTURE NOTE) mới đi qua **sửa theo crop** bằng Codex (mục 5).
 
 ## 4. Chế độ VẼ MỚI (tô nền + paint view)
 
@@ -171,7 +172,9 @@ Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES`, thêm `UNF
 
 - `gen/gen_api.py` (zps-3d-artist), chỉ lệnh `texture` cho Meshy retexture.
 
-**Mới:** `base_fill.py`, `render_paint_views.py`, `seam_fix.py`, `crop_edit.py`, `tex_measure.py`, `texture_complexity.py`.
+**Mới:** `base_fill.py`, `render_paint_views.py`, `seam_fix.py`, `crop_edit.py`, `tex_measure.py`, `texture_complexity.py`, `tone_fix.py`.
+
+**Phân việc (D17):** Texture Artist là sub-agent Claude, chạy mọi script ở trên. Codex (`gpt-6-astra`, D15) chỉ vẽ paint view và sửa crop, qua `gen_image_codex.py`.
 
 **Dùng chung với Concept Views:** `gen_image_codex.py` (D8).
 

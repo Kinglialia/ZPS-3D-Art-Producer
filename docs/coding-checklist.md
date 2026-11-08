@@ -34,3 +34,4 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 28 | Producer | `P show --bundle`: một file HTML mở được trên điện thoại, ảnh thu về ≤ 1024 px, dung lượng hợp lý | producer.md §5 | |
 | 29 | Producer | `P intake` từ chối asset thiếu file bắt buộc hoặc `asset-card.yaml` sai (`check_card.py`); `type` lấy từ thẻ | producer.md §9 | |
 | 30 | Producer | `fix_uv_mesh` chạy `redo --step model`; `meshy_regen` chỉ cho thêm một lần khi có `UNFIXABLE: yes` | producer.md §6 | |
+| 31 | Texture Artist | `tone_fix.py` giảm chênh tông 4 hướng và bóng dưới diềm về trong ngưỡng của `tex_measure.py`, không làm phẳng vân hay vết mòn | D17, texture-artist.md §3 | |
