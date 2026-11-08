@@ -1,5 +1,7 @@
 # Spec — sub-agent Blockout (v1.1)
 
+Tên kỹ thuật: `zps-3dp-blockout`. Tên hiển thị: ZPS-3DP - Blockout. Reviewer: `zps-3dp-review-blockout` (D6.5).
+
 Duyệt: 2026-11-08. Sửa v1.1 cùng ngày (D5). Quyết định nền: `docs/decisions.md` (D1–D5).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist, zps-concept-views).
 
@@ -151,8 +153,8 @@ Nếu Blockout thấy kích thước trong MAP-LAYOUT có vấn đề, Blockout 
 ## 8. Tổ chức file
 
 ```
-agents/blockout/
-  blockout.md                ← file agent: quy trình + quy tắc cốt lõi
+agents/zps-3dp-blockout/
+  zps-3dp-blockout.md        ← file agent: quy trình + quy tắc cốt lõi
   references/
     part-graph.md            ← hợp đồng schema blockout-1, kiểu attach, quy tắc dựng
     craft.md                 ← chép từ kit: blockout.md §A, technique.md §1–2, preflight
@@ -168,7 +170,7 @@ agents/blockout/
     render_review.py, concept_mask.py      ← mới
     setup_deps.sh            ← rút gọn từ kit
   SOURCE.md                  ← nguồn kit v0.10.4, commit 905dc93, danh sách file đã chép kèm sha256
-agents/review-blockout.md    ← reviewer (D1)
+agents/zps-3dp-review-blockout.md   ← reviewer (D1)
 ```
 
 - Blockout giữ bản chép riêng. Blockout không trỏ sang 3D Artist (D2). Không sửa code đã chép.
@@ -198,5 +200,5 @@ agents/review-blockout.md    ← reviewer (D1)
 
 - `graph.py` của kit đọc các field bằng `.get`, nên có thể bỏ qua field lạ như `role` và `tag`. Phải chạy thử để xác nhận.
 - `gates.py` đọc khóa config `contact_dist_m`, `contact_samples`, `inset_depth_tolerance` (đổi tên bên trong). `config.yaml` phải dùng đúng tên này.
-- `bootstrap.py` tìm thư viện ở `agents/blockout/tools/.deps/blender-py<ver>`. Cần chạy `setup_deps.sh` trước các script chạy trong Blender.
+- `bootstrap.py` tìm thư viện ở `agents/zps-3dp-blockout/tools/.deps/blender-py<ver>`. Cần chạy `setup_deps.sh` trước các script chạy trong Blender.
 - Nguồn tham khảo cho các điểm thêm ở D4: Code-as-Room, LL3M, arjun988/blender-skills (qa-review, vehicle proportion-blockout), Epic Modular Level Design.

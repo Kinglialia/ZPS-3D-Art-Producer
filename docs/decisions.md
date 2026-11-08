@@ -52,8 +52,33 @@ Các điểm này lộ ra khi đọc code kit, trước khi viết code. Nguyên
 4. **`check_fix.py` chạy sau khi sửa.** Script so graph cũ với graph mới. Nếu `fixed_params` đổi hoặc bbox lệch quá ±2%, Blockout chạy `apply_edit.py --revert`.
 5. **Gộp render thành `render_review.py`.** Một lần mở Blender cho ảnh camera game, lineup và crop chân nhà. Các ảnh `clay_*`, `normal_*`, `overlay_*`, `parts_*` vẫn dùng `render_views.py` của kit.
 
+## D6 — Producer, điều phối, runtime và tên (2026-11-08)
+
+1. **Producer là skill chạy trong phiên chính.** Producer chỉ điều phối: giao việc, nhận báo cáo ngắn, ghi sổ trạng thái `producer/status.md` (mỗi công trình một dòng). Producer không mở ảnh, JSON hay file dự án. Mọi agent tự làm việc của mình, kể cả bàn giao.
+2. **Agent nào làm thì tự gọi reviewer của mình.** Blockout gọi review-blockout, Concept Views gọi review-views, 3D Artist gọi review-clay, Texture Artist gọi review-texture. Sub-agent được gọi sub-agent (Claude Code: tối đa 3 tầng dưới phiên chính; Codex 0.164: đã thử thật 3 tầng). Dự phòng: nếu agent không có tool gọi agent, agent trả `review: pending`, và agent gọi nó tự gọi reviewer. Reviewer không có tool gọi agent.
+3. **Báo cáo ngắn theo mẫu cố định.** Agent trả về Producer: `asset | gate | status | sheet | summary`, vài dòng. Ảnh và chi tiết nằm trong file, không nằm trong báo cáo.
+4. **Hai runtime: Claude Code và Codex.** Một nguồn chung, không phụ thuộc runtime. Mỗi runtime có một adapter riêng (gọi agent, chạy Blender, mạng, ảnh, Review Board). Một script build xuất ra hai bản. Bảng khác biệt ghi trong `docs/EDITIONS.md`. Thứ tự làm: bản Claude, chạy thử, rồi bản Codex. Bản Codex: Blender chạy ngoài sandbox; quyền mạng và sandbox cấp ở phiên gốc, vì sub-agent Codex dùng chung quyền của phiên gốc.
+5. **Tên.** Tên kỹ thuật `zps-3dp-<vai>` (ví dụ `zps-3dp-3d-artist`). Tên hiển thị `ZPS-3DP - <Vai>`. Tiền tố này tránh trùng với skill `zps-3d-artist`, `zps-concept-views` của kit đang cài.
+
+## D7 — Spec 3D Artist v1 (2026-11-08)
+
+Spec đã duyệt: `docs/agents/3d-artist.md`.
+
+1. **Vai trò.** 3D Artist là chủ asset từ lúc dựng tới lúc bàn giao. 3D Artist tự gọi review-clay, Meshy và Texture Artist.
+2. **Meshy.** Chỉ retexture, giữ UV, không remesh. Gọi một lần. Gọi lần hai chỉ khi review-texture đánh `blocker` và Texture Artist xác nhận không sửa được. Lần hai vẫn hỏng thì Texture Artist vẽ mới. Dùng Texture Artist ngay từ đầu nếu Producer yêu cầu hoặc không có key Meshy.
+3. **Gộp mesh.** Join và quét lỗi. Không weld, không boolean. Khóa mesh bằng hash sau DUYỆT 1. Giả định: `repair.py` của pilot chỉ dùng cho nhánh B (Meshy remesh).
+4. **UV và texture.** Luôn làm và giao ở 2048. Số liệu nằm trong project profile. Thu nhỏ texture là việc của agent khác.
+5. **Cách dựng.** Part graph. Không nhắc okf_context của Gen3D trong các skill của mình.
+6. **Phạm vi v1.** Chỉ self-model. Không gen mesh bằng AI. Không làm nhân vật, sinh vật, cây, đá.
+7. **Tam giác nhỏ.** Chỉ cảnh báo. LOD làm sau.
+8. **Detail pass hai lớp.** Lớp 1: quy tắc chung theo silhouette và pixel (3 px, 16 px). Lớp 2: ví dụ của dự án trong profile, có sau pilot. Thêm: mặt phẳng tối thiểu, phóng to độ sâu, test thumbnail, tris/m² so với pilot, trần tris theo hạng, bevel tùy chọn.
+9. **Review.** Render có ánh sáng, wireframe, thumbnail, lineup, `clay_lit_concept` (DUYỆT 1). Gói hoàn thành có `final_lit_vs_concept.png`, đặt cạnh concept có bóng.
+10. **Bàn giao.** 3D Artist tự chép vào `3D/0X-<tên>/` sau DUYỆT 2.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
+- **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
+- Spec cho Concept Views, Texture Artist, 4 reviewer, Producer.
 
 - 3D Artist: 5 điểm (gộp mesh C1, project profile texture/UV C4, part graph hay archkit C6, bỏ path gen mesh trong v1, tam giác nhỏ là cảnh báo) và runtime (chỉ Claude Code, hay cả Codex).
 - Màu nền gen view (C3).

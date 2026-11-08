@@ -73,7 +73,15 @@ Xuất **một file cho mỗi công trình** (D5.1). Tên file chứa mã công 
 
 ---
 
-## 3. Project profile — chưa có chủ
+## 3. Agent làm sau, theo từng object (D7)
+
+| Agent | Việc | Nguồn quyết định |
+|---|---|---|
+| Thu nhỏ texture | Từ 2048 xuống mức thấp hơn, tùy object | D7.4 |
+| LOD | Giảm tam giác nhỏ khi đã chốt camera | D7.7 |
+| Luồng vật hữu cơ | Nhân vật, sinh vật, cây, đá: concept → gen 3D → retopo → texture, không qua Blockout | D7.6 |
+
+## 4. Project profile — chưa có chủ
 
 Nhiều skill cần cùng một file thông số của từng dự án: kích thước tham chiếu, quy tắc phần khuất mặc định, camera game, thông số texture/UV.
 
