@@ -153,11 +153,28 @@ Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, re
 1. `gen_image_codex.py` luôn gọi `codex exec -m gpt-6-astra`, ghi model rõ trong lệnh, không dựa vào config mặc định của máy. Tên model và mức reasoning nằm trong preset: `image_gen: {codex_model: gpt-6-astra, reasoning: medium}`. Ảnh tham chiếu gửi bằng cờ `-i`.
 2. Khi Codex hỏng (3 lần lỗi kỹ thuật, D8.3): agent báo `STATUS: BLOCKED` kèm lỗi, Producer **hỏi anh**. Không có phương án tự động: không vẽ bằng code, không tự dùng Gen3D hay API khác. Anh chọn cách xử lý; Producer ghi lựa chọn vào ledger rồi `P retry`.
 
+## D16 — Chọn model cho worker và reviewer (2026-11-08)
+
+1. **Pilot: Opus cho mọi bước**, cả worker lẫn reviewer. Thay tạm D1 (reviewer blockout và views dùng Sonnet) trong lúc pilot. Lý do: pilot là lúc chỉnh rubric và profile; giữ model tốt nhất để lỗi còn lại là lỗi của spec, không phải của model.
+2. **Sau pilot: hạ từng bước**, đo rồi mới giữ. Ứng viên hạ:
+
+   | Bước | Ứng viên sau pilot |
+   |---|---|
+   | Concept Views (2 bước), Texture | Sonnet, `escalate_model` = Opus |
+   | `assemble` | Sonnet hoặc Haiku |
+   | review-blockout, review-views | Sonnet (theo D1) |
+   | Blockout, `model`, review-clay, review-texture | Giữ Opus |
+
+3. **Đo gì để quyết:** số vòng sửa mỗi bước, tỉ lệ anh duyệt ngay lần đầu, số lần reviewer chấm lệch so với quyết định của anh. Bước nào sau khi hạ không kém đi thì giữ model mới.
+4. Tính theo **chi phí cho mỗi asset hoàn thành**, không theo từng lần gọi. Ước lượng (chưa đo): bảng hạ ở mục 2 rẻ hơn dùng Opus hết khoảng 20–40%; nếu model rẻ thêm một vòng sửa mỗi bước thì phần tiết kiệm có thể mất hết.
+5. Model nằm trong `pipeline.toml` (`model`, `escalate_model`, `reviewer_model`). Trong file agent dùng tên chung `opus`, `sonnet`, `haiku`. Bản Codex: adapter ghi model riêng (D15).
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
 - **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs
 - Spec riêng cho 4 reviewer (rubric đã nằm trong spec của từng agent; cần gom thành file agent khi viết code).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
+- Texture Artist cách A (Claude điều phối, Codex chỉ vẽ ảnh) và `tone_fix.py` chạy trước Codex: đã đề xuất, chưa xác nhận.
 
 - 3D Artist: 5 điểm (gộp mesh C1, project profile texture/UV C4, part graph hay archkit C6, bỏ path gen mesh trong v1, tam giác nhỏ là cảnh báo) và runtime (chỉ Claude Code, hay cả Codex).
 - Màu nền gen view (C3).
