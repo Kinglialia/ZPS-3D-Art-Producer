@@ -174,6 +174,14 @@ Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, re
 1. **Cách A.** Texture Artist là sub-agent Claude. Texture Artist chạy mọi script (D10, Meshy, `base_fill`, chiếu UV, sửa seam, `tex_measure`). Codex (`gpt-6-astra`) chỉ vẽ paint view và sửa crop. Lý do: phần lớn bước `texture` là script; nếu Codex hỏng thì chỉ phần vẽ bị dừng.
 2. **`tone_fix.py` chạy trước Codex** ở chế độ SỬA: cân tông theo hướng mặt, nâng vùng bị che, làm mịn seam, theo số đo của `tex_measure.py`. Chỉ lỗi script không sửa được mới gọi Codex. Lý do: rẻ hơn, ổn định hơn, giảm số lần gọi Codex.
 
+## D18 — Gọi sinh ảnh Codex bằng mẫu prompt cố định (2026-11-08)
+
+1. Không làm skill sinh ảnh riêng bên Codex. Không gọi sub-agent texture bên Codex.
+2. `gen_image_codex.py` chạy `codex exec -m gpt-6-astra -C <thư mục làm việc của bước> -s workspace-write -i <ảnh tham chiếu> …`. Prompt có hai phần: **khung cố định** (dùng tool sinh ảnh; lưu ảnh vào `<đường dẫn>`; ghi `result.json` gồm đường dẫn, kích thước, lỗi; không làm việc khác) và **nội dung vẽ** do Concept Views hoặc Texture Artist viết.
+3. Script đọc `result.json`, kiểm file ảnh tồn tại và đúng kích thước. Sai thì tính một lần lỗi kỹ thuật (D8.3).
+4. Dự phòng: nếu Astra không lưu đúng đường dẫn, script lấy ảnh mới nhất của phiên đó trong `~/.codex/generated_images/` rồi chép sang. Kém chắc hơn, chỉ để dự phòng.
+5. Lý do: chất lượng ảnh như nhau (cùng Astra, cùng tool ảnh); hướng dẫn nằm một chỗ trong repo, có test; không phải cài thêm gì bên Codex.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, ghi chú real/texture_only, phần khuất).
 - **Review Board.** Trang duyệt trên claude.ai (cách A) đã thử: phiên chính và sub-agent đều tải được ảnh, ghi và đọc được dữ liệu; nút Duyệt của anh lưu được. Còn bàn: chốt cách A hay B, tính năng khoanh vùng trên ảnh, cách làm khi chạy bằng Codex. Trang thử: https://claude.ai/artifact/FizgnSc5J7wp1aHBv3uuxs

@@ -12,7 +12,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 6 | 3D Artist | `bake.py` của kit ở chế độ `rebake` có tách riêng phần unwrap UV được không, hay phải viết script unwrap mới | 3d-artist.md §13 | |
 | 7 | 3D Artist | Join không weld: `mesh_check` của kit có thể báo đỉnh trùng ở cạnh đã tách. Đặt ngưỡng đúng trong spec | 3d-artist.md §13 | |
 | 8 | 3D Artist | `gen_api.py texture` (Meshy) cần mạng. Bản Codex xin phép mạng ở phiên gốc | 3d-artist.md §13, D6.4 | |
-| 9 | Concept Views, Texture Artist | `codex exec` nhận ảnh tham chiếu đầu vào, và trả đường dẫn ảnh đầu ra ổn định. Có tốn lượt Codex | D8 | |
+| 9 | Concept Views, Texture Artist | `codex exec -m gpt-6-astra -s workspace-write -i …` với khung prompt cố định: Astra lưu ảnh đúng đường dẫn và ghi `result.json`; nếu không, dự phòng lấy từ `~/.codex/generated_images/`. Có tốn lượt Codex | D8, D18 | Cờ `-i` và `-m` có trong `codex exec --help` (2026-11-08) |
 | 10 | Concept Views | `measure_views.py` sau khi sửa tách nền theo màu khóa toàn ảnh: khe giữa cột không còn bị tính là vật thể | review-kit G1 | |
 | 11 | Codex | Sub-agent Codex gọi được sub-agent 3 tầng (D14.1 không còn cần, ghi lại để tham khảo) | D6.2 (đã thay bằng D14.1) | Đã thử với Codex 0.164 ngày 2026-11-08: 3 tầng chạy được |
 | 12 | Review Board | Sub-agent tải ảnh và ghi dữ liệu lên trang duyệt; anh bấm Duyệt thì agent đọc được | decisions "Chưa chốt" | Đã thử ngày 2026-11-08: chạy được. Lỗi hiển thị "Đã lưu" đã sửa ở trang thử, chưa xem lại |
