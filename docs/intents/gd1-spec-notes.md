@@ -27,3 +27,15 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 6. `need_evidence` TOP_FIX id form is not stated in §6.1.
 7. §6.1 `note_*` finding kinds "do not cause FIX", but a blocker/major note would force FIX with no valid TOP_FIX. Not reachable in GĐ 1.
 8. Worker reply to Producer cut to the `STATUS` line only (token saving; the script reads the file).
+
+## From T6 (blockout agents and tools)
+
+1. **`apply_edit.py` of the kit does not fit the Producer fix flow** (`agents/blockout.md` §3 step 9). It needs `diagnoses/`, a fresh render per finding and a kit `spec.json`, which the Producer never writes. Its `param` mode runs automatic fitting, not the 2–3 variants the reviewer picks (D26.2). The agent now fixes per finding with a snapshot, edit, assembly, gates, `check_fix`, and restore on fail. `apply_edit.py` is copied but not used.
+2. Kit bug: `blender -b --python assembly.py` fails (`No module named 'yaml'`), because `assembly.py` never loads the deps. Plain Python works. Custom parts that need Blender need a launcher with the deps path.
+3. `agents/blockout.md` §6 asks for 4 ortho views and top. Kit `render_views --mode critic` gives front, back, left, right, 3/4, and no top.
+4. `agents/blockout.md` §6 lists `overlay_*`, but the kit makes overlays only from a `spec.json` with concept views. The agent now builds that file from `concept_mask.py` masks. The spec does not describe this step.
+5. Marker "nhô hoặc lõm ≥ 2 cm": assembly is a union only, so a recess cannot be built from primitives. A recess needs a custom part.
+6. `agents/blockout.md` §5 says `check_inputs.py` checks hashes; D22.12 says existence only. Code follows D22.12.
+7. Which `scale_refs` entry is the character and which `scale_overrides` entry is the door is the agent's judgment. No script checks it.
+8. Worker brief said JSON goes to `work/`; `agents/blockout.md` §4 and D26.4 say `final/review/`. Fixed in T3 (brief).
+9. Install copies agent files flat into `.claude/agents/`, which breaks the `references/` links of the blockout agent. Fixed later at install time.
