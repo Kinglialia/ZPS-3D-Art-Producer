@@ -56,6 +56,11 @@ def show_next(a):
         print("Milestone ≤14 ngày: " + "; ".join(f"{d} {t}" for d, t in ms))
     steps = {s["id"]: s for s in cfg["steps"]}
     free = {r: lim - used(r) for r, lim in cfg["limits"].items()}
+    ids = list(steps)
+    for s in sts:
+        i = ids.index(s["stage"]) if s.get("state") == "done_enabled" and s.get("stage") in steps else -1
+        if 0 <= i < len(ids) - 1 and steps[ids[i + 1]]["enabled"]:
+            print(f"[{s['id']}] {s['stage']}/done_enabled → bước {ids[i + 1]} đã bật → `retry {s['id']}`")
     for s in active:
         act, step = next_action(s), steps.get(s.get("stage"))
         if step and s.get("state") in DISPATCH:

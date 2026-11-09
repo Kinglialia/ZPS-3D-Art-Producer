@@ -19,7 +19,7 @@ MOVES = {
     ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
     ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence", ("reviewing", "reopen"): "fix",
     ("reviewing", "await_approval"): "waiting_human", ("reviewing", "ask_human"): "waiting_human",
-    ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT,
+    ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT, ("done_enabled", "resume"): NEXT,
     ("blocked", "retry"): "running", ("blocked", "retry_evidence"): "evidence", ("blocked", "retry_todo"): "todo",
     **{(s, "redo"): "fix" for s in REDO_FROM},
 }
@@ -296,10 +296,13 @@ def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str):
 
 def retry(a):
     st = load_st(a.id)
-    move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
+    if st["state"] == "done_enabled":
+        move(st, "resume", load_cfg())
+    else:
+        move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
+        st["note"] = ""
     if st["state"] == "running":
         set_aside(vdir(a.id, st["stage"], st["versions"][st["stage"]]) / "report-worker.md")
-    st["note"] = ""
     save_st(st)
     ledger(f"{a.id} · retry")
     print(f"{a.id}: → {st['state']}. Tiếp: {next_action(st)}")

@@ -62,7 +62,7 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
 | waiting_human | chờ người dùng | `feedback --action approve` → bước sau hoặc done · `redo` → fix |
 | blocked | thiếu context, thiếu output, worker kẹt | `retry` → running |
-| done_enabled | xong mọi bước đang bật; bước sau `enabled = false` | `redo` → fix |
+| done_enabled | xong mọi bước đang bật; bước sau `enabled = false` | `redo` → fix · `retry` → todo của bước sau, khi bước đó đã bật |
 | done | xong | `archive` |
 
 FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.

@@ -241,6 +241,10 @@ def validate(_a):
         rub = ASSETS / aid / "rubric.md"
         if rub.exists() and not re.search(r"^- [a-z0-9_]+:", rub.read_text(encoding="utf-8"), re.M):
             problems.append(f"{aid}: rubric.md chưa có tiêu chí dạng `- key: mô tả`")
+        if rub.exists() and (gone := [s["id"] for s in cfg["steps"] if s["enabled"] and s.get("reviewer")
+                                      and not re.search(rf"^## {s['id']}\s*$", rub.read_text(encoding="utf-8"), re.M)]):
+            problems.append(f"{aid}: rubric.md thiếu mục {', '.join(f'## {g}' for g in gone)} của bước đang bật "
+                            "(chép từ templates/rubrics/)")
     rd = ad_readme(cfg)
     if rd:
         listed = set()

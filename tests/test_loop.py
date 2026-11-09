@@ -266,6 +266,22 @@ def test_human_approve_rejects_the_other_versions_moves_no_folder_and_parks_befo
     assert str(e.value) == "house-a: state=done_enabled, không có việc để giao (xong các bước đang bật)"
 
 
+def test_a_gd1_asset_parked_at_done_enabled_moves_on_with_retry_once_its_next_step_is_enabled(flow):
+    pass_v2(flow)
+    flow.human("approve", "ok")
+    assert flow.call(loop.retry, Namespace(id=AID)) == "house-a: → done_enabled. Tiếp: xong các bước đang bật\n"
+    assert flow.st["note"] == "bước views_front chưa bật"
+    p = flow.root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false\n', 'id = "views_front"\n'),
+                 encoding="utf-8")
+    from core import limits
+    assert "[house-a] blockout/done_enabled → bước views_front đã bật → `retry house-a`\n" in flow.call(
+        limits.show_next, Namespace(session=False))
+    assert flow.call(loop.retry, Namespace(id=AID)) == "house-a: → todo. Tiếp: giao worker → `brief house-a`\n"
+    assert {k: flow.st[k] for k in ("stage", "state", "approved")} == {"stage": "views_front", "state": "todo",
+                                                                     "approved": {"blockout": 2}}
+
+
 def test_approving_the_offered_best_version_rejects_the_newer_versions(flow):
     fix_v1(flow, 2)
     for _ in range(2):

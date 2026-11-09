@@ -52,6 +52,15 @@ def test_validate_exits_1_on_problems_so_a_script_can_gate_on_it(proj, capsys):
                                        "production/rubrics/default.md: chưa duyệt (status: draft)\n")
 
 
+def test_validate_names_the_steps_a_gd1_asset_rubric_lacks_so_the_views_brief_never_points_at_nothing(proj, capsys):
+    rub = ROOT / f"assets/{AID}/rubric.md"
+    text = rub.read_text(encoding="utf-8")
+    rub.write_text(text.split("## views_front")[0] + "## model" + text.split("## model", 1)[1], encoding="utf-8")
+    assert error_of("validate") == 1
+    assert capsys.readouterr().out.splitlines()[0] == (
+        "house-a: rubric.md thiếu mục ## views_front, ## views_rest của bước đang bật (chép từ templates/rubrics/)")
+
+
 def test_ledger_tail_0_prints_nothing_instead_of_the_whole_ledger(proj, capsys):
     producer.main(["ledger", "--tail", "0"])
     assert capsys.readouterr().out == "(trống)\n"
