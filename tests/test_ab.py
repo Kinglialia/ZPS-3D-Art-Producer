@@ -210,7 +210,8 @@ def test_the_pairwise_reviewer_is_asked_twice_with_x_and_y_swapped_and_sees_no_r
     d2 = json.loads(judge(two))
     x2 = Image.open(two / "ab/judge/house-a/o2/X/final_lit_vs_concept.png").size
     assert (d2["report"], x1, x2) == ("ab/judge/house-a/o2/report.md", (60, 30), (40, 30))
-    (two / d2["report"]).write_text(report(concept="Y", geometry="X", texture="X"), encoding="utf-8")
+    (two / d2["report"]).write_text(f"--- report ---\n{report(concept='Y', geometry='X', texture='X')}--- end ---\n",
+                                    encoding="utf-8")
     assert judge(two) == "OK: đủ so cặp (1 asset × 2 lần)\n"
     assert ab.pair_result(AID) == {"concept": "A", "geometry": "tie", "texture": "B", "coherence": "tie", "game_read": "tie"}
 

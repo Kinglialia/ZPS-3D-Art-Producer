@@ -24,7 +24,7 @@ FID = r"[FH]\d+"
 HEAD = re.compile(rf"^-\s*({FID})\s*\[(\w+)\]\s*(\S*)\s*$")
 PRIOR = re.compile(rf"^-\s*({FID})\s*:\s*([^|\s]*)(.*)$")
 SPLIT = re.compile(rf"\s*\|\s*(?=(?:{'|'.join(FIELDS)})\s*:)")
-WRAPPED = re.compile(r"^--- report ---$\n(.*?)^--- end ---$", re.M | re.S)
+WRAPPED = re.compile(r"^--- report ---[ \t\r]*\n(.*?)^--- end ---[ \t\r]*$", re.M | re.S)
 
 
 def unwrap(text: str) -> str:

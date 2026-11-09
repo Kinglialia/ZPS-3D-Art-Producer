@@ -7,7 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts"))
 
 from shared import finding, report  # noqa: E402,F401
-from core.contract import FIELDS, parse_review, parse_worker  # noqa: E402
+from core.contract import FIELDS, parse_review, parse_worker, unwrap  # noqa: E402
 
 
 def test_finding_block_keeps_every_kit_field_so_ad_and_human_findings_share_one_format():
@@ -134,3 +134,10 @@ def test_worker_report_without_profile_hash_is_rejected_so_stale_profiles_cannot
 def test_worker_status_outside_contract_is_rejected():
     _, errs = parse_worker("STATUS: OK\nPROFILE_HASH: 3f2a\n")
     assert errs == ["STATUS phải là BLOCKED|DONE|DONE_WITH_CONCERNS|NEEDS_CONTEXT"]
+
+
+def test_a_saved_reviewer_reply_parses_only_its_report_even_with_trailing_spaces_and_crlf_on_the_markers():
+    body = report(findings=[finding()])
+    crlf = body.replace("\n", "\r\n")
+    reply = f"Xong v2.\r\n--- report --- \r\n{crlf}--- end ---\t\r\nCảm ơn.\r\n"
+    assert parse_review(unwrap(reply)) == parse_review(body)

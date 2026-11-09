@@ -229,7 +229,8 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
             shutil.copy2(src, final / "review" / src.name)
     rv = vdir(a.id, "texture", tv) / "report-review.md"
     if rv.is_file():
-        shutil.copy2(rv, final / "review" / "report-review-texture.md")
+        text = unwrap(rv.read_text(encoding="utf-8"))
+        (final / "review" / "report-review-texture.md").write_text(text, encoding="utf-8")
     (final / "review" / "compare.json").write_text(json.dumps(
         {"tris": data.get("tris"), "threshold": {"mean_abs": COMPARE_MEAN, "mask_mismatch": COMPARE_MASK},
          "views": data["compare"], "qa": data["qa"]}, ensure_ascii=False, indent=1), encoding="utf-8")
