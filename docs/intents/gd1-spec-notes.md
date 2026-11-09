@@ -39,3 +39,14 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 7. Which `scale_refs` entry is the character and which `scale_overrides` entry is the door is the agent's judgment. No script checks it.
 8. Worker brief said JSON goes to `work/`; `agents/blockout.md` §4 and D26.4 say `final/review/`. Fixed in T3 (brief).
 9. Install copies agent files flat into `.claude/agents/`, which breaks the `references/` links of the blockout agent. Fixed later at install time.
+
+## From T3 (fix loop, gates, policy)
+
+1. D22.8 (one decision per version) and `producer.md` §4 ("bấm Cần sửa được bất cứ lúc nào") conflict after an approval. Chosen: dedupe blocks a second click on the same waiting version; `redo` after approval is allowed and opens a new version (T4).
+2. `producer.md` §7.4 "từ vòng 2" does not say if a round is a fix or a review. Code follows D11.1: a round is a fix. Early stop fires at the review of v3; the 3-round cap fires at the review of v4.
+3. D25.H lists three cases for the "chưa đạt" label. Code also uses it after the second `need_evidence` request.
+4. D22.1: the fix brief takes the findings of the best version. Findings first seen on a later, worse version drop out.
+5. `producer.md` §7.8: Needs fix at `assemble` goes to `texture` or `model`, both disabled in GĐ 1.
+6. `pipeline.toml` short agent names (`step-blockout`) differ from the real agent names. Brief now prints the full name (T4).
+7. D11.6 asks for a history of each feedback round. Nothing reads it; the ledger already holds it. Not added.
+8. Added: `P delegate model` also needs `--confirm-spend` (same Meshy cost as `approvals set model reviewer`).

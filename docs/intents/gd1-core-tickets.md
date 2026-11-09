@@ -77,9 +77,12 @@ Shared rules for every ticket:
 
 - **Builds.** `docs/producer.md` §10 (profile hash), §11, §12, §14 1b.
 - **Blocked by.** T3.
-- **Writes.** `S/presets/topdown-mobile-lowpoly.yaml` (body from `docs/project-profile.md` §2), `S/templates/settings.snippet.json` (venv python), `S/templates/pipeline.toml` and `S/scripts/core/state.py` (drop unused `[intake].min_images`, `[intake].type`), `S/scripts/core/hashes.py`, `S/scripts/core/limits.py`, `S/scripts/core/preflight.py`, `S/scripts/core/briefs.py`, `S/scripts/core/loop.py` (hash checks at ingest only), `S/scripts/producer.py` (subcommand `preflight` only), `tests/test_hashes.py`, `tests/test_limits.py`, `tests/test_preflight.py`.
+- **Writes.** `S/presets/topdown-mobile-lowpoly.yaml` (body from `docs/project-profile.md` §2), `S/templates/settings.snippet.json` (venv python), `S/templates/pipeline.toml` and `S/scripts/core/state.py` (drop unused `[intake].min_images`, `[intake].type`), `S/scripts/core/hashes.py`, `S/scripts/core/limits.py`, `S/scripts/core/preflight.py`, `S/scripts/core/briefs.py`, `S/scripts/core/loop.py` (hash checks at ingest; redo after approval), `S/scripts/core/intake.py` (`init` copies `policy.yaml`), `S/scripts/producer.py` (subcommand `preflight` only), `S/SKILL.md`, `S/references/setup.md`, `S/references/contracts.md`, `tests/test_hashes.py`, `tests/test_limits.py`, `tests/test_preflight.py`.
 - **Acceptance.** Checklist rows 44, 53, 55, 60, 71, 72 (warning part), 90.
   - Profile hash on normalized YAML, drop `paths` and keys starting with `_`.
+  - Cleanup from T3: `state.STATES` gains `evidence`, `evidence_running`, `done_enabled`; drop the `final_human_gate` default; `show_next` treats `done_enabled` as finished; `P init` copies `templates/policy.yaml`; `contracts.md` documents the new states and status fields and drops `handoff.md`; SKILL.md and setup.md list `approvals`, `delegate`, `preflight`.
+  - `P brief` prints the full agent name (`zps-3dp-step-blockout`), so the Producer does not map names.
+  - The human can send back an approved version: `P feedback <id> redo` after approval opens a new feedback round and a new version (`producer.md` §4 "bấm Cần sửa được bất cứ lúc nào"). Dedupe still blocks a second Approve/Needs-fix click on the same waiting version.
   - `P brief` runs `check_profile.check` and refuses a brief when the profile is invalid (checklist 21).
   - Brief writes `PROFILE_HASH`; ingest rejects a missing or different value.
   - `inputs` per version; stale = input differs from current approved version of the previous step; concept hash by file content.
