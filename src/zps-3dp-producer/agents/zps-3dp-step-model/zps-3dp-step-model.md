@@ -30,7 +30,7 @@ Detail pass, `model.md`, file nào do tool nào ghi: `references/model.md`. Hợ
 
 Brief ghi bản gốc `P` và `TOP_FIX`. Chép `P/final/` vào `F`, trừ `review/`. Đọc trước JSON fail mà brief liệt kê, rồi tới finding.
 - Mỗi finding một lần sửa: chép `part_graph.json`, `parts_lib.py` hiện tại vào `V/work/edits/<F>/`; sửa theo `repair`, giữ `preserve`; dựng, gate part đổi; hỏng thì chép lại và ghi lý do vào báo cáo.
-- `structure`: đúng một finding. Finding có `evidence` mở đầu bằng `texture v` đến từ bước texture (`fix_uv_mesh`): sửa mesh hoặc UV theo `repair`.
+- `structure`: đúng một finding. Ngoại lệ: finding có `evidence` mở đầu bằng `texture v` đến từ bước texture (`fix_uv_mesh`); sửa cùng lúc mọi id `TOP_FIX` liệt kê, mỗi id một lần sửa như trên, theo `repair` cho mesh hoặc UV.
 - `param`: mọi finding trong `TOP_FIX`. Giá trị ở `F` là phương án `a`. Dựng thêm 1–2 phương án: chép `F` sang `V/variants/<b|c>/`, đổi giá trị, chạy bước 3–6 với thư mục đó thay cho `F`. Reviewer chọn thư mục nào thì thư mục đó thành `final/`. Ghi giá trị từng phương án vào `model.md`.
 - Rồi chạy lại bước 4–7. Ghi `FIXED:` theo brief và mục "Thay đổi so với version trước" của `model.md`.
 
