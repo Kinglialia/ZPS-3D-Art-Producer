@@ -358,23 +358,42 @@ def test_a_second_needs_fix_click_on_the_same_waiting_version_is_ignored(flow):
     assert (flow.st["state"], flow.st["fix_round"]) == ("fix", 1)
 
 
-def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_variant_a(flow):
+PICKED = dict(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better",
+              prior=["- F1: resolved | evidence: clay_front"])
+
+
+def test_a_picked_variant_missing_a_required_output_blocks_the_review_and_copies_nothing(flow):
+    """Copied as is, the incomplete variant reached waiting_human and the approval then died on the missing lock file."""
     fix_v1(flow, 1, "param")
     flow.work()
     b = flow.v(2) / "variants/b"
     b.mkdir(parents=True)
     (b / "blockout.md").write_text("b", encoding="utf-8")
-    kw = dict(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better",
-              prior=["- F1: resolved | evidence: clay_front"])
+    flow.review(pick="b", **PICKED)
+    assert (pick(flow.st)["state"], pick(flow.st)["note"]) == ("blocked", (
+        f"PICK b: production/assets/{AID}/blockout/v2/variants/b/ thiếu output bắt buộc: "
+        "part_graph.json, parts_lib.py, assembled.glb, sources.json"))
+    assert {p.name: p.read_text(encoding="utf-8") for p in (flow.v(2) / "final").iterdir()} == {o: "x" for o in OUTPUTS}
+    assert not (flow.v(2) / "variants/a").exists() and not (flow.v(2) / "findings.json").exists()
+    flow.call(loop.retry, Namespace(id=AID))
+    assert (flow.st["state"], flow.st["versions"]["blockout"]) == ("running", 2)
+
+
+def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_variant_a(flow):
+    fix_v1(flow, 1, "param")
+    flow.work()
+    b = flow.v(2) / "variants/b"
+    b.mkdir(parents=True)
+    for o in OUTPUTS:
+        (b / o).write_text("b", encoding="utf-8")
     out = flow.brief()
     with pytest.raises(ProducerError) as e:
-        flow.review(out=out, pick="c", **kw)
+        flow.review(out=out, pick="c", **PICKED)
     assert str(e.value) == f"PICK c: không có production/assets/{AID}/blockout/v2/variants/c/"
     assert flow.st["state"] == "reviewing"
-    flow.review(out=out, pick="b", **kw)
+    flow.review(out=out, pick="b", **PICKED)
     final = flow.v(2) / "final"
-    assert (sorted(p.name for p in final.iterdir()), (final / "blockout.md").read_text(encoding="utf-8")) == (
-        ["blockout.md"], "b")
+    assert {p.name: p.read_text(encoding="utf-8") for p in final.iterdir()} == {o: "b" for o in OUTPUTS}
     assert (flow.v(2) / "variants/a/part_graph.json").read_text(encoding="utf-8") == "x"
     assert flow.st["state"] == "waiting_human"
 

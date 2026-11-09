@@ -19,6 +19,7 @@ MOVES = {
     ("running", "worker_done"): "review", ("running", "checks_done"): "waiting_human", ("running", "stuck"): "blocked",
     ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
     ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence", ("reviewing", "reopen"): "fix",
+    ("reviewing", "stuck"): "blocked",
     ("reviewing", "await_approval"): "waiting_human", ("reviewing", "ask_human"): "waiting_human",
     ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT, ("done_enabled", "resume"): NEXT,
     ("blocked", "retry"): "running", ("blocked", "retry_evidence"): "evidence", ("blocked", "retry_todo"): "todo",
@@ -176,16 +177,19 @@ def on_evidence(cfg, st, step, d, n, a) -> tuple[str, str]:
     return f"{tag} {c['STATUS']}", ""
 
 
-def take_variant(d, pick: str):
+def take_variant(d, pick: str, outputs: list[str]) -> str | None:
     src = d / "variants" / pick
     if not src.is_dir():
         die(f"PICK {pick}: không có {rel(src)}/")
+    if missing := [o[6:] for o in outputs if o.startswith("final/") and not (src / o[6:]).exists()]:
+        return f"PICK {pick}: {rel(src)}/ thiếu output bắt buộc: " + ", ".join(missing)
     a = d / "variants" / "a"
     if a.exists():
         shutil.rmtree(d / "final")
     else:
         shutil.move(str(d / "final"), str(a))
     shutil.copytree(src, d / "final")
+    return None
 
 
 def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
@@ -198,8 +202,10 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         who = "reviewer"
     elif rv["verdict"] == "PASS" and step["gate"] == "review_human":
         who = policy.approver(policy.load(), sid, aid)
-    if rv["pick"] and rv["pick"] != "a":
-        take_variant(d, rv["pick"])
+    if rv["pick"] and rv["pick"] != "a" and (why := take_variant(d, rv["pick"], outputs_of(step, aid))):
+        move(st, "stuck")
+        st["note"] = why
+        return f"review {rv['verdict']} PICK {rv['pick']}", why
     findings.save(aid, sid, doc)
     rvs = st.setdefault("round_versions", [])
     if n not in rvs:
