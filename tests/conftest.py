@@ -1,10 +1,33 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts"
 P = SCRIPTS / "producer.py"
 sys.path.insert(0, str(SCRIPTS))
+
+PROFILE = {
+    "project": "Pilot", "preset": "topdown-mobile-lowpoly",
+    "paths": {"approved": "concepts/_approved", "production": "production", "deliver": "deliver", "env_file": ".env"},
+    "has_map": False, "pilot_asset": None,
+    "scale_refs": [{"name": "nhân vật", "height_m": 1.6, "_source": "anh chốt 2026-11-09"}],
+    "hidden_side_rules": ["tường trơn"],
+    "style": {"light_convention": "unlit_flat", "top_vs_side_L": 0, "view_bg": None},
+    "texture_simple": {"max_materials": 2, "max_color_clusters": 6},
+}
+PROFILE_HASH = "786cfc66bdd2"
+
+
+def write_profile(root, profile=None):
+    (Path(root) / "production/PROJECT-PROFILE.yaml").write_text(
+        yaml.safe_dump(PROFILE if profile is None else profile, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def brief_hash(text: str) -> str:
+    return re.search(r"^PROFILE_HASH: ([0-9a-f]{12})$", text, re.M).group(1)
 
 
 def run(cwd, *args, ok=True):

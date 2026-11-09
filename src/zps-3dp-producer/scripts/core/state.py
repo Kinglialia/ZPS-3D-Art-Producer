@@ -24,7 +24,8 @@ FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 GATES = {"review", "review_human", "checks_human"}
 
-STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "waiting_human", "blocked", "done"}
+STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", "evidence_running", "waiting_human",
+          "blocked", "done", "done_enabled"}
 
 
 class ProducerError(Exception):
@@ -65,15 +66,11 @@ def load_cfg() -> dict:
     pa = cfg.setdefault("paths", {})
     pa["approved"] = Path(os.path.expanduser(pa.get("approved", ""))) if pa.get("approved") else None
     pa["art_direction"] = Path(os.path.expanduser(pa.get("art_direction", ""))) if pa.get("art_direction") else None
-    it = cfg.setdefault("intake", {})
-    it.setdefault("min_images", 3)
-    it.setdefault("type", "asset")
-    it.setdefault("rubric", "rubrics/default.md")
     cfg.setdefault("preview", {}).setdefault("spec", "")
+    cfg.setdefault("limits", {})
     r = cfg.setdefault("review", {})
     r.setdefault("max_fix_rounds", 3)
     r.setdefault("resume_rounds", 2)
-    r.setdefault("final_human_gate", True)
     r.setdefault("reviewer_agent", "reviewer")
     r.setdefault("reviewer_model", "opus")
     return cfg

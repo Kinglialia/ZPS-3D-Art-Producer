@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import json
 
-from . import findings
+from . import findings, hashes, preflight
 from .hashes import ad_text
 from .loop import move, next_action, review_base
-from .state import ASSETS, SKILL_DIR, die, ledger, load_cfg, load_st, rel, save_st, step_of, vdir
+from .state import ASSETS, ROOT, SKILL_DIR, die, ledger, load_cfg, load_st, rel, save_st, step_of, vdir
 
 
 def tools_line(step) -> list[str]:
@@ -27,12 +27,21 @@ def failed_checks(vd) -> list[str]:
     return out
 
 
-def worker_brief(cfg, st, i, step, n, fix: bool) -> str:
+def pid_line(st, step) -> list[str]:
+    if "blender" not in step["uses"]:
+        return []
+    f = rel(ROOT / "pids" / "blender" / f"{st['id']}.pid")
+    return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}` (`P next` đếm slot theo file này)."]
+
+
+def worker_brief(cfg, st, i, step, n, fix: bool, ph: str) -> str:
     aid = st["id"]
     d = vdir(aid, step["id"], n)
     a = ASSETS / aid
     lines = [
         f"# Brief — {st['title']} · bước `{step['id']}` · v{n}",
+        "",
+        f"PROFILE_HASH: {ph}",
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
@@ -76,6 +85,7 @@ def worker_brief(cfg, st, i, step, n, fix: bool) -> str:
         f"- Sản phẩm vào `{rel(d / 'final')}/`; JSON gate và check vào `{rel(d / 'final' / 'review')}/gates/`, `checks/`; "
         f"script, log, bản trung gian vào `{rel(d / 'work')}/`.",
     ]
+    lines += pid_line(st, step)
     if cfg["preview"]["spec"]:
         lines.append(f"- Preview: {cfg['preview']['spec']}")
     if step["outputs"]:
@@ -95,7 +105,7 @@ def worker_brief(cfg, st, i, step, n, fix: bool) -> str:
         f"OUTPUT: {rel(d / 'final')}/",
         "RUBRIC: <key>=pass|fail; <key>=pass|fail; ...",
         "ISSUES: <tối đa 2 vấn đề còn lại, hoặc none>",
-        "PROFILE_HASH: <chép giá trị PROFILE_HASH của brief này>",
+        "PROFILE_HASH: <chép dòng PROFILE_HASH ở đầu brief này>",
         *(["FIXED: F<n>, ...   (id bạn cho là đã sửa; reviewer quyết)"] if fix else []),
         "```",
         "Tin nhắn trả về cho Producer: chỉ dòng STATUS.",
@@ -171,17 +181,20 @@ def review_brief(cfg, st, step, n) -> str:
     return "\n".join(lines) + "\n"
 
 
-def evidence_brief(st, step, n, ed) -> str:
+def evidence_brief(st, step, n, ed, ph: str) -> str:
     aid, sid = st["id"], step["id"]
     tf = findings.load(aid, sid, n)["top_fix"]
     lines = [
         f"# Brief bằng chứng — {st['title']} · bước `{sid}` · v{n} · {ed.name}",
+        "",
+        f"PROFILE_HASH: {ph}",
         "",
         *tools_line(step),
         f"Reviewer cần thêm ảnh để chấm {', '.join(tf['ids'])}: đọc region, viewing_condition, evidence, acceptance "
         f"của các id này trong `{rel(findings.path(aid, sid, n))}`.",
         f"- Chỉ render các ảnh đó, ghi vào `{rel(ed)}/`. Không tạo version mới.",
         f"- Không sửa `{rel(vdir(aid, sid, n) / 'final')}/`. Script so hash trước và sau; đổi thì bỏ kết quả vòng này.",
+        *pid_line(st, step),
         "",
         "## Báo cáo",
         f"Ghi `{rel(ed / 'report-worker.md')}`, các dòng đầu đúng format:",
@@ -189,7 +202,7 @@ def evidence_brief(st, step, n, ed) -> str:
         "STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED",
         f"OUTPUT: {rel(ed)}/",
         "ISSUES: <tối đa 2 vấn đề còn lại, hoặc none>",
-        "PROFILE_HASH: <chép giá trị PROFILE_HASH của brief này>",
+        "PROFILE_HASH: <chép dòng PROFILE_HASH ở đầu brief này>",
         "```",
         "Tin nhắn trả về cho Producer: chỉ dòng STATUS.",
     ]
@@ -203,6 +216,12 @@ def run(a):
     sid, s, r = step["id"], st["state"], cfg["review"]
     if not step["enabled"]:
         die(f"{a.id}: bước {sid} chưa bật (enabled = false), không giao")
+    from .intake import load_profile
+    ph = hashes.digest(load_profile())
+    if s in ("todo", "fix", "running", "evidence", "evidence_running") and (off := preflight.off(step, preflight.load())):
+        die(f"{a.id}: bước {sid} cần {', '.join(off)} đang tắt (preflight) → sửa môi trường rồi chạy lại `preflight`")
+    if "blender" in step["uses"]:
+        (ROOT / "pids" / "blender").mkdir(parents=True, exist_ok=True)
     if s in ("todo", "fix", "running"):
         if s == "running":
             n = st["versions"][sid]
@@ -213,30 +232,31 @@ def run(a):
         (d / "final").mkdir(parents=True, exist_ok=True)
         (d / "work").mkdir(parents=True, exist_ok=True)
         fix = s == "fix" or (s == "running" and st.get("fix_round", 0) > 0)
+        hashes.record_inputs(cfg, st, i, n, ph)
         bp = d / "brief-worker.md"
-        bp.write_text(worker_brief(cfg, st, i, step, n, fix), encoding="utf-8")
+        bp.write_text(worker_brief(cfg, st, i, step, n, fix, ph), encoding="utf-8")
         model = step.get("model")
         resume = None
         if fix and st.get("fix_round", 0) <= r["resume_rounds"]:
             resume = st.get("worker_agent_id")
         elif fix and step.get("escalate_model"):
             model = step["escalate_model"]
-        out = {"role": "worker", "agent": step["agent"], "model": model, "resume": resume,
+        out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": model, "resume": resume,
                "brief": rel(bp), "report": rel(d / "report-worker.md")}
     elif s in ("evidence", "evidence_running"):
         n = st["versions"][sid]
         ed = vdir(a.id, sid, n) / "review" / f"evidence-{st['evidence']['k']}"
         ed.mkdir(parents=True, exist_ok=True)
         bp = ed / "brief-worker.md"
-        bp.write_text(evidence_brief(st, step, n, ed), encoding="utf-8")
-        out = {"role": "worker", "agent": step["agent"], "model": step.get("model"), "resume": st.get("worker_agent_id"),
+        bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"]), encoding="utf-8")
+        out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": step.get("model"), "resume": st.get("worker_agent_id"),
                "brief": rel(bp), "report": rel(ed / "report-worker.md")}
     elif s in ("review", "reviewing"):
         n = st["versions"][sid]
         d = vdir(a.id, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
-        out = {"role": "reviewer", "agent": step.get("reviewer") or r["reviewer_agent"], "model": r["reviewer_model"],
+        out = {"role": "reviewer", "agent": f"zps-3dp-{step.get('reviewer') or r['reviewer_agent']}", "model": r["reviewer_model"],
                "resume": None, "brief": rel(bp), "report": rel(d / "report-review.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")

@@ -9,25 +9,37 @@
   art-direction/README.md       # AD sở hữu; cửa vào, có tag steps: và mục ## Thay đổi
 
 production/                     # trong project Claude Code; chỉ script và subagent ghi
-  pipeline.toml                 # workflow, đường dẫn, chuẩn preview
+  pipeline.toml                 # workflow, đường dẫn, chuẩn preview, [limits]
+  PROJECT-PROFILE.yaml          # Project Setup viết; brief từ chối khi sai
+  policy.yaml                   # ai duyệt; chỉ P approvals / P delegate ghi
+  preflight.json                # P preflight ghi; P next, P brief đọc
+  pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: sự kiện + RULING
   schedule.md                   # `- YYYY-MM-DD · milestone`
-  dashboard.md · review.html    # tự sinh
+  dashboard.md                  # tự sinh
   assets/<id>/
     status.json                 # chỉ script ghi
     brief.md · rubric.md · feedback.md
     <step>/vN/
       brief-worker.md · report-worker.md · brief-review.md · report-review.md · findings.json
-      final/ · work/ · handoff.md
+      final/ · work/ · review/evidence-<k>/
   archive/<id>/
 ```
 
 ## Các trường status.json đáng chú ý
 
-- `concept_dir`, `concept_mtime`: thư mục concept và thời điểm sửa mới nhất lúc intake. File mới hơn → cảnh báo "concept đổi".
-- `started`, `ad_ack`: so với ngày trong `## Thay đổi` của README art direction → cảnh báo "art direction đổi".
-- `ack` cập nhật cả hai mốc.
+- `concept_dir`: thư mục `_approved/<id>/`.
+- `inputs[<step>]["vN"]`: đầu vào khi sinh brief vN: `{<bước trước đã duyệt>: {"v", "hash"}, "concept", "card", "profile", "art_direction"}`. `profile` là `PROFILE_HASH` của brief; `ingest` so report với giá trị này.
+- `approved`, `approved_hash`, `rejected`: version đã duyệt, sha256 của `final/` lúc duyệt, các version khác của bước. `redo` xóa cả ba từ bước đó trở đi. `final/` đã duyệt bị sửa → `brief` và `ingest` bước sau báo lỗi.
+- `stale["<step> vN"] = "<bước trước> vM"`: vN dựng từ bản vM không còn là bản duyệt (so theo hash). Script tính lại khi sinh brief, khi duyệt, khi `redo`; trang duyệt hiện "dựng từ … — cũ".
+- `sources`: hash concept (theo nội dung, trừ thẻ), thẻ, profile lúc giao việc đầu tiên. Khác hiện tại → cảnh báo "concept/thẻ/profile đổi sau khi bắt đầu".
+- `started`, `ad_ack`: so với ngày trong `## Thay đổi` của README art direction → cảnh báo "art direction đổi". `ack` đặt lại `sources` và `ad_ack`.
+- `fix_round`, `fix_base`, `round_versions`: vòng sửa của đợt feedback, bản gốc (bản tốt nhất), các version đã chấm trong đợt.
+- `evidence`, `evidence_used`: vòng bằng chứng đang chạy (`version`, `k`, `hash` của `final/`) và số lần đã xin trong đợt.
+- `offer`, `label`: version đưa người dùng duyệt và nhãn ("chưa đạt" khi chưa qua).
+- `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt.
+- `worker_agent_id`: subagent worker để resume vòng sửa.
 
 ## Art direction trong brief
 
@@ -43,8 +55,11 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | review | worker xong, chờ giao reviewer | `brief` → reviewing |
 | reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · ESCALATE → waiting_human |
 | fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate) |
+| evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
+| evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
 | waiting_human | chờ người dùng | `feedback --action approve` → bước sau hoặc done · `redo` → fix |
 | blocked | thiếu context, thiếu output, worker kẹt | `retry` → running |
+| done_enabled | xong mọi bước đang bật; bước sau `enabled = false` | `redo` → fix |
 | done | xong | `archive` |
 
 FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.
@@ -59,7 +74,7 @@ STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED
 OUTPUT: <thư mục final/>
 RUBRIC: <key>=pass|fail; ...
 ISSUES: <tối đa 2 vấn đề hoặc none>
-PROFILE_HASH: <chép từ brief>        bắt buộc
+PROFILE_HASH: <chép từ brief>        bắt buộc; khác giá trị trong brief → ingest báo lỗi
 FIXED: F<n>, ...                     vòng sửa; chỉ để reviewer đối chiếu
 ```
 

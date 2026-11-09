@@ -22,16 +22,18 @@ Script cần PyYAML trong venv. Nếu `P` báo không thấy python hoặc `yaml
 
 Kiểm profile: chạy `<venv python> .claude/skills/zps-3dp-producer/scripts/check_profile.py production/PROJECT-PROFILE.yaml`. Không in gì là đủ. Thiếu file hoặc có lỗi thì nạp skill `zps-3dp-project-setup` và làm cùng người dùng; không sinh brief khi profile chưa hợp lệ.
 
+Chạy `P preflight` một lần mỗi phiên (và khi đổi tool hoặc cấu hình), không chạy cho từng asset. Lệnh in một dòng: tính năng bật, tắt. Bước cần tính năng đang tắt thì `P next` ghi "không giao" và `P brief` từ chối: báo người dùng sửa môi trường.
+
 Chạy `P next`. Nếu hook SessionStart đã in kết quả này vào context thì không chạy lại. Output gồm việc tiếp theo của từng asset, deadline và milestone sắp tới, các ruling gần nhất, và cảnh báo ⚠ khi concept hoặc art direction đổi sau khi asset bắt đầu. Chỉ đọc thêm file khi việc đang làm cần đến, ví dụ `assets/<id>/feedback.md` khi xử lý feedback của asset đó.
 
-Cảnh báo ⚠: hỏi người dùng làm lại hay giữ. Làm lại thì `P feedback <id> "<lý do>" --action redo --step <bước đầu>`; giữ thì thôi. Cả hai trường hợp đều chạy `P ack <id> "<quyết định>"` để tắt cảnh báo.
+Cảnh báo ⚠ (concept, thẻ, profile hoặc art direction đổi sau khi asset bắt đầu): hỏi người dùng làm lại hay giữ. Làm lại thì `P feedback <id> "<lý do>" --action redo --step <bước đầu>`; giữ thì thôi. Cả hai trường hợp đều chạy `P ack <id> "<quyết định>"` để tắt cảnh báo.
 
 ## Vòng làm việc
 
 Lặp cho đến khi `P next` không còn hành động nào bạn tự làm được.
 
 **Giao việc** (khi `P next` báo `brief <id>`):
-1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent`, `model`, `resume`, `brief`, `report`.
+1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
 2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (SendMessage tới agent id), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent`, truyền `model` tường minh, prompt đúng như sau:
    > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng contract.
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
@@ -40,7 +42,11 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **blocked:** đọc ghi chú. Nếu thông tin thiếu là thứ bạn có (từ brief, art direction, hoặc lời người dùng trong chat), bổ sung vào mục "Làm rõ" của `assets/<id>/brief.md`, rồi chạy `P retry <id>` và giao lại. Nếu chỉ người dùng trả lời được thì hỏi người dùng.
 
-**waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`.
+**Báo cáo sai hash:** `ingest` báo `PROFILE_HASH ... khác brief` thì yêu cầu worker chép đúng dòng `PROFILE_HASH` ở đầu brief. `ingest` hoặc `brief` báo "final/ đã duyệt bị sửa" thì hỏi người dùng làm lại bước đó hay không.
+
+**waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`. Mỗi version chỉ nhận một Duyệt hoặc Cần sửa; `redo` cho bản đã duyệt mở vòng mới và version mới.
+
+**Ai duyệt:** người dùng đổi người duyệt một bước thì `P approvals set <blockout|views_rest|model> <human|reviewer> --by "<nguyên văn>"` (`model reviewer` cần thêm `--confirm-spend`, hỏi lại người dùng trước). Ủy quyền cho một lô: `P delegate <bước> <id> ... --by "<nguyên văn>"`.
 
 ## Nhận việc mới
 

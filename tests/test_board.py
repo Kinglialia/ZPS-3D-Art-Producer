@@ -189,9 +189,9 @@ def test_second_decision_on_the_same_version_shows_the_dedupe_message(server):
     first = post(server, {"id": AID, "action": "approve", "text": "ok", "step": "blockout"})
     assert first[0] == 200 and first[1].startswith("house-a: đã duyệt blockout v2")
     st = load_st(AID)
-    again = post(server, {"id": AID, "action": "redo", "text": "", "step": "blockout"})
+    again = post(server, {"id": AID, "action": "approve", "text": "", "step": "blockout"})
     assert again[0] == 200
-    assert again[1] == f"house-a: bỏ qua redo blockout v2: đã có quyết định lúc {st['decisions']['blockout v2']['at']}"
+    assert again[1] == f"house-a: bỏ qua approve blockout v2: đã có quyết định lúc {st['decisions']['blockout v2']['at']}"
 
 
 def test_a_cross_site_form_post_cannot_decide(server):

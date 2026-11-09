@@ -10,7 +10,7 @@ from pathlib import Path
 import check_card
 import check_profile
 
-from .hashes import latest_mtime, warnings_for
+from .hashes import warnings_for
 from .state import (ARCHIVE, ASSETS, ROOT, TEMPLATES, all_status, die, ledger, load_st, now, rel,
                     rubric_approved, save_st)
 
@@ -46,6 +46,7 @@ def init(a):
         print(f"tạo {dst}")
 
     put(TEMPLATES / "pipeline.toml", ROOT / "pipeline.toml")
+    put(TEMPLATES / "policy.yaml", ROOT / "policy.yaml")
     for r in sorted((TEMPLATES / "rubrics").glob("*.md")):
         put(r, ROOT / "rubrics" / r.name)
     (concepts / "_approved").mkdir(parents=True, exist_ok=True)
@@ -74,7 +75,7 @@ def create_asset(cfg: dict, aid: str, title: str, typ: str, priority: int, deadl
     d = ASSETS / aid
     if d.exists() or (ARCHIVE / aid).exists():
         die(f"asset {aid} đã tồn tại")
-    rub_src = ROOT / cfg["intake"]["rubric"] if typ == cfg["intake"]["type"] else ROOT / "rubrics" / f"{typ}.md"
+    rub_src = ROOT / "rubrics" / f"{typ}.md"
     if not rub_src.exists():
         rub_src = ROOT / "rubrics" / "default.md"
     d.mkdir(parents=True)
@@ -90,8 +91,7 @@ def create_asset(cfg: dict, aid: str, title: str, typ: str, priority: int, deadl
           "stage": cfg["steps"][0]["id"], "state": "todo" if ready else "draft",
           "versions": {}, "approved": {}, "fix_round": 0, "worker_agent_id": None, "last_rubric": "",
           "note": "" if ready else "chờ duyệt rubric", "created": now(), "started": dt.date.today().isoformat(),
-          "concept_dir": str(concept_dir) if concept_dir else None,
-          "concept_mtime": latest_mtime(concept_dir) if concept_dir else 0.0, "ad_ack": None}
+          "concept_dir": str(concept_dir) if concept_dir else None, "ad_ack": None}
     save_st(st)
     ledger(f"{aid} · tạo mới ({'todo' if ready else 'draft, rubric chưa duyệt'})")
     return st

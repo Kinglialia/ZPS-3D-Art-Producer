@@ -10,11 +10,6 @@ name = "{{PROJECT}}"
 approved = "{{CONCEPTS}}/_approved"
 art_direction = "{{CONCEPTS}}/art-direction"
 
-[intake]
-min_images = 3
-type = "building"
-rubric = "rubrics/building.md"
-
 [review]
 max_fix_rounds = 3
 resume_rounds = 2

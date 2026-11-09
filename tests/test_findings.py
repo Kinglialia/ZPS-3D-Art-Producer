@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "zps-3dp-pr
 from core.contract import parse_review  # noqa: E402
 from core.findings import apply, best_version, progress  # noqa: E402
 from test_contract import finding, report  # noqa: E402
+from shared import brief_hash, write_profile  # noqa: E402
 
 P = Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts" / "producer.py"
 STEP = {"id": "blockout", "top_fix": ["structure", "param"]}
@@ -207,7 +208,8 @@ def worker_round(tmp, n):
     v = tmp / f"production/assets/house-a/blockout/v{n}"
     for o in OUTPUTS:
         (v / o).write_text("x", encoding="utf-8")
-    (v / "report-worker.md").write_text("STATUS: DONE\nPROFILE_HASH: 3f2a\nFIXED: F1\n", encoding="utf-8")
+    h = brief_hash((v / "brief-worker.md").read_text(encoding="utf-8"))
+    (v / "report-worker.md").write_text(f"STATUS: DONE\nPROFILE_HASH: {h}\nFIXED: F1\n", encoding="utf-8")
     assert run(tmp, "ingest", "house-a") == "house-a: worker DONE → blockout/review. Tiếp: giao reviewer → `brief house-a`\n"
     out = json.loads(run(tmp, "brief", "house-a"))
     return (tmp / out["brief"]).read_text(encoding="utf-8"), v
@@ -215,6 +217,7 @@ def worker_round(tmp, n):
 
 def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_path):
     run(tmp_path, "init", "--project", "Pilot", "--concepts", "concepts")
+    write_profile(tmp_path)
     run(tmp_path, "new", "house-a", "--title", "House A")
     run(tmp_path, "ready", "house-a")
     run(tmp_path, "brief", "house-a")
@@ -264,6 +267,7 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
 
 def test_worker_report_missing_profile_hash_keeps_the_asset_running(tmp_path):
     run(tmp_path, "init", "--project", "Pilot", "--concepts", "concepts")
+    write_profile(tmp_path)
     run(tmp_path, "new", "house-a", "--title", "House A")
     run(tmp_path, "ready", "house-a")
     run(tmp_path, "brief", "house-a")

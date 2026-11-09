@@ -1,10 +1,9 @@
 """Ingest state machine (docs/producer.md §3, §4, §7, §8): rounds, early stop, need_evidence, redo, gates, approve."""
 from __future__ import annotations
 
-import hashlib
 import shutil
 
-from . import findings, policy
+from . import findings, hashes, policy
 from .contract import parse_review, parse_worker
 from .state import ASSETS, ROOT, die, ledger, load_cfg, load_st, now, rel, save_st, step_of, vdir
 
@@ -67,13 +66,6 @@ def review_base(st: dict, n: int) -> int | None:
     return n if st.get("evidence") else st.get("fix_base")
 
 
-def tree_hash(d) -> str:
-    h = hashlib.sha256()
-    for p in sorted(x for x in d.rglob("*") if x.is_file()):
-        h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes())
-    return h.hexdigest()
-
-
 def next_action(st: dict) -> str:
     aid, s = st["id"], st.get("state")
     if s == "draft":
@@ -115,8 +107,12 @@ def valid(rep, parsed: tuple):
     return out
 
 
-def worker_report(st: dict, rep, agent_id) -> dict:
+def worker_report(st: dict, rep, agent_id, sid: str, n: int) -> dict:
     c = valid(rep, parse_worker(read_report(rep)))
+    inp = (st.get("inputs") or {}).get(sid, {}).get(f"v{n}") or {}
+    if c["PROFILE_HASH"] != inp.get("profile"):
+        die(f"{rel(rep)}: PROFILE_HASH {c['PROFILE_HASH']} khác brief ({inp.get('profile')})")
+    hashes.check_inputs(st, inp)
     if agent_id:
         st["worker_agent_id"] = agent_id
     return c
@@ -127,7 +123,7 @@ def stuck(c: dict) -> str | None:
 
 
 def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
-    c = worker_report(st, d / "report-worker.md", a.agent_id)
+    c = worker_report(st, d / "report-worker.md", a.agent_id, step["id"], n)
     st["last_rubric"] = c.get("RUBRIC", "")
     missing = [o for o in step["outputs"] if not (d / o).exists()]
     if why := stuck(c) or (missing and "thiếu output bắt buộc: " + ", ".join(missing)):
@@ -144,11 +140,11 @@ def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
 
 def on_evidence(cfg, st, step, d, n, a) -> tuple[str, str]:
     tag = f"evidence-{st['evidence']['k']}"
-    c = worker_report(st, d / "review" / tag / "report-worker.md", a.agent_id)
+    c = worker_report(st, d / "review" / tag / "report-worker.md", a.agent_id, step["id"], n)
     if why := stuck(c):
         move(st, "stuck")
         st["note"] = why
-    elif tree_hash(d / "final") != st["evidence"]["hash"]:
+    elif hashes.tree_hash(d / "final") != st["evidence"]["hash"]:
         move(st, "stuck")
         st["evidence"], st["note"] = None, f"{tag}: final/ đổi trong vòng bằng chứng, bỏ kết quả"
     else:
@@ -209,7 +205,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         move(st, event)
         st["evidence_used"] = st.get("evidence_used", 0) + 1
         k = 1 + sum(1 for _ in (d / "review").glob("evidence-*"))
-        st |= {"evidence": {"version": n, "k": k, "hash": tree_hash(d / "final")},
+        st |= {"evidence": {"version": n, "k": k, "hash": hashes.tree_hash(d / "final")},
                "note": "xin bằng chứng: " + ", ".join(rv["top_fix"]["ids"])}
     return f"review {rv['verdict']} ({findings.short(findings.open_counts(doc))})", reason or ""
 
@@ -234,6 +230,7 @@ def ingest(a):
 def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     sid = step["id"]
     st["approved"][sid] = n
+    st.setdefault("approved_hash", {})[sid] = hashes.tree_hash(vdir(st["id"], sid, n) / "final")
     st.setdefault("rejected", {})[sid] = [v for v in range(1, st["versions"][sid] + 1) if v != n]
     if sid == "assemble":
         out = ROOT.parent / "deliver" / st["id"]
@@ -242,6 +239,7 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
         shutil.copytree(vdir(st["id"], sid, n) / "final", out)
     ledger(f"{st['id']} · {sid} v{n} · duyệt bởi {by}")
     move(st, "approve", cfg)
+    hashes.refresh_stale(cfg, st)
 
 
 def redo(cfg: dict, st: dict, i: int, target: str, n: int | None):
@@ -249,7 +247,9 @@ def redo(cfg: dict, st: dict, i: int, target: str, n: int | None):
     st |= fresh() | {"stage": target, "fix_round": 1, "fix_base": n, "round_versions": [n] if n else [],
                      "note": "làm lại theo feedback người dùng"}
     for s in cfg["steps"][i:]:
-        st["approved"].pop(s["id"], None)
+        for k in ("approved", "approved_hash", "rejected"):
+            st.setdefault(k, {}).pop(s["id"], None)
+    hashes.refresh_stale(cfg, st)
     readme = ROOT.parent / "deliver" / st["id"] / "README.md"
     if readme.exists() and not (t := readme.read_text(encoding="utf-8")).startswith(REDOING):
         readme.write_text(REDOING + t, encoding="utf-8")
@@ -288,7 +288,8 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
     n = shown(st, target)
     key = f"{target} v{n}"
     done = st.setdefault("decisions", {})
-    if action != "note" and key in done:
+    send_back = action == "redo" and n is not None and st["approved"].get(target) == n
+    if action != "note" and key in done and not send_back:
         return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {done[key]['at']}"
     append_feedback(aid, st, action, text or "(không ghi chú)", target)
     msg = "đã ghi feedback"

@@ -16,6 +16,13 @@ Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong
 5. Mở session mới (agent file chỉ nạp lúc khởi động), chạy `/agents` để thấy modeller, texturer, reviewer.
 6. Chạy tay `codex exec` một lần với skill texture để chắc cú pháp gọi skill và quyền ghi file khi chạy không tương tác. Sửa `external_command` trong pipeline.toml cho khớp.
 
+## Lệnh môi trường và chính sách duyệt
+
+- `P preflight [--kit <đường dẫn preflight.py>]`: kiểm Blender (`BLENDER`, rồi Blender.app, rồi PATH), codex CLI, `MESHY_API_KEY` trong `paths.env_file` của profile (mặc định `.env`; script không in key), và `preflight.py` của kit khi có (mặc định skill `zps-3d-artist` cạnh skill này). Ghi `production/preflight.json`. Chạy một lần mỗi phiên.
+- `P approvals set <bước> <human|reviewer> --by "<nguyên văn>"`: ghi `production/policy.yaml`. `model reviewer` cần `--confirm-spend`.
+- `P delegate <bước> <id> ... --by "<nguyên văn>"`: reviewer duyệt bước đó cho các asset này. Thứ tự: `delegate` > `approvals` > `human`.
+- `[limits]` trong `pipeline.toml`: số tiến trình cùng lúc. Worker ghi PID mỗi lệnh Blender vào `production/pids/blender/<id>.pid` (brief ghi lệnh mẫu); `P next` chỉ đếm PID còn sống.
+
 ## Project mới
 
 ```
@@ -23,7 +30,7 @@ Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong
 ```
 
 Lệnh này tạo (không ghi đè file đã có):
-- `production/`: pipeline.toml đã điền đường dẫn, `rubrics/` (default, building), ledger.md, schedule.md.
+- `production/`: pipeline.toml đã điền đường dẫn, policy.yaml (mọi bước `human`), `rubrics/` (default, building), ledger.md, schedule.md.
 - Trong thư mục concept: `_approved/` và `GUIDELINE.md` đã điền tên project, đường dẫn và lệnh `check_card.py`.
 - `.env` trong `.gitignore` của project, để key Meshy không bị commit.
 
@@ -53,9 +60,7 @@ Mẫu như texturer: model rẻ (sonnet), không preload skill. Lệnh ngoài đ
 
 ## Review page
 
-`P serve` mở http://127.0.0.1:8765 (chỉ máy local). Mỗi asset hiện ảnh concept đã duyệt, các phiên bản gần nhất và model .glb xoay được. Nút Duyệt, Làm lại, Chỉ ghi chú ghi thẳng vào feedback.md và status.json. Mở `production/review.html` trực tiếp thì xem được nhưng không gửi feedback và không hiện ảnh concept.
-
-`<model-viewer>` tải từ CDN của Google, cần mạng. Đổi phiên bản ở hằng `MODEL_VIEWER_JS` đầu script.
+`P serve` mở http://127.0.0.1:8765 (chỉ máy local). Trang `index.html` đọc `/api/board`. Nút Duyệt, Cần sửa, Ghi chú ghi thẳng vào feedback.md và status.json.
 
 ## Dọn file
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import SCRIPTS, finding, report
+from shared import SCRIPTS, brief_hash, finding, report, write_profile
 from core import briefs, intake, loop, policy
 from core.state import ProducerError, load_cfg, load_st, save_st
 
@@ -41,7 +41,7 @@ class Flow:
         if rep.parent.name.startswith("v"):
             for o in OUTPUTS:
                 (rep.parent / "final" / o).write_text("x", encoding="utf-8")
-        rep.write_text(f"STATUS: {status}\nPROFILE_HASH: 3f2a\n", encoding="utf-8")
+        rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n", encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
 
     def review(self, out=None, **kw):
@@ -64,6 +64,7 @@ class Flow:
 def flow(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     intake.init(Namespace(project="Pilot", concepts="concepts"))
+    write_profile(tmp_path)
     intake.new(Namespace(id=AID, title="House A", type="asset", priority=2, deadline=None), load_cfg())
     intake.ready(Namespace(ids=[AID]))
     capsys.readouterr()
@@ -308,12 +309,31 @@ def test_one_approve_or_needs_fix_per_version_and_notes_are_kept_every_time(flow
     flow.human("approve")
     again = flow.human("approve", "duyệt lần nữa")
     assert re.fullmatch(r"house-a: bỏ qua approve blockout v2: đã có quyết định lúc \d{4}-\d\d-\d\d \d\d:\d\d", again)
-    assert flow.human("redo", "sửa", "blockout").startswith("house-a: bỏ qua redo blockout v2: đã có quyết định lúc ")
     assert flow.st["state"] == "done_enabled"
     flow.human("note", "ghi chú 1")
     flow.human("note", "ghi chú 2")
     log = (flow.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
     assert (log.count("· note · ghi chú"), log.count("· approve ·"), "duyệt lần nữa" in log) == (2, 1, False)
+
+
+def test_needs_fix_after_approval_sends_the_approved_version_back_and_opens_a_new_version(flow):
+    pass_v2(flow)
+    flow.human("approve")
+    assert flow.human("redo", "mái thấp quá", "blockout") == (
+        "house-a: làm lại blockout từ v2. Tiếp: giao worker → `brief house-a`")
+    st = flow.st
+    assert {k: st[k] for k in ("stage", "state", "fix_round", "fix_base", "approved", "rejected", "approved_hash")} == {
+        "stage": "blockout", "state": "fix", "fix_round": 1, "fix_base": 2, "approved": {}, "rejected": {},
+        "approved_hash": {}}
+    assert flow.brief()["report"] == f"production/assets/{AID}/blockout/v3/report-worker.md"
+
+
+def test_a_second_needs_fix_click_on_the_same_waiting_version_is_ignored(flow):
+    pass_v2(flow)
+    flow.human("redo", "mái thấp quá")
+    assert flow.human("redo", "bấm lần nữa").startswith("house-a: bỏ qua redo blockout v2: đã có quyết định lúc ")
+    assert flow.human("approve").startswith("house-a: bỏ qua approve blockout v2: đã có quyết định lúc ")
+    assert (flow.st["state"], flow.st["fix_round"]) == ("fix", 1)
 
 
 def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_variant_a(flow):

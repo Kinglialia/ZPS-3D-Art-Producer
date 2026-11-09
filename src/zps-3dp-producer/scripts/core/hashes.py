@@ -1,14 +1,20 @@
-"""Source tracking: art direction, concept files, schedule, change warnings and `ack`."""
+"""Source tracking (docs/producer.md §10, §11): profile hash, per-version `inputs`, stale versions, warnings, `ack`."""
 from __future__ import annotations
 
 import datetime as dt
+import functools
+import hashlib
+import json
 import re
 from pathlib import Path
 
-from .state import IMAGE_EXT, ROOT, ledger, load_st, save_st
+from .state import ROOT, die, ledger, load_st, save_st, vdir
 
 AD_LINE = re.compile(r"^\s*-\s*`?([^`\s]+\.md)`?.*?steps:\s*([a-z0-9_,\s-]+)\s*$", re.I)
 DATED_LINE = re.compile(r"^\s*-\s*(\d{4}-\d{2}-\d{2})\s*·\s*(.+)$")
+CARD = "asset-card.yaml"
+SOURCES = ("concept", "card", "profile")
+WARN = {"concept": "concept đổi sau khi bắt đầu", "card": "thẻ đổi sau khi bắt đầu", "profile": "profile đổi sau khi bắt đầu"}
 
 
 def ad_readme(cfg: dict) -> Path | None:
@@ -52,14 +58,6 @@ def ad_text(cfg: dict, tags: set[str]) -> str:
     return f"Art direction cho bước này: {', '.join(f'`{d}`' for d in docs)}. Cần chuẩn khác thì xem `{rd}`."
 
 
-def concept_images(d: Path) -> list[Path]:
-    return sorted(p for p in d.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXT) if d.exists() else []
-
-
-def latest_mtime(d: Path) -> float:
-    return max((p.stat().st_mtime for p in d.rglob("*") if p.is_file()), default=0.0)
-
-
 def schedule_soon(days: int = 14) -> list[tuple[str, str]]:
     p = ROOT / "schedule.md"
     if not p.exists():
@@ -69,12 +67,93 @@ def schedule_soon(days: int = 14) -> list[tuple[str, str]]:
             if m and today <= m.group(1) <= until]
 
 
+def tree_hash(d: Path, skip: str = "") -> str | None:
+    if not d.is_dir():
+        return None
+    h = hashlib.sha256()
+    for p in sorted(x for x in d.rglob("*") if x.is_file() and x.name != skip):
+        h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()
+
+
+def _strip(x):
+    if isinstance(x, dict):
+        return {k: _strip(v) for k, v in x.items() if not str(k).startswith("_")}
+    return [_strip(i) for i in x] if isinstance(x, list) else x
+
+
+def digest(profile: dict) -> str:
+    """D21.3: hash of the normalized profile without `paths` and `_` keys, so notes and paths never warn."""
+    body = _strip({k: v for k, v in profile.items() if k != "paths"})
+    return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:12]
+
+
+@functools.lru_cache(maxsize=4)
+def _profile_digest(path: str, _mtime: int, _size: int) -> str | None:
+    import yaml
+    try:
+        data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return None
+    return digest(data) if isinstance(data, dict) else None
+
+
+def profile_hash() -> str | None:
+    p = ROOT / "PROJECT-PROFILE.yaml"
+    if not p.exists():
+        return None
+    s = p.stat()
+    return _profile_digest(str(p.resolve()), s.st_mtime_ns, s.st_size)
+
+
+def sources(st: dict, profile: str | None = None) -> dict:
+    cd = Path(st["concept_dir"]) if st.get("concept_dir") else None
+    card = cd / CARD if cd else None
+    return {"concept": tree_hash(cd, skip=CARD) if cd else None,
+            "card": hashlib.sha256(card.read_bytes()).hexdigest() if card and card.is_file() else None,
+            "profile": profile or profile_hash()}
+
+
+def check_inputs(st: dict, inp: dict):
+    """Checklist 71: an approved final/ edited after approval stops the brief or ingest that would build on it."""
+    for prev, rec in inp.items():
+        if isinstance(rec, dict) and tree_hash(vdir(st["id"], prev, rec["v"]) / "final") != rec["hash"]:
+            die(f"{prev} v{rec['v']}: final/ đã duyệt bị sửa sau khi duyệt (hash lệch)")
+
+
+def record_inputs(cfg: dict, st: dict, i: int, n: int, ph: str) -> dict:
+    prev = {s["id"]: {"v": st["approved"][s["id"]], "hash": st.get("approved_hash", {}).get(s["id"])}
+            for s in cfg["steps"][:i] if s["id"] in st["approved"]}
+    check_inputs(st, prev)
+    inp = prev | sources(st, ph) | {"art_direction": max((d for d, _ in ad_changes(cfg)), default="")}
+    st.setdefault("inputs", {}).setdefault(cfg["steps"][i]["id"], {})[f"v{n}"] = inp
+    st.setdefault("sources", {k: inp[k] for k in SOURCES})
+    refresh_stale(cfg, st)
+    return inp
+
+
+def refresh_stale(cfg: dict, st: dict):
+    """§11: `stale["<step> vN"] = "<prev> vM"` when vN was built from a prev-step final that is no longer approved."""
+    ids = [s["id"] for s in cfg["steps"]]
+    ah = st.get("approved_hash", {})
+    out = {}
+    for sid, vers in (st.get("inputs") or {}).items():
+        i = ids.index(sid) if sid in ids else 0
+        if i == 0:
+            continue
+        prev = ids[i - 1]
+        for v, inp in vers.items():
+            if (rec := inp.get(prev)) and rec["hash"] != ah.get(prev):
+                out[f"{sid} {v}"] = f"{prev} v{rec['v']}"
+    st["stale"] = out
+
+
 def warnings_for(cfg: dict, st: dict) -> list[str]:
-    """Cảnh báo concept hoặc art direction đổi sau khi asset bắt đầu."""
+    """Cảnh báo concept, thẻ, profile (theo nội dung, D23.1) hoặc art direction đổi sau khi asset bắt đầu."""
     w = []
-    cd = st.get("concept_dir")
-    if cd and Path(cd).exists() and latest_mtime(Path(cd)) > st.get("concept_mtime", 0) + 1:
-        w.append("concept đổi sau khi bắt đầu")
+    if base := st.get("sources"):
+        cur = sources(st)
+        w = [WARN[k] for k in SOURCES if cur[k] != base.get(k)]
     since = max(st.get("started", ""), st.get("ad_ack") or "")
     changed = [d for d, _ in ad_changes(cfg) if d > since]
     if changed:
@@ -84,9 +163,8 @@ def warnings_for(cfg: dict, st: dict) -> list[str]:
 
 def ack(a):
     st = load_st(a.id)
-    if st.get("concept_dir"):
-        st["concept_mtime"] = latest_mtime(Path(st["concept_dir"]))
+    st["sources"] = sources(st)
     st["ad_ack"] = dt.date.today().isoformat()
     save_st(st)
-    ledger(f"{a.id} · ack thay đổi concept/art direction · {a.note}")
+    ledger(f"{a.id} · ack thay đổi concept/thẻ/profile/art direction · {a.note}")
     print(f"{a.id}: đã ghi nhận thay đổi")

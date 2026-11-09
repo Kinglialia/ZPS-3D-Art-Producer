@@ -1,0 +1,8 @@
+# Preset: camera top-down, mobile, low poly (docs/project-profile.md §2). Hạng chỉ quyết định trần tris.
+camera: {azimuth_deg: 0, elevation_deg: 35, fov_v_deg: 40, target_px_height: 400}
+tiers:                      # hạng → trần tris
+  hero: 5000
+  standard: 3000
+  background: 1000
+uv: {padding_px: 16, texel_min_px_per_m: 64}   # tính ở độ phân giải làm việc
+screen_tris_max_small_ratio: null              # null = chỉ cảnh báo (D7.7)

@@ -4,7 +4,7 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · intake · new · ready · next · brief · ingest · retry · ack · feedback · approvals · delegate · rule
+Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · approvals · delegate · rule
              ledger · dashboard · serve · validate · cleanup · archive
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
@@ -22,6 +22,11 @@ from core.state import PORT, ProducerError, load_cfg  # noqa: E402
 def cmd_init(a):
     from core.intake import init
     init(a)
+
+
+def cmd_preflight(a):
+    from core.preflight import run_preflight
+    run_preflight(a)
 
 
 def cmd_intake(a):
@@ -120,6 +125,8 @@ def main():
     x = sub.add_parser("init", help="tạo production/, rubric mẫu, _approved/ và GUIDELINE.md")
     x.add_argument("--project", required=True, help="tên project, vd \"New Last Order\"")
     x.add_argument("--concepts", required=True, help="thư mục concept của project")
+    sub.add_parser("preflight", help="kiểm môi trường một lần mỗi phiên → production/preflight.json").add_argument(
+        "--kit", help="preflight.py của kit (mặc định: skill zps-3d-artist cạnh skill này)")
     x = sub.add_parser("intake", help="quét _approved/: không tham số = chỉ liệt kê")
     x.add_argument("ids", nargs="*", help="building id cần đăng ký (làm trước)")
     x.add_argument("--all", action="store_true", help="đăng ký mọi building mới đủ ảnh")
@@ -149,7 +156,7 @@ def main():
     sub.add_parser("rule", help="ghi quyết định Producer tự đưa ra").add_argument("text")
     x = sub.add_parser("ledger", help="xem cuối ledger")
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
-    sub.add_parser("dashboard", help="sinh lại dashboard.md + review.html")
+    sub.add_parser("dashboard", help="sinh lại dashboard.md")
     sub.add_parser("serve", help="mở review page có nút feedback").add_argument("--port", type=int, default=PORT)
     sub.add_parser("validate", help="kiểm tra cấu hình và status")
     x = sub.add_parser("cleanup", help="xoá work/ của phiên bản không được duyệt (mặc định dry-run)")
