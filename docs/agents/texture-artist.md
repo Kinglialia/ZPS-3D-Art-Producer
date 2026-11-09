@@ -142,6 +142,9 @@ Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1).
 5. Từng mục `texture` của rubric theo loại.
 6. TEXTURE NOTE đã xử lý hết.
 7. Chế độ SỬA: chi tiết Meshy đúng vẫn còn; không sửa quá tay.
+8. **Kiểm kê phần tử và lỗi ảnh AI** (D25.F, theo `art-quality.md` và `gen-craft.md` của kit), trên lớp Meshy và trên paint view: mọi motif, chữ, biển, vết bẩn, nguồn sáng vẽ trên texture phải truy được về concept hoặc TEXTURE NOTE; soát bảng lỗi ảnh AI (thừa chi tiết, chữ giả, ánh sáng vẽ sai hướng, nhiễu giả chi tiết, lệch style, scale vân khác nhau trên cùng vật liệu). Không truy được → finding `repaint`.
+
+Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước.
 
 **Chẩn đoán trước khi đề xuất sửa** (theo kit). Lỗi đen hoặc sai màu: kiểm color space, alpha, normal trước khi vẽ lại. Lỗi seam: kiểm UV và padding trước khi làm mờ. Nếu không tách được do map hay do UV, ghi cả hai giả thuyết.
 

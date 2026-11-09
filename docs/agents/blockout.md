@@ -148,6 +148,7 @@ final/
 7. Mục "Blockout tự quyết" hợp lý theo quy tắc mặc định.
 
 - Reviewer không tự đo. Reviewer đọc số từ JSON.
+- Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước.
 - Nếu một chi tiết nhỏ không rõ, reviewer trả `unclear` và xin crop.
 - Output theo contract reviewer (D14.10, D21.1, `docs/producer.md` §6.1): `VERDICT`, `RUBRIC`, `COUNTS`, `TOP_FIX` (loại `structure` kiểu đơn, `param` kiểu lô, `need_evidence`), `FINDINGS` có id, `PRIOR` cho mọi finding đang mở.
 - Duyệt theo ủy quyền (D1.5) chỉ khi không còn finding `blocker`, `major` hay `unclear` đang mở. Lỗi `minor` ghi vào `blockout.md` và không chặn duyệt.

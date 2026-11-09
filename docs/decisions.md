@@ -13,6 +13,7 @@ Mỗi dòng là một quyết định của anh. Ghi ngày và lý do ngắn. Ph
   3. **[Thay bằng D14.10]** ~~Output là JSON: pass / fail / unclear cho từng tiêu chí, kèm đúng một `top_fix`.~~ Output theo contract `KEY: value`.
   4. Tối đa 3 vòng. Nếu quá 3 vòng, Producer dừng và hỏi anh.
   5. Mặc định anh duyệt mọi điểm duyệt. Reviewer chỉ duyệt thay khi anh báo Producer cho lô đó ("lô này anh không duyệt"). Điều kiện: mọi script pass, mọi tiêu chí pass, không có `unclear`. Kết quả ghi "reviewer duyệt theo ủy quyền của anh, ngày …". Anh hủy được sau. (Sửa 2026-11-08.)
+  6. **[Thêm theo D25.B]** Ảnh cùng góc của bản trước ở vòng sửa; `EVIDENCE_OPENED`; cảnh báo xu hướng duyệt dễ; không tự đo; chỉ chấm trong phạm vi bước.
 - Script kiểm trước, reviewer kiểm sau. Nếu script fail, maker tự sửa và không gọi reviewer.
 - Lý do: self-review đã lọt lỗi trong pilot (render phẳng tự viết che lỗi mặt trùng, alpha, normal). Về token, 4 agent và 1 agent với 4 rubric tốn như nhau. 4 agent tránh truyền nhầm rubric và giữ model riêng cho từng bước.
 
@@ -286,6 +287,21 @@ Nguồn: đọc `src/zps-3d-artist/tools`, `src/zps-concept-views/scripts`, `bui
 5. **Cấu trúc hai bản chép từ kit** (cụ thể hóa D6.4): `build.py`, `editions/{claude,codex}/edition.json`, `adapter.md`, `tests/`. Bản Codex thêm hậu tố `-codex` vào tên (như `skill_suffix` của kit). Description ≤ 300 ký tự (Codex rút gọn dài hơn), câu chặn gọi nhầm của D23.2 đứng đầu.
 6. **Không đặt `mesh.max_duplicate_verts`**: `mesh_check` của kit chỉ báo đỉnh trùng ở mức info, nên join không weld không fail.
 7. Hash nội bộ của kit (`code_hash` trong `gates.py`, `render_views.py`; sha256 trong `finalize.py`) là kiểm tươi trong một bước, không trùng với kiểm đầu vào giữa các bước của script Producer. D22.12 giữ nguyên.
+
+## D25 — Mang các điểm hay của kit vào spec (2026-11-09)
+
+Nguồn: `art-operation.md`, `art-quality.md`, `issue-fields.json`, `review.md`, `3d-critic.md`, skill Art Learning, `evals/triggers.json`, `preflight.py`, `estimate.py`, `installer/codex_rules.py`, `gen-craft.md` của kit `905dc93`.
+
+- **A. Finding dùng bộ trường của kit và AD** (mở rộng D21.1): `region`, `viewing_condition`, `evidence`, `consequence`, `confidence`, `repair`, `preserve`, `acceptance`. `resolved` chỉ khi chứng minh được `acceptance`. Thêm trạng thái `superseded` (yêu cầu đổi) và mức `preference` (khẩu vị, không chặn PASS). Lý do: `PRIOR` khách quan hơn, ít thụt lùi hơn, và finding của reviewer, của anh, của AD cùng một format.
+- **B. Quy tắc chung của reviewer theo `3d-critic.md`** (bổ sung D1): ảnh cùng góc của bản trước ở vòng sửa; `EVIDENCE_OPENED`; câu cảnh báo xu hướng duyệt dễ; không tự đo; chỉ chấm trong phạm vi bước. Test D1 kiểm.
+- **C. `P preflight`** mỗi phiên, gọi `preflight.py` của kit, thêm codex CLI, key Meshy, Blender. Tính năng tắt thì không giao bước cần nó.
+- **D. Blender trong bản Codex chạy ngoài sandbox bằng allow-list** (cụ thể hóa D6.4), theo `codex_rules.py` của kit. Lý do: trên macOS Blender crash trong sandbox.
+- **E. Eval kích hoạt** cho mọi skill và agent, có câu âm trùng kit. Build chạy. Thay việc kiểm tay ở checklist dòng 81.
+- **F. Kiểm kê phần tử và bảng lỗi ảnh AI** cho check-views và check-texture.
+- **G. Thứ tự ưu tiên khi nguồn mâu thuẫn:** feedback của anh, brief > art direction > spec, profile, thẻ, `sources.json` > tài liệu agent, reference kit > mặc định. Gặp mâu thuẫn thì ghi cả hai nguồn và lựa chọn.
+- **H. Đổi nhánh không đặt lại bộ đếm; bản gửi anh khi chưa qua mang nhãn "chưa đạt".**
+- **I. Ước lượng thời gian, credit và báo giá Meshy cả lô** lúc `intake`, dùng `estimate.py` của kit; ghi log mỗi asset.
+- **J. Nguyên tắc Art Learning cho `P compare` và D16.3:** đếm theo asset; ghi cả lần thử bị loại; im lặng không phải duyệt.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.

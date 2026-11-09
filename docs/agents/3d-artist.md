@@ -148,7 +148,7 @@ Một script `render_review.py`, mở Blender một lần. 3D Artist có bản r
 
 Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A7 và ghi vào `spec.json`. Texture Artist dùng lại khi render `final_lit_vs_concept.png` ở bước `texture` (D22.11).
 
-**check-clay** (Opus, chỉ đọc, context mới mỗi lần):
+**check-clay** (Opus, chỉ đọc, context mới mỗi lần). Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước. Không chấm màu, texture.
 
 1. Khối: chấm trên clay. Lỗi "ổ bánh mì" là fail.
 2. Detail pass: đủ chi tiết đổi silhouette. So bảng detail pass với concept.

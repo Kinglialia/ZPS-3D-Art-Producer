@@ -91,3 +91,13 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 85 | Producer | Agent không đọc `.env`: brief không chứa key hay đường dẫn `.env`; `P init` thêm `.env` vào `.gitignore`; profile có `env_file` mà thiếu key → `blocked` trước bước `texture` | producer.md §6.3, D24.3 | |
 | 86 | Producer | `assemble.py` dùng `finalize.py` của kit: GLB có QA fail hoặc thiếu `mesh_check` → finalize từ chối → `assemble.py` fail | producer.md §6.4, D24.4 | |
 | 87 | Producer | Build bản Codex: tên agent có hậu tố `-codex`; description mọi skill và agent ≤ 300 ký tự, câu chặn gọi nhầm đứng đầu; build fail nếu vượt | producer.md §3, §16, D24.5 | |
+| 88 | Producer | `ingest` từ chối finding thiếu trường của `issue-fields` (`region`, `evidence`, `repair`, `preserve`, `acceptance`…); `resolved` chỉ khi reviewer dẫn bằng chứng cho `acceptance`; `superseded` không tính vào tiến bộ | producer.md §6.1, D25.A | |
+| 89 | Mọi reviewer | Có `EVIDENCE_OPENED`; mọi finding dẫn nhãn ảnh trong danh sách đó; brief vòng sửa có ảnh cùng góc của bản trước | producer.md §6.1, D25.B | |
+| 90 | Producer | `P preflight`: thiếu Blender, xatlas, codex CLI hoặc key Meshy → tính năng tương ứng tắt, `P next` không giao bước cần nó; không chạy lại cho từng asset | producer.md §14, D25.C | |
+| 91 | Codex | Installer rules: Blender chạy được ngoài sandbox chỉ với script đã cài của Producer và kit; lệnh Python khác vẫn ở trong sandbox (theo `test_codex_rules.py` của kit) | producer.md §16, D25.D | |
+| 92 | Mọi agent | Eval kích hoạt chạy trong build: câu dương kích hoạt đúng agent, câu âm trùng kit không kích hoạt agent của Producer | producer.md §16, D25.E | |
+| 93 | Concept Views, Texture Artist | Reviewer bắt được phần tử thừa: thử với một view có thêm biển chữ giả, một texture có hạt sáng không yêu cầu | concept-views.md §8, texture-artist.md §7, D25.F | |
+| 94 | Producer | Đổi nhánh (Meshy → VẼ MỚI) không đặt lại bộ đếm; bản gửi anh khi hết vòng mang nhãn "chưa đạt" trên trang duyệt | producer.md §7, review-board.md §2, D25.H | |
+| 95 | Producer | `P intake` in ước lượng thời gian và credit cho lô; dưới 3 bản ghi thì dùng mặc định của kit; mỗi asset xong ghi `estimate.py log` | producer.md §9, D25.I | |
+| 96 | Producer | `P compare` đếm theo asset, không theo số lần gọi; quyết định không có người bấm không được tính là anh duyệt | producer.md §16, D25.J | |
+

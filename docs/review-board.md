@@ -1,6 +1,6 @@
 # Spec — Review Board (v1.2)
 
-v1 duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D19, D14, D21, D22).
+v1 duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22–D25). Quyết định nền: `docs/decisions.md` (D19, D14, D21–D25).
 
 Review Board là nơi anh xem và duyệt asset. Có hai trang, dùng chung một bộ tính năng xem và khoanh vùng.
 
@@ -32,7 +32,9 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 - Model 3D xoay được (bước `blockout`, `model`, `assemble`).
 - Tóm tắt **tối đa 3 dòng**: trang lấy 3 dòng đầu của file tóm tắt. Phần còn lại của file ẩn, anh bấm mới mở. File tóm tắt: `blockout.md` (`blockout`), `report/VIEWS.md` (`views_front`, `views_rest`), `model.md` (`model`), `texture/notes.md` (`texture`), `README.md` (`assemble`, do `assemble.py` ghép). `views_front` và `texture` không có gate người duyệt, nhưng vẫn có thể tới `waiting_human` (D20.16).
 - Lý do asset được gửi anh, **một dòng**: lấy từ report reviewer, từ report worker khi `BLOCKED` hay `UNFIXABLE`, hoặc từ script (dừng sớm, hết vòng, Meshy, `checks_human`).
-- Finding đang mở, mỗi finding một dòng có id (`F3 [major] mái · chìa thiếu 20 cm`) (D21.1). Anh khoanh vùng hoặc ghi chú có thể nhắc id.
+- Finding đang mở, mỗi finding một dòng có id, vùng, cách sửa và dấu hiệu đã xong (`F3 [major] mái — chìa thiếu 20 cm — tăng roof_overhang — acceptance: chìa ≥ 0,4 m trên clay_34`) (D21.1, D25.A). Bấm vào finding mở đủ trường. Anh khoanh vùng hoặc ghi chú có thể nhắc id.
+- Finding `preference` (khẩu vị) hiện ở một nhóm riêng, không tính là lỗi.
+- **Nhãn "chưa đạt"** (D25.H) khi asset tới anh vì hết vòng, dừng sớm hoặc ESCALATE: trang ghi rõ bản này chưa đạt và còn những finding nào, không trình bày như bản đã qua.
 - Nhãn **cũ** khi version dựng từ đầu vào đã thay đổi (D21.5), ví dụ "dựng từ blockout v1 — cũ".
 - Nút **Duyệt**, **Cần sửa**, **Ghi chú**; ô ghi chú chung.
 - Bước `assemble` không có agent và reviewer (D22.11): bấm **Cần sửa** thì trang hỏi sửa ở bước nào, `texture` (vẽ lại) hay `model` (mesh, UV). Sheet DUYỆT 2 dùng bộ render của bước `texture`, cộng ảnh so pixel GLB của `assemble.py`.

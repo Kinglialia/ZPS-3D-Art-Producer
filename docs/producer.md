@@ -1,7 +1,7 @@
 # Spec — Producer (v2)
 
 Tên kỹ thuật: `zps-3dp-producer`. Tên hiển thị: ZPS-3DP · Producer.
-v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21, D22). Quyết định nền: `docs/decisions.md` (D14, D21, D22 và các quyết định trước còn hiệu lực).
+v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D25). Quyết định nền: `docs/decisions.md` (D14, D21–D25 và các quyết định trước còn hiệu lực).
 
 **Nền:** skill `producer` anh đã làm (`producer-skill.zip`: `SKILL.md`, `scripts/producer.py`, `references/`, `templates/`). Spec này giữ cơ chế của skill đó và ghi những chỗ thay đổi.
 
@@ -107,18 +107,34 @@ Anh nói trong chat. Producer chạy script và chuyển đường dẫn cho anh
 
 ## 6. Contract
 
-### 6.1 Reviewer (D14.10, D21.1)
+### 6.1 Reviewer (D14.10, D21.1, D25.A, D25.B)
 
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear; ...
-COUNTS: blocker=N; major=N; minor=N; unclear=N
+COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N
 TOP_FIX: <loại>: F<n>[, F<m> ...]
+EVIDENCE_OPENED: <nhãn các ảnh và file đã mở>
 FINDINGS:
-- F<n> [blocker|major|minor|unclear] <loại> · <ở đâu> — <sai gì> — <sửa thế nào>
+- F<n> [blocker|major|minor|preference|unclear] <loại>
+  region: <ở đâu> | viewing_condition: <góc, kích thước xem> | evidence: <ảnh, số đo>
+  consequence: <hậu quả> | confidence: high|medium|low
+  repair: <sửa thế nào> | preserve: <phải giữ nguyên gì> | acceptance: <dấu hiệu đã sửa xong>
 PRIOR:
-- F<n>: resolved | open | regressed
+- F<n>: resolved | open | regressed | superseded
 ```
+
+**Bộ trường finding lấy từ `issue-fields.json` của kit** (D25.A), dùng chung với AD critique. Finding của reviewer, finding `H<n>` của anh và nhận xét của AD agent cùng một format, chuyển qua lại được. `ingest` kiểm đủ trường.
+- `resolved` chỉ khi bản mới chứng minh được `acceptance`. Không thấy lỗi nữa nhưng không có bằng chứng cho `acceptance` thì vẫn `open`.
+- `superseded`: yêu cầu đã đổi (anh hoặc AD đổi, có `ack`). Không tính vào tiến bộ hay thụt lùi.
+- `preference`: khẩu vị, không chặn PASS. Ghi riêng để anh xem; nếu reviewer thấy anh phải chọn thì ESCALATE.
+- Tên VERDICT của mình ứng với verdict của kit: PASS = `meets_checked_criteria`, FIX = `needs_revision`, `need_evidence` = `insufficient_evidence`.
+
+**Quy tắc chung của 4 reviewer** (D25.B, theo `3d-critic.md` của kit; test D1 kiểm cả 4 file có đủ):
+- Brief kèm **ảnh cùng góc của bản trước** khi đây là vòng sửa, để so trực tiếp.
+- Ghi `EVIDENCE_OPENED`. Finding phải dẫn nhãn ảnh trong danh sách đó.
+- Câu cố định trong file agent: "Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí."
+- Không tự đo; số đọc từ JSON của script. Chỉ chấm trong phạm vi bước (ví dụ không chấm màu ở bước clay).
 
 **Finding có id cố định qua các vòng.** Script lưu finding **theo từng version**: `<bước>/vN/findings.json` (id, mức, loại, trạng thái, vòng xuất hiện đầu, vòng gần nhất) (D22.1). Brief vòng sửa lấy danh sách finding của bản được chọn làm gốc (bản tốt nhất), không phải của bản mới nhất. Brief của reviewer có danh sách đó và số id bắt đầu cho finding mới. Reviewer phải ghi `PRIOR` cho **mọi** finding đang mở. Thiếu một dòng → `ingest` báo lỗi contract.
 
@@ -126,7 +142,7 @@ PRIOR:
 - Mỗi key chấm `unclear` trong `RUBRIC` phải có ít nhất một finding mức `unclear` (D22.6).
 - **Tin nhắn trả về cho Producer** chỉ gồm hai dòng `VERDICT` và `COUNTS` (D22.6). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report.
 
-**Chọn VERDICT** (theo thứ tự, dừng ở dòng đầu tiên khớp):
+**Chọn VERDICT** (theo thứ tự, dừng ở dòng đầu tiên khớp). Finding `preference` không tính vào các dòng dưới:
 
 | # | Điều kiện | VERDICT | TOP_FIX |
 |---|---|---|---|
@@ -212,7 +228,9 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 2. **Mỗi vòng:** worker sửa đúng các finding liệt kê trong `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất).
 3. **Tiến bộ** đo trên finding có id, không đo trên tổng số đếm. Một vòng có tiến bộ khi: có ít nhất một finding `blocker` hoặc `major` cũ chuyển `resolved`, và số finding chuyển `regressed` ít hơn số `resolved`. Finding mới phát hiện không tính là thụt lùi, vì reviewer có context mới mỗi lần nên có thể thấy thêm lỗi cũ chưa ai nêu.
 4. **Dừng sớm:** từ vòng 2, nếu vòng không có tiến bộ → `waiting_human`, ghi "không tiến bộ ở vòng N" kèm danh sách finding còn mở.
+4b. **Đổi nhánh không đặt lại bộ đếm** (D25.H): ví dụ Texture Artist chuyển từ Meshy sang VẼ MỚI trong cùng đợt feedback vẫn đếm tiếp vòng cũ. Chỉ feedback `redo` của anh mới mở đợt mới.
 5. **Bản tốt nhất** (D11.3): version có ít finding `blocker` + `major` đang mở nhất (bằng nhau thì version cũ hơn). Brief vòng sửa trỏ tới bản tốt nhất. Khi gửi anh hoặc khi dừng, gửi bản tốt nhất.
+5b. **Không giao bản đỡ tệ nhất như đã đạt** (D25.H): bản gửi anh vì hết vòng, dừng sớm hay ESCALATE mang nhãn **chưa đạt** trên trang duyệt, kèm finding còn mở. Anh vẫn duyệt được; khi đó finding còn mở được ghi vào mục "việc còn mở" của README gói cuối.
 6. **Vòng xin bằng chứng (`need_evidence`):**
    - Chỉ dùng khi không còn `blocker`, `major` đang mở (mục 6.1, bảng VERDICT).
    - Worker của cùng bước chỉ render các ảnh reviewer xin, ghi vào `<bước>/vN/review/evidence-<k>/`. **Không tạo version mới.** Reviewer chấm lại chính `vN` với ảnh thêm.
@@ -256,6 +274,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 - **MAP-LAYOUT:** nếu profile có `has_map: true`, intake bắt buộc có `<id>.layout.md`. Nếu `has_map: false`, thẻ bắt buộc có `size_m: {w, d, h}` (mét); `check_card.py` kiểm trường này. Blockout lấy W×D×H từ `size_m` (D20.9).
 - Thiếu hoặc sai → không đăng ký. Producer báo anh theo nhóm lỗi.
 - Loại asset lấy từ `type` trong thẻ (`building`, `prop`, `tree`, `rock`). Loại `character`, `creature`: báo v1 chưa hỗ trợ (D9).
+- **Ước lượng và báo giá theo lô** (D25.I): `P intake` in ước lượng thời gian và credit cho lô, dùng `estimate.py` của kit (dữ liệu của chính project trong `<project>/.zps-art/estimates.jsonl`; dưới 3 bản ghi thì dùng mặc định của kit). Tổng credit Meshy dự kiến của cả lô được đưa anh duyệt một lần. Mỗi asset xong, script ghi `estimate.py log` (phương pháp, số phút, credit, tris).
 - **Pilot trước, lô sau** (D21.7): khi profile có `pilot_asset: null`, `intake --all` từ chối; chỉ đăng ký từng asset gọi đích danh, và chỉ khi không có asset nào khác đang chạy. Các phép so với pilot (tris/m², dE vật liệu) ghi `not_checked`, không fail.
 
 ## 10. Thông số và rubric
@@ -263,13 +282,15 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 | Loại thông tin | Nằm ở |
 |---|---|
 | Số và quy ước script dùng | Mặc định skill → preset → profile → thẻ asset (D13) |
+| Khi các nguồn mâu thuẫn | Xem thứ tự ưu tiên ngay dưới bảng (D25.G) |
 | Ai duyệt, trang duyệt | `production/policy.yaml` (mục 4) |
 | Tài liệu style | `art-direction/` (AD giữ, tag `steps:`), như skill nền. **Chỉ** ở đây (D22.16) |
 | Tiêu chí chấm chung của bước | Trong file agent reviewer |
 | Tiêu chí chấm riêng theo loại asset | `production/rubrics/<loại>.md`, chia mục theo bước. Anh duyệt một lần (`status: approved`). Chỉ chứa tiêu chí pass/fail kèm tham chiếu tới tài liệu AD (ví dụ "mái đúng `roofs.md` §2"), không mô tả style (D22.16) |
 | Số hình học sau khi blockout được duyệt | `sources.json` của blockout là nguồn duy nhất cho các bước sau (D22.13). Profile và thẻ chỉ còn dùng cho thông số không phải hình học (`texture_res`, ngưỡng pixel, `detail_examples`) |
 
-- Số không viết hai lần. Tài liệu art direction có thể nhắc số, nhưng số thật nằm trong YAML. Nếu lệch, YAML thắng.
+- **Thứ tự ưu tiên khi các nguồn mâu thuẫn** (D25.G, theo `art-operation.md` của kit): (1) quyết định hoặc feedback mới nhất của anh, brief của asset; (2) art direction đã duyệt; (3) spec, profile, thẻ asset, `sources.json`; (4) tài liệu của agent và reference của kit cho đúng loại việc; (5) quy tắc chung và mặc định. Agent gặp mâu thuẫn còn ảnh hưởng tới kết quả thì ghi cả hai nguồn và lựa chọn đã dùng vào báo cáo, không chọn âm thầm.
+- Số không viết hai lần. Tài liệu art direction có thể nhắc số, nhưng số thật nằm trong YAML. Nếu lệch, YAML thắng (đây là trường hợp riêng của thứ tự trên: số kỹ thuật thuộc nhóm 3, không thuộc nhóm 2).
 - **Hash profile** (D21.3) tính trên nội dung đã chuẩn hóa của `PROJECT-PROFILE.yaml`, **bỏ** `paths` và mọi khóa bắt đầu bằng `_` (ví dụ `_source`). Sửa ghi chú nguồn hay đường dẫn không làm đổi hash.
 - `check_profile.py` do script chạy một lần khi `intake` và khi sinh brief. Agent không chạy lại.
 
@@ -314,6 +335,7 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 ## 14. Khởi tạo và phiên mới (D13)
 
 1. Anh gọi Producer. Producer chạy `check_profile.py`.
+1b. **`P preflight`** (D25.C): kiểm môi trường một lần mỗi phiên, gọi `preflight.py` của kit và kiểm thêm codex CLI, `gen_api.py keys` (Meshy), bản Blender. Kết quả ghi `production/preflight.json` gồm bảng tính năng bật/tắt. Bước nào cần tính năng đang tắt thì `P next` báo ngay và không giao việc bước đó. Chạy lại khi đổi tool hoặc cấu hình, không chạy lại cho từng asset.
 2. Thiếu profile → nạp skill Project Setup, làm cùng anh (gồm cả `policy.yaml`).
 3. Xong → **Producer nhắc anh gõ lệnh xóa context và mở phiên mới**, đúng câu lệnh của runtime (Claude Code: `/clear`; Codex: `/new`).
 4. Producer cũng nhắc mở phiên mới sau khi cập nhật nội dung profile, và khi context đã dài sau một lô.
@@ -340,7 +362,9 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - Spec agent viết trung lập với runtime: "sub-agent của runtime", không "sub-agent Claude" (D22.9).
 - Adapter ghi cách quy đổi tên chung `opus`, `sonnet`, `haiku` sang model thật của runtime. Ledger ghi model thật đã dùng ở mỗi lần giao (D22.9).
 - Claude Code: subagent qua Task; resume qua SendMessage; hook SessionStart; gửi file qua `SendUserFile`; Review Board `local+remote` dùng được (đã thử 2026-11-08).
-- Codex: gọi agent qua `collaboration.spawn_agent`, resume qua `collaboration.send_message` (cần thử, `docs/coding-checklist.md`). Blender ngoài sandbox, quyền mạng cấp ở phiên gốc. Review Board chỉ `local`.
+- Codex: gọi agent qua `collaboration.spawn_agent`, resume qua `collaboration.send_message` (cần thử, `docs/coding-checklist.md`). Quyền mạng cấp ở phiên gốc. Review Board chỉ `local`.
+- **Blender trong bản Codex** (D25.D): trên macOS Blender bị crash bên trong sandbox của Codex. Theo `installer/codex_rules.py` của kit, bản Codex có installer ghi file rules chỉ cho phép đúng các lệnh `<Blender> -b --python <script đã cài>.py …` của Producer và kit chạy ngoài sandbox. Mọi lệnh khác vẫn chạy trong sandbox. Thư mục skill chỉ đọc trong sandbox, nên agent không sửa được danh sách script được phép. Chạy lại installer sau mỗi lần nâng cấp.
+- **Eval kích hoạt** (D25.E, theo `evals/triggers.json` của kit): mỗi skill và agent có bộ câu mẫu kèm kết quả mong đợi (kích hoạt hay không), gồm các câu âm trùng với kit, ví dụ "ZPS - 3D Artist dựng model cái rương" không được kích hoạt `zps-3dp-step-model`. Build chạy bộ eval này.
 - Sửa prompt agent chỉ sửa một chỗ. Adapter không được chứa quy tắc nghiệp vụ.
 - Thứ tự làm giữ như D6.4: bản Claude, chạy thử, rồi bản Codex. Chạy A/B khi cả hai bản đã qua một asset trọn vẹn.
 
@@ -356,7 +380,7 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 | Mở nhãn | `P compare --reveal`, chỉ sau khi anh đã duyệt hết các asset trong lô so sánh |
 | Pilot | Mỗi runtime so với pilot nằm trong `deliver` của chính nó (D22.10) |
 
-**`P compare`** tổng hợp từ ledger của hai bên (script ghi `runtime` vào mọi dòng ledger):
+**`P compare`** tổng hợp từ ledger của hai bên (script ghi `runtime` vào mọi dòng ledger). Theo nguyên tắc Art Learning của kit (D25.J): đếm theo asset, không theo số lần gọi (thử lại trên cùng asset không phải bằng chứng độc lập); ghi cả lần thử bị loại; im lặng không tính là anh duyệt. Cùng nguyên tắc dùng cho việc hạ model sau pilot (D16.3):
 - Số vòng sửa mỗi bước; tỉ lệ anh duyệt ngay lần đầu ở DUYỆT 1 và DUYỆT 2.
 - Số lần `waiting_human` theo lý do.
 - Thời gian thực mỗi bước và cả asset.
@@ -387,6 +411,10 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 | Quyết định không ghi trùng | `human_action` | ~15 dòng |
 | Pilot trước lô sau | `cmd_intake` | ~15 dòng |
 | `P show`, `--bundle` (dùng renderer của Review Board) | mới | ~60 dòng |
+| Finding theo bộ trường của kit (`issue-fields`), `EVIDENCE_OPENED`, `superseded`, `preference` | `parse_contract`, `cmd_ingest` | ~40 dòng |
+| `P preflight` (gọi `preflight.py` của kit) | mới | ~40 dòng |
+| Ước lượng và báo giá theo lô (`estimate.py` của kit) | `cmd_intake`, `approve_step` | ~30 dòng |
+| Installer rules Blender cho bản Codex; eval kích hoạt | `editions/codex/installer/`, `tests/` | chép mẫu của kit |
 | `P board prepare` (Review Board §6) | mới | — |
 | `P ab board`, `P compare`, cột `runtime` trong ledger | mới | ~150 dòng |
 | Intake: `check_card`, file bắt buộc, `type` từ thẻ, `check_profile` | `scan_approved`, `cmd_intake`, `create_asset` | ~60 dòng |

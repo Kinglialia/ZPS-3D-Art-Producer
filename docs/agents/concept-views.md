@@ -142,7 +142,11 @@ Kèm `report/VIEWS.md` ngắn. 3 dòng đầu là tóm tắt cho anh (D20.17). P
 
 ## 8. Reviewer `zps-3dp-check-views`
 
-Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agent.
+Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agent. Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước.
+
+**Kiểm kê phần tử và lỗi ảnh AI** (D25.F, theo `art-quality.md` và `gen-craft.md` của kit), áp cho mọi view:
+- Mọi phần tử nhìn thấy (vật, phụ kiện, motif, chữ, nguồn sáng) phải truy được về concept, guide hoặc thẻ asset. Không truy được → finding `regen` (nếu thay đổi hình) hoặc `note_texture` (nếu chỉ là màu, hoa văn nhỏ).
+- Soát theo bảng lỗi ảnh AI của kit: thừa chi tiết (hoa văn phủ khắp, hạt sáng, khói không yêu cầu), chữ hoặc ký hiệu giả, nhiều hướng sáng hoặc viền sáng quanh mọi cạnh, bề mặt nhiễu giả chi tiết, lệch style so với concept, viền halo ở nền.
 
 **Lần 1, chỉ front:**
 1. Style, chất liệu, mức chi tiết giống concept albedo.
