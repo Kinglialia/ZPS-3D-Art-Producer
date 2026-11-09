@@ -6,3 +6,7 @@ upstream/
 __pycache__/
 output/
 .DS_Store
+
+.worktrees/
+**/.deps/
+.pytest_cache/
