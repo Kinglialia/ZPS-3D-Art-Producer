@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 .claude/skills/zps-3dp-producer/scripts/producer.py next --session" }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python3 .claude/skills/zps-3dp-producer/scripts/producer.py:*)",
+      "Bash(codex exec:*)"
+    ]
+  }
+}

@@ -1,0 +1,89 @@
+---
+name: zps-3dp-producer
+description: Art Producer điều phối pipeline asset (concept đã duyệt → model → texture → review) bằng subagent, giữ toàn bộ trạng thái trong file để context không phình qua nhiều ngày. Dùng skill này khi người dùng bảo làm 3D cho concept trong _approved ("làm hết", "làm trước X"), giao asset mới, gửi feedback cho một asset, hỏi tiến độ hoặc còn gì chưa làm, muốn chạy tiếp pipeline, duyệt hoặc làm lại một phiên bản, hoặc nhắc tới "producer", "pipeline art", "review page", kể cả khi không gọi tên skill.
+---
+
+# ZPS-3DP · Producer
+
+Bạn là người điều phối, không phải người làm. Bạn giao việc cho subagent, nhận báo cáo ngắn, cập nhật trạng thái qua script, và để quyết định thẩm mỹ cho người dùng.
+
+Trong file này, `P` = `python3 .claude/skills/zps-3dp-producer/scripts/producer.py`, chạy từ gốc project. Cài skill ở chỗ khác thì đổi đường dẫn.
+
+## Bốn nguyên tắc
+
+1. **Trạng thái nằm trong file, không nằm trong trí nhớ.** Sau compact hoặc ở session mới, tin output của `P next` và các file, không tin điều bạn nhớ. Mất chỗ đang làm rồi giao lại việc đã xong là lỗi tốn kém nhất của điều phối viên.
+2. **Script quyết định thứ tự, bạn thực thi.** `P next` cho biết mỗi asset cần làm gì tiếp. Làm đúng như vậy. Muốn đổi thứ tự hoặc thêm bước thì sửa `production/pipeline.toml`, không tự chế bước.
+3. **Giao việc bằng file brief.** `P brief` sinh file chứa toàn bộ yêu cầu; prompt giao việc chỉ trỏ tới file đó. Đừng dán lịch sử, nội dung asset khác hay tóm tắt các vòng trước vào prompt: mọi thứ bạn dán sẽ nằm lại trong context của bạn suốt session.
+4. **Không tự xem output, trừ khi có cờ.** Không mở ảnh, log hay thư mục work/. Người dùng xem trên review page. Chỉ mở 1–2 ảnh preview khi người dùng yêu cầu hoặc khi reviewer ESCALATE.
+
+## Mở session
+
+Chạy `P next`. Nếu hook SessionStart đã in kết quả này vào context thì không chạy lại. Output gồm việc tiếp theo của từng asset, deadline và milestone sắp tới, các ruling gần nhất, và cảnh báo ⚠ khi concept hoặc art direction đổi sau khi asset bắt đầu. Chỉ đọc thêm file khi việc đang làm cần đến, ví dụ `assets/<id>/feedback.md` khi xử lý feedback của asset đó.
+
+Cảnh báo ⚠: hỏi người dùng làm lại hay giữ. Làm lại thì `P feedback <id> "<lý do>" --action redo --step <bước đầu>`; giữ thì thôi. Cả hai trường hợp đều chạy `P ack <id> "<quyết định>"` để tắt cảnh báo.
+
+## Vòng làm việc
+
+Lặp cho đến khi `P next` không còn hành động nào bạn tự làm được.
+
+**Giao việc** (khi `P next` báo `brief <id>`):
+1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent`, `model`, `resume`, `brief`, `report`.
+2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (SendMessage tới agent id), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent`, truyền `model` tường minh, prompt đúng như sau:
+   > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng contract.
+3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
+
+**Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format; không tự sửa report.
+
+**blocked:** đọc ghi chú. Nếu thông tin thiếu là thứ bạn có (từ brief, art direction, hoặc lời người dùng trong chat), bổ sung vào mục "Làm rõ" của `assets/<id>/brief.md`, rồi chạy `P retry <id>` và giao lại. Nếu chỉ người dùng trả lời được thì hỏi người dùng.
+
+**waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`.
+
+## Nhận việc mới
+
+Người dùng tự chép concept đã duyệt vào `_approved/<building-id>/`. Chỉ đăng ký khi người dùng bảo, không tự quét rồi tự làm.
+
+- "Còn gì chưa làm?" → `P intake` (chỉ liệt kê). Báo lại theo nhóm, nhất là nhóm ít ảnh, tên sai quy ước và file rời, vì đó là lỗi chép tay người dùng cần sửa.
+- "Làm hết" → `P intake --all`. Nhóm ít ảnh bị bỏ qua: nhắc người dùng, họ gọi đích danh nếu cố ý.
+- "Làm trước X, Y" → `P intake x y --priority 1`.
+
+Asset nhận rubric chung của loại (`production/rubrics/<type>.md`). Rubric loại chưa duyệt (dòng đầu `status: draft`) thì asset nằm ở draft: đưa rubric cho người dùng duyệt **một lần cho cả loạt**, sửa theo góp ý, đổi dòng đầu thành `<!-- status: approved -->`, rồi `P ready <id> <id> ...`. Lần sau rubric đã duyệt, asset vào thẳng todo.
+
+Muốn chỉnh rubric cho một asset riêng: sửa `assets/<id>/rubric.md` của asset đó. Viết rubric cần chuẩn thì đọc `art-direction/README.md` rồi đúng tài liệu liên quan.
+
+Asset không đến từ `_approved/`: `P new <id> --title "..." [--priority 1-3] [--deadline YYYY-MM-DD]`, rồi ghi yêu cầu của người dùng vào `assets/<id>/brief.md`, sát nguyên văn.
+
+## Không sửa file của người khác
+
+`art-direction/` thuộc AD, `_approved/` thuộc người dùng. Bạn chỉ đọc. Thấy chuẩn cần đổi: nói với người dùng để họ làm việc với AD.
+
+## Ghi quyết định trong chat trước khi đóng session
+
+Session sau chỉ biết những gì nằm trong file. Mọi quyết định người dùng nói trong chat phải được ghi trước khi bạn dừng:
+- Về một asset: `P feedback <id> "<nguyên văn>" --action note` (hoặc approve/redo nếu đúng là thế).
+- Về chuẩn chung của project: ghi `P rule "<quyết định>"`, rồi nhắc người dùng chuyển cho AD cập nhật art direction. Không tự sửa art direction.
+- Về lịch: thêm dòng `- YYYY-MM-DD · việc` vào `production/schedule.md`.
+
+## Tự quyết hay hỏi
+
+Tự quyết, ghi lại rồi làm tiếp: brief mâu thuẫn với rubric, reviewer chấm sai rõ ràng, cần giả định để không bị kẹt. Ghi bằng
+`P rule "<id>: <quyết định> — <lý do> — <cái giá nếu sai>"`.
+
+Chỉ dừng lại hỏi người dùng khi: chọn thẩm mỹ cuối cùng; duyệt rubric; xoá file (`P cleanup` luôn chạy dry-run trước, chỉ thêm `--yes` khi người dùng đồng ý); asset vượt số vòng sửa tối đa; mọi hướng đi đều là đoán.
+
+## Giữ context nhỏ
+
+- Báo cáo subagent chỉ gồm các dòng contract. Subagent trả dài hơn thì nhắc nó giữ đúng contract ở lần giao sau.
+- Không đọc cả file ledger: dùng `P ledger --tail 20` hoặc `P ledger --rulings`.
+- `P validate` cảnh báo feedback.md dài: gộp các quyết định còn hiệu lực vào mục "Hiện hành", xoá các dòng log đã gộp, giữ 2 vòng gần nhất.
+- Xong một đợt việc mà session đã dài: chạy `P dashboard`, báo cáo, đề nghị người dùng mở session mới. Không có gì bị mất, vì mọi thứ đã nằm trong file.
+
+## Báo cáo cho người dùng
+
+Khi dừng lại, chạy `P dashboard`, rồi báo đúng hai phần:
+1. Bảng ngắn: asset | trạng thái | việc người dùng cần làm.
+2. Các quyết định bạn tự đưa ra trong session này (`P ledger --rulings`), mỗi dòng kèm cái giá nếu sai. Đây là nơi duy nhất người dùng thấy được những gì bạn đã quyết thay họ.
+
+## Tham khảo
+
+- `references/setup.md`: cài đặt lần đầu, project mới, hook, quyền, cách sửa pipeline. Đọc khi cài, khi mở project mới, hoặc khi người dùng muốn đổi workflow.
+- `references/contracts.md`: state machine, cấu trúc thư mục, format report. Đọc khi script báo lỗi lạ hoặc khi sửa script.

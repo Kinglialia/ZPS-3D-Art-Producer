@@ -1,0 +1,82 @@
+# Pipeline của Producer — nơi DUY NHẤT định nghĩa thứ tự bước, agent, model, gate, output bắt buộc, giới hạn chạy song song.
+# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 1 chỉ bật `blockout`.
+# gate: review (reviewer PASS → bước sau) | review_human (reviewer PASS → người duyệt) | checks_human (script pass → người duyệt)
+# top_fix: loại TOP_FIX reviewer được dùng ở bước này; `need_evidence` dùng được ở mọi bước có reviewer.
+
+[project]
+name = "{{PROJECT}}"
+
+[paths]
+approved = "{{CONCEPTS}}/_approved"
+art_direction = "{{CONCEPTS}}/art-direction"
+
+[intake]
+min_images = 3
+type = "building"
+rubric = "rubrics/building.md"
+
+[review]
+max_fix_rounds = 3
+resume_rounds = 2
+reviewer_model = "opus"
+
+[limits]
+blender = 2
+codex_image = 2
+meshy = 1
+
+[[steps]]
+id = "blockout"
+agent = "step-blockout"
+reviewer = "check-blockout"
+model = "opus"
+gate = "review_human"
+uses = ["blender"]
+top_fix = ["structure", "param"]
+outputs = ["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb", "final/sources.json", "final/blockout.md"]
+
+[[steps]]
+id = "views_front"
+enabled = false
+agent = "step-views"
+reviewer = "check-views"
+model = "opus"
+gate = "review"
+uses = ["codex_image"]
+top_fix = ["regen"]
+
+[[steps]]
+id = "views_rest"
+enabled = false
+agent = "step-views"
+reviewer = "check-views"
+model = "opus"
+gate = "review_human"
+uses = ["codex_image"]
+top_fix = ["regen", "regen_front", "note_exception", "note_texture"]
+
+[[steps]]
+id = "model"
+enabled = false
+agent = "step-model"
+reviewer = "check-clay"
+model = "opus"
+gate = "review_human"
+uses = ["blender"]
+top_fix = ["structure", "param"]
+
+[[steps]]
+id = "texture"
+enabled = false
+agent = "step-texture"
+reviewer = "check-texture"
+model = "opus"
+gate = "review"
+uses = ["blender", "codex_image", "meshy"]
+top_fix = ["repaint", "fix_uv_mesh", "meshy_regen", "note"]
+
+[[steps]]
+id = "assemble"
+enabled = false
+gate = "checks_human"
+uses = ["blender"]
