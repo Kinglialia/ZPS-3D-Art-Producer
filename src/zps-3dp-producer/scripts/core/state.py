@@ -61,6 +61,10 @@ def now() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
+def stamp() -> str:
+    return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def rel(p: Path) -> str:
     return os.path.relpath(p)
 

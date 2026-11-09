@@ -7,9 +7,11 @@ import shutil
 
 from . import annotate, findings, hashes, policy, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
-from .state import ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, step_of, vdir
+from .state import (ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, stamp, step_of,
+                    vdir)
 
 NOT_PASSED = "chưa đạt"
+NO_NUMBER = "không có số"
 ACTIONS = ("approve", "redo", "note", "paint")
 STATUS_LINE = "Trạng thái:"
 REDOING = "**đang làm lại**\n\n"
@@ -301,19 +303,33 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
 HANDLERS = {"running": on_worker, "evidence_running": on_evidence, "reviewing": on_review}
 
 
+def open_dispatch(st: dict, sid: str, n: int, role: str) -> dict | None:
+    """The dispatch an ingest closes: its step, version and role, not yet ingested. A script step has none."""
+    return next((x for x in reversed(st.get("dispatches", [])) if (x["step"], x["v"], x["role"]) == (sid, n, role)
+                 and "ingested" not in x), None)
+
+
+def number(x, unit: str = "") -> str:
+    return NO_NUMBER if x is None else f"{x}{unit}"
+
+
 def ingest(a):
     from .board import build_outputs
     cfg = load_cfg()
     st = load_st(a.id)
     _, step = step_of(cfg, st["stage"])
-    n = st["versions"].get(step["id"])
+    sid, n = step["id"], st["versions"].get(step["id"])
     h = HANDLERS.get(st["state"]) or die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
-    event, reason = h(cfg, st, step, vdir(a.id, step["id"], n), n, a)
-    if (tokens := getattr(a, "tokens", None)) is not None and st.get("dispatches"):
-        st["dispatches"][-1]["tokens"] = tokens
+    role = "reviewer" if st["state"] == "reviewing" else "script" if step["script"] else "worker"
+    rec = open_dispatch(st, sid, n, role)
+    event, reason = h(cfg, st, step, vdir(a.id, sid, n), n, a)
+    tokens, ms, at = getattr(a, "tokens", None), getattr(a, "duration_ms", None), stamp()
+    if rec is not None:
+        rec |= {"ingested": at, "tokens": tokens, "duration_ms": ms, "after": st["state"]}
     save_st(st)
-    ledger(f"{a.id} · {step['id']} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else "")
-           + (f" · tokens {tokens}" if tokens is not None else ""))
+    ledger(f"{a.id} · {sid} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else "")
+           + f" · {role} giao {rec['at'] if rec else NO_NUMBER} · ingest {at} · token {number(tokens)}"
+           + f" · thời lượng {number(ms, ' ms')}")
     build_outputs(cfg)
     print(f"{a.id}: {event} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
 

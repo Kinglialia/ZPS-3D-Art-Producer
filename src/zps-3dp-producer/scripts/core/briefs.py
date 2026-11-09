@@ -9,9 +9,9 @@ from pathlib import Path
 from . import findings, hashes, preflight, texture
 from .contract import NONE, parse_worker
 from .hashes import ad_text
-from .loop import log_wait, move, next_action, review_base, set_aside
+from .loop import log_wait, move, next_action, open_dispatch, review_base, set_aside
 from .state import (ASSETS, DELIVER, EDITION, ROOT, SKILL_DIR, agent_file, agent_name, die, ledger, load_cfg, load_st,
-                    model_of, now, outputs_of, rel, save_st, step_of, vdir)
+                    model_of, outputs_of, rel, save_st, stamp, step_of, vdir)
 
 
 def image_gen(preset: Path) -> dict:
@@ -388,15 +388,20 @@ def run(a):
                "resume": None, "brief": rel(bp), "report": rel(d / "report-review.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")
-    set_aside(Path(out["report"]))
+    again = s in ("running", "reviewing", "evidence_running") and open_dispatch(st, sid, n, out["role"]) is not None
+    if not again:
+        set_aside(Path(out["report"]))
     move(st, "dispatch")
     who = step["script"]
     if out["role"] != "script":
         out["model"] = model_of(out["model"])
         if EDITION.get("agent_file"):
             out["agent_file"] = rel(agent_file(out["agent"]))
-        st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"], "at": now()})
+        if not again:
+            st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"],
+                                                    "at": stamp()})
         who = f"{out['agent']}, {out['model'] or 'model của phiên'}"
     save_st(st)
-    ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({who})")
+    if not again:
+        ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({who})")
     print(json.dumps(out, ensure_ascii=False))

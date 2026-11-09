@@ -20,7 +20,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 ## Token
 
-- Kết quả sub-agent có số token thì thêm `--tokens <N>` vào `P ingest`. Không có số thì bỏ cờ này.
+- Kết quả sub-agent có số token thì thêm `--tokens <N>`, có thời lượng thì thêm `--duration-ms <M>` vào `P ingest`. Thiếu số nào thì bỏ cờ đó.
 
 ## Hook mở phiên
 

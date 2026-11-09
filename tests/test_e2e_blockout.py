@@ -20,6 +20,7 @@ PIDS = f"production/pids/blender/{AID}.pid"
 KEYS = ("stage", "state", "fix_round", "fix_base", "round_versions", "offer", "label", "note", "evidence_used",
         "worker_agent_id", "approved", "rejected")
 BRIEF_MAX = 4096
+TIMING = r" · (worker|reviewer|script) giao .*$"
 NEXT_HEAD = ("1 asset đang chạy · 0 done · review page: `serve` → http://127.0.0.1:8765\n"
              "Chưa có production/preflight.json → chạy `preflight` một lần mỗi phiên\n")
 
@@ -127,7 +128,7 @@ def flow(tmp_path_factory):
     f.save("approve again", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("cleanup dry-run", f.p("cleanup", AID))
     f.save("cleanup", f.p("cleanup", AID, "--yes"))
-    f.cp["ledger"] = [l.split(" · ", 2)[2] for l in (root / "production/ledger.md").read_text(encoding="utf-8")
+    f.cp["ledger"] = [re.sub(TIMING, "", l.split(" · ", 2)[2]) for l in (root / "production/ledger.md").read_text(encoding="utf-8")
                       .splitlines() if l.startswith("- ")]
     f.cp["findings"] = {n: f.findings(n) for n in (1, 2, 3, 4)}
     f.cp["variant files"] = {p: (root / f"{V}2/{p}/blockout.md").read_text(encoding="utf-8")

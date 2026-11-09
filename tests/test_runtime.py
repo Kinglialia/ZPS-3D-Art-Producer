@@ -11,7 +11,7 @@ from argparse import Namespace
 import pytest
 
 from shared import P, brief_hash
-from core import loop
+from core import briefs, loop
 from test_loop import AID, flow  # noqa: F401
 
 
@@ -70,19 +70,49 @@ def test_each_runtime_compares_with_the_pilot_in_its_own_deliver_folder_d22_10(t
     assert out == f"PILOT: {deliver}/hut/\n"
 
 
-def test_a_dispatch_records_its_model_and_the_ingest_records_the_tokens_the_runtime_reported(flow):  # noqa: F811
-    out = flow.brief()
+def clock(monkeypatch, *times):
+    t = iter(times)
+    monkeypatch.setattr(briefs, "stamp", lambda: next(t))
+    monkeypatch.setattr(loop, "stamp", lambda: next(t))
+
+
+def worker_report(flow, out):
     rep = flow.root / out["report"]
     for o in ("part_graph.json", "parts_lib.py", "assembled.glb", "sources.json", "blockout.md"):
         (rep.parent / "final" / o).write_text("x", encoding="utf-8")
     rep.write_text(f"STATUS: DONE\nPROFILE_HASH: {brief_hash(flow.text(out))}\n", encoding="utf-8")
-    flow.call(loop.ingest, Namespace(id=AID, agent_id="w1", tokens=48210))
-    d = flow.st["dispatches"]
-    assert [{k: x[k] for k in ("step", "v", "role", "model", "tokens")} for x in d] == [
-        {"step": "blockout", "v": 1, "role": "worker", "model": "opus", "tokens": 48210}]
+
+
+def test_a_dispatch_records_its_model_and_the_ingest_records_the_role_times_tokens_and_duration_d27_3(
+        flow, monkeypatch):  # noqa: F811
+    """Run 4 had tokens per step only, so nobody could tell whether the worker, the reviewer or the Producer grew."""
+    clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30")
+    out = flow.brief()
+    worker_report(flow, out)
+    flow.call(loop.ingest, Namespace(id=AID, agent_id="w1", tokens=48210, duration_ms=731000))
+    assert flow.st["dispatches"] == [
+        {"step": "blockout", "v": 1, "role": "worker", "model": "opus", "at": "2026-11-10 09:00:00",
+         "ingested": "2026-11-10 09:12:30", "tokens": 48210, "duration_ms": 731000, "after": "review"}]
     lines = flow.ledger().splitlines()
     assert lines[-2].endswith(" · src · house-a · blockout v1 · giao worker (zps-3dp-step-blockout, opus)")
-    assert lines[-1].endswith(" · src · house-a · blockout v1 · worker DONE ·  · tokens 48210")
+    assert lines[-1].endswith(" · src · house-a · blockout v1 · worker DONE ·  · worker giao 2026-11-10 09:00:00 · "
+                              "ingest 2026-11-10 09:12:30 · token 48210 · thời lượng 731000 ms")
+
+
+def test_a_runtime_that_reports_no_numbers_is_ledgered_as_having_none_never_as_zero_d27_3(flow, monkeypatch):  # noqa: F811
+    clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30")
+    worker_report(flow, flow.brief())
+    flow.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
+    assert flow.ledger().splitlines()[-1].endswith(
+        " · token không có số · thời lượng không có số")
+    assert (flow.st["dispatches"][0]["tokens"], flow.st["dispatches"][0]["duration_ms"]) == (None, None)
+
+
+def test_brief_called_again_while_its_subagent_runs_reprints_the_same_dispatch_and_records_it_once_d27_2(flow):  # noqa: F811
+    first = flow.call(briefs.run, Namespace(id=AID))
+    again = flow.call(briefs.run, Namespace(id=AID))
+    assert (again, flow.st["versions"], len(flow.st["dispatches"])) == (first, {"blockout": 1}, 1)
+    assert sum(" · giao worker " in l for l in flow.ledger().splitlines()) == 1
 
 
 def test_every_offer_is_logged_with_its_reason_and_the_users_answer_so_silence_is_not_an_approval(flow):  # noqa: F811

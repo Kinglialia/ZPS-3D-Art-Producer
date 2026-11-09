@@ -22,6 +22,7 @@ SEEN = "front.png, back.png, report.json"
 KEYS = ("stage", "state", "fix_round", "fix_base", "round_versions", "offer", "label", "note", "worker_agent_id",
         "approved", "rejected", "reopened", "prior", "stale")
 BRIEF_MAX = 4096
+TIMING = r" · (worker|reviewer|script) giao .*$"
 
 
 def counts(major=0, minor=0):
@@ -106,7 +107,7 @@ def flow(tmp_path_factory):
              prior=["- H1: resolved | evidence: front.png"])
     f.human("approve blockout v2", "đạt", "--action", "approve")
     f.brief("vf4 brief")
-    f.cp["ledger"] = [l.split(" · ", 2)[2] for l in (root / "production/ledger.md").read_text(encoding="utf-8")
+    f.cp["ledger"] = [re.sub(TIMING, "", l.split(" · ", 2)[2]) for l in (root / "production/ledger.md").read_text(encoding="utf-8")
                       .splitlines() if l.startswith("- ")]
     f.cp["root"] = root
     return f.cp

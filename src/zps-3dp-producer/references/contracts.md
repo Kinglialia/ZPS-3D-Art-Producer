@@ -52,7 +52,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `paint_for`: 12 ký tự đầu hash mesh mà người dùng chọn VẼ MỚI; brief `texture` của mesh đó ghi `MODE: VẼ MỚI`.
 - `meshy_price`: giá một lần retexture, đọc từ `gen_api.py texture --dry-run` khi sinh brief.
 - `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.
-- `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên. `ingest --tokens N` thêm `tokens` cho lần giao cuối.
+- `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên; `at` tính tới giây. `brief` gọi lại khi subagent chưa trả về thì không thêm lần giao. `ingest` đóng lần giao cùng bước, version và vai trò: `ingested` (giờ ingest), `tokens` (`--tokens N`), `duration_ms` (`--duration-ms M`), `after` (state sau ingest); không có số thì `null`, ledger ghi "không có số". `P stats` tính khoảng chờ Producer từ `ingested` của lần trước tới `at` của lần sau, khi `after` là `todo`, `review`, `fix` hoặc `evidence`.
 - `offer_log`: mỗi lần đưa người dùng duyệt hoặc hỏi `{key, step, v, why, verdict, at}`; quyết định Duyệt / Cần sửa / VẼ MỚI của người dùng thêm `decision`, `decided`. Ghi chú không phải quyết định. `P compare` đọc trường này.
 - `approved_at[<bước>]`: lúc bước được duyệt.
 

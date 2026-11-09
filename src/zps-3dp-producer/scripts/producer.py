@@ -5,7 +5,7 @@ Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi
 Cần Python 3.11+ (dùng tomllib).
 
 Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · meshy · approvals
-             delegate · rule · ledger · dashboard · serve · show · board · validate · cleanup · archive · texture-stats
+             delegate · rule · ledger · stats · dashboard · serve · show · board · validate · cleanup · archive · texture-stats
              ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 
-UNLOCKED = {"next", "ledger", "validate", "serve", "texture-stats", "ab", "compare"}
+UNLOCKED = {"next", "ledger", "stats", "validate", "serve", "texture-stats", "ab", "compare"}
 
 
 def cmd_init(a):
@@ -110,6 +110,11 @@ def cmd_ledger(a):
     ledger_tail(a)
 
 
+def cmd_stats(a):
+    from core.stats import run
+    run(a)
+
+
 def cmd_dashboard(_a):
     from core.board import dashboard
     dashboard()
@@ -183,7 +188,8 @@ def main(argv: list[str] | None = None):
     sub.add_parser("brief", help="sinh brief cho worker/reviewer, in JSON để giao việc").add_argument("id")
     x = sub.add_parser("ingest", help="đọc báo cáo, chuyển state")
     x.add_argument("id"); x.add_argument("--agent-id", help="id subagent worker, để resume vòng sửa")
-    x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này, nếu runtime báo được (P compare)")
+    x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này, nếu runtime báo được (P compare, P stats)")
+    x.add_argument("--duration-ms", type=int, help="thời lượng runtime báo cho lần giao này, mili giây (P stats)")
     sub.add_parser("retry", help="giao lại asset đang blocked").add_argument("id")
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])
@@ -202,6 +208,7 @@ def main(argv: list[str] | None = None):
     sub.add_parser("rule", help="ghi quyết định Producer tự đưa ra").add_argument("text")
     x = sub.add_parser("ledger", help="xem cuối ledger")
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
+    sub.add_parser("stats", help="bảng theo bước: thời gian, token theo vai trò, chờ Producer").add_argument("id")
     sub.add_parser("dashboard", help="sinh lại dashboard.md")
     sub.add_parser("serve", help="mở review page có nút feedback").add_argument("--port", type=int, default=PORT)
     x = sub.add_parser("show", help="xuất trang board của một asset thành file HTML tĩnh")
