@@ -400,13 +400,14 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
     key = f"{target} v{n}"
     done = st.setdefault("decisions", {})
     send_back = action == "redo" and n is not None and st["approved"].get(target) == n
-    if action != "note" and key in done and not send_back:
+    answer = action == "approve" and st.get("ask") and st["state"] == "waiting_human" and target == st["stage"]
+    if action != "note" and key in done and not (send_back or answer):
         return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {done[key]['at']}"
     text = text.strip() or "(không ghi chú)"
     append_feedback(aid, target, n, action, text)
     msg = "đã ghi feedback"
     if action == "approve":
-        if st.get("ask") and st["state"] == "waiting_human" and target == st["stage"]:
+        if answer:
             done[key] = {"action": action, "at": now()}
             msg = texture.resolve(st, "call", policy.BY["human"])
         elif st["state"] != "waiting_human" or target != st["stage"]:

@@ -14,6 +14,8 @@ Failures, 3 tries in all (D8.3):
   before the task exists (no task_id in <out>/task.json, gen_api charged the budget): refund the charge, try again.
   after the task exists (wait or download failed, GLB cut off): wait again on the same task_id with gen_api wait() and
   download(); never a new task.
+  the task ended FAILED, CANCELED, BANNED or EXPIRED: Meshy refunds a failed task (docs.meshy.ai), so the charge is
+  refunded too; stop at once (exit 1), because a new paid task is the user's call.
   refused before any charge (no key, budget used up, <out> not empty): stop at once (exit 3).
 A GLB counts only with the glTF magic and a header length equal to the file size.
 Writes <out>/meshy_call.json and prints one line. Exit 0 ok, 1 after 3 failed tries (STATUS: BLOCKED), 3 refused.
@@ -24,6 +26,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -36,6 +39,7 @@ from core.state import ASSETS, ROOT  # noqa: E402
 GEN_API = Path(__file__).resolve().parent / "kit" / "tools" / "gen" / "gen_api.py"
 TRIES = 3
 REFUSED, FAILED = 3, 1
+ENDED = re.compile(r"task \S+ (FAILED|CANCELED|CANCELLED|BANNED|EXPIRED)")
 
 
 class Refused(Exception):
@@ -178,6 +182,11 @@ def call(a) -> tuple[int, dict, str]:
             rec |= {"status": "ok", "glb": str(a.out / "glb.glb")}
             break
         err = out.get("error") or ("GLB hỏng hoặc thiếu" if rc == 0 else f"gen_api exit {rc}")
+        if tid and ENDED.search(err):
+            refund(budget, start)
+            (a.out / "task.json").rename(a.out / "task-ended.json")
+            rec["tries"].append({"stage": "task_ended", "task_id": tid, "error": err, "refunded": True})
+            break
         if tid:
             rec["tries"].append({"stage": "after_task", "task_id": tid, "error": err})
             continue
@@ -193,6 +202,8 @@ def call(a) -> tuple[int, dict, str]:
         return 0, rec, f"ok lần {len(rec['tries']) + 1} task {rec['task_id']} -> {rec['glb']}"
     if rec["status"] == "refused":
         return REFUSED, rec, f"từ chối: {rec['error']}"
+    if rec["tries"][-1]["stage"] == "task_ended":
+        return FAILED, rec, f"BLOCKED: Meshy kết thúc task {rec['task_id']}, đã hoàn budget: {rec['tries'][-1]['error']}"
     return FAILED, rec, f"BLOCKED {TRIES}/{TRIES}: {rec['tries'][-1]['error']}"
 
 

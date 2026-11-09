@@ -126,6 +126,15 @@ def test_three_failures_after_the_task_exists_stop_as_blocked_and_keep_the_spent
     assert (r["budget"]["used_credits"], r["record"]["status"], r["record"]["task_id"]) == (10, "fail", "task-1")
 
 
+def test_a_task_meshy_ends_as_failed_is_refunded_and_stops_without_a_second_paid_task(meshy):
+    r = meshy(mode="task_failed:1")
+    assert (r["rc"], kinds(r)) == (1, ["post", "task_failed"])
+    assert r["out"] == ("[meshy_call] BLOCKED: Meshy kết thúc task task-1, đã hoàn budget: task task-1 FAILED: "
+                        "{'message': 'mesh không hợp lệ'}\n")
+    assert (r["budget"], r["record"]["credits_charged"]) == ({"max_credits": 10, "used_credits": 0}, 0)
+    assert r["files"] == ["meshy_call.json", "task-ended.json"]
+
+
 def test_a_used_up_budget_is_refused_by_the_kit_before_any_request(meshy):
     meshy.budget.write_text(json.dumps({"max_credits": 10, "used_credits": 10}), encoding="utf-8")
     r = meshy()

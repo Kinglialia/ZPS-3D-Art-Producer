@@ -93,3 +93,18 @@ def test_answering_call_to_the_mesh_question_gives_the_new_mesh_one_call(tmp_pat
         "Tiếp: giao worker → `brief pilot-house`\n")
     assert budgets(tmp_path)[new] == {"max_credits": 10, "used_credits": 0}
     assert f.p("meshy", AID, "paint", ok=False) == "LỖI: pilot-house: không có câu hỏi Meshy đang chờ (state=todo)\n"
+
+
+def test_approve_answers_the_mesh_question_although_the_old_texture_version_had_a_decision(tmp_path):
+    f = to_texture(tmp_path)
+    f.work("t1", meshy="")
+    f.human("redo texture", "mái tối", "--action", "redo")
+    f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
+    f.work("m2", mesh_size=(1.3, 1, 1))
+    f.review("m2", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",
+             prior=["- H1: resolved | evidence: lit_34_front.png"])
+    f.human("approve m2", "đạt", "--action", "approve")
+    f.brief("gate")
+    assert ("texture v1" in f.st()["decisions"], f.st()["state"]) == (True, "waiting_human")
+    out = f.p("feedback", AID, "gọi lại Meshy", "--action", "approve")
+    assert out.startswith("pilot-house: mesh_changed: thêm 1 lần gọi Meshy (10 credit)") and f.st()["state"] == "todo"

@@ -1,6 +1,7 @@
 """Stand-in for the Meshy HTTP API, loaded by every Python child that has this folder on PYTHONPATH: tests never reach
 api.meshy.ai. It replaces urllib.request.urlopen. FAKE_MESHY_MODE is a comma list of <fault>:<n> (the first n requests
-of that kind fail): post_fail (network error on the POST), poll_fail (HTTP 503 on the task GET), download_fail
+of that kind fail): post_fail (network error on the POST), poll_fail (HTTP 503 on the task GET), task_failed (the
+task ends FAILED), download_fail
 (network error on the GLB URL), truncated (GLB cut off), echo_key (HTTP 401 whose body repeats the Authorization
 header). The returned GLB is the uploaded model, as Meshy returns the mesh with original UVs.
 Each request is logged to FAKE_MESHY_LOG (method, url, authorization, and the pid files in FAKE_MESHY_PIDS)."""
@@ -68,10 +69,14 @@ def urlopen(req, timeout=None):
         n = sum(c["kind"] == "post" for c in past) + 1
         return Resp(json.dumps({"result": f"task-{n}"}).encode())
     if method == "GET" and (m := re.search(r"/retexture/(task-\d+)$", url)):
-        kind = "poll_fail" if fail_now("poll_fail", past) else "poll"
+        kind = ("poll_fail" if fail_now("poll_fail", past) else "task_failed" if fail_now("task_failed", past)
+                else "poll")
         log({"method": method, "url": url, "auth": auth, "kind": kind})
         if kind == "poll_fail":
             raise urllib.error.HTTPError(url, 503, "Service Unavailable", {}, io.BytesIO(b"busy"))
+        if kind == "task_failed":
+            return Resp(json.dumps({"id": m.group(1), "status": "FAILED", "consumed_credits": 0,
+                                    "task_error": {"message": "mesh không hợp lệ"}}).encode())
         n = m.group(1).split("-")[1]
         return Resp(json.dumps({"id": m.group(1), "status": "SUCCEEDED", "consumed_credits": 10,
                                 "model_urls": {"glb": ASSET.format(n=n)}}).encode())
