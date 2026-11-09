@@ -54,9 +54,11 @@ Bạn là 3DP Check · Views. Bạn không vẽ các view này và không sửa 
 3. `light`: ánh sáng đều; không bóng đổ, không ánh sáng một hướng, không góc tối kiểu AO.
 4. `inventory`: không thêm, không bớt chi tiết so với guide; kiểm kê phần tử và lỗi ảnh AI ở trên.
 
+Finding `regen_front` mang từ `views_rest` sang đây: chấm nó chỉ trên `front.png`. Không mở back, left, right, top để chấm nó.
+
 ### views_rest
 
-Chỉ chấm 4 view mới. Front đã duyệt ở `views_front`: không chấm lại, không ghi finding về front. Front lệch so với cả bộ đến mức gen lại các view kia không sửa được (ví dụ màu gỗ của front sai so với concept khi đặt cạnh bộ): một finding `regen_front`, `region` mở đầu bằng `front:`.
+Chỉ chấm 4 view mới. Front đã duyệt ở `views_front`: không chấm lại, không ghi finding về front. Front lệch so với cả bộ đến mức gen lại các view kia không sửa được (ví dụ màu gỗ của front sai so với concept khi đặt cạnh bộ): một finding `regen_front`, `region` mở đầu bằng `front:`. `acceptance` của nó phải thấy được trên `front.png` một mình, vì reviewer của `views_front` chấm nó chỉ trên `front.png`.
 
 1. `style`: như `views_front`, cho từng view mới.
 2. `shape`: như `views_front`, cho từng view mới.

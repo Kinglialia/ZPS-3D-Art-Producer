@@ -18,11 +18,11 @@ def image_gen(preset: Path) -> dict:
     return ig
 
 
-def tools_line(st, step, pf: dict | None, preset: Path) -> list[str]:
+def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True) -> list[str]:
     t = SKILL_DIR / "agents" / f"zps-3dp-{step.get('agent')}" / "tools"
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
         [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else [])
-    if "codex_image" in step["uses"]:
+    if gen and "codex_image" in step["uses"]:
         ig = image_gen(preset)
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
                 f"GEN_ARGS: --model {ig['codex_model']} --reasoning {ig['reasoning']} "
@@ -100,15 +100,18 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         bad = failed_checks(pd)
         doc = findings.load(aid, step["id"], m) or {}
         tf = doc.get("top_fix")
+        outside = (f"Front đã duyệt ở `{findings.REOPEN[tf['kind']]}`, sửa ngoài bước này: không sửa front ở đây."
+                   if tf and tf["kind"] in findings.REOPEN else "")
+        tf = None if outside else tf
         fp = f"`{rel(findings.path(aid, step['id'], m))}`"
         human = [i for i, f in findings.open_of(doc).items() if i.startswith("H")]
         why = (f"Sửa đúng `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}`; repair, preserve, acceptance của từng id trong "
                f"{fp}. Rồi tới feedback mới nhất của người dùng trong feedback.md."
-               if tf else "Lý do phải sửa: feedback mới nhất của người dùng trong feedback.md.")
+               if tf else "Lý do phải sửa: feedback mới nhất của người dùng trong feedback.md." + (f" {outside}" if outside else ""))
         if human:
             why = (f"Ưu tiên 1, feedback của người dùng: sửa {', '.join(f'`{i}`' for i in human)} (nguyên văn trong "
                    f"`acceptance` của {fp} và feedback.md). Đối chiếu từng ý với concept; không bỏ ý nào. "
-                   + (f"Sau đó: `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}` của reviewer." if tf else ""))
+                   + (f"Sau đó: `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}` của reviewer." if tf else outside))
         lines += [
             f"{k}. Bản gốc: `{rel(pd)}/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
             *([f"{k + 1}. Đọc trước nguyên văn lỗi script của bản gốc: {', '.join(f'`{b}`' for b in bad)}."] if bad else []),
@@ -167,6 +170,7 @@ def review_brief(cfg, st, step, n) -> str:
     pick = bool(tf and tf["kind"] == "param")
     nxt = (base or {}).get("next_id", 1)
     tie = [k for k in step["top_fix"] if k in findings.TIE_FIRST]
+    single = [k for k in step["top_fix"] if k in findings.SINGLE]
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
         "",
@@ -217,7 +221,8 @@ def review_brief(cfg, st, step, n) -> str:
         "- VERDICT: còn blocker/major → FIX; chỉ còn unclear → FIX với TOP_FIX need_evidence; không còn → PASS; "
         "người dùng phải chọn gu hoặc rubric mâu thuẫn brief → ESCALATE. preference không chặn PASS.",
         "- TOP_FIX chỉ khi FIX: loại của finding nặng nhất" + (f" (cùng mức: {', '.join(tie)} trước)" if tie else "")
-        + "; structure đúng 1 id; loại khác: mọi finding blocker/major/minor đang mở của loại đó; "
+        + (f"; {', '.join(single)} đúng 1 id; loại khác:" if single else ";")
+        + " mọi finding blocker/major/minor đang mở của loại đó; "
         "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- COUNTS: số finding đang mở (mới + open/regressed). Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
@@ -234,7 +239,7 @@ def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> s
         "",
         f"PROFILE_HASH: {ph}",
         "",
-        *tools_line(st, step, pf, preset),
+        *tools_line(st, step, pf, preset, gen=False),
         f"Reviewer cần thêm ảnh để chấm {', '.join(tf['ids'])}: đọc region, viewing_condition, evidence, acceptance "
         f"của các id này trong `{rel(findings.path(aid, sid, n))}`.",
         f"- Chỉ render các ảnh đó, ghi vào `{rel(ed)}/`. Không tạo version mới.",

@@ -49,6 +49,15 @@ def test_the_set_reviewer_never_rejudges_the_approved_front_except_through_regen
     assert "một finding `regen_front`, `region` mở đầu bằng `front:`" in rest
 
 
+def test_a_regen_front_finding_is_judged_on_front_png_only_by_the_front_reviewer_so_the_set_reviewer_writes_acceptance_for_it():
+    _, body = front(REVIEWER)
+    on_front, on_rest = body.split("### views_rest", 1)[0], body.split("### views_rest", 1)[1]
+    assert ("Finding `regen_front` mang từ `views_rest` sang đây: chấm nó chỉ trên `front.png`. "
+            "Không mở back, left, right, top để chấm nó.") in on_front
+    assert ("`acceptance` của nó phải thấy được trên `front.png` một mình, vì reviewer của `views_front` "
+            "chấm nó chỉ trên `front.png`.") in on_rest
+
+
 def reviewer_keys(step):
     _, body = front(REVIEWER)
     part = body.split(f"### {step}\n", 1)[1].split("\n### ", 1)[0]
