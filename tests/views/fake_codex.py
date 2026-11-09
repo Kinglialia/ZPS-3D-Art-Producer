@@ -30,6 +30,7 @@ def main():
     pid_base = Path(os.environ["FAKE_CODEX_PID_FILE"])
     own = sorted(pid_base.parent.glob(f"{pid_base.stem}-{os.getppid()}.pid"))
     entry = {"argv": sys.argv[1:], "prompt": prompt, "ppid": os.getppid(),
+             "api_keys": sorted(k for k in os.environ if k.endswith("_API_KEY")),
              "pid_file": own[0].read_text(encoding="utf-8").strip() if own else None,
              "pid_name": own[0].name if own else None}
     with log.open("a", encoding="utf-8") as f:

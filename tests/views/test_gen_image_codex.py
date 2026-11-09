@@ -28,8 +28,8 @@ def gen(tmp_path):
     out.parent.mkdir(parents=True)
     log, pid = tmp_path / "calls.jsonl", tmp_path / "pids/codex_image/hut.pid"
 
-    def run(mode="ok", found=True, size=None, timeout=None):
-        env = {**os.environ, "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(pid),
+    def run(mode="ok", found=True, size=None, timeout=None, keys=None):
+        env = {**os.environ, **(keys or {}), "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(pid),
                "CODEX_HOME": str(tmp_path / "codex-home"),
                "PATH": path if found else "/usr/bin:/bin"}
         args = [sys.executable, str(GEN), "--model", "gpt-6-astra", "--reasoning", "medium", "--pid-file", str(pid),
@@ -60,6 +60,11 @@ def test_one_call_runs_codex_exec_with_the_preset_model_and_refs_and_saves_the_i
         "status": "ok", "attempts": 1, "model": "gpt-6-astra", "reasoning": "medium", "size": [1536, 1024],
         "fallback": False, "errors": []}
     assert r["record"]["images"] == [str(x) for x in gen.refs]
+
+
+def test_codex_gets_no_api_key_of_another_service_so_a_meshy_key_never_reaches_the_image_agent(gen):
+    r = gen(keys={"MESHY_API_KEY": "msy-shell-9876543210", "TRIPO_API_KEY": "tsk-1", "OPENAI_API_KEY": "sk-test"})
+    assert (r["rc"], [c["api_keys"] for c in r["calls"]]) == (0, [["OPENAI_API_KEY"]])
 
 
 def test_three_technical_failures_in_a_row_stop_with_exit_1_and_no_fourth_paid_call(gen):

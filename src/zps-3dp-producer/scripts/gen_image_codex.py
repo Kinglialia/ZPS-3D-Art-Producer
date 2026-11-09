@@ -5,8 +5,9 @@ Usage: python3 gen_image_codex.py --model <m> --reasoning <r> --pid-file <f> --p
            --image <ref> [--image <ref> ...] --out <dir/name.png> [--size 1536x1024] [--timeout 900]
 The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prompt holds only what to draw;
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
-Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin. If --out is missing, Codex reported no
-error and exactly one image appeared under $CODEX_HOME/generated_images during the call, it takes that image (D18.4);
+Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin, in an env without any *_API_KEY other than
+OPENAI_API_KEY and CODEX_API_KEY (a Meshy key never reaches Codex). If --out is missing, Codex reported no error and
+exactly one image appeared under $CODEX_HOME/generated_images during the call, it takes that image (D18.4);
 this also holds after a timeout. A valid --out image is accepted even if result.json carries an error.
 A try fails when there is no image, Codex reports an error, the image is broken, or the long side is 1040 px or less.
 The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset each hold a slot.
@@ -26,6 +27,7 @@ from pathlib import Path
 TRIES = 3
 MIN_LONG = 1041
 IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
+CODEX_KEYS = {"OPENAI_API_KEY", "CODEX_API_KEY"}
 FRAME = """You are one step of an art build pipeline. Do only this:
 1. Use your image generation tool once to make the image that REQUEST describes. Give the tool the attached images.
 2. Save the image as PNG at OUTPUT_PATH, SIZE pixels.
@@ -61,7 +63,8 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
            "-s", "workspace-write", "--skip-git-repo-check", *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
     start = time.time() - 1
     try:
-        p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=a.timeout)
+        env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY") or k in CODEX_KEYS}
+        p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=a.timeout, env=env)
     except subprocess.TimeoutExpired:
         p = None
     err, fallback = codex_error(result), False
