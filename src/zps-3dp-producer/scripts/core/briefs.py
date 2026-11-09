@@ -207,7 +207,7 @@ def review_brief(cfg, st, step, n) -> str:
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
         "",
-        "Bạn chấm độc lập. Không sửa file nào.",
+        "Bạn chấm độc lập. Không sửa file nào ngoài report.",
         "",
         "## Chấm cái gì",
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
