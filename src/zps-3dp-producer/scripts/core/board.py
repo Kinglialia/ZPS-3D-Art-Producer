@@ -1,23 +1,27 @@
-"""Dashboard and local review page (base board until T7 replaces it)."""
+"""Dashboard and the local review board: one JSON payload, one shell, one JS renderer (docs/review-board.md §2, §3, §7)."""
 from __future__ import annotations
 
-import html
 import json
-import os
-from pathlib import Path
-from urllib.parse import quote, unquote
+from pathlib import Path, PurePosixPath
+from urllib.parse import quote, unquote, urlsplit
 
-from .hashes import concept_images
-from .loop import next_action
-from .state import IMAGE_EXT, PORT, ROOT, ProducerError, all_status, load_cfg, load_st, now, rel, sort_key, vdir
+from . import findings
+from .contract import FIELDS
+from .loop import next_action, shown
+from .state import IMAGE_EXT, ROOT, SKILL_DIR, ProducerError, all_status, load_cfg, now, sort_key, vdir
 
-MODEL_VIEWER_JS = "https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"
+BOARD_DIR = SKILL_DIR / "scripts" / "board"
+SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "views_rest": "report/VIEWS.md",
+                "model": "model.md", "texture": "texture/notes.md", "assemble": "README.md"}
+SHEET = "game_cam.png"
+SUMMARY_LINES = 3
+LINE_FIELDS = ("region", "evidence", "repair")
+HOSTS = ("127.0.0.1", "localhost")
 
 
-def build_outputs(cfg: dict):
+def build_outputs(_cfg: dict):
     sts = sorted(all_status(), key=sort_key)
     (ROOT / "dashboard.md").write_text(render_dashboard(sts), encoding="utf-8")
-    (ROOT / "review.html").write_text(render_review(cfg, sts), encoding="utf-8")
 
 
 def render_dashboard(sts: list[dict]) -> str:
@@ -35,161 +39,136 @@ def render_dashboard(sts: list[dict]) -> str:
     return "\n".join(out) + "\n"
 
 
-def _url(p: Path) -> str:
-    return quote(os.path.relpath(p, ROOT).replace(os.sep, "/"))
+def _url(root: str, base: Path, f: Path) -> str:
+    return f"/{root}/" + quote(f.relative_to(base).as_posix())
 
 
-def render_review(cfg: dict, sts: list[dict]) -> str:
-    e = html.escape
-    cards = []
-    for s in sts:
-        aid = s["id"]
-        blocks = []
-        glb = None
-        for step in cfg["steps"]:
-            n = s.get("versions", {}).get(step["id"])
-            if not n:
-                continue
-            imgs = []
-            for v in range(n, max(0, n - 3), -1):
-                fd = vdir(aid, step["id"], v) / "final"
-                pics = sorted(p for p in fd.glob("*") if p.suffix.lower() in IMAGE_EXT) if fd.exists() else []
-                appr = " ✓" if s.get("approved", {}).get(step["id"]) == v else ""
-                thumbs = "".join(f'<a href="{_url(p)}" target="_blank"><img src="{_url(p)}" alt="{e(p.name)}"></a>' for p in pics)
-                imgs.append(f'<div class="ver"><div class="vlabel">{e(step["id"])} v{v}{appr}</div>'
-                            f'<div class="pics">{thumbs or "<span class=muted>chưa có preview</span>"}</div></div>')
-                if v == n and fd.exists():  # glb của bản mới nhất, bước sau ghi đè bước trước
-                    glb = next(iter(sorted(fd.glob("*.glb"))), glb)
-            blocks.append("".join(imgs))
-        if s.get("concept_dir"):
-            cd = Path(s["concept_dir"])
-            cpics = "".join(
-                f'<a href="/_concept/{quote(aid)}/{quote(p.relative_to(cd).as_posix())}" target="_blank">'
-                f'<img src="/_concept/{quote(aid)}/{quote(p.relative_to(cd).as_posix())}" alt="{e(p.name)}"></a>'
-                for p in concept_images(cd)[:6])
-            blocks.insert(0, f'<div class="ver"><div class="vlabel">concept đã duyệt</div><div class="pics">{cpics}</div></div>')
-        viewer = (f'<model-viewer src="{_url(glb)}" camera-controls auto-rotate shadow-intensity="1"></model-viewer>'
-                  if glb else "")
-        steps_opt = "".join(f'<option value="{e(x["id"])}"{" selected" if x["id"] == s.get("stage") else ""}>{e(x["id"])}</option>'
-                            for x in cfg["steps"])
-        waiting = s.get("state") == "waiting_human"
-        cards.append(f"""
-<section class="card{' wait' if waiting else ''}{' done' if s.get('state') == 'done' else ''}" id="{e(aid)}">
-  <header><h2>{e(s.get('title', aid))}</h2>
-    <span class="badge s-{e(s.get('state', ''))}">{e(s.get('stage', ''))} · {e(s.get('state', ''))}</span></header>
-  <p class="meta">{e(aid)} · deadline {e(s.get('deadline') or '-')} · rubric: {e(s.get('last_rubric') or '-')}</p>
-  <p class="next">{e(next_action(s))}</p>
-  <div class="body"><div class="vers">{''.join(blocks) or '<span class=muted>chưa có phiên bản</span>'}</div>{viewer}</div>
-  <form class="fb" data-id="{e(aid)}">
-    <textarea name="text" rows="2" placeholder="Feedback (ghi nguyên văn vào feedback.md)"></textarea>
-    <div class="row"><label>bước <select name="step">{steps_opt}</select></label>
-      <button name="action" value="approve">Duyệt</button>
-      <button name="action" value="redo">Làm lại</button>
-      <button name="action" value="note">Chỉ ghi chú</button></div>
-  </form>
-</section>""")
-    return f"""<!doctype html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Review — {e(cfg.get('project', {}).get('name', 'Producer'))}</title>
-<script type="module" src="{MODEL_VIEWER_JS}"></script>
-<style>
-:root{{--bg:#f6f6f4;--card:#fff;--fg:#1d1d1f;--muted:#777;--line:#ddd;--accent:#2f6fde;--wait:#e3a008;color-scheme:light}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#151517;--card:#1f1f22;--fg:#eee;--muted:#999;--line:#333;--accent:#6a9bff;--wait:#f0b429;color-scheme:dark}}}}
-body{{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,system-ui,sans-serif}}
-h1{{font-size:18px;margin:0 0 4px}} .muted,.meta{{color:var(--muted)}} .meta{{margin:2px 0;font-size:12px}}
-#warn{{display:none;background:var(--wait);color:#000;padding:8px 12px;border-radius:8px;margin:8px 0}}
-.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}}
-.card.wait{{border-color:var(--wait);box-shadow:0 0 0 2px var(--wait) inset}} .card.done{{opacity:.6}}
-header{{display:flex;gap:10px;align-items:center;flex-wrap:wrap}} h2{{font-size:16px;margin:0}}
-.badge{{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}}
-.next{{margin:6px 0;font-weight:600}}
-.body{{display:flex;gap:12px;flex-wrap:wrap}} .vers{{flex:1 1 420px;min-width:0}}
-.ver{{margin:6px 0}} .vlabel{{font-size:12px;color:var(--muted)}}
-.pics{{display:flex;gap:6px;overflow-x:auto}} .pics img{{height:120px;border-radius:6px;border:1px solid var(--line);background:#888}}
-model-viewer{{flex:1 1 280px;height:280px;background:var(--bg);border-radius:8px}}
-.fb textarea{{width:100%;box-sizing:border-box;margin-top:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px}}
-.row{{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}}
-button{{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:5px 12px;cursor:pointer}}
-button[value=approve]{{background:var(--accent);color:#fff;border-color:var(--accent)}}
-</style></head><body>
-<h1>Review — {e(cfg.get('project', {}).get('name', 'Producer'))}</h1>
-<p class="meta">Sinh lúc {now()} · asset chờ duyệt có viền vàng</p>
-<div id="warn">Đang mở dạng file nên không gửi được feedback. Chạy <code>producer.py serve</code> rồi mở http://127.0.0.1:{PORT}</div>
-{''.join(cards) or '<p class=muted>Chưa có asset.</p>'}
-<script>
-const live = location.protocol.startsWith('http');
-if (!live) document.getElementById('warn').style.display = 'block';
-document.querySelectorAll('form.fb').forEach(f => f.addEventListener('submit', async ev => {{
-  ev.preventDefault();
-  if (!live) return;
-  const body = {{id: f.dataset.id, action: ev.submitter.value, text: f.text.value, step: f.step.value}};
-  const r = await fetch('/api/feedback', {{method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify(body)}});
-  const j = await r.json();
-  alert(j.message);
-  if (r.ok) location.reload();
-}}));
-</script></body></html>
-"""
+def finding_view(fid: str, f: dict) -> dict:
+    head = " — ".join(f[k] for k in LINE_FIELDS if f.get(k))
+    acc = f" — acceptance: {f['acceptance']}" if f.get("acceptance") else ""
+    return {"line": f"{fid} [{f['priority']}] {head}{acc}",
+            "fields": {k: f[k] for k in FIELDS if k not in (*LINE_FIELDS, "acceptance") and f.get(k)}}
+
+
+def summary_lines(path: Path) -> list[str]:
+    return [l.rstrip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()] if path.is_file() else []
+
+
+def images_of(d: Path | None) -> list[Path]:
+    return sorted(p for p in d.rglob("*") if p.suffix.lower() in IMAGE_EXT) if d and d.is_dir() else []
+
+
+def asset_view(cfg: dict, st: dict) -> dict:
+    aid, step = st["id"], st["stage"]
+    n = shown(st, step)
+    approved = cfg["paths"]["approved"]
+    final = vdir(aid, step, n) / "final" if n else None
+    pics = sorted(images_of(final), key=lambda p: p.name != SHEET)
+    images = [{"u": _url("p", ROOT, p), "n": p.relative_to(final).as_posix()} for p in pics]
+    cd = Path(st["concept_dir"]) if st.get("concept_dir") else None
+    if cd and approved and cd.resolve().is_relative_to(approved.resolve()):
+        images += [{"u": _url("a", approved.resolve(), p.resolve()), "n": "concept/" + p.relative_to(cd).as_posix()}
+                   for p in images_of(cd)]
+    glb = next(iter(sorted(final.glob("*.glb"))), None) if final and final.is_dir() else None
+    lines = summary_lines(final / SUMMARY_FILE[step]) if final and step in SUMMARY_FILE else []
+    op = findings.open_of(findings.load(aid, step, n))
+    waiting = st["state"] == "waiting_human"
+    note = (st.get("note") or "").splitlines()
+    return {
+        "id": aid, "step": step, "version": n, "waiting": waiting,
+        "header": f"{st.get('title', aid)} · {step}{f' v{n}' if n else ''} · {'chờ anh duyệt' if waiting else st['state']}",
+        "sheet": images[0]["u"] if pics and pics[0].name == SHEET else None,
+        "images": images,
+        "glb": _url("p", ROOT, glb) if glb else None,
+        "summary": lines[:SUMMARY_LINES], "more": lines[SUMMARY_LINES:],
+        "reason": note[0] if note else "",
+        "label": st.get("label") or "",
+        "stale": f"dựng từ {src} — cũ" if (src := (st.get("stale") or {}).get(f"{step} v{n}")) else None,
+        "decided": (st.get("decisions") or {}).get(f"{step} v{n}", {}).get("at"),
+        "open": [finding_view(i, f) for i, f in op.items() if f["priority"] != "preference"],
+        "preference": [finding_view(i, f) for i, f in op.items() if f["priority"] == "preference"],
+    }
+
+
+def board_payload(cfg: dict) -> dict:
+    sts = sorted(all_status(), key=lambda s: (s.get("state") != "waiting_human", *sort_key(s)))
+    return {"project": cfg.get("project", {}).get("name", "Producer"), "assets": [asset_view(cfg, s) for s in sts]}
+
+
+def safe_file(cfg: dict, url_path: str) -> Path | None:
+    """`/p/<path under the production root>` or `/a/<path under _approved/>`; anything else is None."""
+    key, _, rest = unquote(url_path).lstrip("/").partition("/")
+    base = {"p": ROOT, "a": cfg["paths"]["approved"]}.get(key)
+    if base is None or not rest or rest.startswith("/") or "\0" in rest or ".." in PurePosixPath(rest).parts:
+        return None
+    f = (base / rest).resolve()
+    return f if f.is_file() and f.is_relative_to(base.resolve()) else None
 
 
 def dashboard():
     build_outputs(load_cfg())
-    print(f"OK: {rel(ROOT / 'dashboard.md')}, {rel(ROOT / 'review.html')}")
+    print(f"OK: {ROOT / 'dashboard.md'}")
 
 
-def serve(port: int):
+def make_server(port: int):
     import mimetypes
-    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     from .loop import human_action
 
-    class ReviewHandler(SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kw):
-            super().__init__(*args, directory=str(ROOT), **kw)
+    class Handler(BaseHTTPRequestHandler):
+        def send(self, code: int, body: bytes, ctype: str):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def local(self) -> bool:
+            if self.headers.get("Host", "").rsplit(":", 1)[0] in HOSTS:
+                return True
+            self.send_error(403)
+            return False
 
         def do_GET(self):
-            if self.path.startswith("/_concept/"):
-                return self.send_concept()
-            if self.path in ("/", "/index.html"):
-                build_outputs(load_cfg())
-                self.path = "/review.html"
-            return super().do_GET()
-
-        def send_concept(self):
-            """Ảnh concept nằm ngoài production/, chỉ phục vụ file nằm trong concept_dir của asset."""
-            try:
-                _, _, aid, relpath = self.path.split("/", 3)
-                base = Path(load_st(unquote(aid))["concept_dir"]).resolve()
-                f = (base / unquote(relpath)).resolve()
-                if base not in f.parents or not f.is_file():
-                    raise ValueError
-            except (ValueError, ProducerError, TypeError, KeyError):
+            if not self.local():
+                return
+            path = urlsplit(self.path).path
+            if path == "/api/board":
+                return self.send(200, json.dumps(board_payload(load_cfg()), ensure_ascii=False).encode(),
+                                 "application/json; charset=utf-8")
+            if path in ("/", "/index.html", "/board.js"):
+                name = "board.js" if path == "/board.js" else "index.html"
+                return self.send(200, (BOARD_DIR / name).read_bytes(), mimetypes.guess_type(name)[0] + "; charset=utf-8")
+            f = safe_file(load_cfg(), path)
+            if f is None:
                 return self.send_error(404)
-            data = f.read_bytes()
-            self.send_response(200)
-            self.send_header("Content-Type", mimetypes.guess_type(f.name)[0] or "application/octet-stream")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self.send(200, f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream")
 
         def do_POST(self):
-            if self.path != "/api/feedback":
+            if not self.local():
+                return
+            if urlsplit(self.path).path != "/api/feedback":
                 return self.send_error(404)
+            if self.headers.get_content_type() != "application/json":
+                return self.send_error(403)
             try:
                 data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
                 msg, code = human_action(data["id"], data["action"], data.get("text", ""), data.get("step")), 200
             except (ProducerError, KeyError, json.JSONDecodeError) as ex:
                 msg, code = f"Lỗi: {ex}", 400
-            body = json.dumps({"message": msg}, ensure_ascii=False).encode()
-            self.send_response(code)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self.send(code, json.dumps({"message": msg}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
 
         def log_message(self, *_):
             pass
 
+    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+
+
+def serve(port: int):
     build_outputs(load_cfg())
+    srv = make_server(port)
     print(f"Review page: http://127.0.0.1:{port}  (Ctrl+C để dừng)")
-    ThreadingHTTPServer(("127.0.0.1", port), ReviewHandler).serve_forever()
+    srv.serve_forever()
+
+
