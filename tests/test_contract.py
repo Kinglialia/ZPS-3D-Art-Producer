@@ -51,6 +51,12 @@ def test_field_value_with_a_pipe_stays_in_its_field():
     assert rv["findings"]["F1"]["repair"] == "nâng mái | giữ độ dốc"
 
 
+def test_confidence_with_a_reason_in_brackets_keeps_the_level_so_a_reviewer_is_not_sent_back_for_a_rewrite():
+    rv, errs = parse_review(report(findings=[finding(confidence="low (chưa có ảnh cùng góc, xem F1)")]))
+    assert errs == []
+    assert rv["findings"]["F1"]["confidence"] == "low"
+
+
 def test_unknown_priority_and_confidence_are_rejected():
     _, errs = parse_review(report(findings=[finding(prio="critical", confidence="sure")]))
     assert errs == ["F1: mức 'critical' không hợp lệ", "F1: confidence phải là high|medium|low"]

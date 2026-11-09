@@ -84,6 +84,8 @@ def parse_findings(lines: list[str], labels: list[str], errs: list[str]) -> dict
         else:
             errs.append(f"dòng FINDINGS sai format: {line.strip()[:60]}")
     for fid, f in out.items():
+        if f.get("confidence"):
+            f["confidence"] = f["confidence"].split("(")[0].strip()
         miss = [k for k in FIELDS if not f.get(k)]
         if miss:
             errs.append(f"{fid} thiếu {', '.join(miss)}")
