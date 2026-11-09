@@ -115,6 +115,30 @@ def test_a_motif_word_inside_another_word_is_no_motif_so_a_plain_crate_still_get
                                                                                     (True, "paint", [])]
 
 
+def ortho_view(k, sign):
+    m = [[sign, 0, 0, 0], [0, 0, -sign, -5 * sign], [0, 1, 0, 0.5], [0, 0, 0, 1]]
+    return {"k": k, "guide": f"guide_{k}.png", "paint": f"paint_{k}.png",
+            "camera": {"matrix": m, "type": "ORTHO", "ortho_scale": 2.0, "w": 96, "h": 64}}
+
+
+def test_a_paint_view_of_another_aspect_is_skipped_and_named_so_only_that_view_is_painted_again(m, tmp_path):
+    paint = tmp_path / "paint"
+    paint.mkdir()
+    (paint / "cameras.json").write_text(json.dumps({"views": [ortho_view(0, 1), ortho_view(4, -1)]}))
+    for k in (0, 4):
+        Image.new("RGBA", (96, 64), (128, 128, 128, 255)).save(paint / f"guide_{k}.png")
+    Image.new("RGB", (96, 64), (200, 30, 30)).save(paint / "paint_0.png")
+    Image.new("RGB", (100, 100), (30, 30, 200)).save(paint / "paint_4.png")
+    Image.new("RGB", (RES, RES), (90, 90, 90)).save(paint / "base_fill.png")
+    rc, out = tool("project_views.py", "--glb", m / f"{AID}-untextured.glb", "--model", m, "--views", paint, "--base",
+                   paint / "base_fill.png", "--res", RES, "--out", paint / "projected.png", "--padding", "2")
+    r = json.loads((paint / "projected.json").read_text())
+    assert (rc, r["views"], r["skipped"]) == (1, 1, {"paint_4.png": "100x100 khác tỉ lệ guide 96x64"})
+    assert out.endswith(f"; bỏ paint_4.png (100x100 khác tỉ lệ guide 96x64): gen lại view đó -> {paint}/projected.png\n")
+    front = by_face(tex.load_rgb(paint / "projected.png"), texels(m), ["-Y"])
+    assert np.abs(front - (200, 30, 30)).max() <= 2
+
+
 def meshy_glb(path, shift_px=0.0, drop=0):
     v, uv, f = glbkit.box()
     uv = uv + np.array([shift_px / RES, 0])

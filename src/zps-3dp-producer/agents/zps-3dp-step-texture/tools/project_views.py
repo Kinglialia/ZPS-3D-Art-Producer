@@ -9,7 +9,9 @@ render_paint_views.py instead of a bbox fit to a concept, so 8 views of any angl
   asset size) and the painted pixel is opaque (paint alpha, else guide alpha); weight cos^2.
   texels no view sees take, in order: the mean of the seen texels of the same face; of the same material code and side
   (+X -X +Y -Y top bottom: the same normal direction); else the base fill.
-Writes <out> and <out>.json (share of island texels per source). Prints one line. Exit 0, 2 on error.
+  a paint view of another aspect than its guide is skipped and named, so only that view is painted again.
+Writes <out> and <out>.json (share of island texels per source, skipped views). Prints one line. Exit 0, 1 when a
+view was skipped, 2 on error.
 """
 import argparse
 import json
@@ -26,6 +28,10 @@ import tex  # noqa: E402
 
 MIN_COS = 0.2
 DEPTH_EPS = 0.004
+
+
+class Aspect(ValueError):
+    pass
 
 
 def project(cam, pts):
@@ -68,7 +74,7 @@ def rgba(path, size=None):
     im = Image.open(path).convert("RGBA")
     if size and im.size != size:
         if abs(im.width / im.height - size[0] / size[1]) > 0.01:
-            raise ValueError(f"{os.path.basename(path)} {im.width}x{im.height} khác tỉ lệ guide {size[0]}x{size[1]}")
+            raise Aspect(f"{im.width}x{im.height} khác tỉ lệ guide {size[0]}x{size[1]}")
         im = im.resize(size, Image.LANCZOS)
     return np.asarray(im, float)
 
@@ -81,12 +87,19 @@ def run(a):
     diag = float(np.linalg.norm(g["v"].max(0) - g["v"].min(0)))
     acc, wsum = np.zeros((len(pos), 3)), np.zeros(len(pos))
     views = json.load(open(os.path.join(a.views, "cameras.json"), encoding="utf-8"))["views"]
+    used, skipped = 0, {}
     for vw in views:
         paint = os.path.join(a.views, vw["paint"])
         if not os.path.isfile(paint):
             continue
         cam = vw["camera"]
-        img, guide = rgba(paint, (cam["w"], cam["h"])), rgba(os.path.join(a.views, vw["guide"]))
+        try:
+            img = rgba(paint, (cam["w"], cam["h"]))
+        except Aspect as e:
+            skipped[vw["paint"]] = str(e)
+            continue
+        used += 1
+        guide = rgba(os.path.join(a.views, vw["guide"]))
         alpha = img[..., 3] if (img[..., 3] < 250).any() else guide[..., 3]
         px, py, depth, look = project(cam, pos)
         cos = nrm @ -look
@@ -116,7 +129,7 @@ def run(a):
     img[ins] = out
     tex.save_rgb(tex.gutter(img, ins, a.padding), a.out)
     share = {k: round(float((source == k).mean()), 4) for k in ("projected", "face", "code_side", "base")}
-    return share, len([v for v in views if os.path.isfile(os.path.join(a.views, v["paint"]))])
+    return share, used, skipped
 
 
 def main():
@@ -127,13 +140,16 @@ def main():
     p.add_argument("--padding", type=int, default=16)
     a = p.parse_args()
     try:
-        share, n = run(a)
+        share, n, skipped = run(a)
     except Exception as e:  # noqa: BLE001
         print(f"[project_views] error: {e!r}")
         sys.exit(2)
-    json.dump({"views": n, "share": share}, open(os.path.splitext(a.out)[0] + ".json", "w"), indent=1)
+    json.dump({"views": n, "share": share, "skipped": skipped}, open(os.path.splitext(a.out)[0] + ".json", "w",
+                                                                      encoding="utf-8"), ensure_ascii=False, indent=1)
+    skip = "".join(f"; bỏ {k} ({v}): gen lại view đó" for k, v in skipped.items())
     print(f"[project_views] {n} view; chiếu {share['projected']:.0%}, mặt {share['face']:.0%}, "
-          f"mã+hướng {share['code_side']:.0%}, nền {share['base']:.0%} -> {a.out}")
+          f"mã+hướng {share['code_side']:.0%}, nền {share['base']:.0%}{skip} -> {a.out}")
+    sys.exit(1 if skipped else 0)
 
 
 if __name__ == "__main__":
