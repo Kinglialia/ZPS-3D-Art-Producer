@@ -68,3 +68,11 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 2. "Mái dốc dùng wedge": a `wedge` slopes one way. A gable roof needs a `wedge` plus a `mirror_of` part. `references/part-graph.md` should show this.
 3. D11.4 says the counter restarts "từ 0"; code shows `fix_round=1` after redo because the redo builds the first fix of the new round. Same behavior, different wording.
 4. `archive` at `done_enabled` is final, so an archived GĐ 1 asset cannot continue when GĐ 2 enables later steps.
+
+## From the review fix
+
+1. A user "Cần sửa" now becomes a finding `H<k>` (major) in the sent-back version, as `review-board.md` §4 / D23.1 describe for marked regions. The reviewer must write `PRIOR` for it. Without this, the loop offered the rejected version again forever.
+2. D22.8 now means one decision per offer, not one per version: when a version is offered again after more rounds, the user can decide again.
+3. Rubric templates now have one section per step (`## blockout`, `## model`, `## texture`), as `producer.md` §10 says. The blockout keys match the reviewer's 7 keys.
+4. The status lock uses `fcntl.flock`, which works on macOS and Linux only.
+5. `config.yaml` `paths.blender` is read only by the kit `apply_edit.py`, which the agent does not use.
