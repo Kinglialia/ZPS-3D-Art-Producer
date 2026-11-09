@@ -1,7 +1,8 @@
 """Ingest state machine: worker and reviewer reports, gates, approve, retry, human feedback."""
 from __future__ import annotations
 
-from .contract import VERDICTS, WORKER_STATUS, parse_contract
+from . import findings
+from .contract import parse_review, parse_worker
 from .state import ASSETS, die, ledger, load_cfg, load_st, now, rel, save_st, step_of, vdir
 
 
@@ -47,6 +48,19 @@ def next_action(st: dict) -> str:
     return "xong"
 
 
+def read_report(rep) -> str:
+    if not rep.exists():
+        die(f"chưa có báo cáo {rel(rep)}")
+    return rep.read_text(encoding="utf-8")
+
+
+def valid(rep, parsed: tuple):
+    out, errs = parsed
+    if errs:
+        die(f"{rel(rep)} sai contract: {'; '.join(errs)}")
+    return out
+
+
 def ingest(a):
     from .board import build_outputs
     cfg = load_cfg()
@@ -57,11 +71,7 @@ def ingest(a):
     r = cfg["review"]
     if st["state"] == "running":
         rep = d / "report-worker.md"
-        c = parse_contract(rep, {"STATUS", "OUTPUT", "RUBRIC", "ISSUES"})
-        if c is None:
-            die(f"chưa có báo cáo {rel(rep)}")
-        if c.get("STATUS") not in WORKER_STATUS:
-            die(f"báo cáo sai contract (STATUS phải là {'|'.join(sorted(WORKER_STATUS))}): {rel(rep)}")
+        c = valid(rep, parse_worker(read_report(rep)))
         if a.agent_id:
             st["worker_agent_id"] = a.agent_id
         st["last_rubric"] = c.get("RUBRIC", "")
@@ -77,13 +87,11 @@ def ingest(a):
         event = f"worker {c['STATUS']}"
     elif st["state"] == "reviewing":
         rep = d / "report-review.md"
-        c = parse_contract(rep, {"VERDICT", "RUBRIC"})
-        if c is None:
-            die(f"chưa có báo cáo {rel(rep)}")
-        v = c.get("VERDICT")
-        if v not in VERDICTS:
-            die(f"report review sai contract (VERDICT phải là PASS|FIX|ESCALATE): {rel(rep)}")
-        st["last_rubric"] = c.get("RUBRIC", "")
+        rv = valid(rep, parse_review(read_report(rep)))
+        doc = valid(rep, findings.apply(findings.load(a.id, step["id"], st.get("fix_base")), rv, step, n))
+        findings.save(a.id, step["id"], doc)
+        v = rv["verdict"]
+        st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
         if v == "PASS" and step["gate"] == "review_human":
             st["state"], st["note"] = "waiting_human", f"duyệt {step['id']} v{n}"
         elif v == "PASS":
@@ -97,7 +105,7 @@ def ingest(a):
                 st["state"], st["note"] = "fix", f"vòng sửa {st['fix_round']}/{r['max_fix_rounds']}"
         else:
             st["state"], st["note"] = "waiting_human", f"reviewer ESCALATE ở {step['id']} v{n}"
-        event = f"review {v}"
+        event = f"review {v} ({findings.short(findings.open_counts(doc))})"
     else:
         die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
     save_st(st)

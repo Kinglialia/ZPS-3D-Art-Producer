@@ -18,7 +18,7 @@ production/                     # trong project Claude Code; chỉ script và su
     status.json                 # chỉ script ghi
     brief.md · rubric.md · feedback.md
     <step>/vN/
-      brief-worker.md · report-worker.md · brief-review.md · report-review.md
+      brief-worker.md · report-worker.md · brief-review.md · report-review.md · findings.json
       final/ · work/ · handoff.md
   archive/<id>/
 ```
@@ -51,23 +51,55 @@ FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. `redo` của n
 
 ## Contract báo cáo
 
-Worker: bốn dòng đầu của `report-worker.md`, cũng là toàn bộ tin nhắn trả về.
+Script đọc dòng `KEY: value` đầu tiên của mỗi khóa trong cả file. `FINDINGS` và `PRIOR` là khối: các dòng `- ` và dòng thụt lề ngay sau, tới khóa kế tiếp hoặc dòng không thụt lề. Sai thì `ingest` in một dòng `LỖI: <report> sai contract: <lỗi>; <lỗi>`, không đổi state.
+
+Worker (`report-worker.md`). Tin nhắn trả về chỉ dòng `STATUS`.
 ```
 STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED
 OUTPUT: <thư mục final/>
 RUBRIC: <key>=pass|fail; ...
 ISSUES: <tối đa 2 vấn đề hoặc none>
+PROFILE_HASH: <chép từ brief>        bắt buộc
+FIXED: F<n>, ...                     vòng sửa; chỉ để reviewer đối chiếu
 ```
 
-Reviewer: mở đầu `report-review.md`; tin nhắn trả về chỉ gồm hai dòng đầu.
+Reviewer (`report-review.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
 ```
 VERDICT: PASS | FIX | ESCALATE
-RUBRIC: <key>=pass|fail; ...
-FINDINGS:
-- [critical|minor] <ở đâu> — <sai gì> — <sửa thế nào>
+RUBRIC: <key>=pass|fail|unclear; ...
+COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N
+TOP_FIX: <loại>: F<n>[, F<m>]        chỉ khi FIX
+EVIDENCE_OPENED: <nhãn ảnh, file đã mở>
+COMPARE: F<n>=better|same|worse; ... vòng sửa: mọi id trong TOP_FIX của bản gốc
+PICK: a|b|c                          chỉ khi TOP_FIX của bản gốc là param
+FINDINGS:                            chỉ finding mới, id từ next_id của bản gốc
+- F<n> [blocker|major|minor|preference|unclear] <loại>
+  region: … | viewing_condition: … | evidence: …
+  consequence: … | confidence: high|medium|low
+  repair: … | preserve: … | acceptance: …
+PRIOR:                               đúng mọi finding đang mở của bản gốc
+- F<n>: open|resolved|regressed|superseded | evidence: <nhãn>
 ```
 
-Script đọc các dòng `KEY: value` trong 40 dòng đầu. Thiếu hoặc sai giá trị thì `ingest` báo lỗi, không đoán.
+`ingest` kiểm:
+- Finding đủ 8 trường của kit `issue-fields.json` (`region` … `acceptance`). Một trường không được chứa ` | <tên trường>:`.
+- `evidence` của finding mới và của `PRIOR … resolved` chứa ít nhất một nhãn trong `EVIDENCE_OPENED` (so chuỗi con, không phân biệt hoa thường, nhãn có hoặc không có đuôi file).
+- `PRIOR` có đúng các id đang mở (`open`, `regressed`) của bản gốc. Id mới không trùng id cũ.
+- `COMPARE` đủ id; `resolved` cần `better`; `worse` cần `regressed`.
+- `COUNTS` bằng số finding đang mở sau khi áp `PRIOR`.
+- Số key `unclear` trong `RUBRIC` ≤ số finding `unclear` đang mở.
+- VERDICT: `PASS` khi không còn `blocker`, `major`, `unclear` đang mở (`preference`, `minor` không chặn). `FIX` khi còn.
+- `TOP_FIX`: loại nằm trong `top_fix` của bước (trừ loại `note*`) hoặc `need_evidence`; là loại của finding nặng nhất, cùng mức thì `structure`, `fix_uv_mesh` trước. `structure` đúng một id. Loại khác: đủ mọi finding `blocker|major|minor` đang mở của loại đó. `need_evidence`: đủ mọi finding `unclear` đang mở, chỉ khi không còn `blocker`, `major`.
+
+Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa ghi). Brief reviewer điền sẵn `PRIOR`, `COMPARE` với `?` để reviewer thay.
+
+## findings.json (mỗi version, chỉ script ghi)
+
+```
+{"version": N, "base": M|null, "top_fix": {"kind": k, "ids": [..]}|null, "pick": "a"|null, "next_id": K,
+ "findings": {"F1": {"priority", "kind", "status", "first_v", "last_v", "region", …, "acceptance"}}}
+```
+Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
 
 ## Nguồn tham khảo của thiết kế
 
