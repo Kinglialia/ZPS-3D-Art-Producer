@@ -422,3 +422,7 @@ def test_the_review_brief_names_the_profile_and_only_the_handoff_files_so_the_re
     line = [l for l in text.splitlines() if "Concept đã duyệt để đối chiếu" in l]
     assert len(line) == 1 and line[0].endswith(": chỉ `concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`, "
                                                "`pilot-house.material.md`.")
+
+
+def test_a_param_review_brief_names_the_image_labels_of_each_variant_so_evidence_cites_one_form(flow):
+    assert ("`v2a/<ảnh>`, `v2b/<ảnh>`, `v2c/<ảnh>`; ảnh bản gốc: `v1/<ảnh>`.") in flow["v2 review brief"]["text"]

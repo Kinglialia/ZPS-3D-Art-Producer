@@ -98,3 +98,8 @@ def test_worker_points_only_at_files_that_exist():
         assert (AGENT / "references" / ref).is_file(), ref
     for tool in set(re.findall(r"T/((?:self_build/)?[\w.]+\.(?:py|sh))", body)):
         assert (AGENT / "tools" / tool).is_file(), tool
+
+
+def test_reviewer_writes_acceptance_a_fix_can_reach_not_an_overlay_percentage():
+    text = (AGENT.parent / "zps-3dp-check-blockout.md").read_text(encoding="utf-8")
+    assert "Không dùng % red/blue hay IoU của overlay làm ngưỡng" in text

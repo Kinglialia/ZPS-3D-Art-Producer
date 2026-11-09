@@ -159,7 +159,8 @@ def review_brief(cfg, st, step, n) -> str:
            f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n else
           [f"- Bản gốc v{m}: ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`; finding đủ trường "
            f"`{rel(findings.path(aid, sid, m))}`."] if base else []),
-        *([f"- Phương án param: `{rel(d / 'variants')}/<a|b|c>/`; a là `final/`."] if pick else []),
+        *([f"- Phương án param: `{rel(d / 'variants')}/<a|b|c>/`; a là `final/`. Nhãn ảnh trong EVIDENCE_OPENED: "
+           f"`v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."] if pick else []),
         "",
         "## Báo cáo",
         f"Ghi vào `{rel(d / 'report-review.md')}`, mở đầu đúng format, mỗi khóa một dòng:",
