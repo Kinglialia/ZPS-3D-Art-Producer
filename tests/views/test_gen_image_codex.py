@@ -28,13 +28,13 @@ def gen(tmp_path):
     out.parent.mkdir(parents=True)
     log, pid = tmp_path / "calls.jsonl", tmp_path / "pids/codex_image/hut.pid"
 
-    def run(mode="ok", found=True, size=None):
+    def run(mode="ok", found=True, size=None, timeout=None):
         env = {**os.environ, "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(pid),
                "CODEX_HOME": str(tmp_path / "codex-home"),
                "PATH": path if found else "/usr/bin:/bin"}
         args = [sys.executable, str(GEN), "--model", "gpt-6-astra", "--reasoning", "medium", "--pid-file", str(pid),
                 "--prompt", str(tmp_path / "front.md"), *[f"--image={r}" for r in refs], "--out", str(out),
-                *(["--size", size] if size else [])]
+                *(["--size", size] if size else []), *(["--timeout", str(timeout)] if timeout else [])]
         p = subprocess.run(args, capture_output=True, text=True, env=env)
         calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
         rec = out.with_suffix(".json")
@@ -121,5 +121,62 @@ def test_missing_codex_cli_fails_at_once_because_a_retry_cannot_install_it(gen):
 
 def test_the_pid_file_holds_the_wrapper_pid_while_codex_runs_so_p_next_counts_the_codex_slot(gen):
     r = gen()
-    assert r["calls"][0]["pid_file"] == str(r["calls"][0]["ppid"])
-    assert not gen.pid.exists()
+    c = r["calls"][0]
+    assert (c["pid_file"], c["pid_name"]) == (str(c["ppid"]), f"hut-{c['ppid']}.pid")
+    assert list(gen.pid.parent.glob("*.pid")) == []
+
+
+def test_two_gens_of_one_asset_hold_two_pid_files_so_the_first_to_finish_does_not_free_the_other_slot(gen):
+    env = {**os.environ, "PATH": fake_codex.install(gen.tmp / "bin"), "FAKE_CODEX_LOG": str(gen.tmp / "two.jsonl"),
+           "FAKE_CODEX_PID_FILE": str(gen.pid), "CODEX_HOME": str(gen.tmp / "codex-home")}
+
+    def spawn(name, secs):
+        return subprocess.Popen([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                                 "--prompt", str(gen.tmp / "front.md"), "--out", str(gen.out.with_name(name))],
+                                env={**env, "FAKE_CODEX_MODE": f"slow:{secs}"}, stdout=subprocess.PIPE, text=True)
+    short, long = spawn("a.png", 1), spawn("b.png", 5)
+    pids = lambda: sorted(p.name for p in gen.pid.parent.glob("*.pid"))
+    deadline = time.time() + 10
+    while len(pids()) < 2 and time.time() < deadline:
+        time.sleep(0.05)
+    assert pids() == sorted([f"hut-{short.pid}.pid", f"hut-{long.pid}.pid"])
+    short.communicate()
+    assert pids() == [f"hut-{long.pid}.pid"]
+    long.communicate()
+    assert (short.returncode, long.returncode, pids()) == (0, 0, [])
+
+
+def test_a_codex_reported_error_is_never_overridden_by_another_assets_newer_image_under_codex_home(gen):
+    r = gen("error_with_bystander")
+    assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 3, False)
+    assert r["record"]["errors"] == ["codex: content policy"] * 3 and r["record"]["fallback"] is False
+
+
+def test_two_new_images_under_codex_home_are_ambiguous_so_the_fallback_takes_neither(gen):
+    r = gen("home_two")
+    assert (r["rc"], gen.out.exists(), r["record"]["errors"][0]) == (1, False, "không có file ảnh")
+
+
+def test_a_timeout_after_codex_saved_the_image_takes_it_instead_of_paying_for_two_more_tries(gen):
+    r = gen("hang_after_image", timeout=3)
+    assert (r["rc"], len(r["calls"]), r["record"]["attempts"], r["record"]["fallback"]) == (0, 1, 1, True)
+    with Image.open(gen.out) as im:
+        assert im.getpixel((0, 0)) == (10, 120, 200)
+
+
+def test_a_timeout_without_any_image_is_a_failed_try_with_the_wait_in_the_message(gen):
+    r = gen("slow:60", timeout=1)
+    assert (r["rc"], len(r["calls"]), r["record"]["errors"][0]) == (1, 3, "hết thời gian chờ 1 s")
+
+
+def test_a_valid_out_image_is_accepted_even_if_result_json_also_carries_an_error_field_since_the_paid_image_is_good(gen):
+    r = gen("ok_but_error")
+    assert (r["rc"], len(r["calls"]), r["record"]["fallback"], r["record"]["errors"]) == (0, 1, False, [])
+    with Image.open(gen.out) as im:
+        assert im.getpixel((0, 0)) == (200, 120, 10)
+
+
+def test_a_truncated_png_is_a_broken_image_because_pillow_reads_only_the_header_on_open(gen):
+    r = gen("truncated")
+    assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 3, False)
+    assert r["record"]["errors"] == ["file ảnh hỏng"] * 3

@@ -13,7 +13,7 @@ production/                     # trong project Claude Code; chỉ script và su
   PROJECT-PROFILE.yaml          # Project Setup viết; brief từ chối khi sai
   policy.yaml                   # ai duyệt; chỉ P approvals / P delegate ghi
   preflight.json                # P preflight ghi; P next, P brief đọc
-  pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; P next đếm PID còn sống
+  pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; gen_image_codex.py ghi <id>-<pid>.pid mỗi lần chạy; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: sự kiện + RULING
   .lock                         # mỗi lệnh ghi và mỗi nút trên review page giữ flock file này

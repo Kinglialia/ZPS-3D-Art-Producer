@@ -5,9 +5,11 @@ Usage: python3 gen_image_codex.py --model <m> --reasoning <r> --pid-file <f> --p
            --image <ref> [--image <ref> ...] --out <dir/name.png> [--size 1536x1024] [--timeout 900]
 The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prompt holds only what to draw;
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
-Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin. If --out is missing, it takes the
-newest image Codex saved under $CODEX_HOME/generated_images during the call (D18.4).
-A try fails when there is no image, Codex reports an error, or the long side is 1040 px or less.
+Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin. If --out is missing, Codex reported no
+error and exactly one image appeared under $CODEX_HOME/generated_images during the call, it takes that image (D18.4);
+this also holds after a timeout. A valid --out image is accepted even if result.json carries an error.
+A try fails when there is no image, Codex reports an error, the image is broken, or the long side is 1040 px or less.
+The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset each hold a slot.
 3 failed tries in a row: exit 1 (D8.3). Writes <dir/name>.json, prints one line.
 """
 from __future__ import annotations
@@ -40,10 +42,16 @@ REQUEST:
 """
 
 
-def newest_image(since: float) -> Path | None:
+def new_images(since: float) -> list[Path]:
     d = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "generated_images"
-    found = [p for p in d.rglob("*") if p.suffix.lower() in IMAGES and p.stat().st_mtime >= since] if d.is_dir() else []
-    return max(found, key=lambda p: p.stat().st_mtime, default=None)
+    return [p for p in d.rglob("*") if p.suffix.lower() in IMAGES and p.stat().st_mtime >= since] if d.is_dir() else []
+
+
+def codex_error(result: Path) -> str | None:
+    try:
+        return json.loads(result.read_text(encoding="utf-8")).get("error")
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, list[int] | None]:
@@ -55,25 +63,24 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
     try:
         p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=a.timeout)
     except subprocess.TimeoutExpired:
-        return f"hết thời gian chờ {a.timeout} s", False, None
-    fallback = False
-    if not out.is_file() and (img := newest_image(start)):
-        shutil.copyfile(img, out)
+        p = None
+    err, fallback = codex_error(result), False
+    if not out.is_file() and not err and len(found := new_images(start)) == 1:
+        shutil.copyfile(found[0], out)
         fallback = True
-    try:
-        err = json.loads(result.read_text(encoding="utf-8")).get("error")
-    except (OSError, ValueError, AttributeError):
-        err = None
-    if err and not fallback:
-        return f"codex: {err}", fallback, None
     if not out.is_file():
+        if err:
+            return f"codex: {err}", False, None
+        if p is None:
+            return f"hết thời gian chờ {a.timeout} s", False, None
         tail = (p.stderr.strip().splitlines() or [""])[-1][:200]
-        return ("không có file ảnh" + (f" (codex exit {p.returncode}: {tail})" if p.returncode else "")), fallback, None
+        return "không có file ảnh" + (f" (codex exit {p.returncode}: {tail})" if p.returncode else ""), False, None
     from PIL import Image
     try:
         with Image.open(out) as im:
+            im.load()
             size = list(im.size)
-    except OSError:
+    except (OSError, SyntaxError, ValueError):
         return "file ảnh hỏng", fallback, None
     if max(size) < MIN_LONG:
         return f"ảnh {size[0]}x{size[1]}, cạnh dài cần > 1040 px", fallback, size
@@ -100,8 +107,9 @@ def main():
     if shutil.which("codex") is None:
         rec["errors"].append("không thấy codex trên PATH")
     else:
-        a.pid_file.parent.mkdir(parents=True, exist_ok=True)
-        a.pid_file.write_text(str(os.getpid()), encoding="utf-8")
+        pid_file = a.pid_file.with_name(f"{a.pid_file.stem}-{os.getpid()}{a.pid_file.suffix}")
+        pid_file.parent.mkdir(parents=True, exist_ok=True)
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
         try:
             while rec["attempts"] < TRIES:
                 rec["attempts"] += 1
@@ -111,7 +119,7 @@ def main():
                     break
                 rec["errors"].append(err)
         finally:
-            a.pid_file.unlink(missing_ok=True)
+            pid_file.unlink(missing_ok=True)
     if rec["status"] != "ok":
         out.unlink(missing_ok=True)
     rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
