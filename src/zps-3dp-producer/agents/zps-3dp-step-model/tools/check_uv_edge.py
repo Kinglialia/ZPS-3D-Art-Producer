@@ -1,0 +1,80 @@
+"""UV islands keep the padding to the atlas border and the texel minimum (docs/agents/3d-artist.md §6). Plain Python.
+
+Usage: python3 tools/check_uv_edge.py --final F
+  uv.present          F/<id>-untextured.glb has TEXCOORD_0 on every primitive
+  uv.edge_margin_px   smallest distance of a UV corner to the atlas border, px at spec uv.resolution, >= uv.min_padding_px
+  uv.texel_px_per_m   sqrt(UV area in px / surface m2) of the whole mesh >= spec model.texel_min_px_per_m
+  uv.texel_islands    the same for every UV piece with >= 0.5 % of the surface (a piece: triangles that share a vertex
+                      of the file, so a sharp edge may split an island into two pieces)
+The kit uv_check measures the gaps between islands, not the gap to the border.
+data.at_<res> and data.at_1024 give the same numbers at the working resolution and at 1024 (scaled).
+Writes F/review/checks/uv_edge.json. Exit 0 pass, 1 fail, 2 error.
+"""
+import os
+import sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import cli  # noqa: E402
+import common  # noqa: E402
+import glbread  # noqa: E402
+
+TOOL = "model/check_uv_edge"
+ISLAND_MIN_SHARE = 0.005
+
+
+def pieces(f, nv):
+    parent = list(range(nv))
+
+    def root(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    for a, b, c in f.tolist():
+        for y in (b, c):
+            ra, ry = root(a), root(y)
+            if ra != ry:
+                parent[ry] = ra
+    return np.array([root(a) for a in f[:, 0].tolist()])
+
+
+def numbers(g, res):
+    f, uv = g["f"], g["uv"]
+    t, tu = g["v"][f], uv[f]
+    world = np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]), axis=1) / 2
+    e1, e2 = tu[:, 1] - tu[:, 0], tu[:, 2] - tu[:, 0]
+    uva = np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]) / 2
+    used = uv[np.unique(f)]
+    margin = float(np.minimum(used, 1 - used).min()) * res
+    lab = pieces(f, len(uv))
+    big = [k for k in np.unique(lab) if world[lab == k].sum() >= ISLAND_MIN_SHARE * world.sum()]
+    isl = [float(np.sqrt(uva[lab == k].sum() / world[lab == k].sum())) * res for k in big]
+    return {"edge_margin_px": common.r(margin, 2), "texel_px_per_m": common.r(np.sqrt(uva.sum() / world.sum()) * res, 1),
+            "island_texel_min": common.r(min(isl), 1), "islands_checked": len(isl)}
+
+
+def check(a):
+    spec = common.read_json(os.path.join(a.final, "spec.json"))
+    g = glbread.load(os.path.join(a.final, f"{spec['asset']}-untextured.glb"))
+    if g["uv"] is None:
+        return [common.check("uv.present", "fail", note="GLB không có TEXCOORD_0")], {}
+    res, pad, tmin = spec["uv"]["resolution"], spec["uv"]["min_padding_px"], spec["model"]["texel_min_px_per_m"]
+    at = numbers(g, res)
+    scale = 1024 / res
+    at1024 = {"edge_margin_px": common.r(at["edge_margin_px"] * scale, 2),
+              "texel_px_per_m": common.r(at["texel_px_per_m"] * scale, 1),
+              "island_texel_min": common.r(at["island_texel_min"] * scale, 1),
+              "min_padding_px": common.r(pad * scale, 1), "texel_min_px_per_m": common.r(tmin * scale, 1)}
+    checks = [common.check("uv.present", "pass", True),
+              common.check("uv.edge_margin_px", "pass" if at["edge_margin_px"] >= pad else "fail", at["edge_margin_px"], pad),
+              common.check("uv.texel_px_per_m", "pass" if at["texel_px_per_m"] >= tmin else "fail",
+                           at["texel_px_per_m"], tmin),
+              common.check("uv.texel_islands", "pass" if at["island_texel_min"] >= tmin else "fail",
+                           at["island_texel_min"], tmin, note=f"{at['islands_checked']} mảnh ≥ 0,5 % diện tích")]
+    return checks, {f"at_{res}": at, "at_1024": at1024}
+
+
+if __name__ == "__main__":
+    cli.run(TOOL, "uv_edge", __doc__, lambda p: None, check)

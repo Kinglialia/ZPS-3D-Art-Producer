@@ -1,0 +1,40 @@
+# Model: the kit config keys the copied tools read (lib/common.load_config, asset_checks ac_common.config_value).
+# Values as kit v0.10.4 config.yaml, except paths.blender. F/spec.json (make_spec.py) overrides per asset.
+# No mesh.max_duplicate_verts or validate.max_duplicate_verts: the join keeps split edges, so duplicates stay info (D24.6).
+
+paths:
+  blender: blender   # fallback only: every Blender command uses the brief's BLENDER path
+  gltf_validator: gltf_validator
+
+budgets:
+  max_vertices_exported: 65534
+  max_materials: 1
+  min_tris_ratio: 0.0
+
+optimize:
+  raster_size: 512
+
+texture:
+  texel_density_px_per_m: 256
+  padding_px_by_res: {512: 4, 1024: 8, 2048: 16}
+
+validate:
+  max_file_size_mb: 5
+  allow_uv_overlap: false
+  sliver_min_px_area: 10
+
+self_build:
+  rollouts: 3
+  part_max_attempts: 3
+  critic_cycles: 3
+  revert_tolerance: 0.005
+  render_size: 1024
+  critic_max_long_edge: 1568
+  gates:
+    contact_min_ratio: 0.05
+    penetration_max_ratio: 0.02
+    floater_span_ratio: 0.01
+    bbox_tolerance: 0.10
+    contact_dist_m: 0.001
+    inset_depth_tolerance: 0.2
+    contact_samples: 4000
