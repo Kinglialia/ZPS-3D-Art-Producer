@@ -28,7 +28,7 @@ Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `referenc
 2. Đếm thành phần trên concept. Ghi một dòng vào `F/blockout.md` (ví dụ "4 trụ, 1 cửa, 3 thùng").
 3. Đo trên concept riêng, không đo trên map tổng. Lấy cửa làm thước. Ghi bảng đo vào `blockout.md`: param, giá trị, nguồn, cách đo.
 4. Viết `part_graph.json` (+ `parts_lib.py` khi có `custom`). Chạy `check_schema.py`, `check_materials.py`.
-5. Khóa tỉ lệ chính trước: footprint, tường, mái, cửa, các tầng nền. Dựng với `--upto` tới part chính cuối cùng, chạy gate từng part và `check_layout.py`. Chỉ khi pass mới thêm part phụ.
+5. Khóa tỉ lệ chính trước: footprint, tường, mái, cửa, các tầng nền. Dựng với `--upto` tới part chính cuối cùng, chạy gate từng part và `check_layout.py`. Chỉ khi gate pass mới thêm part phụ. `size_m` tính cả viền, đai và chi tiết nhô, nên `check_layout` có thể fail ở bước này: ghi số lệch vào `work/notes.md`; `check_layout` phải pass ở lần tự kiểm cuối.
 6. Thêm part phụ, mỗi lần một part: `--upto <tên>`, rồi gate của part đó.
 7. Dựng đủ, chạy mọi `check_*` (trừ `check_fix`). Script fail thì tự sửa trước khi báo cáo. `not_checked` không phải lỗi.
 8. Render bộ review. Viết đủ `blockout.md` theo `references/part-graph.md` mục `blockout.md` (ba dòng tóm tắt trước, rồi mục 3–10). Ghi báo cáo theo brief, rồi dừng.

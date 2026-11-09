@@ -6,8 +6,8 @@ Reads <dir>/assembled.glb, part_graph.json, assembly.json, sources.json. Clay sh
                         no camera: not_checked
   lineup.png            front ortho, the building beside a figure (cylinder + sphere) character_h tall
   foot_front_left.png,  ortho close-ups of the base-ground-wall corner at the front, from the bbox of
-  foot_front_right.png  the tag: base parts; left = the object's own left (+X), as the kit's views.
-                        No base part: not_checked
+  foot_front_right.png  the tag: base parts, or else the parts resting on the ground (props have no
+                        base); left = the object's own left (+X), as the kit's views.
 Writes <outdir>/review.json (result JSON, artifacts = label -> path). Exit 0, 1 on error.
 """
 import math
@@ -96,6 +96,9 @@ def run(work, outdir, size):
         checks.append(common.check("render.game_cam", "not_checked", note="sources.json has no camera"))
 
     base = [r for r in rows if any(p["name"] == r["name"] and p.get("tag") == "base" for p in graph["parts"])]
+    if not base and rows:
+        floor = min(r["bbox_min"][2] for r in rows)
+        base = [r for r in rows if r["bbox_min"][2] <= floor + 0.01]
     if base:
         blo = np.min([r["bbox_min"] for r in base], axis=0)
         bhi = np.max([r["bbox_max"] for r in base], axis=0)
@@ -106,7 +109,7 @@ def run(work, outdir, size):
             files[label] = os.path.join(outdir, f"{label}.png")
             shoot(bpy, scene, files[label], size // 2, size // 2)
     else:
-        checks.append(common.check("render.foot", "not_checked", note="no part has tag: base"))
+        checks.append(common.check("render.foot", "not_checked", note="no part rests on the ground"))
     bpy.data.objects.remove(ground)
     checks.insert(0, common.check("render.files", "info", value=len(files)))
     return checks, files

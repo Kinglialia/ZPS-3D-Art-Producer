@@ -112,3 +112,17 @@ def test_review_renders_open_blender_once_each(built, tmp_path):
     rr = read(built / "review/review.json")
     assert sorted(rr["artifacts"]) == ["foot_front_left", "foot_front_right", "game_cam", "lineup"]
     assert all(os.path.getsize(p) > 1000 for p in rr["artifacts"].values())
+
+
+def test_a_prop_without_a_base_part_still_gets_foot_crops_from_the_parts_on_the_ground(tmp_path):
+    f = tmp_path / "final"
+    f.mkdir()
+    g = json.loads((AGENT.parents[3] / "tests/blockout/fixtures/hut/part_graph.json").read_text(encoding="utf-8"))
+    for p in g["parts"]:
+        p.pop("tag", None)
+    (f / "part_graph.json").write_text(json.dumps(g), encoding="utf-8")
+    (f / "sources.json").write_text(json.dumps(HUT_SOURCES), encoding="utf-8")
+    assert py(TOOLS / "self_build/assembly.py", "--work", f).returncode == 0
+    blender("--python", TOOLS / "render_review.py", "--", "--work", f, "--size", "256")
+    rr = read(f / "review/review.json")
+    assert {"foot_front_left", "foot_front_right"} <= set(rr["artifacts"])
