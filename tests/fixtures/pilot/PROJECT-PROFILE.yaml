@@ -1,0 +1,10 @@
+project: Pilot
+preset: topdown-mobile-lowpoly
+paths: {approved: concepts/_approved, production: production, deliver: deliver, env_file: .env}
+has_map: false
+pilot_asset: null
+scale_refs:
+  - {name: nhân vật, height_m: 1.6, _source: anh chốt 2026-11-09}
+hidden_side_rules: [tường trơn]
+style: {light_convention: unlit_flat, top_vs_side_L: 0, view_bg: null}
+texture_simple: {max_materials: 2, max_color_clusters: 6}

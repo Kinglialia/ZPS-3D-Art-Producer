@@ -1,0 +1,13 @@
+asset: pilot-house
+type: building
+tier: standard
+texture_res: null
+tris_max: null
+scale_overrides:
+  - {name: cửa, height_m: 1.8}
+symmetric: {left_right: true, front_back: false}
+size_m: {w: 4, d: 4, h: 3.7}
+hidden_sides:
+  - "mặt sau: tường trơn"
+real_texture_only_notes:
+  - "real: cửa nhô 5 cm"

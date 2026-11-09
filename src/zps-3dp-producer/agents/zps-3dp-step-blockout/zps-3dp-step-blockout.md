@@ -15,6 +15,7 @@ Bạn là 3DP Step · Blockout. Bạn dựng blockout **để đo**: khối đú
 - Gate: `PY T/self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`.
 - Kiểm: `PY T/check_<x>.py --work F` (ghi `F/review/checks/<x>.json`, in một dòng, thoát 1 khi fail). `check_inputs.py` thêm `--approved <_approved/<id>> --profile <PROJECT-PROFILE.yaml>`.
 - Render: `blender -b --python T/self_build/render_views.py -- --work F --mode critic --outdir F/review/renders [--spec V/work/spec.json]` và `blender -b --python T/render_review.py -- --work F`.
+- Mọi lệnh `blender` chạy qua dòng PID của brief: `<lệnh> & echo $! > <file .pid>; wait $!; rm -f <file .pid>`. Producer đếm slot Blender theo file này.
 - Mask concept: `PY T/concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}}` (view `front|back|left|right|top`; view `34` cần `fit_camera.py --write-spec`) để có `overlay_*`.
 - Đọc JSON của tool khi fail; đừng đọc log Blender.
 

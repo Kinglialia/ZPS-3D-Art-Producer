@@ -1,0 +1,29 @@
+{
+  "schema": "blockout-1",
+  "version": "v01",
+  "units": "m",
+  "up": "+Z",
+  "front": "-Y",
+  "params": {
+    "base_w": 4.0, "base_d": 4.0, "base_h": 0.3,
+    "wall_w": 3.0, "wall_d": 3.0, "wall_h": 2.4,
+    "roof_d": 1.5, "roof_h": 1.0,
+    "door_w": 0.9, "door_t": 0.05, "door_h": 1.8
+  },
+  "fixed_params": ["base_w", "base_d", "door_h"],
+  "_fixed_reason": "base_w, base_d from size_m; door_h from scale_overrides",
+  "parts": [
+    {"name": "base", "primitive": "box", "dims": ["base_w", "base_d", "base_h"], "attach": null,
+     "material": "STONE", "role": "mass", "tag": "base"},
+    {"name": "walls", "primitive": "box", "dims": ["wall_w", "wall_d", "wall_h"],
+     "attach": {"type": "on_top", "to": "base"}, "material": "TIMBER", "role": "mass"},
+    {"name": "roof_f", "primitive": "wedge", "dims": ["wall_w", "roof_d", "roof_h"],
+     "attach": {"type": "on_top", "to": "walls", "offset_uv": [0.0, -1.0]}, "material": "TEAL", "role": "mass",
+     "tag": "roof"},
+    {"name": "roof_b", "attach": {"type": "mirror_of", "of": "roof_f", "plane": "Y"}, "material": "TEAL",
+     "role": "mass", "tag": "roof"},
+    {"name": "door", "primitive": "box", "dims": ["door_w", "door_t", "door_h"],
+     "attach": {"type": "center_on_face", "to": "walls", "face": "-Y", "offset_uv": [0.0, -1.0]},
+     "material": "TIMBER", "role": "marker"}
+  ]
+}

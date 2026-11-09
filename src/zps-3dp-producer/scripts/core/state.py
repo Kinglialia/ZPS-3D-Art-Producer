@@ -26,6 +26,7 @@ GATES = {"review", "review_human", "checks_human"}
 
 STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", "evidence_running", "waiting_human",
           "blocked", "done", "done_enabled"}
+FINISHED = ("done", "done_enabled")
 
 
 class ProducerError(Exception):
@@ -63,6 +64,7 @@ def load_cfg() -> dict:
             die(f"step {s['id']}: gate phải là {' | '.join(sorted(GATES))}")
         if s["gate"] != "checks_human":
             s.get("agent") or die(f"step {s['id']}: thiếu agent")
+            s.get("reviewer") or die(f"step {s['id']}: thiếu reviewer")
     pa = cfg.setdefault("paths", {})
     pa["approved"] = Path(os.path.expanduser(pa.get("approved", ""))) if pa.get("approved") else None
     pa["art_direction"] = Path(os.path.expanduser(pa.get("art_direction", ""))) if pa.get("art_direction") else None
@@ -71,7 +73,6 @@ def load_cfg() -> dict:
     r = cfg.setdefault("review", {})
     r.setdefault("max_fix_rounds", 3)
     r.setdefault("resume_rounds", 2)
-    r.setdefault("reviewer_agent", "reviewer")
     r.setdefault("reviewer_model", "opus")
     return cfg
 
@@ -150,7 +151,7 @@ def ledger_tail(a):
 
 def cleanup(a):
     st = load_st(a.id)
-    if st["state"] != "done":
+    if st["state"] not in FINISHED:
         die(f"{a.id} chưa done (state={st['state']}): vòng sửa sau còn cần work/ của bản trước")
     targets = []
     for vd in sorted((ASSETS / a.id).glob("*/v*/work")):
@@ -174,7 +175,7 @@ def cleanup(a):
 def archive(a):
     from .board import build_outputs
     st = load_st(a.id)
-    if st["state"] != "done" and not a.force:
+    if st["state"] not in FINISHED and not a.force:
         die(f"{a.id} chưa done (state={st['state']}); dùng --force nếu người dùng muốn bỏ")
     ARCHIVE.mkdir(parents=True, exist_ok=True)
     shutil.move(str(ASSETS / a.id), str(ARCHIVE / a.id))
