@@ -414,3 +414,11 @@ def test_real_tools_write_gates_and_checks_under_final_review_where_the_fix_brie
 @needs_tools
 def test_a_failing_real_check_is_the_only_script_error_named_in_the_next_fix_brief(real_build):
     assert f"\n8. Đọc trước nguyên văn lỗi script của bản gốc: `{V}1/final/review/checks/layout.json`.\n" in real_build["fix"]
+
+
+def test_the_review_brief_names_the_profile_and_only_the_handoff_files_so_the_reviewer_needs_no_search(flow):
+    text = flow["v2 review brief"]["text"]
+    assert "- Profile dự án (`hidden_side_rules`, `scale_refs`): `production/PROJECT-PROFILE.yaml`." in text.splitlines()
+    line = [l for l in text.splitlines() if "Concept đã duyệt để đối chiếu" in l]
+    assert len(line) == 1 and line[0].endswith(": chỉ `concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`, "
+                                               "`pilot-house.material.md`.")

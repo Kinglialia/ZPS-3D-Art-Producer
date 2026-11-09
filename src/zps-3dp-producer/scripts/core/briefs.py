@@ -30,6 +30,12 @@ def failed_checks(vd) -> list[str]:
     return out
 
 
+def concept_files(st) -> list[str]:
+    from check_card import required_files
+    d = Path(st["concept_dir"])
+    return [x for x in required_files(st["id"], True) if not x.endswith(".layout.md") or (d / x).is_file()]
+
+
 def pid_line(st, step) -> list[str]:
     if "blender" not in step["uses"]:
         return []
@@ -57,8 +63,7 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, prese
     ]
     k = 5
     if st.get("concept_dir"):
-        from check_card import required_files
-        names = ", ".join(f"`{x}`" for x in required_files(aid, bool((pf or {}).get("has_map"))))
+        names = ", ".join(f"`{x}`" for x in concept_files(st))
         lines.append(f"{k}. Concept đã duyệt trong `{st['concept_dir']}`: chỉ đọc {names}. "
                      "Bỏ qua file và thư mục khác (bản nháp cũ).")
         k += 1
@@ -146,7 +151,9 @@ def review_brief(cfg, st, step, n) -> str:
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
         f"- Báo cáo tự check của worker: `{rel(d / 'report-worker.md')}` — tham khảo, không tin thay bằng chứng.",
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
-        *([f"- Concept đã duyệt để đối chiếu: `{st['concept_dir']}`."] if st.get("concept_dir") else []),
+        *([f"- Concept đã duyệt để đối chiếu, trong `{st['concept_dir']}`: chỉ "
+           + ", ".join(f"`{x}`" for x in concept_files(st)) + "."] if st.get("concept_dir") else []),
+        f"- Profile dự án (`hidden_side_rules`, `scale_refs`): `{rel(ROOT / 'PROJECT-PROFILE.yaml')}`.",
         f"- {ad_text(cfg, {sid, 'review'})}",
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "
            f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n else
