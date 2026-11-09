@@ -8,6 +8,7 @@ Shared rules for every ticket:
 - Keep `P` output short (one JSON line or a few lines). Token cost at run time matters.
 - No comments that narrate code. Comment only a non-obvious why.
 - Do not edit files outside **Writes**. Report anything else as a follow-up.
+- Report a **Spec notes** section: any spec step that is not needed, any output nobody reads, any output that does not fit the input the next step expects, any spec contradiction. Cite the spec file and section. Do not change the spec.
 
 ## Pinned module layout (T1 creates the files; later tickets fill them)
 
@@ -44,7 +45,7 @@ Shared rules for every ticket:
 
 - **Builds.** `P ingest` reads worker and reviewer reports per `docs/producer.md` §6.1–6.2 and keeps `<step>/vN/findings.json`.
 - **Blocked by.** T1.
-- **Writes.** `S/scripts/core/contract.py`, `S/scripts/core/findings.py`, `S/scripts/core/briefs.py`, `S/references/contracts.md`, `tests/test_contract.py`, `tests/test_findings.py`.
+- **Writes.** `S/scripts/core/contract.py`, `S/scripts/core/findings.py`, `S/scripts/core/briefs.py`, `S/scripts/core/loop.py` (wire findings into ingest only), `S/references/contracts.md`, `tests/test_contract.py`, `tests/test_findings.py`.
 - **Acceptance.** Checklist rows 25, 50, 67, 88, 89, 97, 99 (PICK parse only), 44 (PROFILE_HASH presence only; value check is T4).
   - Finding ids `F<n>` stay fixed across rounds; new findings get the next free id.
   - Finding fields per kit `issue-fields` (D25.A); missing field → ingest rejects with a short error.
@@ -60,6 +61,8 @@ Shared rules for every ticket:
 - **Blocked by.** T2.
 - **Writes.** `S/scripts/core/loop.py`, `S/scripts/core/policy.py`, `S/scripts/core/briefs.py`, `S/scripts/producer.py` (subcommands `approvals`, `delegate` only), `S/templates/policy.yaml`, `tests/test_loop.py`, `tests/test_policy.py`.
 - **Acceptance.** Checklist rows 20, 24, 26, 27, 38, 39, 40, 43, 54, 59, 65, 66, 70 (local part), 94 (label only), 99 (copy picked variant to `final/`), 101.
+  - Steps with `enabled = false` are never dispatched; approving the last enabled step leaves the asset at a clear `done_gd1` style state, not at a disabled step's `todo`.
+  - Remove `final_human_gate` default.
   - Max 3 rounds per feedback round; `redo` resets counters and copies open findings to the new round.
   - Progress: ≥1 old blocker/major resolved and regressed < resolved. From round 2, no progress → `waiting_human` with reason.
   - Best version: fewest open blocker+major, tie → older. Fix brief points to the best version and lists failed gate/check JSON files of it (D26.4).
@@ -87,7 +90,7 @@ Shared rules for every ticket:
 
 - **Builds.** `docs/producer.md` §9 and `docs/project-profile.md` §5.
 - **Blocked by.** T1.
-- **Writes.** `S/scripts/core/intake.py`, `S/scripts/check_card.py`, `S/scripts/check_profile.py`, `S/templates/asset-card.yaml`, `S/templates/PROJECT-PROFILE.yaml`, `S/templates/GUIDELINE.md`, `tests/test_intake.py`.
+- **Writes.** `S/SKILL.md`, `S/references/setup.md` (point `P` at the venv python, since YAML is now needed), `S/scripts/core/intake.py`, `S/scripts/check_card.py`, `S/scripts/check_profile.py`, `S/templates/asset-card.yaml`, `S/templates/PROJECT-PROFILE.yaml`, `S/templates/GUIDELINE.md`, `tests/test_intake.py`.
 - **Acceptance.** Checklist rows 21, 29, 35, 58 (intake part).
   - Required files in `_approved/<id>/`; `type` from the card; `character`, `creature` rejected as not supported in v1.
   - `has_map: true` needs `<id>.layout.md`; `has_map: false` needs `size_m: {w, d, h}` in metres.
