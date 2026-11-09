@@ -32,11 +32,14 @@
 - props: props đủ số và tách rời
 
 ## model
-- silhouette: nhận ra hình dạng ở thumb.png (256px) mà không cần màu
-- concept_match: đúng hình khối và đặc điểm chính so với concept đã duyệt
-- budget: không vượt poly budget của art direction cho loại asset này
-- scale: kích thước và trục đúng chuẩn của art direction
-- clean_mesh: preview không có lỗ thủng hoặc mặt ngược
+- mass: khối trên clay đúng concept; khối giống ổ bánh mì là fail
+- detail: chi tiết đổi silhouette ở camera game hoặc 3/4 là hình học; bảng detail pass khớp concept
+- shading: ảnh clay có ánh sáng không có vệt đen, bóng chéo, mặt nhấp nháy
+- planes: wireframe 3/4 không có cạnh thừa trên mặt phẳng
+- thumbnail: thumbnail kích thước thật còn đọc được khối chính
+- density: tris/m² không lệch quá 2 lần so với pilot; chưa có pilot thì pass, ghi not_checked
+- blockout_match: bbox và `fixed_params` giữ như blockout đã duyệt
+- shadow_read: clay_lit_concept đọc khối như concept có bóng (độ chìa, độ sâu hốc, bóng đổ chính)
 
 ## texture
 - clean_texture: preview không có texture kéo giãn nhìn thấy được

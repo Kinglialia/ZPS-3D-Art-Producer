@@ -8,12 +8,13 @@ from urllib.parse import quote, unquote, urlsplit
 from . import findings
 from .contract import FIELDS
 from .loop import next_action, shown
-from .state import FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, load_cfg, locked, now, sort_key, vdir, write_atomic
+from .state import (FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, load_cfg, locked, now, outputs_of, sort_key, step_of,
+                    vdir, write_atomic)
 
 BOARD_DIR = SKILL_DIR / "scripts" / "board"
 SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "views_rest": "report/VIEWS.md",
                 "model": "model.md", "texture": "texture/notes.md", "assemble": "README.md"}
-HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "VIEWS_sheet.png"}
+HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "VIEWS_sheet.png", "model": "model_sheet.png"}
 SUMMARY_LINES = 3
 CONCEPT_IMAGES = ("concept_albedo.png", "concept_shadow.png")
 LINE_FIELDS = ("region", "evidence", "repair")
@@ -66,6 +67,12 @@ def latest_evidence(v: Path) -> Path | None:
     return max(ks, key=lambda p: int(p.name.split("-")[-1]), default=None)
 
 
+def main_glb(final: Path, outputs: list[str]) -> Path | None:
+    """The GLB the step declares as output (model: the untextured mesh, not the blockout union beside it)."""
+    want = [final / o.removeprefix("final/") for o in outputs if o.endswith(".glb")]
+    return next((p for p in want if p.is_file()), None) or next(iter(sorted(final.glob("*.glb"))), None)
+
+
 def asset_view(cfg: dict, st: dict) -> dict:
     aid, step = st["id"], st["stage"]
     n, hero = shown(st, step), HERO.get(step)
@@ -86,7 +93,7 @@ def asset_view(cfg: dict, st: dict) -> dict:
                    for x in CONCEPT_IMAGES if (cd / x).is_file()]
         k = 1 if pics and pics[0].name == hero else 0
         images[k:k] = concept
-    glb = next(iter(sorted(final.glob("*.glb"))), None) if final and final.is_dir() else None
+    glb = main_glb(final, outputs_of(step_of(cfg, step)[1], aid)) if final and final.is_dir() else None
     lines = summary_lines(final / SUMMARY_FILE[step]) if final and step in SUMMARY_FILE else []
     op = findings.open_of(findings.load(aid, step, n))
     waiting = st["state"] == "waiting_human"

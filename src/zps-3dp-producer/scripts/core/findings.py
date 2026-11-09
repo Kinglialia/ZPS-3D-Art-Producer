@@ -12,7 +12,8 @@ SINGLE = {"structure", "regen_front"}
 NOTE = {"note", "note_exception", "note_texture"}
 TIE_FIRST = {"structure", "fix_uv_mesh", "regen_front"}
 BATCH_PRIO = ("blocker", "major", "minor")
-REOPEN = {"regen_front": "views_front"}
+REOPEN = {"regen_front": "views_front", "fix_uv_mesh": "model"}
+REOPENED_PART = {"regen_front": "front", "fix_uv_mesh": "mesh và UV"}
 
 
 def path(aid: str, step: str, n: int):
@@ -41,16 +42,19 @@ def add_human(aid: str, step: dict, n: int, text: str):
     save(aid, step["id"], doc)
 
 
-def carry(aid: str, f: dict, src: str, dst: dict, m: int) -> str:
-    """D22.4: a finding on an earlier step's output joins that step's approved version m as its TOP_FIX."""
+def carry(aid: str, found: dict, src: str, dst: dict, m: int) -> list[str]:
+    """D22.4, §6.1: findings on an earlier step's output join that step's approved version m, with new ids, as its TOP_FIX."""
     doc = load(aid, dst["id"], m) or {"version": m, "base": None, "top_fix": None, "pick": None, "next_id": 1,
                                       "findings": {}}
-    fid, kind = f"F{doc['next_id']}", next(t for t in dst["top_fix"] if t not in NOTE)
-    doc["findings"][fid] = f | {"kind": kind, "status": "open", "first_v": m, "last_v": m,
-                                "evidence": f"{src}: {f['evidence']}"}
-    doc |= {"next_id": doc["next_id"] + 1, "top_fix": {"kind": kind, "ids": [fid]}}
+    kind, new = next(t for t in dst["top_fix"] if t not in NOTE), []
+    for i, f in found.items():
+        new.append(fid := f"F{doc['next_id']}")
+        doc["findings"][fid] = f | {"kind": kind, "status": "open", "first_v": m, "last_v": m,
+                                    "evidence": f"{src} {i}: {f['evidence']}"}
+        doc["next_id"] += 1
+    doc["top_fix"] = {"kind": kind, "ids": new}
     save(aid, dst["id"], doc)
-    return fid
+    return new
 
 
 def region_ok(region: str, names: list[str]) -> bool:

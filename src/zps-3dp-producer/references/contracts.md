@@ -33,6 +33,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `concept_dir`: thư mục `_approved/<id>/`.
 - `inputs[<step>]["vN"]`: đầu vào khi sinh brief vN: `{<bước trước đã duyệt>: {"v", "hash"}, "concept", "card", "profile", "art_direction"}`. `profile` là `PROFILE_HASH` của brief; `ingest` so report với giá trị này.
 - `approved`, `approved_hash`, `rejected`: version đã duyệt, sha256 của `final/` lúc duyệt, các version khác của bước. `redo` xóa cả ba từ bước đó trở đi. `final/` đã duyệt bị sửa → `brief` và `ingest` bước sau báo lỗi.
+- `locked[<bước>]`: sha256 của file `lock` của bước (`model`: `final/<id>-untextured.glb`) lúc duyệt; khóa mesh (D20.7). Mở lại bước đó (`redo`, `fix_uv_mesh`) thì xóa cùng `approved`.
 - `stale["<step> vN"] = "<bước trước> vM"`: vN dựng từ bản vM không còn là bản duyệt (so theo hash). Script tính lại khi sinh brief, khi duyệt, khi `redo`; trang duyệt hiện "dựng từ … — cũ".
 - `sources`: hash concept (theo nội dung, trừ thẻ), thẻ, profile lúc giao việc đầu tiên. Khác hiện tại → cảnh báo "concept/thẻ/profile đổi sau khi bắt đầu".
 - `started`, `ad_ack`: so với ngày trong `## Thay đổi` của README art direction → cảnh báo "art direction đổi". `ack` đặt lại `sources` và `ad_ack`.
@@ -41,7 +42,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `offer`, `label`: version đưa người dùng duyệt và nhãn ("chưa đạt" khi chưa qua).
 - `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt. Script xóa khóa này mỗi lần đưa vN cho người dùng duyệt, nên một lần đưa nhận một quyết định.
 - `worker_agent_id`: subagent worker để resume vòng sửa. Mở lại một bước khác bước đang chạy thì xóa, vì worker cũ có context của bước khác.
-- `reopened`: số lần reviewer mở lại bước trước (`regen_front`) trong đợt feedback. Lần thứ hai → `waiting_human`. `redo` của người dùng đặt về 0.
+- `reopened[<loại>]`: số lần reviewer mở lại bước trước bằng loại `TOP_FIX` đó (`regen_front`, `fix_uv_mesh`) trong đợt feedback. Cùng loại lần thứ hai → `waiting_human`; loại khác không tính. `redo` của người dùng xóa hết.
 - `prior[<bước>]`: bản đã duyệt của bước sau khi một bước trước nó làm lại. Brief lần dựng đầu của bước đó trỏ tới bản này để giữ phần không đổi. Duyệt bước đó thì xóa.
 
 ## Art direction trong brief
@@ -56,7 +57,7 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | todo | bước chưa bắt đầu | `brief` → running (tạo vN mới) |
 | running | worker đang làm | `ingest` → review / waiting_human / blocked / bước sau |
 | review | worker xong, chờ giao reviewer | `brief` → reviewing |
-| reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · `regen_front` → fix của `views_front` · ESCALATE → waiting_human |
+| reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · `regen_front` → fix của `views_front` · `fix_uv_mesh` → fix của `model` · ESCALATE → waiting_human |
 | fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate) |
 | evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
@@ -120,6 +121,8 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
 Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
 
 `TOP_FIX: regen_front: F<n>` ở `views_rest` (D22.4): script chép F<n> sang `findings.json` của bản `views_front` đã duyệt với id mới của bản đó, loại `regen`, và đặt `top_fix` của bản đó là id mới. Rồi `views_front` vào vòng sửa từ bản đó, như `redo`. Front duyệt lại thì `views_rest` dựng lại từ đầu. Finding mới ở bước có `regions` (`pipeline.toml`) mở đầu `region` bằng một tên trong đó; loại `regen_front` thì không. Loại `note*` chỉ ở mức `minor`.
+
+`TOP_FIX: fix_uv_mesh: F<n>[, F<m>]` ở `texture` (§6.1): như `regen_front`, nhưng chép mọi id sang bản `model` đã duyệt, loại `structure`. Mở lại `model` xóa khóa mesh; duyệt lại thì khóa mesh mới.
 
 `redo` ghi lời người dùng thành finding `H<k>` (`major`, loại đầu tiên trong `top_fix` của bước) vào `findings.json` của version bị trả về, tạo file nếu chưa có. Reviewer vòng sau ghi `PRIOR` cho `H<k>` như mọi finding.
 

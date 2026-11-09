@@ -31,12 +31,14 @@
 - props: props đủ số và tách rời
 
 ## model
-- concept_match: đúng hình khối, mái, tỉ lệ các khối so với concept đã duyệt, đối chiếu từng view
-- silhouette: nhận ra building ở thumb.png (256px) và phân biệt được với building khác
-- scale: cửa, tường, chiều cao đúng chuẩn kích thước của art direction
-- budget: không vượt poly budget building của art direction
-- lowpoly_detail: mặt khuất đơn giản; chi tiết nhỏ nằm trong texture, không nằm trong mesh
-- clean_mesh: không lỗ thủng, mặt ngược
+- mass: khối trên clay đúng concept (mái, tường, nền nhiều tầng); khối giống ổ bánh mì là fail
+- detail: diềm, đầu dầm, bậc, khung cửa đổi silhouette ở camera game hoặc 3/4 là hình học; bảng detail pass khớp concept
+- shading: ảnh clay có ánh sáng không có vệt đen, bóng chéo, mặt nhấp nháy dưới mái và ở chân tường
+- planes: wireframe 3/4 không có cạnh thừa trên mảng tường và mái
+- thumbnail: thumbnail kích thước thật còn đọc được mái, cửa, khối chính
+- density: tris/m² không lệch quá 2 lần so với công trình pilot; chưa có pilot thì pass, ghi not_checked
+- blockout_match: bbox và `fixed_params` giữ như blockout đã duyệt
+- shadow_read: clay_lit_concept đọc khối như concept có bóng (độ chìa mái, độ sâu hốc cửa, bóng đổ chính)
 
 ## texture
 - edges_materials: cạnh mái và cạnh khối sắc; chất liệu phân biệt rõ trên preview

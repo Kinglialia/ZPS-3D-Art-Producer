@@ -21,6 +21,7 @@ TEMPLATES = SKILL_DIR / "templates"
 ROOT = Path(os.environ.get("PRODUCER_ROOT", "production"))
 ASSETS = ROOT / "assets"
 ARCHIVE = ROOT / "archive"
+DELIVER = ROOT.parent / "deliver"
 PORT = 8765
 FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
@@ -89,8 +90,13 @@ def load_cfg() -> dict:
         s.setdefault("inputs", ids[i - 1:i])
         s.setdefault("concept", None)
         s.setdefault("regions", [])
+        s.setdefault("issues", [])
+        s.setdefault("lock", None)
+        s.setdefault("pilot", False)
         if bad := [x for x in s["inputs"] if x not in ids[:i]]:
             die(f"step {s['id']}: inputs {', '.join(bad)} không phải bước trước nó")
+        if bad := [x for x in s["issues"] if x not in s["inputs"]]:
+            die(f"step {s['id']}: issues {', '.join(bad)} không nằm trong inputs của bước")
         if s["gate"] not in GATES:
             die(f"step {s['id']}: gate phải là {' | '.join(sorted(GATES))}")
         if s["gate"] != "checks_human":
@@ -106,6 +112,10 @@ def load_cfg() -> dict:
     r.setdefault("resume_rounds", 2)
     r.setdefault("reviewer_model", "opus")
     return cfg
+
+
+def outputs_of(step: dict, aid: str) -> list[str]:
+    return [o.format(id=aid) for o in step["outputs"]]
 
 
 def step_of(cfg: dict, sid: str) -> tuple[int, dict]:

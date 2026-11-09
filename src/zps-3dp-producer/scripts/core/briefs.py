@@ -5,9 +5,11 @@ import json
 from pathlib import Path
 
 from . import findings, hashes, preflight
+from .contract import NONE, parse_worker
 from .hashes import ad_text
 from .loop import move, next_action, review_base, set_aside
-from .state import ASSETS, ROOT, SKILL_DIR, die, ledger, load_cfg, load_st, rel, save_st, step_of, vdir
+from .state import (ASSETS, DELIVER, ROOT, SKILL_DIR, die, ledger, load_cfg, load_st, outputs_of, rel, save_st, step_of,
+                    vdir)
 
 
 def image_gen(preset: Path) -> dict:
@@ -18,10 +20,17 @@ def image_gen(preset: Path) -> dict:
     return ig
 
 
-def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True) -> list[str]:
+def pilot_line(prof: dict) -> str:
+    """D21.7, D22.10: the pilot package in this runtime's own deliver/, or not_checked while there is no pilot."""
+    p = prof.get("pilot_asset")
+    return f"PILOT: {rel(DELIVER / p)}/" if p else "PILOT: none (pilot_asset: null): so với pilot ghi not_checked"
+
+
+def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = ()) -> list[str]:
     t = SKILL_DIR / "agents" / f"zps-3dp-{step.get('agent')}" / "tools"
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
-        [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else [])
+        [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else []
+    ) + list(extra)
     if gen and "codex_image" in step["uses"]:
         ig = image_gen(preset)
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
@@ -54,6 +63,13 @@ def input_finals(st, step) -> list[tuple[str, Path]]:
     return [(p, vdir(st["id"], p, v) / "final") for p in step["inputs"] if (v := st["approved"].get(p))]
 
 
+def handoff_issues(st, prev: str, v: int) -> str | None:
+    """D20.3: the ISSUES line of the approved worker report of an input step; None when it hands over nothing."""
+    c, _ = parse_worker((vdir(st["id"], prev, v) / "report-worker.md").read_text(encoding="utf-8"))
+    issues = c.get("ISSUES", "")
+    return None if issues.lower() in NONE else issues
+
+
 def pid_line(st, step) -> list[str]:
     if "blender" not in step["uses"]:
         return []
@@ -61,7 +77,7 @@ def pid_line(st, step) -> list[str]:
     return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}`."]
 
 
-def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path) -> str:
+def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path, prof: dict) -> str:
     aid = st["id"]
     d = vdir(aid, step["id"], n)
     a = ASSETS / aid
@@ -72,7 +88,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
-        *tools_line(st, step, pf, preset),
+        *tools_line(st, step, pf, preset, extra=[pilot_line(prof)] if step["pilot"] else []),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
@@ -90,6 +106,10 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     for prev, fd in input_finals(st, step):
         lines.append(f"{k}. Đầu ra đã duyệt của bước `{prev}`: `{rel(fd)}/`.")
         k += 1
+    for prev in step["issues"]:
+        if (v := st["approved"].get(prev)) and (issues := handoff_issues(st, prev, v)):
+            lines.append(f"{k}. ISSUES của report worker `{prev}` v{v}: {issues}")
+            k += 1
     if not fix and (pv := (st.get("prior") or {}).get(step["id"])):
         lines.append(f"{k}. Bản đã duyệt trước của bước này (dựng từ đầu vào cũ): `{rel(vdir(aid, step['id'], pv) / 'final')}/`. "
                      "Giữ phần có đầu vào không đổi, theo file agent.")
@@ -100,8 +120,9 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         bad = failed_checks(pd)
         doc = findings.load(aid, step["id"], m) or {}
         tf = doc.get("top_fix")
-        outside = (f"Front đã duyệt ở `{findings.REOPEN[tf['kind']]}`, sửa ngoài bước này: không sửa front ở đây."
-                   if tf and tf["kind"] in findings.REOPEN else "")
+        part = findings.REOPENED_PART.get(tf["kind"]) if tf else None
+        outside = (f"{part[0].upper() + part[1:]} đã duyệt ở `{findings.REOPEN[tf['kind']]}`, sửa ngoài bước này: "
+                   f"không sửa {part} ở đây." if part else "")
         tf = None if outside else tf
         fp = f"`{rel(findings.path(aid, step['id'], m))}`"
         human = [i for i, f in findings.open_of(doc).items() if i.startswith("H")]
@@ -129,7 +150,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     if cfg["preview"]["spec"]:
         lines.append(f"- Preview: {cfg['preview']['spec']}")
     if step["outputs"]:
-        req = ", ".join(f"`{o}`" for o in step["outputs"])
+        req = ", ".join(f"`{o}`" for o in outputs_of(step, aid))
         lines.append(f"- Bắt buộc có (tính từ `{rel(d)}/`): {req}.")
     if step.get("external_command"):
         cmd = step["external_command"].format(
@@ -287,7 +308,7 @@ def run(a):
         fix = s == "fix" or (s == "running" and st.get("fix_round", 0) > 0)
         hashes.record_inputs(cfg, st, i, n, ph)
         bp = d / "brief-worker.md"
-        bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset), encoding="utf-8")
+        bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset, prof), encoding="utf-8")
         model = step.get("model")
         resume = None
         if fix and st.get("fix_round", 0) <= r["resume_rounds"]:

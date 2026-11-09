@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import P, finding, pilot_project, report, run
+from shared import P, finding, pilot_project, report, run, views_only
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -78,6 +78,7 @@ def flow(tmp_path_factory):
     root = tmp_path_factory.mktemp("views")
     f = Flow(root)
     pilot_project(root)
+    views_only(root)
     f.p("intake", AID)
     f.p("ready", AID)
     f.work("b1")
@@ -183,7 +184,7 @@ def test_regen_front_reopens_the_approved_front_with_a_fresh_worker_and_carries_
     assert pick(flow["vr1 review"]["st"]) == {
         "stage": "views_front", "state": "fix", "fix_round": 1, "fix_base": 2, "round_versions": [2], "offer": None,
         "label": "", "note": "regen_front: sửa views_front v2 theo F2 (views_rest v1 F1)", "worker_agent_id": None,
-        "approved": {"blockout": 1}, "rejected": {"blockout": []}, "reopened": 1, "prior": {},
+        "approved": {"blockout": 1}, "rejected": {"blockout": []}, "reopened": {"regen_front": 1}, "prior": {},
         "stale": {"views_rest v1": "views_front v2"}}
     doc = flow["front v2 doc"]
     assert {k: doc[k] for k in ("version", "top_fix", "next_id")} == {
@@ -220,14 +221,14 @@ def test_approving_the_set_parks_at_done_enabled_before_the_disabled_model_step(
     assert {k: st[k] for k in ("approved", "rejected", "note", "reopened")} == {
         "approved": {"blockout": 1, "views_front": 3, "views_rest": 2},
         "rejected": {"blockout": [], "views_front": [1, 2], "views_rest": [1]}, "note": "bước model chưa bật",
-        "reopened": 1}
+        "reopened": {"regen_front": 1}}
 
 
 def test_a_blockout_redo_after_the_set_keeps_the_old_views_as_prior_so_the_next_build_reuses_unchanged_ones(flow):
     st = flow["redo blockout"]["st"]
     assert {k: st[k] for k in ("stage", "state", "approved", "prior", "reopened", "worker_agent_id")} == {
         "stage": "blockout", "state": "fix", "approved": {}, "prior": {"views_front": 3, "views_rest": 2},
-        "reopened": 0, "worker_agent_id": None}
+        "reopened": {}, "worker_agent_id": None}
     assert flow["b2 brief"]["out"]["resume"] is None
     b = flow["vf4 brief"]
     assert b["out"]["brief"] == f"{A}/views_front/v4/brief-worker.md"

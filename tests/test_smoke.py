@@ -26,7 +26,7 @@ def test_init_then_new_creates_files_and_starts_at_blockout(tmp_path):
     assert cfg["paths"]["approved"] == f"{(tmp_path / 'concepts').resolve()}/_approved"
     steps = cfg["steps"]
     assert [s["id"] for s in steps] == ["blockout", "views_front", "views_rest", "model", "texture", "assemble"]
-    assert [s.get("enabled", True) for s in steps] == [True, True, True, False, False, False]
+    assert [s.get("enabled", True) for s in steps] == [True, True, True, True, False, False]
     assert [s["gate"] for s in steps] == ["review_human", "review", "review_human", "review_human", "review",
                                           "checks_human"]
     assert (steps[0]["agent"], steps[0]["reviewer"], steps[0]["uses"]) == ("step-blockout", "check-blockout", ["blender"])

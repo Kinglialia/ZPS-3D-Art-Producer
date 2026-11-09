@@ -1,11 +1,12 @@
 """Ingest state machine (docs/producer.md §3, §4, §7, §8): rounds, early stop, need_evidence, redo, gates, approve."""
 from __future__ import annotations
 
+import hashlib
 import shutil
 
 from . import findings, hashes, policy
 from .contract import parse_review, parse_worker
-from .state import ASSETS, ROOT, die, ledger, load_cfg, load_st, now, rel, save_st, step_of, vdir
+from .state import ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, step_of, vdir
 
 NOT_PASSED = "chưa đạt"
 REDOING = "**đang làm lại**\n\n"
@@ -49,7 +50,8 @@ def move(st: dict, event: str, cfg: dict | None = None):
 def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int, max_rounds: int, progressed: bool,
                  evidence_used: int, reopened: int = 0) -> tuple[str, str | None]:
     """§7: what a valid review leads to. fix_round is the fix round that built the reviewed version (0 = first build).
-    reopened: earlier steps a reviewer reopened in this feedback round (regen_front costs a new front and a new set)."""
+    reopened: times this TOP_FIX kind reopened an earlier step in this feedback round (regen_front costs a new front and
+    a new set; fix_uv_mesh a new DUYỆT 1)."""
     if verdict == "ESCALATE":
         return "ask_human", "reviewer ESCALATE"
     if verdict == "PASS":
@@ -63,6 +65,12 @@ def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int,
     if fix_round >= 2 and not progressed:
         return "ask_human", f"không tiến bộ ở vòng {fix_round}"
     return "fix", None
+
+
+def reopened_of(st: dict) -> dict:
+    """Reopens per TOP_FIX kind in this feedback round. GĐ 2 kept one int, which only regen_front raised."""
+    r = st.get("reopened") or {}
+    return r if isinstance(r, dict) else {"regen_front": r}
 
 
 def review_base(st: dict, n: int) -> int | None:
@@ -140,7 +148,7 @@ def stuck(c: dict) -> str | None:
 def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
     c = worker_report(st, d / "report-worker.md", a.agent_id, step["id"], n)
     st["last_rubric"] = c.get("RUBRIC", "")
-    missing = [o for o in step["outputs"] if not (d / o).exists()]
+    missing = [o for o in outputs_of(step, st["id"]) if not (d / o).exists()]
     if why := stuck(c) or (missing and "thiếu output bắt buộc: " + ", ".join(missing)):
         move(st, "stuck")
         st["note"] = why
@@ -200,18 +208,19 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     kind = (rv["top_fix"] or {}).get("kind")
     event, reason = review_event(rv["verdict"], kind, who != "human", st.get("fix_round", 0), r["max_fix_rounds"],
                                  bool(base) and findings.progress(base, doc), st.get("evidence_used", 0),
-                                 st.get("reopened", 0))
+                                 reopened_of(st).get(kind, 0))
     st["evidence"] = None
     st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
     best = findings.best_version([findings.load(aid, sid, v) for v in rvs])
     if event == "reopen":
         move(st, event)
-        tid, fid = findings.REOPEN[kind], rv["top_fix"]["ids"][0]
+        tid, ids = findings.REOPEN[kind], rv["top_fix"]["ids"]
         ti, target = step_of(cfg, tid)
         m = st["approved"].get(tid) or die(f"{aid}: {kind} cần bản {tid} đã duyệt")
-        new = findings.carry(aid, doc["findings"][fid], f"{sid} v{n} {fid}", target, m)
-        reopen(cfg, st, ti, target, m, f"{kind}: sửa {tid} v{m} theo {new} ({sid} v{n} {fid})")
-        st["reopened"] = st.get("reopened", 0) + 1
+        new = ", ".join(findings.carry(aid, {i: doc["findings"][i] for i in ids}, f"{sid} v{n}", target, m))
+        reopen(cfg, st, ti, target, m, f"{kind}: sửa {tid} v{m} theo {new} ({sid} v{n} {', '.join(ids)})")
+        r = reopened_of(st)
+        st["reopened"] = r | {kind: r.get(kind, 0) + 1}
         reason = f"{kind} → {tid} v{m} {new}"
     elif event == "approve":
         approve(cfg, st, step, n, "reviewer" if who == "reviewer" else policy.BY[who])
@@ -256,10 +265,14 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     sid = step["id"]
     st["approved"][sid] = n
     st.setdefault("approved_hash", {})[sid] = hashes.tree_hash(vdir(st["id"], sid, n) / "final")
+    if step["lock"]:
+        p = vdir(st["id"], sid, n) / step["lock"].format(id=st["id"])
+        p.is_file() or die(f"{rel(p)}: không có file để khóa khi duyệt")
+        st.setdefault("locked", {})[sid] = hashlib.sha256(p.read_bytes()).hexdigest()
     st.setdefault("rejected", {})[sid] = [v for v in range(1, st["versions"][sid] + 1) if v != n]
     st.setdefault("prior", {}).pop(sid, None)
     if sid == "assemble":
-        out = ROOT.parent / "deliver" / st["id"]
+        out = DELIVER / st["id"]
         if out.exists():
             shutil.rmtree(out)
         shutil.copytree(vdir(st["id"], sid, n) / "final", out)
@@ -278,7 +291,7 @@ def reopen(cfg: dict, st: dict, i: int, step: dict, n: int | None, note: str):
     st |= fresh() | {"stage": step["id"], "fix_round": 1, "fix_base": n, "round_versions": [n] if n else [],
                      "note": note}
     for s in cfg["steps"][i:]:
-        for k in ("approved", "approved_hash", "rejected"):
+        for k in ("approved", "approved_hash", "rejected", "locked"):
             st.setdefault(k, {}).pop(s["id"], None)
     hashes.refresh_stale(cfg, st)
 
@@ -288,8 +301,8 @@ def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str):
     if n:
         findings.add_human(st["id"], step, n, text)
     reopen(cfg, st, i, step, n, "làm lại theo feedback người dùng")
-    st["reopened"] = 0
-    readme = ROOT.parent / "deliver" / st["id"] / "README.md"
+    st["reopened"] = {}
+    readme = DELIVER / st["id"] / "README.md"
     if readme.exists() and not (t := readme.read_text(encoding="utf-8")).startswith(REDOING):
         readme.write_text(REDOING + t, encoding="utf-8")
 

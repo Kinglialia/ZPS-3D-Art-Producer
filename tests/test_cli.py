@@ -76,6 +76,20 @@ def test_new_after_a_crash_that_left_a_folder_without_status_creates_the_asset(p
     assert (ROOT / "assets/b-barn/brief.md").read_text(encoding="utf-8").startswith("# Brief — B Barn")
 
 
+def test_an_issues_handoff_from_a_step_outside_inputs_is_one_error_line_so_no_brief_quotes_an_unapproved_report(proj):
+    p = ROOT / "pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('issues = ["model"]', 'issues = ["views_front", "assemble"]'),
+                 encoding="utf-8")
+    assert error_of("next") == "LỖI: step texture: issues assemble không nằm trong inputs của bước"
+
+
+@pytest.mark.parametrize("pilot, line", [(None, "PILOT: none (pilot_asset: null): so với pilot ghi not_checked"),
+                                         ("wooden-chest", "PILOT: deliver/wooden-chest/")])
+def test_the_pilot_line_points_at_the_pilot_package_in_this_runtime_deliver_d22_10(proj, pilot, line):
+    from core import briefs
+    assert briefs.pilot_line({"pilot_asset": pilot}) == line
+
+
 def test_a_mutating_command_waits_for_the_lock_so_two_writers_never_interleave(proj):
     t = threading.Thread(target=producer.main, args=(["feedback", AID, "ghi chú"],))
     with locked():

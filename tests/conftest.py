@@ -43,6 +43,13 @@ def blockout_only(root):
                  encoding="utf-8")
 
 
+def views_only(root):
+    """GĐ 2 tests end at the view set; turning model off keeps `done_enabled` right after views_rest."""
+    p = Path(root) / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "model"\n', 'id = "model"\nenabled = false\n', 1),
+                 encoding="utf-8")
+
+
 def brief_hash(text: str) -> str:
     return re.search(r"^PROFILE_HASH: ([0-9a-f]{12})$", text, re.M).group(1)
 

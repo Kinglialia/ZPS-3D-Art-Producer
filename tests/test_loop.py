@@ -97,6 +97,8 @@ def pick(st):
     (("FIX", "regen_front", False, 1, 3, False, 0, 0), ("reopen", None)),
     (("FIX", "regen_front", False, 3, 3, False, 0, 0), ("reopen", None)),
     (("FIX", "regen_front", False, 0, 3, False, 0, 1), ("ask_human", "regen_front lần 2")),
+    (("FIX", "fix_uv_mesh", False, 2, 3, False, 0, 0), ("reopen", None)),
+    (("FIX", "fix_uv_mesh", False, 0, 3, False, 0, 1), ("ask_human", "fix_uv_mesh lần 2")),
 ])
 def test_review_outcome_table_encodes_round_cap_early_stop_escalate_one_evidence_round_and_one_reopen(args, expected):
     assert loop.review_event(*args) == expected

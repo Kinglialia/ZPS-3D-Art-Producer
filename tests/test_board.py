@@ -147,6 +147,24 @@ def test_views_rest_puts_the_five_view_sheet_first_because_the_user_approves_the
                                                  "report/VIEWS_sheet.png")
 
 
+def test_duyet_1_shows_the_model_sheet_first_and_the_untextured_glb_not_the_blockout_union(project):
+    final = vdir(AID, "model", 1) / "final"
+    for name in ("assembled.glb", "house-a-untextured.glb", "review/renders/clay_front.png", "review/model_sheet.png"):
+        (final / name).parent.mkdir(parents=True, exist_ok=True)
+        (final / name).write_bytes(PNG)
+    (final / "model.md").write_text("# Model house-a v1\nThêm diềm mái: 6 px ở game cam\n1200 → 2400 tris / trần 3000\n\n"
+                                    "## Detail pass\n", encoding="utf-8")
+    st = load_st(AID)
+    st |= {"stage": "model", "versions": {"blockout": 2, "model": 1}, "offer": 1, "label": "", "note": "duyệt model v1"}
+    save_st(st)
+    v = view()
+    assert (v["sheet"], [i["n"] for i in v["images"]], v["glb"], v["summary"]) == (
+        "/p/assets/house-a/model/v1/final/review/model_sheet.png",
+        ["review/model_sheet.png", "concept/concept_albedo.png", "review/renders/clay_front.png"],
+        "/p/assets/house-a/model/v1/final/house-a-untextured.glb",
+        ["Model house-a v1", "Thêm diềm mái: 6 px ở game cam", "1200 → 2400 tris / trần 3000"])
+
+
 def test_asset_without_a_version_still_has_a_header(project):
     st = load_st(AID)
     st |= {"state": "todo", "versions": {}, "offer": None, "label": ""}

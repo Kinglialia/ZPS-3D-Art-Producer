@@ -43,7 +43,7 @@ def test_a_human_redo_on_a_set_whose_top_fix_is_regen_front_gets_no_instruction_
         "region": "front: gỗ đỏ", "acceptance": "front.png: gỗ cùng tông concept"})
     findings.add_human(AID, step, 1, "mái cao hơn")
     st |= {"fix_base": 1, "fix_round": 1}
-    text = briefs.worker_brief(cfg, st, step, 2, True, ph, None, preset)
+    text = briefs.worker_brief(cfg, st, step, 2, True, ph, None, preset, {})
     assert "TOP_FIX" not in text and "regen_front" not in text
     assert ("Ưu tiên 1, feedback của người dùng: sửa `H1` (nguyên văn trong `acceptance` của "
             f"`production/assets/{AID}/views_rest/v1/findings.json` và feedback.md). Đối chiếu từng ý với concept; "
