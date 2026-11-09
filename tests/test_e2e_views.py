@@ -178,6 +178,14 @@ def test_the_set_reviewer_gets_the_view_region_rule_and_both_inputs(flow):
                  "- F1 [blocker|major|minor|preference|unclear] <regen|regen_front|note_exception|note_texture>") == []
 
 
+def test_the_set_reviewer_is_told_a_wrong_part_count_is_a_regen_and_preserve_names_the_neighbours_d27_11(flow):
+    """Run 4: `back.png` had 2 board rows for 3 and passed as a `note_texture`."""
+    assert lines(flow["vr1 review brief"]["text"],
+                 "- Sai số thành phần (hàng ván, cửa, trụ) so với concept hoặc `blockout.md`: luôn `regen`, không phải "
+                 "`note_exception`, `note_texture`.",
+                 "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực khe nắp\"), không ghi \"giữ phần còn lại\".") == []
+
+
 def test_regen_front_reopens_the_approved_front_with_a_fresh_worker_and_carries_the_finding_as_its_top_fix(flow):
     assert flow["vr1 review"]["out"] == ("pilot-house: review FIX (major=1 minor=1) → views_front/fix. "
                                          "Tiếp: giao worker → `brief pilot-house`\n")

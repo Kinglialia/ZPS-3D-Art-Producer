@@ -250,6 +250,10 @@ def review_brief(cfg, st, step, n) -> str:
         "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
         "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
         *([f"- Loại {', '.join(f'`{k}`' for k in notes)}: mức `minor`."] if notes else []),
+        "- Sai số thành phần (hàng ván, cửa, trụ) so với concept hoặc `blockout.md`: luôn "
+        f"`{next(k for k in step['top_fix'] if k not in findings.NOTE)}`"
+        + (f", không phải {', '.join(f'`{k}`' for k in notes)}." if notes else "."),
+        "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực khe nắp\"), không ghi \"giữ phần còn lại\".",
         *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`; "
            + "; ".join(f"`{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
                        if k in findings.REOPEN) + "."] if step["regions"] else []),
