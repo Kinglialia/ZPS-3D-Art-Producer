@@ -37,6 +37,8 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (SendMessage tới agent id), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent`, truyền `model` tường minh, prompt đúng như sau:
    > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
+4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash, chờ xong, rồi `P ingest <id>`.
+5. `P brief` in một dòng thay cho JSON khi bước `texture` dừng trước khi giao (thiếu key Meshy, câu hỏi Meshy): làm theo phần "Tiếp" của dòng đó.
 
 **Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format; không tự sửa report.
 
@@ -45,6 +47,14 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 **Bước view gọi Codex** (`views_front`, `views_rest`): mỗi ảnh tốn lượt Codex của người dùng. Ghi chú blocked có lỗi `gen_image_codex` (3 lần lỗi kỹ thuật) thì hỏi người dùng cách xử lý; không tự đổi sang tool ảnh khác (D15.2). Ghi lựa chọn bằng `P rule`, rồi `P retry <id>`.
 
 **Bước model** (DUYỆT 1): duyệt `model` thì script khóa sha256 của `<id>-untextured.glb` (`locked` trong status.json). Từ đó không ai sửa mesh hay UV. Người dùng muốn sửa: `P feedback <id> "<nguyên văn>" --action redo --step model`. Reviewer texture trả `fix_uv_mesh` thì script tự mở lại `model`; lần thứ hai trong một đợt feedback thì hỏi người dùng.
+
+**Bước texture** (Meshy tốn credit của người dùng): script kiểm key Meshy và mở budget theo hash mesh trước khi giao; worker chỉ gọi Meshy qua `meshy_call.py`. Không đọc, in hay chép `.env`. Ba trường hợp `waiting_human` cần người dùng trả lời, không tự quyết:
+- `meshy_regen` (reviewer) hoặc `UNFIXABLE` (worker): lớp Meshy không sửa được. Người dùng cho gọi thêm một lần → `P feedback <id> "<nguyên văn>" --action approve`; chọn VẼ MỚI → `P meshy <id> paint --by "<nguyên văn>"`.
+- Mesh đổi (sau `fix_uv_mesh` hoặc làm lại `model`): "Gọi lại Meshy hay VẼ MỚI?". Trả lời như trên.
+- `blocked` vì thiếu key: người dùng thêm key vào file `env_file` của profile, rồi `P retry <id>`.
+Người dùng hỏi về ngưỡng chọn chế độ texture: `P texture-stats` (một dòng).
+
+**Bước assemble** (DUYỆT 2): script kiểm hash mesh, xuất GLB unlit, chạy QA và `finalize.py` của kit, so pixel GLB với render bước texture. Fail → `blocked`: báo người dùng điểm fail trong ghi chú; sửa môi trường xong thì `P retry <id>` (chạy lại thành version mới). Pass → `waiting_human`. Cần sửa ở `assemble` phải chọn bước: `P feedback <id> "<nguyên văn>" --action redo --step texture` (vẽ lại) hoặc `--step model` (mesh, UV). Duyệt thì script chép gói sang `deliver/<id>/`.
 
 **Báo cáo sai hash:** `ingest` báo `PROFILE_HASH ... khác brief` thì yêu cầu worker chép đúng dòng `PROFILE_HASH` ở đầu brief. `ingest` hoặc `brief` báo "final/ đã duyệt bị sửa" thì hỏi người dùng làm lại bước đó hay không.
 
@@ -60,6 +70,7 @@ Mỗi thư mục cần đủ `concept_albedo.png`, `concept_shadow.png`, `asset-
 
 - "Còn gì chưa làm?" → `P intake` (chỉ liệt kê). Báo lại theo nhóm: asset đủ file, thiếu file, thẻ sai, loại chưa hỗ trợ, tên sai quy ước, file rời. Các nhóm lỗi là việc người dùng hoặc Concept Artist cần sửa.
 - "Làm hết" → `P intake --all`. Asset lỗi bị bỏ qua và được liệt kê.
+- `P intake` in một dòng ước lượng thời gian và credit Meshy của lô. Báo người dùng tổng credit một lần; người dùng đồng ý thì ghi `P rule "<lô>: duyệt <N> credit Meshy — <nguyên văn>"`.
 - "Làm trước X, Y" → `P intake x y --priority 1`. Có asset lỗi thì không đăng ký asset nào.
 - Profile có `pilot_asset: null`: `--all` và nhiều id bị từ chối. Chỉ đăng ký từng asset, và chỉ khi không còn asset nào đang chạy. Báo người dùng lý do, không tự lách.
 

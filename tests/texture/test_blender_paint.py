@@ -53,7 +53,7 @@ def test_projecting_unchanged_guides_gives_the_base_fill_back_and_respects_occlu
     assert rc == 0, out
     r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python-exit-code", "1", "--python",
                         str(TOOLS / "render_paint_views.py"), "--", "--glb", str(m / "pair-untextured.glb"), "--albedo",
-                        str(paint / "base_fill.png"), "--outdir", str(paint), "--size", "256"], capture_output=True,
+                        str(paint / "base_fill.png"), "--outdir", str(paint), "--width", "384", "--height", "256"], capture_output=True,
                        text=True)
     assert r.returncode == 0, r.stdout + r.stderr
     cams = json.loads((paint / "cameras.json").read_text())["views"]

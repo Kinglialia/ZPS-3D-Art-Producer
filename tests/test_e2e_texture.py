@@ -56,6 +56,7 @@ def flow(tmp_path_factory):
     f.review("t3", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",
              prior=["- H1: resolved | evidence: lit_34_front.png"])
     f.assemble("a2")
+    cp["deliver before"] = (root / "deliver").exists()
     f.human("approve a2", "đạt", "--action", "approve")
     cp["deliver"] = sorted(p.relative_to(root / "deliver" / AID).as_posix()
                            for p in (root / "deliver" / AID).rglob("*") if p.is_file())
@@ -197,6 +198,7 @@ def test_with_the_budget_spent_the_fix_brief_says_no_meshy_call_is_left(flow):
 def test_duyet_2_copies_the_package_to_deliver_and_logs_the_estimate_record(flow):
     assert flow["approve a2"]["out"] == "pilot-house: đã duyệt assemble v3 → assemble/done. Tiếp: xong\n"
     assert pick(flow["approve a2"]["st"], "approved", "rejected")["rejected"]["assemble"] == [1, 2]
+    assert flow["deliver before"] is False
     assert flow["deliver"] == ["README.md", "model/pilot-house.blend", "model/pilot-house.glb", "review/compare.json",
                                "texture/albedo_2048.png", "texture/notes.md"]
     rec = flow["estimates"]
@@ -238,6 +240,7 @@ def test_choosing_paint_starts_a_texture_build_that_must_not_call_meshy(flow):
 
 
 def test_texture_stats_compare_the_proposal_with_the_mode_used_and_sum_the_meshy_spend(flow):
+    assert list(Path(flow["root"]).rglob("texture-log.jsonl")) == []
     assert flow["stats"]["out"] == ("texture-stats: 1 asset có texture_spec.json; đề xuất khớp chế độ dùng 0/1 "
                                     "(lệch: pilot-house (meshy→paint)); Meshy 2 lần, 20 credit; "
                                     "người dùng duyệt gọi thêm 1 lần\n")

@@ -4,8 +4,10 @@ Usage:
   python3 T/crop_edit.py cut --albedo A --box x0,y0,x1,y1 [--margin 32] --out V/work/crops/<k>
   python3 T/crop_edit.py paste --albedo A --crop V/work/crops/<k> --edited <png> --out A2 [--feather 8]
 cut: the crop is the box plus the margin, clamped to the atlas; its long side must be <= 1024 px (else split the
-region). Writes <out>/crop.png and <out>/crop.json {box, crop}.
-paste: the edited image must have the crop's size. Only pixels inside the box change, blended with a weight that
+region). Writes <out>/crop.png, <out>/send.png (the crop scaled so its long side is SEND_LONG px, because
+gen_image_codex.py needs a long side over 1040 px) and <out>/crop.json {box, crop, send}. Codex gets send.png.
+paste: the edited image must have send.png's size; it is scaled back to the crop. Only pixels inside the box change,
+blended with a weight that
 rises from 0 at the box edge to 1 at --feather px inside; then every pixel outside the box is compared with A and must
 be equal, else nothing is written. Writes <out>.json next to A2. Prints one line. Exit 0, 1 refused, 2 error.
 """
@@ -18,6 +20,7 @@ import numpy as np
 from PIL import Image
 
 MAX_SIDE = 1024
+SEND_LONG = 1536
 
 
 def cut(a):
@@ -27,10 +30,14 @@ def cut(a):
     if max(c[2] - c[0], c[3] - c[1]) > MAX_SIDE:
         return 1, f"vùng {c[2] - c[0]}x{c[3] - c[1]} px > {MAX_SIDE}: chia nhỏ vùng"
     os.makedirs(a.out, exist_ok=True)
-    im.crop(c).save(os.path.join(a.out, "crop.png"))
-    json.dump({"albedo": os.path.abspath(a.albedo), "box": [x0, y0, x1, y1], "crop": c},
+    crop = im.crop(c)
+    crop.save(os.path.join(a.out, "crop.png"))
+    k = SEND_LONG / max(crop.size)
+    send = (round(crop.width * k), round(crop.height * k))
+    crop.resize(send, Image.LANCZOS).save(os.path.join(a.out, "send.png"))
+    json.dump({"albedo": os.path.abspath(a.albedo), "box": [x0, y0, x1, y1], "crop": c, "send": list(send)},
               open(os.path.join(a.out, "crop.json"), "w"), indent=1)
-    return 0, f"crop {c[2] - c[0]}x{c[3] - c[1]} -> {a.out}/crop.png"
+    return 0, f"crop {c[2] - c[0]}x{c[3] - c[1]}, gửi {send[0]}x{send[1]} -> {a.out}/send.png"
 
 
 def paste(a):
@@ -38,8 +45,9 @@ def paste(a):
     base = np.asarray(Image.open(a.albedo).convert("RGB"), float)
     ed = Image.open(a.edited).convert("RGB")
     (cx0, cy0, cx1, cy1), (x0, y0, x1, y1) = meta["crop"], meta["box"]
-    if ed.size != (cx1 - cx0, cy1 - cy0):
-        return 1, f"ảnh sửa {ed.width}x{ed.height} khác crop {cx1 - cx0}x{cy1 - cy0}: bỏ kết quả", None
+    if list(ed.size) != meta["send"]:
+        return 1, f"ảnh sửa {ed.width}x{ed.height} khác ảnh gửi {meta['send'][0]}x{meta['send'][1]}: bỏ kết quả", None
+    ed = ed.resize((cx1 - cx0, cy1 - cy0), Image.LANCZOS)
     out = base.copy()
     yy, xx = np.mgrid[y0:y1, x0:x1]
     inner = np.minimum.reduce([xx - x0 + 0.5, x1 - xx - 0.5, yy - y0 + 0.5, y1 - yy - 0.5])

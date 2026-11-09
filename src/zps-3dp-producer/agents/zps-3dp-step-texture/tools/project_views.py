@@ -32,9 +32,9 @@ def project(cam, pts):
     m = np.asarray(cam["matrix"], float)
     right, up, back, t = m[:3, 0], m[:3, 1], m[:3, 2], m[:3, 3]
     rel = pts - t
-    s = cam["ortho_scale"]
-    px = (rel @ right / s + 0.5) * cam["w"]
-    py = (0.5 - rel @ up / s) * cam["h"]
+    k = max(cam["w"], cam["h"]) / cam["ortho_scale"]
+    px = cam["w"] / 2 + (rel @ right) * k
+    py = cam["h"] / 2 - (rel @ up) * k
     return px, py, -(rel @ back), -back
 
 
@@ -62,9 +62,15 @@ def zbuffer(cam, v, f):
     return z
 
 
-def rgba(path):
+def rgba(path, size=None):
+    """RGBA array; a paint view of the guide's aspect but another size is resized to the guide (Codex picks its size)."""
     from PIL import Image
-    return np.asarray(Image.open(path).convert("RGBA"), float)
+    im = Image.open(path).convert("RGBA")
+    if size and im.size != size:
+        if abs(im.width / im.height - size[0] / size[1]) > 0.01:
+            raise ValueError(f"{os.path.basename(path)} {im.width}x{im.height} khác tỉ lệ guide {size[0]}x{size[1]}")
+        im = im.resize(size, Image.LANCZOS)
+    return np.asarray(im, float)
 
 
 def run(a):
@@ -80,9 +86,7 @@ def run(a):
         if not os.path.isfile(paint):
             continue
         cam = vw["camera"]
-        img, guide = rgba(paint), rgba(os.path.join(a.views, vw["guide"]))
-        if img.shape[:2] != (cam["h"], cam["w"]):
-            raise ValueError(f"{vw['paint']} {img.shape[1]}x{img.shape[0]} khác guide {cam['w']}x{cam['h']}")
+        img, guide = rgba(paint, (cam["w"], cam["h"])), rgba(os.path.join(a.views, vw["guide"]))
         alpha = img[..., 3] if (img[..., 3] < 250).any() else guide[..., 3]
         px, py, depth, look = project(cam, pos)
         cos = nrm @ -look

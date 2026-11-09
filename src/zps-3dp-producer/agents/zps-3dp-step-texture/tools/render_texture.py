@@ -84,18 +84,19 @@ def shading(sc, lit, sun=None):
     sc.render.image_settings.color_mode = "RGB" if lit else "RGBA"
 
 
-def ortho(v, d, half=None):
+def ortho(v, d, half=None, w=1, h=1):
+    """Blender's ortho_scale spans the longer image side; the shorter side sees span * short / long."""
     right, up = basis(d)
     if half == "front":
         v = v[v[:, 1] <= (v[:, 1].min() + v[:, 1].max()) / 2]
     pu, pv = v @ right, v @ up
-    span = 1.1 * max(pu.max() - pu.min(), pv.max() - pv.min())
+    span = 1.1 * max((pu.max() - pu.min()) * max(w, h) / w, (pv.max() - pv.min()) * max(w, h) / h)
     diag = float(np.linalg.norm(v.max(0) - v.min(0))) or 1.0
     c = right * (pu.max() + pu.min()) / 2 + up * (pv.max() + pv.min()) / 2 + d * float(((v.min(0) + v.max(0)) / 2) @ d)
     m = np.eye(4)
     m[:3, :3] = np.stack([right, up, -d], axis=1)
     m[:3, 3] = c - d * 5 * diag
-    return {"type": "ORTHO", "ortho_scale": span, "clip": [0.01 * diag, 20 * diag], "matrix": m.tolist()}
+    return {"type": "ORTHO", "ortho_scale": span, "clip": [0.01 * diag, 20 * diag], "matrix": m.tolist(), "w": w, "h": h}
 
 
 def perspective(v, gc):
@@ -180,13 +181,12 @@ def render_set(bpy, a):
     obs, v = import_glb(bpy, a.glb)
     attach(bpy, obs, a.albedo)
     sun = spec.get("sun") or SUN
-    cams = {k: ortho(v, camera_dir(az, el), "front" if k == "close_front" else None) | {"w": a.size, "h": a.size}
+    cams = {k: ortho(v, camera_dir(az, el), "front" if k == "close_front" else None, a.size, a.size)
             for k, (az, el) in VIEWS.items()}
     if spec.get("camera"):
         cams["game"] = perspective(v, spec["camera"]) | {"w": a.size, "h": a.size * 3 // 4}
     cc = spec.get("concept_cam") or {"azimuth_deg": 45, "elevation_deg": 30}
-    cams["concept"] = ortho(v, camera_dir(float(cc["azimuth_deg"]), float(cc["elevation_deg"]))) | {"w": a.size,
-                                                                                                   "h": a.size}
+    cams["concept"] = ortho(v, camera_dir(float(cc["azimuth_deg"]), float(cc["elevation_deg"])), None, a.size, a.size)
     files = {}
     for lit in (True, False):
         shading(sc, lit, sun)
@@ -208,13 +208,14 @@ def render_set(bpy, a):
 
 
 def render_cameras(bpy, a):
-    rec = json.load(open(a.cameras, encoding="utf-8"))["renders"]
+    doc = json.load(open(a.cameras, encoding="utf-8"))
+    rec = doc["renders"]
     os.makedirs(a.outdir, exist_ok=True)
     sc, cam = scene_setup(bpy)
     import_glb(bpy, a.glb)
     files = {}
     for label in a.views.split(","):
-        shading(sc, label.startswith("lit_"), json.load(open(a.cameras, encoding="utf-8")).get("sun") or SUN)
+        shading(sc, label.startswith("lit_"), doc.get("sun") or SUN)
         files[label] = os.path.join(a.outdir, f"{label}.png")
         shoot(bpy, sc, cam, rec[label]["camera"], files[label])
     return [tex.check("render.files", "info", len(files))], files

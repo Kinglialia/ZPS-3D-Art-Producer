@@ -134,8 +134,9 @@ def test_a_crop_edit_changes_pixels_inside_the_region_only_checklist_18(tmp_path
     Image.fromarray(src).save(tmp_path / "a.png")
     rc, out = tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "20,30,60,50", "--margin", "8",
                    "--out", tmp_path / "c")
-    assert (rc, out) == (0, f"[crop_edit] crop 56x36 -> {tmp_path}/c/crop.png\n")
-    Image.new("RGB", (56, 36), (255, 0, 0)).save(tmp_path / "edited.png")
+    assert (rc, out) == (0, f"[crop_edit] crop 56x36, gửi 1536x987 -> {tmp_path}/c/send.png\n")
+    assert Image.open(tmp_path / "c/send.png").size == (1536, 987)
+    Image.new("RGB", (1536, 987), (255, 0, 0)).save(tmp_path / "edited.png")
     rc, out = tool("crop_edit.py", "paste", "--albedo", tmp_path / "a.png", "--crop", tmp_path / "c", "--edited",
                    tmp_path / "edited.png", "--out", tmp_path / "b.png", "--feather", "4")
     got = np.asarray(Image.open(tmp_path / "b.png"))
@@ -153,7 +154,7 @@ def test_a_codex_crop_of_another_size_is_refused_and_writes_nothing(tmp_path):
     rc, out = tool("crop_edit.py", "paste", "--albedo", tmp_path / "a.png", "--crop", tmp_path / "c", "--edited",
                    tmp_path / "edited.png", "--out", tmp_path / "b.png")
     assert (rc, out, (tmp_path / "b.png").exists()) == (
-        1, "[crop_edit] ảnh sửa 64x64 khác crop 56x36: bỏ kết quả\n", False)
+        1, "[crop_edit] ảnh sửa 64x64 khác ảnh gửi 1536x987: bỏ kết quả\n", False)
 
 
 def test_a_region_over_1024_px_must_be_split(tmp_path):

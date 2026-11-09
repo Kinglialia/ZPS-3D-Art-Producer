@@ -44,6 +44,14 @@ production/                     # trong project Claude Code; chỉ script và su
 - `worker_agent_id`: subagent worker để resume vòng sửa. Mở lại một bước khác bước đang chạy thì xóa, vì worker cũ có context của bước khác.
 - `reopened[<loại>]`: số lần reviewer mở lại bước trước bằng loại `TOP_FIX` đó (`regen_front`, `fix_uv_mesh`) trong đợt feedback. Cùng loại lần thứ hai → `waiting_human`; loại khác không tính. `redo` của người dùng xóa hết.
 - `prior[<bước>]`: bản đã duyệt của bước sau khi một bước trước nó làm lại. Brief lần dựng đầu của bước đó trỏ tới bản này để giữ phần không đổi. Duyệt bước đó thì xóa.
+- `ask`: câu hỏi Meshy đang chờ người dùng (`kind` = `meshy_regen` | `mesh_changed`, `budget` = tên file budget, `next` = `fix` | `todo`, `base`, `new_round`). Duyệt = gọi thêm một lần (`max_credits` + giá); `P meshy <id> paint` = VẼ MỚI. Trả lời xong thì xóa.
+- `paint_for`: 12 ký tự đầu hash mesh mà người dùng chọn VẼ MỚI; brief `texture` của mesh đó ghi `MODE: VẼ MỚI`.
+- `meshy_price`: giá một lần retexture, đọc từ `gen_api.py texture --dry-run` khi sinh brief.
+- `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.
+
+## Budget Meshy
+
+`assets/<id>/texture/budget-<sha256 mesh[:12]>.json`, định dạng kit `{"max_credits": N, "used_credits": U}`. Chỉ script Producer và `gen_api.py` (qua `meshy_call.py`) ghi. Brief `texture` đầu tiên của một hash mở file với `max_credits` = giá một lần; nếu hash khác đã tiêu credit thì `max_credits: 0` và hỏi người dùng (mesh đổi). Số lần còn gọi = `(max − used) / giá`, in ở dòng `MESHY_CALLS` của brief.
 
 ## Art direction trong brief
 
@@ -61,11 +69,12 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate) |
 | evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
-| waiting_human | chờ người dùng | `feedback --action approve` → bước sau hoặc done · `redo` → fix |
-| blocked | thiếu context, thiếu output, worker kẹt | `retry` → running |
+| waiting_human | chờ người dùng | `feedback --action approve` → bước sau hoặc done; có `ask` thì → fix/todo với thêm một lần gọi Meshy · `meshy <id> paint` → fix/todo · `redo` → fix |
+| blocked | thiếu context, thiếu output, worker kẹt; `texture` thiếu key; `assemble.py` fail | `retry` → running · về `blocked_from` · bước script → todo (version mới) |
 | done_enabled | xong mọi bước đang bật; bước sau `enabled = false` | `redo` → fix · `retry` → todo của bước sau, khi bước đó đã bật |
 | done | xong | `archive` |
 
+Brief `texture` ở todo/fix có thể đổi state trước khi tạo version: thiếu key → blocked; mesh đổi → waiting_human với `ask`.
 FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.
 
 ## Contract báo cáo
@@ -81,6 +90,10 @@ ISSUES: <tối đa 2 vấn đề hoặc none>
 PROFILE_HASH: <chép từ brief>        bắt buộc; khác giá trị trong brief → ingest báo lỗi
 FIXED: F<n>, ...                     vòng sửa; chỉ để reviewer đối chiếu
 ```
+
+Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`meshy_regen`), hoặc blocked khi bước này không có Meshy.
+
+Script (`report-script.md`, bước có `script` trong `pipeline.toml`, ví dụ `assemble`): `STATUS`, `OUTPUT`, `ISSUES`, `PROFILE_HASH` như worker (`PROFILE_HASH` là giá trị `--profile-hash` của lệnh), rồi `EVIDENCE_OPENED` và `FINDINGS` mỗi điểm fail một finding. `ingest` ghi các finding đó vào `findings.json` của version để trang duyệt hiện. `DONE` → waiting_human; `BLOCKED` → blocked.
 
 Reviewer (`report-review.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
 ```

@@ -42,4 +42,11 @@
 - shadow_read: clay_lit_concept đọc khối như concept có bóng (độ chìa, độ sâu hốc, bóng đổ chính)
 
 ## texture
-- clean_texture: preview không có texture kéo giãn nhìn thấy được
+- light: không bóng bake, AO, glow ngoài quy ước ánh sáng của profile; 4 mặt bên cùng tông
+- material: mỗi vật liệu giống concept và bộ đã duyệt
+- thumbnail: đọc được ở kích thước thật trên màn hình
+- seams: không thấy seam ở camera game; nét theo khối, không theo mép UV
+- texture_note: mọi TEXTURE NOTE đã xử lý
+- meshy_detail: chế độ SỬA giữ chi tiết Meshy đúng vị trí, không sửa quá tay
+- geometry_match: ranh giới vật liệu trùng cạnh và khối của mesh
+- inventory: mọi motif, chữ, biển, vết bẩn truy được về concept; không có lỗi ảnh AI
