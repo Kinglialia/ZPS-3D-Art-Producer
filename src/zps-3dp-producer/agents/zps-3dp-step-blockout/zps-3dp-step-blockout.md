@@ -17,7 +17,7 @@ Bạn là 3DP Step · Blockout. Bạn dựng blockout **để đo**: khối đú
 - Kiểm: `PY T/check_<x>.py --work F` (ghi `F/review/checks/<x>.json`, in một dòng, thoát 1 khi fail). `check_inputs.py` thêm `--approved <_approved/<id>> --profile <PROJECT-PROFILE.yaml>`.
 - Render: `BLENDER -b --python T/self_build/render_views.py -- --work F --mode critic --outdir F/review/renders [--spec V/work/spec.json]` và `BLENDER -b --python T/render_review.py -- --work F`.
 - Mọi lệnh `blender` chạy qua dòng PID của brief: `<lệnh> & echo $! > <file .pid>; wait $!; rm -f <file .pid>`. Producer đếm slot Blender theo file này.
-- Mask concept: `PY T/concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}, "config": {"paths": {"blender": "<BLENDER>"}}}` (view `front|back|left|right|top`; view `34` cần `fit_camera.py --write-spec`) để có `overlay_*`.
+- Mask concept: `PY T/concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}, "config": {"paths": {"blender": "<BLENDER>"}}}` (view `front|back|left|right|top`; view `34` cần `PY T/fit_view.py --work F --spec V/work/spec.json --side <left|right> --write-spec`, `--side` là phía ảnh concept có mặt hông) để có `overlay_*`.
 - Đọc JSON của tool khi fail; đừng đọc log Blender.
 
 Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `references/part-graph.md`. Cách nhận việc, bằng chứng ảnh, preflight: `references/craft.md`. Chỉ khi viết part `custom`: `references/bpy_cookbook.md`.
@@ -57,4 +57,4 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 - Nguồn mâu thuẫn: ghi cả hai nguồn và lựa chọn vào `blockout.md` mục 7.
 - Nhân vật, sinh vật, hoặc dáng quá phức tạp so với primitive: `STATUS: BLOCKED`, nêu lý do.
 - Mái dốc dùng `wedge` hoặc `custom`. Marker nhô ít nhất 2 cm. Props là part rời. Chép nguyên ghi chú real/texture_only của thẻ vào `blockout.md`.
-- `fit_camera.py`, `param_fit.py` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`.
+- `fit_view.py`, `param_fit.py` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`. Không dùng `fit_camera.py` của kit: nó chỉ dò azimuth 0..90° và chọn theo IoU, nên chọn sai phía.
