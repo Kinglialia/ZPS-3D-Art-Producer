@@ -103,11 +103,11 @@ def flow(tmp_path_factory):
     f.save("ready", f.p("ready", AID))
     f.brief("v1 brief")
     f.work("v1", status="DONE_WITH_CONCERNS", failing=True)
-    f.review("v1", counts=counts(4), top_fix="param: " + ids(1, 2, 3, 4), rubric="concept_match=fail; scale=fail",
-             findings=params(1, 2, 3, 4))
     pids = [root / PIDS, root / "production/pids/blender/other.pid"]
     for p, pid in zip(pids, (os.getpid(), os.getppid())):
         p.write_text(str(pid), encoding="utf-8")
+    f.review("v1", counts=counts(4), top_fix="param: " + ids(1, 2, 3, 4), rubric="concept_match=fail; scale=fail",
+             findings=params(1, 2, 3, 4))
     f.save("next, two live blender pids", f.p("next"))
     for p in pids:
         p.unlink()
@@ -190,8 +190,9 @@ def test_the_worker_is_resumed_on_every_fix_round_within_resume_rounds_and_revie
 def test_the_brief_records_the_profile_hash_that_ingest_compares_with_the_worker_report(flow):
     assert "\nPROFILE_HASH: 786cfc66bdd2\n" in flow["v1 brief"]["text"]
     assert flow["v1 brief"]["st"]["inputs"]["blockout"]["v1"]["profile"] == PROFILE_HASH
-    assert flow["v1 worker"]["out"] == ("pilot-house: worker DONE_WITH_CONCERNS → blockout/review. "
-                                        "Tiếp: giao reviewer → `brief pilot-house`\n")
+    assert flow["v1 worker"]["out"].splitlines() == [
+        "pilot-house: worker DONE_WITH_CONCERNS → blockout/review. Tiếp: giao reviewer → `brief pilot-house`",
+        json.dumps(reviewer_json(1), ensure_ascii=False)]
 
 
 def test_the_worker_brief_names_only_the_handoff_files_so_old_drafts_beside_them_are_never_read(flow):
@@ -209,6 +210,8 @@ def test_the_worker_brief_gives_the_pid_line_the_agent_file_tells_the_worker_to_
 
 
 def test_two_live_blender_pids_hold_the_fix_dispatch_because_slots_count_processes_not_states(flow):
+    """D27.2: the ingest that ends in FIX does not dispatch either while the slot is full."""
+    assert flow["v1 review"]["out"].count("\n") == 1
     assert flow["next, two live blender pids"]["out"] == NEXT_HEAD + "[pilot-house] blockout/fix → chờ slot blender\n"
 
 
@@ -248,8 +251,11 @@ def test_prior_is_recorded_per_finding_and_pick_b_moves_variant_b_into_final_kee
 
 
 def test_two_old_majors_resolved_is_progress_so_round_2_starts_from_v2(flow):
-    assert flow["v2 review"]["out"] == "pilot-house: review FIX (major=2) → blockout/fix. Tiếp: giao worker → `brief pilot-house`\n"
-    assert pick(flow["v2 review"]["st"]) == state(fix_round=2, fix_base=2, round_versions=[1, 2], note="vòng sửa 2/3")
+    assert flow["v2 review"]["out"].splitlines() == [
+        "pilot-house: review FIX (major=2) → blockout/fix. Tiếp: giao worker → `brief pilot-house`",
+        json.dumps(worker_json(3, "w1"), ensure_ascii=False)]
+    assert pick(flow["v2 review"]["st"]) == state(state="running", fix_round=2, fix_base=2, round_versions=[1, 2],
+                                                  note="vòng sửa 2/3")
 
 
 def test_the_fix_brief_lists_no_script_errors_when_the_best_version_has_no_failed_check(flow):

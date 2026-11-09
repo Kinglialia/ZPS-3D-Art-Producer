@@ -86,24 +86,25 @@ def worker_report(flow, out):
 def test_a_dispatch_records_its_model_and_the_ingest_records_the_role_times_tokens_and_duration_d27_3(
         flow, monkeypatch):  # noqa: F811
     """Run 4 had tokens per step only, so nobody could tell whether the worker, the reviewer or the Producer grew."""
-    clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30")
+    clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30", "2026-11-10 09:12:31")
     out = flow.brief()
     worker_report(flow, out)
     flow.call(loop.ingest, Namespace(id=AID, agent_id="w1", tokens=48210, duration_ms=731000))
     assert flow.st["dispatches"] == [
         {"step": "blockout", "v": 1, "role": "worker", "model": "opus", "at": "2026-11-10 09:00:00",
-         "ingested": "2026-11-10 09:12:30", "tokens": 48210, "duration_ms": 731000, "after": "review"}]
+         "ingested": "2026-11-10 09:12:30", "tokens": 48210, "duration_ms": 731000, "after": "review"},
+        {"step": "blockout", "v": 1, "role": "reviewer", "model": "opus", "at": "2026-11-10 09:12:31"}]
     lines = flow.ledger().splitlines()
-    assert lines[-2].endswith(" · src · house-a · blockout v1 · giao worker (zps-3dp-step-blockout, opus)")
-    assert lines[-1].endswith(" · src · house-a · blockout v1 · worker DONE ·  · worker giao 2026-11-10 09:00:00 · "
+    assert lines[-3].endswith(" · src · house-a · blockout v1 · giao worker (zps-3dp-step-blockout, opus)")
+    assert lines[-2].endswith(" · src · house-a · blockout v1 · worker DONE ·  · worker giao 2026-11-10 09:00:00 · "
                               "ingest 2026-11-10 09:12:30 · token 48210 · thời lượng 731000 ms")
 
 
 def test_a_runtime_that_reports_no_numbers_is_ledgered_as_having_none_never_as_zero_d27_3(flow, monkeypatch):  # noqa: F811
-    clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30")
+    clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30", "2026-11-10 09:12:31")
     worker_report(flow, flow.brief())
     flow.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
-    assert flow.ledger().splitlines()[-1].endswith(
+    assert flow.ledger().splitlines()[-2].endswith(
         " · token không có số · thời lượng không có số")
     assert (flow.st["dispatches"][0]["tokens"], flow.st["dispatches"][0]["duration_ms"]) == (None, None)
 

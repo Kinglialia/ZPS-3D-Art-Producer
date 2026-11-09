@@ -219,8 +219,10 @@ def worker_round(tmp, n):
         (v / o).write_text("x", encoding="utf-8")
     h = brief_hash((v / "brief-worker.md").read_text(encoding="utf-8"))
     (v / "report-worker.md").write_text(f"STATUS: DONE\nPROFILE_HASH: {h}\nFIXED: F1\n", encoding="utf-8")
-    assert run(tmp, "ingest", "house-a") == "house-a: worker DONE → blockout/review. Tiếp: giao reviewer → `brief house-a`\n"
-    out = json.loads(run(tmp, "brief", "house-a"))
+    head, line = run(tmp, "ingest", "house-a").splitlines()
+    assert head == "house-a: worker DONE → blockout/review. Tiếp: giao reviewer → `brief house-a`"
+    out = json.loads(line)
+    assert (out["role"], json.loads(run(tmp, "brief", "house-a"))) == ("reviewer", out)
     return (tmp / out["brief"]).read_text(encoding="utf-8"), v
 
 
@@ -236,12 +238,13 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
     (v / "report-review.md").write_text(report(counts=counts(major=2), top_fix="structure: F1", findings=[
         finding("F1", "major", "structure"), finding("F2", "major", "param", acceptance="mái chìa 0.3 m")]),
         encoding="utf-8")
-    assert run(tmp_path, "ingest", "house-a") == (
-        "house-a: review FIX (major=2) → blockout/fix. Tiếp: giao worker → `brief house-a`\n")
+    head, line = run(tmp_path, "ingest", "house-a").splitlines()
+    assert head == "house-a: review FIX (major=2) → blockout/fix. Tiếp: giao worker → `brief house-a`"
     assert "house-a · blockout v1 · review FIX (major=2) · massing=fail" in (
         tmp_path / "production/ledger.md").read_text(encoding="utf-8")
 
     out = json.loads(run(tmp_path, "brief", "house-a"))
+    assert out == json.loads(line)
     wb = (tmp_path / out["brief"]).read_text(encoding="utf-8")
     assert "Sửa đúng `TOP_FIX: structure: F1`" in wb
     assert "production/assets/house-a/blockout/v1/findings.json" in wb
@@ -266,8 +269,8 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
         counts=counts(major=1, minor=1), top_fix="param: F2, F3", compare="F1=better",
         prior=["- F1: resolved | evidence: clay_front", "- F2: open | evidence: ?"],
         findings=[finding("F3", "minor", "param")]), encoding="utf-8")
-    assert run(tmp_path, "ingest", "house-a") == (
-        "house-a: review FIX (major=1 minor=1) → blockout/fix. Tiếp: giao worker → `brief house-a`\n")
+    assert run(tmp_path, "ingest", "house-a").splitlines()[0] == (
+        "house-a: review FIX (major=1 minor=1) → blockout/fix. Tiếp: giao worker → `brief house-a`")
     doc = json.loads((v2 / "findings.json").read_text(encoding="utf-8"))
     assert (doc["version"], doc["base"], doc["next_id"], doc["top_fix"]) == (2, 1, 4, {"kind": "param", "ids": ["F2", "F3"]})
     assert brief_view(doc) == {"F1": ("major", "structure", "resolved", 1, 2), "F2": ("major", "param", "open", 1, 2),

@@ -79,6 +79,12 @@ def fix_v1(f, n=2, kind="structure"):
                     findings=[finding(f"F{i}", "major", kind) for i in range(1, n + 1)])
 
 
+@pytest.fixture
+def held(monkeypatch):
+    """The Producer has not dispatched yet (no free slot, preflight off), so the asset waits in review or fix."""
+    monkeypatch.setattr(loop, "dispatch_next", lambda cfg, st: None)
+
+
 def pick(st):
     return {k: st.get(k) for k in ("state", "fix_round", "fix_base", "offer", "label", "note")}
 
@@ -105,8 +111,11 @@ def test_review_outcome_table_encodes_round_cap_early_stop_escalate_one_evidence
 
 
 def test_three_fix_rounds_then_still_fix_sends_the_best_version_to_the_human_labelled_not_passed(flow):
-    assert fix_v1(flow, 4) == "house-a: review FIX (major=4) → blockout/fix. Tiếp: giao worker → `brief house-a`\n"
-    assert pick(flow.st) | {"note": None} == {"state": "fix", "fix_round": 1, "fix_base": 1, "offer": None,
+    head, line = fix_v1(flow, 4).splitlines()
+    assert head == "house-a: review FIX (major=4) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert (json.loads(line)["brief"], json.loads(line)["resume"]) == (
+        f"production/assets/{AID}/blockout/v2/brief-worker.md", "w1")
+    assert pick(flow.st) | {"note": None} == {"state": "running", "fix_round": 1, "fix_base": 1, "offer": None,
                                               "label": None, "note": None}
     flow.work()
     flow.review(counts=counts(major=3), top_fix="structure: F2", compare="F1=better",
@@ -132,7 +141,7 @@ def test_round_1_without_progress_continues_but_round_2_without_progress_stops_a
     fix_v1(flow, 2)
     flow.work()
     flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: open"])
-    assert pick(flow.st)["state"] == "fix"
+    assert pick(flow.st)["state"] == "running"
     assert flow.st["fix_base"] == 1
     out = flow.brief()
     assert f"Bản gốc: `production/assets/{AID}/blockout/v1/`" in flow.text(out)
@@ -215,7 +224,9 @@ def test_need_evidence_renders_into_the_version_review_folder_and_the_reviewer_r
     assert (out["role"], out["resume"], out["brief"], out["report"]) == (
         "worker", "w1", f"{ev}/brief-worker.md", f"{ev}/report-worker.md")
     assert "Không sửa `production/assets/house-a/blockout/v1/final/`" in flow.text(out)
-    assert flow.work(out=out) == "house-a: evidence-1 DONE → blockout/review. Tiếp: giao reviewer → `brief house-a`\n"
+    head, line = flow.work(out=out).splitlines()
+    assert (head, json.loads(line)["brief"]) == ("house-a: evidence-1 DONE → blockout/review. Tiếp: giao reviewer → "
+                                                 "`brief house-a`", f"production/assets/{AID}/blockout/v1/brief-review.md")
     rb = flow.brief()
     assert f"- Chấm lại v1 với ảnh thêm `{ev}/`" in flow.text(rb)
     assert "- F1: ? | evidence: ? |" in flow.text(rb)
@@ -443,7 +454,7 @@ H1 = {"priority": "major", "kind": "structure", "status": "open", "first_v": 1, 
       "preserve": "những gì feedback không nhắc", "acceptance": "đạt yêu cầu của người dùng: mái cao hơn"}
 
 
-def test_redo_of_an_unreviewed_version_files_the_user_text_as_H1_so_the_next_review_has_a_base(flow):
+def test_redo_of_an_unreviewed_version_files_the_user_text_as_H1_so_the_next_review_has_a_base(flow, held):
     flow.work()
     assert flow.st["state"] == "review"
     assert flow.human("redo", "mái cao hơn") == "house-a: làm lại blockout từ v1. Tiếp: giao worker → `brief house-a`"
@@ -540,7 +551,7 @@ def current(f) -> list[str]:
     return [re.sub(r"^- \d{4}-\d\d-\d\d \d\d:\d\d · ", "- ", r) for r in rows if r.strip() and not r.startswith("<!--")]
 
 
-def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_approved_by_its_reviewer(flow):
+def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_approved_by_its_reviewer(flow, held):
     """Run 4: redo text went only to the Log, so the texture worker and reviewers read an empty "Hiện hành"."""
     policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
     flow.cap.readouterr()
@@ -590,6 +601,6 @@ def test_a_report_the_producer_saved_from_a_reply_is_ingested_and_logged_as_a_fa
     body = report(counts=counts(major=1), findings=[finding("F1", "major")])
     (flow.root / out["report"]).write_text(f"--- report ---\n{body}--- end ---\n", encoding="utf-8")
     flow.call(loop.ingest, Namespace(id=AID, agent_id=None, fallback=True))
-    assert [x.get("fallback", False) for x in flow.st["dispatches"]] == [False, True]
+    assert [x.get("fallback", False) for x in flow.st["dispatches"]] == [False, True, False]
     assert [l.split(" · ", 2)[2] for l in flow.ledger().splitlines() if "report_fallback" in l] == [
         "house-a · blockout v1 · report_fallback · reviewer"]

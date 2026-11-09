@@ -76,6 +76,7 @@ def test_a_second_click_on_approve_after_the_answer_changes_nothing(tmp_path):
 def test_a_new_mesh_after_an_unused_budget_gets_one_call_without_a_question(tmp_path):
     f = to_texture(tmp_path)
     f.work("t1")
+    f.review("t1", verdict="ESCALATE", counts=counts(), top_fix=None)
     f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
     f.work("m2", mesh_size=(1.3, 1, 1))
     f.review("m2", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",
@@ -89,6 +90,7 @@ def test_a_new_mesh_after_an_unused_budget_gets_one_call_without_a_question(tmp_
 def test_answering_call_to_the_mesh_question_gives_the_new_mesh_one_call(tmp_path):
     f = to_texture(tmp_path)
     f.work("t1", meshy="")
+    f.review("t1", verdict="ESCALATE", counts=counts(), top_fix=None)
     f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
     f.work("m2", mesh_size=(1.3, 1, 1))
     f.review("m2", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",
@@ -106,6 +108,7 @@ def test_answering_call_to_the_mesh_question_gives_the_new_mesh_one_call(tmp_pat
 def test_approve_answers_the_mesh_question_although_the_old_texture_version_had_a_decision(tmp_path):
     f = to_texture(tmp_path)
     f.work("t1", meshy="")
+    f.review("t1", verdict="ESCALATE", counts=counts(), top_fix=None)
     f.human("redo texture", "mái tối", "--action", "redo")
     f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
     f.work("m2", mesh_size=(1.3, 1, 1))
@@ -138,6 +141,7 @@ def test_a_key_line_with_export_blocks_texture_with_the_fix_instead_of_saying_th
 def to_paint(tmp_path):
     f = to_texture(tmp_path)
     f.work("t1", meshy="")
+    f.review("t1", verdict="ESCALATE", counts=counts(), top_fix=None)
     f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
     f.work("m2", mesh_size=(1.3, 1, 1))
     f.review("m2", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",

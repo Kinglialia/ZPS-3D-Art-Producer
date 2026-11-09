@@ -188,10 +188,11 @@ def test_the_set_reviewer_is_told_a_wrong_part_count_is_a_regen_and_preserve_nam
 
 
 def test_regen_front_reopens_the_approved_front_with_a_fresh_worker_and_carries_the_finding_as_its_top_fix(flow):
-    assert flow["vr1 review"]["out"] == ("pilot-house: review FIX (major=1 minor=1) → views_front/fix. "
-                                         "Tiếp: giao worker → `brief pilot-house`\n")
+    head, line = flow["vr1 review"]["out"].splitlines()
+    assert (head, json.loads(line)["resume"]) == (
+        "pilot-house: review FIX (major=1 minor=1) → views_front/fix. Tiếp: giao worker → `brief pilot-house`", None)
     assert pick(flow["vr1 review"]["st"]) == {
-        "stage": "views_front", "state": "fix", "fix_round": 1, "fix_base": 2, "round_versions": [2], "offer": None,
+        "stage": "views_front", "state": "running", "fix_round": 1, "fix_base": 2, "round_versions": [2], "offer": None,
         "label": "", "note": "regen_front: sửa views_front v2 theo F2 (views_rest v1 F1)", "worker_agent_id": None,
         "approved": {"blockout": 1}, "rejected": {"blockout": []}, "reopened": {"regen_front": 1}, "prior": {},
         "stale": {"views_rest v1": "views_front v2"}}

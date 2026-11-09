@@ -189,7 +189,8 @@ def test_the_required_outputs_carry_the_asset_id_so_a_missing_mesh_blocks_ingest
     assert req == [f"- Bắt buộc có (tính từ `{A}/model/v1/`): `final/pilot-house-untextured.glb`, `final/pilot-house.blend`, "
                    "`final/part_graph.json`, `final/parts_lib.py`, `final/spec.json`, `final/model.md`, "
                    "`final/review/model_sheet.png`, `final/review/renders/renders.json`."]
-    assert flow["m1 worker"]["out"] == "pilot-house: worker DONE → model/review. Tiếp: giao reviewer → `brief pilot-house`\n"
+    assert flow["m1 worker"]["out"].splitlines()[0] == (
+        "pilot-house: worker DONE → model/review. Tiếp: giao reviewer → `brief pilot-house`")
 
 
 def test_check_clay_reviews_model_against_the_blockout_only_with_the_structure_and_param_kinds(flow):
@@ -206,8 +207,10 @@ def test_check_clay_reviews_model_against_the_blockout_only_with_the_structure_a
 
 
 def test_a_structure_fix_resumes_the_worker_from_the_best_version_and_reads_the_failing_kit_qa_first(flow):
-    assert flow["m1 review"]["out"] == "pilot-house: review FIX (major=2) → model/fix. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = flow["m1 review"]["out"].splitlines()
+    assert head == "pilot-house: review FIX (major=2) → model/fix. Tiếp: giao worker → `brief pilot-house`"
     b = flow["m2 brief"]
+    assert json.loads(line) == b["out"]
     assert b["out"]["resume"] == "w-m1"
     assert missing(b["text"],
                    f"10. Bản gốc: `{A}/model/v1/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
@@ -257,10 +260,13 @@ def test_the_texture_brief_copies_the_approved_model_issues_and_names_every_appr
 
 def test_the_first_fix_uv_mesh_reopens_the_approved_model_although_regen_front_ran_in_this_feedback_round(flow):
     s = flow["t1 review"]
-    assert s["out"] == "pilot-house: review FIX (major=1) → model/fix. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = s["out"].splitlines()
+    assert (head, json.loads(line)["brief"]) == (
+        "pilot-house: review FIX (major=1) → model/fix. Tiếp: giao worker → `brief pilot-house`",
+        f"{A}/model/v4/brief-worker.md")
     assert pick(s["st"], "stage", "state", "fix_round", "fix_base", "round_versions", "worker_agent_id", "approved",
                 "locked", "reopened", "note") == {
-        "stage": "model", "state": "fix", "fix_round": 1, "fix_base": 3, "round_versions": [3], "worker_agent_id": None,
+        "stage": "model", "state": "running", "fix_round": 1, "fix_base": 3, "round_versions": [3], "worker_agent_id": None,
         "approved": {"blockout": 1, "views_front": 2, "views_rest": 2}, "locked": {},
         "reopened": {"regen_front": 1, "fix_uv_mesh": 1}, "note": "fix_uv_mesh: sửa model v3 theo F3 (texture v1 F1)"}
     doc = flow["model v3 doc"]

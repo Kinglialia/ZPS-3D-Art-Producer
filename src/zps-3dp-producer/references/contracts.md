@@ -81,9 +81,9 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | draft | rubric loại chưa duyệt | `ready` → todo |
 | todo | bước chưa bắt đầu | `brief` → running (tạo vN mới) |
 | running | worker đang làm | `ingest` → review / waiting_human / blocked / bước sau |
-| review | worker xong, chờ giao reviewer | `brief` → reviewing |
+| review | worker xong, chờ giao reviewer | `brief` → reviewing; `ingest` của worker tự giao (in dòng JSON của `brief`) |
 | reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · `regen_front` → fix của `views_front` · `fix_uv_mesh` → fix của `model` · ESCALATE → waiting_human |
-| fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate) |
+| fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate); `ingest` của reviewer tự giao, trừ khi tài nguyên của bước hết slot |
 | evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
 | waiting_human | chờ người dùng | `feedback --action approve` → bước sau hoặc done; có `ask` thì → fix/todo với thêm một lần gọi Meshy · `meshy <id> paint` → fix/todo · `redo` → fix |

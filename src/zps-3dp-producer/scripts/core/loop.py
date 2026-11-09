@@ -4,11 +4,12 @@ from __future__ import annotations
 import hashlib
 import re
 import shutil
+from argparse import Namespace
 
 from . import annotate, findings, hashes, policy, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
-from .state import (ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, stamp, step_of,
-                    vdir)
+from .state import (ASSETS, DELIVER, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
+                    stamp, step_of, vdir)
 
 NOT_PASSED = "chưa đạt"
 NO_NUMBER = "không có số"
@@ -334,8 +335,25 @@ def ingest(a):
     ledger(f"{a.id} · {sid} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else "")
            + f" · {role} giao {rec['at'] if rec else NO_NUMBER} · ingest {at} · token {number(tokens)}"
            + f" · thời lượng {number(ms, ' ms')}")
-    build_outputs(cfg)
     print(f"{a.id}: {event} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
+    dispatch_next(cfg, st)
+    build_outputs(cfg)
+
+
+def dispatch_next(cfg: dict, st: dict):
+    """D27.2: a reviewer after a worker, or a worker after FIX, goes out in the same turn: the dispatch line of `P brief`.
+    A fix waits while a resource of its step has no free slot, as in `P next`."""
+    if st["state"] not in ("review", "fix"):
+        return
+    from .briefs import run
+    from .limits import used
+    _, step = step_of(cfg, st["stage"])
+    if st["state"] == "fix" and any(cfg["limits"][r] - used(r) <= 0 for r in step["uses"] if r in cfg["limits"]):
+        return
+    try:
+        run(Namespace(id=st["id"]))
+    except ProducerError as ex:
+        print(f"{st['id']}: chưa giao được: {ex}")
 
 
 def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
