@@ -77,9 +77,10 @@ Shared rules for every ticket:
 
 - **Builds.** `docs/producer.md` §10 (profile hash), §11, §12, §14 1b.
 - **Blocked by.** T3.
-- **Writes.** `S/scripts/core/hashes.py`, `S/scripts/core/limits.py`, `S/scripts/core/preflight.py`, `S/scripts/core/briefs.py`, `S/scripts/core/loop.py` (hash checks at ingest only), `S/scripts/producer.py` (subcommand `preflight` only), `tests/test_hashes.py`, `tests/test_limits.py`, `tests/test_preflight.py`.
+- **Writes.** `S/presets/topdown-mobile-lowpoly.yaml` (body from `docs/project-profile.md` §2), `S/templates/settings.snippet.json` (venv python), `S/templates/pipeline.toml` and `S/scripts/core/state.py` (drop unused `[intake].min_images`, `[intake].type`), `S/scripts/core/hashes.py`, `S/scripts/core/limits.py`, `S/scripts/core/preflight.py`, `S/scripts/core/briefs.py`, `S/scripts/core/loop.py` (hash checks at ingest only), `S/scripts/producer.py` (subcommand `preflight` only), `tests/test_hashes.py`, `tests/test_limits.py`, `tests/test_preflight.py`.
 - **Acceptance.** Checklist rows 44, 53, 55, 60, 71, 72 (warning part), 90.
   - Profile hash on normalized YAML, drop `paths` and keys starting with `_`.
+  - `P brief` runs `check_profile.check` and refuses a brief when the profile is invalid (checklist 21).
   - Brief writes `PROFILE_HASH`; ingest rejects a missing or different value.
   - `inputs` per version; stale = input differs from current approved version of the previous step; concept hash by file content.
   - Slots count real running processes (a PID file per Blender job, checked alive), not the `running` state.
