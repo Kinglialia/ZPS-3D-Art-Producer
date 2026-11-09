@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 
 from . import annotate, findings, hashes, policy, texture
@@ -328,6 +329,7 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
         st.setdefault("locked", {})[sid] = hashlib.sha256(p.read_bytes()).hexdigest()
     st.setdefault("rejected", {})[sid] = [v for v in range(1, st["versions"][sid] + 1) if v != n]
     st.setdefault("prior", {}).pop(sid, None)
+    current(st["id"], sid)
     if sid == "assemble":
         from .estimate import log_asset
         out = DELIVER / st["id"]
@@ -392,8 +394,26 @@ def retry(a):
 
 def append_feedback(aid: str, step: str, n: int | None, action: str, text: str):
     tag = f"{step} v{n}" if n else step
+    line = f"- {now()} · {tag} · {action} · {text.strip()}"
     with open(ASSETS / aid / "feedback.md", "a", encoding="utf-8") as f:
-        f.write(f"- {now()} · {tag} · {action} · {text.strip()}\n")
+        f.write(line + "\n")
+    if action == "redo":
+        current(aid, step, line)
+
+
+def current(aid: str, step: str, line: str | None = None):
+    """Section "Hiện hành" of feedback.md: a redo adds its log line; approving the step drops that step's redo lines.
+    Lines the Producer merged by hand stay."""
+    p = ASSETS / aid / "feedback.md"
+    if not p.is_file():
+        return
+    head, sep, log = p.read_text(encoding="utf-8").partition("\n## Log")
+    rows = head.rstrip("\n").split("\n")
+    if line is None:
+        rows = [r for r in rows if not re.match(rf"- [^·]+ · {re.escape(step)}(?: v\d+)? · redo · ", r)]
+    else:
+        rows.append(line)
+    p.write_text("\n".join(rows) + "\n" + sep + log, encoding="utf-8")
 
 
 def shown(st: dict, step: str) -> int | None:

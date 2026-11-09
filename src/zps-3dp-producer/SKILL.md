@@ -125,7 +125,7 @@ Chỉ dừng lại hỏi người dùng khi: chọn thẩm mỹ cuối cùng; du
 
 - Báo cáo subagent chỉ gồm các dòng contract. Subagent trả dài hơn thì nhắc nó giữ đúng contract ở lần giao sau.
 - Không đọc cả file ledger: dùng `P ledger --tail 20` hoặc `P ledger --rulings`.
-- `P validate` cảnh báo feedback.md dài: gộp các quyết định còn hiệu lực vào mục "Hiện hành", xoá các dòng log đã gộp, giữ 2 vòng gần nhất.
+- `P validate` cảnh báo feedback.md dài: gộp các quyết định còn hiệu lực vào mục "Hiện hành", xoá các dòng log đã gộp, giữ 2 vòng gần nhất. Script tự chép mỗi lần `redo` vào "Hiện hành" và xoá dòng đó khi bước đó được duyệt.
 - Xong một đợt việc mà session đã dài: chạy `P dashboard`, báo cáo, đề nghị người dùng mở session mới. Không có gì bị mất, vì mọi thứ đã nằm trong file.
 
 ## Báo cáo cho người dùng

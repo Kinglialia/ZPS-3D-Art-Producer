@@ -532,3 +532,26 @@ def test_worker_brief_names_the_rubric_section_profile_preset_and_blender_path(f
 def test_review_brief_names_the_rubric_section_of_the_step(flow):
     flow.work()
     assert f"- Theo: `production/assets/{AID}/rubric.md` mục `## blockout`, " in flow.text(flow.brief())
+
+
+def current(f) -> list[str]:
+    text = (f.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
+    rows = text.split("## Hiện hành", 1)[1].split("## Log", 1)[0].splitlines()
+    return [re.sub(r"^- \d{4}-\d\d-\d\d \d\d:\d\d · ", "- ", r) for r in rows if r.startswith("- ")]
+
+
+def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_approved_by_its_reviewer(flow):
+    """Run 4: redo text went only to the Log, so the texture worker and reviewers read an empty "Hiện hành"."""
+    policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
+    flow.cap.readouterr()
+    fb = flow.root / f"production/assets/{AID}/feedback.md"
+    fb.write_text(fb.read_text(encoding="utf-8").replace("## Log", "- giữ mái ngói đỏ (Producer gộp)\n\n## Log"),
+                  encoding="utf-8")
+    fix_v1(flow, 1)
+    flow.human("redo", "mái cao hơn")
+    flow.human("note", "chỉ là ghi chú")
+    assert current(flow) == ["- giữ mái ngói đỏ (Producer gộp)", "- blockout v1 · redo · mái cao hơn"]
+    flow.work()
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better; H1=better",
+                prior=["- F1: resolved | evidence: clay_front", "- H1: resolved | evidence: clay_front"])
+    assert (flow.st["approved"], current(flow)) == ({"blockout": 2}, ["- giữ mái ngói đỏ (Producer gộp)"])
