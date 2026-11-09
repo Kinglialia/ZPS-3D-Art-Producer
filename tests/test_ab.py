@@ -140,6 +140,18 @@ def test_the_pair_server_reads_only_files_under_the_root_of_a_known_label(server
     assert get(server + path)[0] == 404
 
 
+def test_the_pair_server_serves_only_the_images_and_glb_a_card_links_so_no_text_file_names_the_runtime(server, two):
+    done_both(two)
+    work = two / f"production-codex/assets/{AID}/assemble/v1/work"
+    png(work / "leak.png", (8, 8))
+    (two / f"production-codex/assets/{AID}/assemble/v1/final/review/ledger.png").symlink_to(two / "production-codex/ledger.md")
+    final = f"/ab/{AID}/A/p/assets/{AID}/assemble/v1/final"
+    assert [get(server + p)[0] for p in (
+        f"/ab/{AID}/A/p/ledger.md", f"/ab/{AID}/A/p/pipeline.toml", f"{final}/README.md", f"{final}/review/ledger.png",
+        f"/ab/{AID}/A/p/assets/{AID}/assemble/v1/work/leak.png", f"{final}/final_lit_vs_concept.png",
+        f"{final}/model/{AID}.glb")] == [404, 404, 404, 404, 404, 200, 200]
+
+
 def test_a_decision_on_one_side_lands_in_that_runtime_folder_only(server, two):
     for rt in ("claude", "codex"):
         png(two / f"production-{rt}/assets/{AID}/blockout/v1/final/game_cam.png", (20, 20))

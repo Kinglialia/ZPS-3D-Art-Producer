@@ -36,6 +36,7 @@ CRITERIA = {
     "game_read": "đọc được ở camera game và ở thumbnail kích thước thật",
 }
 DUYET = {"model": "DUYỆT 1", "assemble": "DUYỆT 2"}
+SERVED = IMAGE_EXT | {".glb"}
 PRODUCER = SKILL_DIR / "scripts" / "producer.py"
 
 
@@ -149,7 +150,8 @@ def payload() -> dict:
 
 
 def ab_file(url_path: str) -> Path | None:
-    """`/ab/<asset>/<A|B>/p/<path under that root>` or `/ab/<asset>/<A|B>/a/<path under its _approved/>`."""
+    """`/ab/<asset>/<A|B>/p/assets/<asset>/<step>/v<n>/{final,review}/…` or `/ab/<asset>/<A|B>/a/<path under its
+    _approved/>`: only the images and GLBs a card links, since the other files of a root name its runtime."""
     parts = unquote(url_path).split("/", 5)
     if len(parts) != 6 or parts[1] != "ab" or parts[4] not in ("p", "a"):
         return None
@@ -164,8 +166,11 @@ def ab_file(url_path: str) -> Path | None:
         root = Path(os.path.expanduser(ap)) if ap else None
     if root is None:
         return None
-    f = (root / rest).resolve()
-    return f if f.is_file() and f.is_relative_to(root.resolve()) else None
+    base, f = root.resolve(), (root / rest).resolve()
+    if not (f.is_file() and f.is_relative_to(base) and f.suffix.lower() in SERVED):
+        return None
+    q = f.relative_to(base).parts
+    return f if key == "a" or (len(q) > 5 and q[:2] == ("assets", aid) and q[4] in ("final", "review")) else None
 
 
 def make_server(port: int):
