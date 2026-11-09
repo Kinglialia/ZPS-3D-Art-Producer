@@ -80,7 +80,7 @@ def test_every_offer_is_logged_with_its_reason_and_the_users_answer_so_silence_i
                 rubric="massing=pass")
     log = flow.st["offer_log"]
     assert [{k: w.get(k) for k in ("key", "step", "v", "why", "verdict", "decision")} for w in log] == [
-        {"key": "blockout-v1-1", "step": "blockout", "v": 1, "why": "duyệt", "verdict": "PASS", "decision": None}]
+        {"key": "house-a-blockout-v1-1", "step": "blockout", "v": 1, "why": "duyệt", "verdict": "PASS", "decision": None}]
     flow.human("approve", "đạt")
     assert flow.st["offer_log"][0]["decision"] == "approve"
     assert list(flow.st["approved_at"]) == ["blockout"]

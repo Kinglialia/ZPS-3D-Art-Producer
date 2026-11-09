@@ -108,7 +108,7 @@ def side_call(rt: str, req: dict) -> tuple[bool, dict | str]:
 def side(_a):
     """Inside one runtime root: `cards` = board cards of the given assets; `act` = one decision from the pair board."""
     from .board import asset_view
-    from .loop import human_action
+    from .loop import act
     from .state import ASSETS, load_st, locked
     req = json.loads(sys.stdin.read())
     cfg = load_cfg()
@@ -120,8 +120,8 @@ def side(_a):
         if not isinstance(b.get("offer", ""), str | None):
             die("offer phải là chuỗi")
         with locked():
-            out = {"message": human_action(b["id"], b["action"], b.get("text", ""), b.get("step"), b.get("regions"),
-                                           b.get("offer"))}
+            applied, msg = act(b["id"], b["action"], b.get("text", ""), b.get("step"), b.get("regions"), b.get("offer"))
+        out = {"applied": applied, "message": msg}
     print(json.dumps(out, ensure_ascii=False))
 
 
@@ -182,8 +182,9 @@ def make_server(port: int):
             self.end_headers()
             self.wfile.write(body)
 
-        def reply(self, code: int, msg: str):
-            self.send(code, json.dumps({"message": scrub(msg)}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+        def reply(self, code: int, msg: str, applied: bool = False):
+            self.send(code, json.dumps({"applied": applied, "message": scrub(msg)}, ensure_ascii=False).encode(),
+                      "application/json; charset=utf-8")
 
         def local(self) -> bool:
             if self.headers.get("Host", "").rsplit(":", 1)[0] in HOSTS:
@@ -223,11 +224,13 @@ def make_server(port: int):
                     raise ValueError(f"body lớn hơn {MAX_BODY} byte")
                 data = json.loads(self.rfile.read(size))
                 if path == "/api/prefer":
-                    return self.reply(200, prefer(str(data["asset"]), data["choice"], str(data.get("text") or "")))
+                    return self.reply(200, prefer(str(data["asset"]), data["choice"], str(data.get("text") or "")), True)
                 aid, _, label = str(data["id"]).rpartition("~")
                 rt = mapping().get(aid, {}).get(label) or die(f"{data['id']}: không có trong lô so sánh")
                 ok, out = side_call(rt, {"op": "act", "body": data | {"id": aid}})
-                self.reply(200 if ok else 400, out["message"] if ok else "Lỗi: " + out.removeprefix("LỖI: "))
+                if ok:
+                    return self.reply(200, out["message"], out["applied"])
+                self.reply(400, "Lỗi: " + out.removeprefix("LỖI: "))
             except Exception as ex:  # noqa: BLE001
                 self.reply(400, f"Lỗi: {ex}")
 

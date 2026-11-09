@@ -102,13 +102,15 @@ def get(url):
         return e.code, b""
 
 
-def post(url, body):
+def post(url, body, applied=False):
     req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req) as r:
-            return r.status, json.loads(r.read())["message"]
+            j = json.loads(r.read())
+            code = r.status
     except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read())["message"]
+        j, code = json.loads(e.read()), e.code
+    return (code, j["message"], j["applied"]) if applied else (code, j["message"])
 
 
 def test_the_pair_page_shows_no_runtime_or_model_name_in_text_urls_or_file_names_row_62(server, two):
@@ -141,14 +143,21 @@ def test_the_pair_server_reads_only_files_under_the_root_of_a_known_label(server
 def test_a_decision_on_one_side_lands_in_that_runtime_folder_only(server, two):
     for rt in ("claude", "codex"):
         png(two / f"production-{rt}/assets/{AID}/blockout/v1/final/game_cam.png", (20, 20))
-        patch_st(two, rt, state="waiting_human", versions={"blockout": 1}, offer=1, offer_key="blockout-v1-1",
-                 offer_log=[{"key": "blockout-v1-1", "step": "blockout", "v": 1, "why": "duyệt", "verdict": "PASS",
-                             "at": "2026-11-09 09:00"}])
+        patch_st(two, rt, state="waiting_human", versions={"blockout": 1}, offer=1, offer_key="house-a-blockout-v1-1",
+                 offer_log=[{"key": "house-a-blockout-v1-1", "step": "blockout", "v": 1, "why": "duyệt",
+                             "verdict": "PASS", "at": "2026-11-09 09:00"}])
+    sides = json.loads(get(server + "/api/board")[1])["pairs"][0]["sides"]
+    assert [s["key"] for s in sides] == ["house-a-blockout-v1-1"] * 2
     before = st_path(two, "codex").read_text(encoding="utf-8")
-    code, msg = post(server + "/api/feedback", {"id": f"{AID}~B", "action": "approve", "text": "đạt",
-                                                 "step": "blockout", "offer": "blockout-v1-1", "regions": None})
+    code, msg, applied = post(server + "/api/feedback", {"id": f"{AID}~B", "action": "approve", "text": "đạt",
+                                                          "step": "blockout", "offer": "house-a-blockout-v1-1",
+                                                          "regions": None}, applied=True)
     st = json.loads(st_path(two, "claude").read_text(encoding="utf-8"))
-    assert (code, msg) == (200, "house-a: đã duyệt blockout v1 → views_front/todo. Tiếp: giao worker → `brief house-a`")
+    assert (code, msg, applied) == (
+        200, "house-a: đã duyệt blockout v1 → views_front/todo. Tiếp: giao worker → `brief house-a`", True)
+    again = post(server + "/api/feedback", {"id": f"{AID}~B", "action": "approve", "text": "đạt", "step": "blockout",
+                                            "offer": "house-a-blockout-v1-1", "regions": None}, applied=True)
+    assert again[0::2] == (200, False)
     assert (st["approved"], st["offer_log"][0]["decision"]) == ({"blockout": 1}, "approve")
     assert st_path(two, "codex").read_text(encoding="utf-8") == before
     assert (two / "production-claude/ledger.md").read_text(encoding="utf-8").splitlines()[-1].endswith(
