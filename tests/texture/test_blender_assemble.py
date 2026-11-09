@@ -85,13 +85,13 @@ def base(tmp_path_factory):
     return t
 
 
-def assemble(base, tmp_path, edit=None):
+def assemble(base, tmp_path, edit=None, blender=BLENDER):
     root = tmp_path / "p"
     shutil.copytree(base, root, symlinks=True)
     if edit:
         edit(root / "production/assets" / AID)
     r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), AID, "--version", "1", "--profile-hash", "abc123",
-                        "--blender", BLENDER], cwd=root, capture_output=True, text=True)
+                        "--blender", str(blender)], cwd=root, capture_output=True, text=True)
     d = root / "production/assets" / AID / "assemble/v1"
     rep = (d / "report-script.md").read_text(encoding="utf-8") if (d / "report-script.md").is_file() else r.stderr
     cmp_ = d / "final/review/compare.json"
@@ -154,3 +154,14 @@ def test_a_failing_kit_qa_makes_finalize_refuse_and_assemble_block(base, tmp_pat
     assert (r["rc"], r["compare"]["qa"]["mesh_check"]) == (1, "fail")
     issues = r["report"].splitlines()[2]
     assert issues.startswith("ISSUES: qa GLB cuối: ") and "mesh_check" in issues
+
+
+def test_a_kit_check_that_writes_no_result_is_a_qa_fail_because_finalize_only_requires_mesh_check(base, tmp_path):
+    crash = tmp_path / "blender_crash_export_check.sh"
+    crash.write_text(f'#!/bin/sh\ncase "$*" in *export_check.py*) exit 1;; esac\nexec "{BLENDER}" "$@"\n')
+    crash.chmod(0o755)
+    r = assemble(base, tmp_path, blender=crash)
+    assert (r["rc"], r["compare"]["qa"]) == (1, {"mesh_check": "pass", "uv_check": "pass", "export_check": "missing",
+                                                  "screen_tris_check": "info"})
+    assert r["report"].splitlines()[:3] == ["STATUS: BLOCKED", "OUTPUT: production/assets/box/assemble/v1/final/",
+                                            "ISSUES: qa GLB cuối: export_check: missing"]

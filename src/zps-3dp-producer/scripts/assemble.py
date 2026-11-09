@@ -8,6 +8,7 @@ Reads the approved `model` and `texture` versions of status.json and writes asse
   3 kit QA on a byte copy of that GLB in work/qa_input/ (the validator writes beside its input), results in
     work/evidence/qa/: mesh_check, uv_check, export_check (expect_unlit), screen_tris_check.
   3b kit finalize.py over work/: refuses unless every QA result for this GLB's sha256 passes and mesh_check is there.
+     Finalize skips a check with no result, so any of the four not pass or info, missing included, is a fail too.
   4 the GLB rendered again with the texture step's recorded cameras (unlit_34_front, unlit_game) and compared with the
     texture renders: mean |RGB| difference over the object ≤ COMPARE_MEAN, silhouette mismatch ≤ COMPARE_MASK.
   5 package: texture/ (albedo, notes.md), review/ (model_sheet.png, the texture renders, final_lit_vs_concept.png,
@@ -185,13 +186,14 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
         dst = work / "evidence" / "qa" / f"{q}.json"
         blender(a.blender, MODEL_TOOLS / "asset_checks" / f"{q}.py", "--input", probe, "--spec", work / "spec.json",
                 "--out", dst)
-        qa[q] = json.loads(dst.read_text(encoding="utf-8")) if dst.is_file() else {"overall": "error", "checks": []}
+        qa[q] = json.loads(dst.read_text(encoding="utf-8")) if dst.is_file() else {"overall": "missing", "checks": []}
     r = subprocess.run([sys.executable, str(FINALIZE), "--work", str(work), "--from", str(glb), "--out",
                         str(work / "evidence" / "finalize.json")], capture_output=True, text=True)
     data["qa"] = {q: v.get("overall") for q, v in qa.items()}
-    if r.returncode != 0:
-        why = "; ".join(l.strip() for l in r.stderr.splitlines()[1:]) or r.stderr.strip()[-300:]
-        fails.append(fail_point("qa", "GLB cuối", f"work/evidence/finalize.json: {why}",
+    bad = [f"{q}: {o}" for q, o in data["qa"].items() if o not in ("pass", "info")]
+    if r.returncode != 0 or bad:
+        refused = [l.strip() for l in r.stderr.splitlines()[1:]] or [r.stderr.strip()[-300:]] if r.returncode else []
+        fails.append(fail_point("qa", "GLB cuối", f"work/evidence/finalize.json: {'; '.join(bad + refused)}",
                                 "QA của kit không pass cho đúng file GLB này", "sửa theo JSON QA fail ở work/evidence/qa/",
                                 "finalize.py không từ chối"))
     rc, out = blender(a.blender, RENDER, "--glb", glb, "--cameras", tf / "review" / "renders.json", "--views",
@@ -260,6 +262,9 @@ def main():
         fails, _ = run(a, d)
     except Fail as ex:
         fails = [fail_point("input", "assemble", f"work/evidence: {ex}", "không ghép được gói", "xem lỗi", "chạy lại pass")]
+    except Exception as ex:  # noqa: BLE001
+        fails = [fail_point("script", "assemble", f"work/evidence: {type(ex).__name__}: {ex}", "script dừng giữa chừng",
+                            "sửa môi trường theo lỗi rồi `retry`", "chạy lại pass")]
     finally:
         pid.unlink(missing_ok=True)
     for f in fails:
