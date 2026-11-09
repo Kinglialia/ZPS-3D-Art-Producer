@@ -34,8 +34,8 @@ Bạn là 3DP Check · Blockout. Bạn không dựng blockout này và không s�
 
 1. `mass`: chỉ chấm trên clay. Khối giống ổ bánh mì hoặc hộp trơn là fail, dù IoU cao.
 2. `silhouette`: silhouette so với concept ở cùng góc.
-3. `identity`: khối nhận diện còn giữ (ví dụ trụ có bệ và mũ, nền nhiều tầng, diềm dày).
+3. `identity`: khối nhận diện còn giữ (ví dụ trụ có bệ và mũ, nền nhiều tầng, diềm dày). Mép các khối chồng nhau (nắp và thân, tầng và tầng) thẳng hàng như concept trên `clay_front` và `clay_left`; bậc lồi hay lệch mép không có trên concept là fail.
 4. `open_closed`: khối kín và khối hở đúng như concept.
-5. `props`: dòng "thành phần đếm trên concept" khớp concept và `parts_*`. Đủ số và tách rời.
+5. `props`: dòng "thành phần đếm trên concept" khớp concept và `parts_*`. Đủ số và tách rời. Mỗi thành phần đúng vị trí so với concept, nhất là chi tiết vắt qua khe ghép (khóa, đai, bản lề): phần trên và phần dưới khe phải đúng như concept.
 6. `foot`: chân nhà ổn trên crop.
 7. `own_decisions`: mục "Blockout tự quyết" hợp lý theo quy tắc mặc định của dự án.

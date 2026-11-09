@@ -103,3 +103,9 @@ def test_worker_points_only_at_files_that_exist():
 def test_reviewer_writes_acceptance_a_fix_can_reach_not_an_overlay_percentage():
     text = (AGENT.parent / "zps-3dp-check-blockout.md").read_text(encoding="utf-8")
     assert "Không dùng % red/blue hay IoU của overlay làm ngưỡng" in text
+
+
+def test_reviewer_checks_aligned_edges_and_parts_across_a_seam_which_the_pilot_reviewers_missed():
+    text = (AGENT.parent / "zps-3dp-check-blockout.md").read_text(encoding="utf-8")
+    assert "chi tiết vắt qua khe ghép (khóa, đai, bản lề)" in text
+    assert "bậc lồi hay lệch mép không có trên concept là fail" in text
