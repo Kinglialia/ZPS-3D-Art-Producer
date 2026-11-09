@@ -1,7 +1,10 @@
 # Pipeline của Producer — nơi DUY NHẤT định nghĩa thứ tự bước, agent, model, gate, output bắt buộc, giới hạn chạy song song.
-# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 1 chỉ bật `blockout`.
+# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 2 bật `blockout`, `views_front`, `views_rest`.
 # gate: review (reviewer PASS → bước sau) | review_human (reviewer PASS → người duyệt) | checks_human (script pass → người duyệt)
 # top_fix: loại TOP_FIX reviewer được dùng ở bước này; `need_evidence` dùng được ở mọi bước có reviewer.
+# inputs: bước đã duyệt mà brief trỏ tới `final/` (mặc định: bước liền trước).
+# concept: file trong _approved/<id>/ bước cần đọc; {id} = mã asset (mặc định: mọi file bắt buộc).
+# regions: `region` của finding mới mở đầu bằng một trong các tên này, vd `back: mép mái`.
 
 [project]
 name = "{{PROJECT}}"
@@ -32,23 +35,30 @@ outputs = ["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb",
 
 [[steps]]
 id = "views_front"
-enabled = false
 agent = "step-views"
 reviewer = "check-views"
 model = "opus"
 gate = "review"
-uses = ["codex_image"]
+uses = ["blender", "codex_image"]
 top_fix = ["regen"]
+inputs = ["blockout"]
+concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
+outputs = ["final/front.png", "final/guides/views.json", "final/concept_colors.json", "final/bg_color.json",
+           "final/report/report.json", "final/report/VIEWS.md"]
 
 [[steps]]
 id = "views_rest"
-enabled = false
 agent = "step-views"
 reviewer = "check-views"
 model = "opus"
 gate = "review_human"
 uses = ["codex_image"]
 top_fix = ["regen", "regen_front", "note_exception", "note_texture"]
+inputs = ["blockout", "views_front"]
+concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
+regions = ["back", "left", "right", "top"]
+outputs = ["final/back.png", "final/left.png", "final/right.png", "final/top.png", "final/README.md",
+           "final/report/report.json", "final/report/VIEWS.md", "final/report/VIEWS_sheet.png"]
 
 [[steps]]
 id = "model"

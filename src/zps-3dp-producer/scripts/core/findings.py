@@ -8,10 +8,11 @@ from .state import vdir, write_atomic
 
 OPEN = {"open", "regressed"}
 BM = ("blocker", "major")
-SINGLE = {"structure"}
+SINGLE = {"structure", "regen_front"}
 NOTE = {"note", "note_exception", "note_texture"}
-TIE_FIRST = {"structure", "fix_uv_mesh"}
+TIE_FIRST = {"structure", "fix_uv_mesh", "regen_front"}
 BATCH_PRIO = ("blocker", "major", "minor")
+REOPEN = {"regen_front": "views_front"}
 
 
 def path(aid: str, step: str, n: int):
@@ -38,6 +39,23 @@ def add_human(aid: str, step: dict, n: int, text: str):
         "evidence": f"feedback.md: {step['id']} v{n}", "consequence": "người dùng chưa duyệt", "confidence": "high",
         "repair": text, "preserve": "những gì feedback không nhắc", "acceptance": f"đạt yêu cầu của người dùng: {text}"}
     save(aid, step["id"], doc)
+
+
+def carry(aid: str, f: dict, src: str, dst: dict, m: int) -> str:
+    """D22.4: a finding on an earlier step's output joins that step's approved version m as its TOP_FIX."""
+    doc = load(aid, dst["id"], m) or {"version": m, "base": None, "top_fix": None, "pick": None, "next_id": 1,
+                                      "findings": {}}
+    fid, kind = f"F{doc['next_id']}", next(t for t in dst["top_fix"] if t not in NOTE)
+    doc["findings"][fid] = f | {"kind": kind, "status": "open", "first_v": m, "last_v": m,
+                                "evidence": f"{src}: {f['evidence']}"}
+    doc |= {"next_id": doc["next_id"] + 1, "top_fix": {"kind": kind, "ids": [fid]}}
+    save(aid, dst["id"], doc)
+    return fid
+
+
+def region_ok(region: str, names: list[str]) -> bool:
+    head, sep, _ = region.partition(":")
+    return bool(sep) and all(x.strip() in names for x in head.split(","))
 
 
 def open_of(doc: dict | None) -> dict:
@@ -98,6 +116,10 @@ def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[s
             continue
         if f["kind"] not in step["top_fix"]:
             errs.append(f"{i}: loại '{f['kind']}' không có ở bước {step['id']} ({'|'.join(step['top_fix'])})")
+        if f["kind"] in NOTE and f["priority"] != "minor":
+            errs.append(f"{i}: {f['kind']} chỉ ghi chú, mức phải là minor")
+        if (names := step.get("regions")) and f["kind"] not in REOPEN and not region_ok(f.get("region", ""), names):
+            errs.append(f"{i}: region phải mở đầu bằng {'|'.join(names)}, vd `{names[0]}: …`")
         fs[i] = {"priority": f["priority"], "kind": f["kind"], "status": "open", "first_v": n, "last_v": n,
                  **{k: v for k, v in f.items() if k not in ("priority", "kind")}}
     doc = {"version": n, "base": base["version"] if base else None, "top_fix": rv["top_fix"], "pick": rv["pick"],

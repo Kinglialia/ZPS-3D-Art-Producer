@@ -10,10 +10,23 @@ from .loop import move, next_action, review_base, set_aside
 from .state import ASSETS, ROOT, SKILL_DIR, die, ledger, load_cfg, load_st, rel, save_st, step_of, vdir
 
 
-def tools_line(step, pf: dict | None) -> list[str]:
+def image_gen(preset: Path) -> dict:
+    import yaml
+    ig = (yaml.safe_load(preset.read_text(encoding="utf-8")) or {}).get("image_gen") or {}
+    if not (ig.get("codex_model") and ig.get("reasoning")):
+        die(f"{rel(preset)}: thiếu image_gen: {{codex_model, reasoning}} (D15.1)")
+    return ig
+
+
+def tools_line(st, step, pf: dict | None, preset: Path) -> list[str]:
     t = SKILL_DIR / "agents" / f"zps-3dp-{step.get('agent')}" / "tools"
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
         [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else [])
+    if "codex_image" in step["uses"]:
+        ig = image_gen(preset)
+        out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
+                f"GEN_ARGS: --model {ig['codex_model']} --reasoning {ig['reasoning']} "
+                f"--pid-file {rel(ROOT / 'pids' / 'codex_image' / (st['id'] + '.pid'))}"]
     return out + [""] if out else []
 
 
@@ -30,10 +43,15 @@ def failed_checks(vd) -> list[str]:
     return out
 
 
-def concept_files(st) -> list[str]:
+def concept_files(st, step) -> list[str]:
     from check_card import required_files
     d = Path(st["concept_dir"])
-    return [x for x in required_files(st["id"], True) if not x.endswith(".layout.md") or (d / x).is_file()]
+    names = [x.format(id=st["id"]) for x in step["concept"]] if step["concept"] else required_files(st["id"], True)
+    return [x for x in names if not x.endswith(".layout.md") or (d / x).is_file()]
+
+
+def input_finals(st, step) -> list[tuple[str, Path]]:
+    return [(p, vdir(st["id"], p, v) / "final") for p in step["inputs"] if (v := st["approved"].get(p))]
 
 
 def pid_line(st, step) -> list[str]:
@@ -43,7 +61,7 @@ def pid_line(st, step) -> list[str]:
     return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}`."]
 
 
-def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, preset) -> str:
+def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path) -> str:
     aid = st["id"]
     d = vdir(aid, step["id"], n)
     a = ASSETS / aid
@@ -54,7 +72,7 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, prese
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
-        *tools_line(step, pf),
+        *tools_line(st, step, pf, preset),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
@@ -63,19 +81,19 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, prese
     ]
     k = 5
     if st.get("concept_dir"):
-        names = ", ".join(f"`{x}`" for x in concept_files(st))
+        names = ", ".join(f"`{x}`" for x in concept_files(st, step))
         lines.append(f"{k}. Concept đã duyệt trong `{st['concept_dir']}`: chỉ đọc {names}. "
                      "Bỏ qua file và thư mục khác (bản nháp cũ).")
         k += 1
     lines.append(f"{k}. {ad_text(cfg, {step['id']})}")
     k += 1
-    if i > 0:
-        prev = cfg["steps"][i - 1]["id"]
-        pv = st["approved"].get(prev)
-        if pv:
-            pd = vdir(aid, prev, pv)
-            lines.append(f"{k}. Đầu ra đã duyệt của bước `{prev}`: `{rel(pd / 'final')}/`.")
-            k += 1
+    for prev, fd in input_finals(st, step):
+        lines.append(f"{k}. Đầu ra đã duyệt của bước `{prev}`: `{rel(fd)}/`.")
+        k += 1
+    if not fix and (pv := (st.get("prior") or {}).get(step["id"])):
+        lines.append(f"{k}. Bản đã duyệt trước của bước này (dựng từ đầu vào cũ): `{rel(vdir(aid, step['id'], pv) / 'final')}/`. "
+                     "Giữ phần có đầu vào không đổi, theo file agent.")
+        k += 1
     m = st.get("fix_base")
     if fix and m:
         pd = vdir(aid, step["id"], m)
@@ -159,7 +177,8 @@ def review_brief(cfg, st, step, n) -> str:
         f"- Báo cáo tự check của worker: `{rel(d / 'report-worker.md')}` — tham khảo, không tin thay bằng chứng.",
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
         *([f"- Concept đã duyệt để đối chiếu, trong `{st['concept_dir']}`: chỉ "
-           + ", ".join(f"`{x}`" for x in concept_files(st)) + "."] if st.get("concept_dir") else []),
+           + ", ".join(f"`{x}`" for x in concept_files(st, step)) + "."] if st.get("concept_dir") else []),
+        *(f"- Đầu ra đã duyệt của bước `{p}` (đầu vào, không chấm lại): `{rel(fd)}/`." for p, fd in input_finals(st, step)),
         f"- Profile dự án (`hidden_side_rules`, `scale_refs`): `{rel(ROOT / 'PROJECT-PROFILE.yaml')}`.",
         f"- {ad_text(cfg, {sid, 'review'})}",
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "
@@ -188,6 +207,9 @@ def review_brief(cfg, st, step, n) -> str:
         "```",
         f"- FINDINGS chỉ ghi finding mới, id từ F{nxt}, đủ mọi trường; evidence dẫn nhãn trong EVIDENCE_OPENED. "
         "Không có finding mới: `FINDINGS: none`.",
+        *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`; "
+           + "; ".join(f"`{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
+                       if k in findings.REOPEN) + "."] if step["regions"] else []),
         *(["- PRIOR: thay `?` bằng open|resolved|regressed|superseded. resolved chỉ khi thấy bằng chứng cho "
            "acceptance, ghi nhãn ảnh đó vào evidence."] if op else []),
         *([f"- COMPARE: so ảnh cùng góc với v{m}: better|same|worse. resolved cần better; worse thì regressed."]
@@ -204,7 +226,7 @@ def review_brief(cfg, st, step, n) -> str:
     return "\n".join(lines) + "\n"
 
 
-def evidence_brief(st, step, n, ed, ph: str, pf: dict | None) -> str:
+def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> str:
     aid, sid = st["id"], step["id"]
     tf = findings.load(aid, sid, n)["top_fix"]
     lines = [
@@ -212,7 +234,7 @@ def evidence_brief(st, step, n, ed, ph: str, pf: dict | None) -> str:
         "",
         f"PROFILE_HASH: {ph}",
         "",
-        *tools_line(step, pf),
+        *tools_line(st, step, pf, preset),
         f"Reviewer cần thêm ảnh để chấm {', '.join(tf['ids'])}: đọc region, viewing_condition, evidence, acceptance "
         f"của các id này trong `{rel(findings.path(aid, sid, n))}`.",
         f"- Chỉ render các ảnh đó, ghi vào `{rel(ed)}/`. Không tạo version mới.",
@@ -242,11 +264,12 @@ def run(a):
     from check_profile import PRESETS
     from .intake import load_profile
     prof = load_profile()
-    ph, pf = hashes.digest(prof), preflight.load()
+    ph, pf, preset = hashes.digest(prof), preflight.load(), PRESETS / f"{prof['preset']}.yaml"
     if s in ("todo", "fix", "running", "evidence", "evidence_running") and (off := preflight.off(step, pf)):
         die(f"{a.id}: bước {sid} cần {', '.join(off)} đang tắt (preflight) → sửa môi trường rồi chạy lại `preflight`")
-    if "blender" in step["uses"]:
-        (ROOT / "pids" / "blender").mkdir(parents=True, exist_ok=True)
+    for res in step["uses"]:
+        if res in cfg["limits"]:
+            (ROOT / "pids" / res).mkdir(parents=True, exist_ok=True)
     if s in ("todo", "fix", "running"):
         if s == "running":
             n = st["versions"][sid]
@@ -259,7 +282,7 @@ def run(a):
         fix = s == "fix" or (s == "running" and st.get("fix_round", 0) > 0)
         hashes.record_inputs(cfg, st, i, n, ph)
         bp = d / "brief-worker.md"
-        bp.write_text(worker_brief(cfg, st, i, step, n, fix, ph, pf, PRESETS / f"{prof['preset']}.yaml"), encoding="utf-8")
+        bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset), encoding="utf-8")
         model = step.get("model")
         resume = None
         if fix and st.get("fix_round", 0) <= r["resume_rounds"]:
@@ -273,7 +296,7 @@ def run(a):
         ed = vdir(a.id, sid, n) / "review" / f"evidence-{st['evidence']['k']}"
         ed.mkdir(parents=True, exist_ok=True)
         bp = ed / "brief-worker.md"
-        bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"], pf), encoding="utf-8")
+        bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"], pf, preset), encoding="utf-8")
         out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": step.get("model"), "resume": st.get("worker_agent_id"),
                "brief": rel(bp), "report": rel(ed / "report-worker.md")}
     elif s in ("review", "reviewing"):

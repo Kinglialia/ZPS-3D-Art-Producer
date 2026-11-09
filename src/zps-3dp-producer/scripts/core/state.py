@@ -80,12 +80,17 @@ def load_cfg() -> dict:
     ids = [s.get("id") or die("mỗi [[steps]] cần id") for s in steps]
     if len(set(ids)) != len(ids):
         die("step id bị trùng trong pipeline.toml")
-    for s in steps:
+    for i, s in enumerate(steps):
         s.setdefault("gate", "review")
         s.setdefault("outputs", [])
         s.setdefault("enabled", True)
         s.setdefault("uses", [])
         s.setdefault("top_fix", [])
+        s.setdefault("inputs", ids[i - 1:i])
+        s.setdefault("concept", None)
+        s.setdefault("regions", [])
+        if bad := [x for x in s["inputs"] if x not in ids[:i]]:
+            die(f"step {s['id']}: inputs {', '.join(bad)} không phải bước trước nó")
         if s["gate"] not in GATES:
             die(f"step {s['id']}: gate phải là {' | '.join(sorted(GATES))}")
         if s["gate"] != "checks_human":

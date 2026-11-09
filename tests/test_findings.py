@@ -276,3 +276,33 @@ def test_worker_report_missing_profile_hash_keeps_the_asset_running(tmp_path):
     assert run(tmp_path, "ingest", "house-a", ok=False) == (
         "LỖI: production/assets/house-a/blockout/v1/report-worker.md sai contract: thiếu PROFILE_HASH\n")
     assert json.loads((tmp_path / "production/assets/house-a/status.json").read_text())["state"] == "running"
+
+
+REST = {"id": "views_rest", "top_fix": ["regen", "regen_front", "note_exception", "note_texture"],
+        "regions": ["back", "left", "right", "top"]}
+
+
+def test_regen_front_takes_one_id_and_wins_a_tie_with_regen_because_a_new_front_voids_every_other_view():
+    fs = [finding("F1", "major", "regen", region="back: bóng đổ dưới mái"),
+          finding("F2", "major", "regen_front", region="front: gỗ đỏ hơn cả bộ")]
+    assert errs_of(None, step=REST, counts=counts(major=2), top_fix="regen: F1", findings=fs) == [
+        "TOP_FIX phải là loại regen_front"]
+    assert errs_of(None, step=REST, counts=counts(major=2), top_fix="regen_front: F2", findings=fs) == []
+
+
+def test_a_note_finding_must_be_minor_because_a_note_never_causes_a_fix():
+    note = {"region": "back: đầu dầm"}
+    assert errs_of(None, step=REST, verdict="PASS", top_fix=None, counts=counts(minor=1),
+                   findings=[finding("F1", "minor", "note_texture", **note)]) == []
+    assert errs_of(None, step=REST, verdict="PASS", top_fix=None, counts=counts(major=1),
+                   findings=[finding("F1", "major", "note_texture", **note)]) == [
+        "F1: note_texture chỉ ghi chú, mức phải là minor", "PASS nhưng còn major=1 đang mở"]
+
+
+def test_a_views_rest_finding_opens_with_its_view_so_front_is_judged_only_through_regen_front():
+    fs = [finding("F1", "major", "regen", region="mép mái"), finding("F2", "major", "regen", region="front: màu gỗ"),
+          finding("F3", "major", "regen", region="back, left: bóng đổ"),
+          finding("F4", "major", "regen_front", region="front: gỗ đỏ")]
+    assert errs_of(None, step=REST, counts=counts(major=4), top_fix="regen_front: F4", findings=fs) == [
+        "F1: region phải mở đầu bằng back|left|right|top, vd `back: …`",
+        "F2: region phải mở đầu bằng back|left|right|top, vd `back: …`"]

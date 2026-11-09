@@ -13,7 +13,7 @@ from .state import FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, load_cfg, l
 BOARD_DIR = SKILL_DIR / "scripts" / "board"
 SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "views_rest": "report/VIEWS.md",
                 "model": "model.md", "texture": "texture/notes.md", "assemble": "README.md"}
-SHEET = "game_cam.png"
+HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "VIEWS_sheet.png"}
 SUMMARY_LINES = 3
 CONCEPT_IMAGES = ("concept_albedo.png", "concept_shadow.png")
 LINE_FIELDS = ("region", "evidence", "repair")
@@ -68,7 +68,7 @@ def latest_evidence(v: Path) -> Path | None:
 
 def asset_view(cfg: dict, st: dict) -> dict:
     aid, step = st["id"], st["stage"]
-    n = shown(st, step)
+    n, hero = shown(st, step), HERO.get(step)
     approved = cfg["paths"]["approved"]
     final = vdir(aid, step, n) / "final" if n else None
     pics = images_of(final)
@@ -76,7 +76,7 @@ def asset_view(cfg: dict, st: dict) -> dict:
     if ev:
         newer = {p.name for p in images_of(ev)}
         pics = [p for p in pics if p.name not in newer] + images_of(ev)
-    pics.sort(key=lambda p: p.name != SHEET)
+    pics.sort(key=lambda p: p.name != hero)
     images = [{"u": _url("p", ROOT, p),
                "n": (p.relative_to(final) if p.is_relative_to(final) else p.relative_to(ev.parent)).as_posix()}
               for p in pics]
@@ -84,7 +84,7 @@ def asset_view(cfg: dict, st: dict) -> dict:
     if cd and approved and cd.resolve().is_relative_to(approved.resolve()):
         concept = [{"u": _url("a", approved.resolve(), (cd / x).resolve()), "n": "concept/" + x}
                    for x in CONCEPT_IMAGES if (cd / x).is_file()]
-        k = 1 if pics and pics[0].name == SHEET else 0
+        k = 1 if pics and pics[0].name == hero else 0
         images[k:k] = concept
     glb = next(iter(sorted(final.glob("*.glb"))), None) if final and final.is_dir() else None
     lines = summary_lines(final / SUMMARY_FILE[step]) if final and step in SUMMARY_FILE else []
@@ -94,7 +94,7 @@ def asset_view(cfg: dict, st: dict) -> dict:
     return {
         "id": aid, "step": step, "version": n, "waiting": waiting,
         "header": f"{st.get('title', aid)} · {step}{f' v{n}' if n else ''} · {'chờ anh duyệt' if waiting else st['state']}",
-        "sheet": images[0]["u"] if pics and pics[0].name == SHEET else None,
+        "sheet": images[0]["u"] if pics and pics[0].name == hero else None,
         "images": images,
         "glb": _url("p", ROOT, glb) if glb else None,
         "summary": lines[:SUMMARY_LINES], "more": lines[SUMMARY_LINES:],

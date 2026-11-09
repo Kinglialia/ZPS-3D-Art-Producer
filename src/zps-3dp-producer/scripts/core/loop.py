@@ -17,7 +17,7 @@ MOVES = {
     ("evidence", "dispatch"): "evidence_running", ("evidence_running", "dispatch"): "evidence_running",
     ("running", "worker_done"): "review", ("running", "checks_done"): "waiting_human", ("running", "stuck"): "blocked",
     ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
-    ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence",
+    ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence", ("reviewing", "reopen"): "fix",
     ("reviewing", "await_approval"): "waiting_human", ("reviewing", "ask_human"): "waiting_human",
     ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT,
     ("blocked", "retry"): "running", ("blocked", "retry_evidence"): "evidence", ("blocked", "retry_todo"): "todo",
@@ -47,14 +47,17 @@ def move(st: dict, event: str, cfg: dict | None = None):
 
 
 def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int, max_rounds: int, progressed: bool,
-                 evidence_used: int) -> tuple[str, str | None]:
-    """§7: what a valid review leads to. fix_round is the fix round that built the reviewed version (0 = first build)."""
+                 evidence_used: int, reopened: int = 0) -> tuple[str, str | None]:
+    """§7: what a valid review leads to. fix_round is the fix round that built the reviewed version (0 = first build).
+    reopened: earlier steps a reviewer reopened in this feedback round (regen_front costs a new front and a new set)."""
     if verdict == "ESCALATE":
         return "ask_human", "reviewer ESCALATE"
     if verdict == "PASS":
         return ("approve", None) if auto else ("await_approval", None)
     if top_kind == "need_evidence":
         return ("ask_human", "xin bằng chứng lần 2") if evidence_used else ("need_evidence", None)
+    if top_kind in findings.REOPEN:
+        return ("ask_human", f"{top_kind} lần 2") if reopened else ("reopen", None)
     if fix_round >= max_rounds:
         return "ask_human", f"hết {max_rounds} vòng sửa"
     if fix_round >= 2 and not progressed:
@@ -194,13 +197,23 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     if n not in rvs:
         rvs.append(n)
     base = findings.load(aid, sid, st.get("fix_base"))
-    event, reason = review_event(rv["verdict"], (rv["top_fix"] or {}).get("kind"), who != "human",
-                                 st.get("fix_round", 0), r["max_fix_rounds"], bool(base) and findings.progress(base, doc),
-                                 st.get("evidence_used", 0))
+    kind = (rv["top_fix"] or {}).get("kind")
+    event, reason = review_event(rv["verdict"], kind, who != "human", st.get("fix_round", 0), r["max_fix_rounds"],
+                                 bool(base) and findings.progress(base, doc), st.get("evidence_used", 0),
+                                 st.get("reopened", 0))
     st["evidence"] = None
     st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
     best = findings.best_version([findings.load(aid, sid, v) for v in rvs])
-    if event == "approve":
+    if event == "reopen":
+        move(st, event)
+        tid, fid = findings.REOPEN[kind], rv["top_fix"]["ids"][0]
+        ti, target = step_of(cfg, tid)
+        m = st["approved"].get(tid) or die(f"{aid}: {kind} cần bản {tid} đã duyệt")
+        new = findings.carry(aid, doc["findings"][fid], f"{sid} v{n} {fid}", target, m)
+        reopen(cfg, st, ti, target, m, f"{kind}: sửa {tid} v{m} theo {new} ({sid} v{n} {fid})")
+        st["reopened"] = st.get("reopened", 0) + 1
+        reason = f"{kind} → {tid} v{m} {new}"
+    elif event == "approve":
         approve(cfg, st, step, n, "reviewer" if who == "reviewer" else policy.BY[who])
     elif event == "await_approval":
         move(st, event)
@@ -244,6 +257,7 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     st["approved"][sid] = n
     st.setdefault("approved_hash", {})[sid] = hashes.tree_hash(vdir(st["id"], sid, n) / "final")
     st.setdefault("rejected", {})[sid] = [v for v in range(1, st["versions"][sid] + 1) if v != n]
+    st.setdefault("prior", {}).pop(sid, None)
     if sid == "assemble":
         out = ROOT.parent / "deliver" / st["id"]
         if out.exists():
@@ -254,16 +268,27 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     hashes.refresh_stale(cfg, st)
 
 
-def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str):
-    move(st, "redo")
-    if n:
-        findings.add_human(st["id"], step, n, text)
+def reopen(cfg: dict, st: dict, i: int, step: dict, n: int | None, note: str):
+    """A fix round of `step` from version n; this step and every later one lose their approval.
+    A later approved version becomes `prior`, so its next build can keep what did not change (concept-views.md §9)."""
+    later = {s["id"]: st["approved"][s["id"]] for s in cfg["steps"][i + 1:] if s["id"] in st["approved"]}
+    st.setdefault("prior", {}).update(later)
+    if st["stage"] != step["id"]:
+        st["worker_agent_id"] = None
     st |= fresh() | {"stage": step["id"], "fix_round": 1, "fix_base": n, "round_versions": [n] if n else [],
-                     "note": "làm lại theo feedback người dùng"}
+                     "note": note}
     for s in cfg["steps"][i:]:
         for k in ("approved", "approved_hash", "rejected"):
             st.setdefault(k, {}).pop(s["id"], None)
     hashes.refresh_stale(cfg, st)
+
+
+def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str):
+    move(st, "redo")
+    if n:
+        findings.add_human(st["id"], step, n, text)
+    reopen(cfg, st, i, step, n, "làm lại theo feedback người dùng")
+    st["reopened"] = 0
     readme = ROOT.parent / "deliver" / st["id"] / "README.md"
     if readme.exists() and not (t := readme.read_text(encoding="utf-8")).startswith(REDOING):
         readme.write_text(REDOING + t, encoding="utf-8")

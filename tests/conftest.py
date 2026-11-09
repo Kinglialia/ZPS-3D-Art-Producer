@@ -26,6 +26,23 @@ def write_profile(root, profile=None):
         yaml.safe_dump(PROFILE if profile is None else profile, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
+PILOT = Path(__file__).parent / "fixtures/pilot"
+
+
+def pilot_project(root: Path):
+    import shutil
+    run(root, "init", "--project", "Pilot", "--concepts", "concepts")
+    shutil.copytree(PILOT / "_approved", root / "concepts/_approved", dirs_exist_ok=True)
+    shutil.copy(PILOT / "PROJECT-PROFILE.yaml", root / "production/PROJECT-PROFILE.yaml")
+
+
+def blockout_only(root):
+    """GĐ 1 tests drive one step; turning views_front off keeps `done_enabled` right after blockout."""
+    p = Path(root) / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\n', 'id = "views_front"\nenabled = false\n', 1),
+                 encoding="utf-8")
+
+
 def brief_hash(text: str) -> str:
     return re.search(r"^PROFILE_HASH: ([0-9a-f]{12})$", text, re.M).group(1)
 

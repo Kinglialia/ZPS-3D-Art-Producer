@@ -3,15 +3,13 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from shared import P, PROFILE_HASH, finding, report, run
+from shared import P, PILOT, PROFILE_HASH, blockout_only, finding, pilot_project, report, run
 
-PILOT = Path(__file__).parent / "fixtures/pilot"
 AGENT = P.parents[1] / "agents/zps-3dp-step-blockout"
 TOOLS = AGENT / "tools"
 VPY = TOOLS / ".deps/venv/bin/python"
@@ -44,12 +42,6 @@ def resolved(*n):
 
 def still_open(*n):
     return [f"- F{i}: open" for i in n]
-
-
-def pilot_project(root: Path):
-    run(root, "init", "--project", "Pilot", "--concepts", "concepts")
-    shutil.copytree(PILOT / "_approved", root / "concepts/_approved", dirs_exist_ok=True)
-    shutil.copy(PILOT / "PROJECT-PROFILE.yaml", root / "production/PROJECT-PROFILE.yaml")
 
 
 class Pilot:
@@ -104,6 +96,7 @@ def flow(tmp_path_factory):
     root = tmp_path_factory.mktemp("pilot")
     f = Pilot(root)
     pilot_project(root)
+    blockout_only(root)
     f.save("intake list", f.p("intake"))
     f.save("intake", f.p("intake", AID))
     f.save("ready", f.p("ready", AID))

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import SCRIPTS, brief_hash, finding, report, write_profile
+from shared import SCRIPTS, blockout_only, brief_hash, finding, report, write_profile
 from core import briefs, findings, intake, loop, policy
 from core.state import ProducerError, load_cfg, load_st, save_st
 
@@ -64,6 +64,7 @@ class Flow:
 def flow(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     intake.init(Namespace(project="Pilot", concepts="concepts"))
+    blockout_only(tmp_path)
     write_profile(tmp_path)
     intake.new(Namespace(id=AID, title="House A", type="asset", priority=2, deadline=None), load_cfg())
     intake.ready(Namespace(ids=[AID]))
@@ -93,8 +94,11 @@ def pick(st):
     (("FIX", "param", False, 2, 3, False, 0), ("ask_human", "không tiến bộ ở vòng 2")),
     (("FIX", "param", False, 2, 3, True, 0), ("fix", None)),
     (("FIX", "structure", False, 3, 3, True, 0), ("ask_human", "hết 3 vòng sửa")),
+    (("FIX", "regen_front", False, 1, 3, False, 0, 0), ("reopen", None)),
+    (("FIX", "regen_front", False, 3, 3, False, 0, 0), ("reopen", None)),
+    (("FIX", "regen_front", False, 0, 3, False, 0, 1), ("ask_human", "regen_front lần 2")),
 ])
-def test_review_outcome_table_encodes_round_cap_early_stop_from_round_2_escalate_and_one_evidence_round(args, expected):
+def test_review_outcome_table_encodes_round_cap_early_stop_escalate_one_evidence_round_and_one_reopen(args, expected):
     assert loop.review_event(*args) == expected
 
 

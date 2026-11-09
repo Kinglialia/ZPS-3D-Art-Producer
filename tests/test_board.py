@@ -119,6 +119,34 @@ def test_a_version_built_from_old_input_gets_the_stale_label(project):
     assert (v["step"], v["version"], v["stale"], v["label"]) == ("views_rest", 1, "dựng từ blockout v1 — cũ", "")
 
 
+def views_version(step, files, note, label=""):
+    final = vdir(AID, step, 1) / "final"
+    for name in files:
+        (final / name).parent.mkdir(parents=True, exist_ok=True)
+        (final / name).write_bytes(PNG)
+    (final / "report/VIEWS.md").write_text("# Views house-a v1\nfront: bóng đổ còn dưới mái\nđã gen 3 lần\n\nchi tiết\n",
+                                           encoding="utf-8")
+    st = load_st(AID)
+    st |= {"stage": step, "versions": {"blockout": 2, step: 1}, "offer": 1, "label": label, "note": note}
+    save_st(st)
+    return view()
+
+
+def test_views_front_sent_to_the_user_shows_front_first_the_views_md_summary_and_why_d20_16(project):
+    v = views_version("views_front", ("report/overlay_front.png", "front.png", "guides/front_guide.png"),
+                      "hết 3 vòng sửa; còn mở: F1", loop.NOT_PASSED)
+    assert (v["sheet"], [i["n"] for i in v["images"]][:2], v["summary"], v["reason"], v["label"]) == (
+        "/p/assets/house-a/views_front/v1/final/front.png", ["front.png", "concept/concept_albedo.png"],
+        ["Views house-a v1", "front: bóng đổ còn dưới mái", "đã gen 3 lần"], "hết 3 vòng sửa; còn mở: F1", "chưa đạt")
+
+
+def test_views_rest_puts_the_five_view_sheet_first_because_the_user_approves_the_set(project):
+    v = views_version("views_rest", ("back.png", "report/VIEWS_sheet.png", "report/overlay_back.png"),
+                      "duyệt views_rest v1")
+    assert (v["sheet"], v["images"][0]["n"]) == ("/p/assets/house-a/views_rest/v1/final/report/VIEWS_sheet.png",
+                                                 "report/VIEWS_sheet.png")
+
+
 def test_asset_without_a_version_still_has_a_header(project):
     st = load_st(AID)
     st |= {"state": "todo", "versions": {}, "offer": None, "label": ""}
