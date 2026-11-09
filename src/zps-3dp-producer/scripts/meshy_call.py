@@ -10,13 +10,18 @@ ZPS_ART_ENV_FILE=<absolute .env> and no MESHY_API_KEY, so a key exported in the 
 Nothing here prints the key: child output is scrubbed of it before it is printed or recorded.
 Budget: production/assets/<id>/texture/budget-<sha256(model)[:12]>.json in the kit format, written by the Producer
 script. No budget for that mesh: refused (exit 3), so only the locked mesh can be retextured.
+One call per mesh at a time: budget-<sha>.lock (O_EXCL, beside the budget) is held for the whole call; a second call
+is refused (exit 3).
 Failures, 3 tries in all (D8.3):
-  before the task exists (no task_id in <out>/task.json, gen_api charged the budget): refund the charge, try again.
+  before the task exists (no task_id in <out>/task.json, gen_api charged the budget): refund the charge and try again
+  only when the POST provably never reached Meshy (connection refused, DNS failure, HTTP 4xx); any other error (reset,
+  timeout) may have left a paid task on Meshy: keep the charge, stop as BLOCKED, never send it again.
   after the task exists (wait or download failed, GLB cut off): wait again on the same task_id with gen_api wait() and
   download(); never a new task.
   the task ended FAILED, CANCELED, BANNED or EXPIRED: Meshy refunds a failed task (docs.meshy.ai), so the charge is
   refunded too; stop at once (exit 1), because a new paid task is the user's call.
   refused before any charge (no key, budget used up, <out> not empty): stop at once (exit 3).
+An <out> of an earlier call is refused, unless it holds a task without its GLB: then the call waits on that task again.
 A GLB counts only with the glTF magic and a header length equal to the file size.
 Writes <out>/meshy_call.json and prints one line. Exit 0 ok, 1 after 3 failed tries (STATUS: BLOCKED), 3 refused.
 """
@@ -40,6 +45,8 @@ GEN_API = Path(__file__).resolve().parent / "kit" / "tools" / "gen" / "gen_api.p
 TRIES = 3
 REFUSED, FAILED = 3, 1
 ENDED = re.compile(r"task \S+ (FAILED|CANCELED|CANCELLED|BANNED|EXPIRED)")
+NOT_SENT = re.compile(r"Connection refused|nodename nor servname|Name or service not known|getaddrinfo failed|"
+                      r"Temporary failure in name resolution|^HTTP 4\d\d from ")
 
 
 class Refused(Exception):
@@ -72,6 +79,12 @@ def secret(ef: Path) -> str | None:
     return None
 
 
+def key_line_ok(ef: Path):
+    lines = ef.read_text(encoding="utf-8").splitlines() if ef.is_file() else []
+    if any(re.match(r"\s*export\s+MESHY_API_KEY\s*=", line) for line in lines):
+        raise Refused(f"{ef.name} có `export MESHY_API_KEY=`, kit không đọc dòng đó: bỏ chữ `export ` ở đầu dòng")
+
+
 def scrub(text: str, key: str | None) -> str:
     return text.replace(key, "<MESHY_API_KEY>") if key else text
 
@@ -92,7 +105,9 @@ def gen_api(args: list[str], ef: Path, timeout: int | None = None) -> tuple[int 
 
 def keys() -> str:
     """'key file' or 'missing' for Meshy: the project .env only, the shell key is never seen."""
-    rc, out = gen_api(["keys"], env_file())
+    ef = env_file()
+    key_line_ok(ef)
+    rc, out = gen_api(["keys"], ef)
     return (out.get("keys") or {}).get("meshy", "missing") if rc == 0 else "missing"
 
 
@@ -158,6 +173,7 @@ def resume(out: Path):
 
 def call(a) -> tuple[int, dict, str]:
     ef = env_file()
+    key_line_ok(ef)
     budget = budget_of(a.asset, a.model)
     if not budget.is_file():
         raise Refused(f"không có {budget.name} cho mesh này: chỉ gọi Meshy trên mesh đã khóa")
@@ -167,7 +183,23 @@ def call(a) -> tuple[int, dict, str]:
         rc, out = gen_api(base + ["--dry-run"], ef)
         return (0 if rc == 0 else REFUSED), {"status": "dry_run", "expected_credits": out.get("expected_credits"),
                                              "error": out.get("error")}, f"dry-run {out.get('expected_credits')} credit"
-    if (a.out / "meshy_call.json").exists():
+    lock = budget.with_suffix(".lock")
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise Refused(f"{lock.name} có: một lần gọi Meshy khác đang chạy trên mesh này (pid "
+                      f"{lock.read_text(encoding='utf-8').strip()}); chờ nó xong, hoặc xóa file đó khi không còn "
+                      "process này") from None
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
+    try:
+        return paid_call(a, ef, budget, base)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def paid_call(a, ef: Path, budget: Path, base: list[str]) -> tuple[int, dict, str]:
+    if (a.out / "meshy_call.json").exists() and not (task(a.out).get("task_id") and not glb_ok(a.out / "glb.glb")):
         raise Refused(f"{a.out} đã dùng cho một lần gọi trước: dùng thư mục mới")
     rec = {"status": "fail", "model": str(a.model), "budget": budget.name, "task_id": None, "glb": None, "tries": []}
     start = used(budget)
@@ -194,6 +226,9 @@ def call(a) -> tuple[int, dict, str]:
         if not charged:
             rec |= {"status": "refused", "error": err}
             break
+        if not NOT_SENT.search(err):
+            rec["tries"].append({"stage": "maybe_sent", "error": err, "refunded": 0})
+            break
         refund(budget, before)
         rec["tries"].append({"stage": "before_task", "error": err, "refunded": charged})
     rec["credits_charged"] = used(budget) - start
@@ -202,6 +237,9 @@ def call(a) -> tuple[int, dict, str]:
         return 0, rec, f"ok lần {len(rec['tries']) + 1} task {rec['task_id']} -> {rec['glb']}"
     if rec["status"] == "refused":
         return REFUSED, rec, f"từ chối: {rec['error']}"
+    if rec["tries"][-1]["stage"] == "maybe_sent":
+        return FAILED, rec, (f"BLOCKED: POST có thể đã tới Meshy ({rec['tries'][-1]['error']}): giữ "
+                             f"{rec['credits_charged']:g} credit, không gửi lại; xem task trên Meshy trước khi gọi tiếp")
     if rec["tries"][-1]["stage"] == "task_ended":
         return FAILED, rec, f"BLOCKED: Meshy kết thúc task {rec['task_id']}, đã hoàn budget: {rec['tries'][-1]['error']}"
     return FAILED, rec, f"BLOCKED {TRIES}/{TRIES}: {rec['tries'][-1]['error']}"

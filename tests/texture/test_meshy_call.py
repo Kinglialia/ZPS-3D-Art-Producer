@@ -83,11 +83,22 @@ def test_the_call_holds_a_meshy_slot_of_its_own_pid_while_it_runs_and_frees_it_a
     assert list(meshy.pids.glob("*.pid")) == []
 
 
-def test_a_network_error_before_the_task_exists_is_refunded_and_retried_so_one_retexture_costs_10_not_20(meshy):
+def test_a_refused_connection_never_reached_meshy_so_it_is_refunded_and_retried_and_one_retexture_costs_10(meshy):
     r = meshy(mode="post_fail:1")
     assert (r["rc"], kinds(r)) == (0, ["post_fail", "post", "poll", "download"])
     assert r["budget"] == {"max_credits": 10, "used_credits": 10}
-    assert r["record"]["tries"] == [{"stage": "before_task", "error": "<urlopen error connection reset>", "refunded": 10}]
+    assert r["record"]["tries"] == [{"stage": "before_task", "error": "<urlopen error [Errno 61] Connection refused>",
+                                     "refunded": 10}]
+
+
+def test_a_post_whose_response_is_lost_keeps_the_charge_and_is_not_sent_again_because_meshy_may_hold_a_paid_task(meshy):
+    r = meshy(mode="post_lost:1")
+    assert (r["rc"], kinds(r)) == (1, ["post_lost"])
+    assert r["out"] == ("[meshy_call] BLOCKED: POST có thể đã tới Meshy (<urlopen error [Errno 54] Connection reset by "
+                        "peer>): giữ 10 credit, không gửi lại; xem task trên Meshy trước khi gọi tiếp\n")
+    assert r["budget"] == {"max_credits": 10, "used_credits": 10}
+    assert r["record"]["tries"] == [{"stage": "maybe_sent", "error": "<urlopen error [Errno 54] Connection reset by peer>",
+                                     "refunded": 0}]
 
 
 def test_a_poll_error_after_the_task_exists_waits_on_the_same_task_and_never_creates_a_second_one(meshy):
@@ -116,7 +127,7 @@ def test_a_cut_off_glb_that_gen_api_accepted_is_not_taken_and_the_same_task_is_d
 def test_three_failures_before_the_task_exists_stop_as_blocked_with_the_whole_budget_refunded(meshy):
     r = meshy(mode="post_fail:3")
     assert (r["rc"], kinds(r)) == (1, ["post_fail"] * 3)
-    assert r["out"] == "[meshy_call] BLOCKED 3/3: <urlopen error connection reset>\n"
+    assert r["out"] == "[meshy_call] BLOCKED 3/3: <urlopen error [Errno 61] Connection refused>\n"
     assert (r["budget"], r["record"]["credits_charged"]) == ({"max_credits": 10, "used_credits": 0}, 0)
 
 
@@ -124,6 +135,13 @@ def test_three_failures_after_the_task_exists_stop_as_blocked_and_keep_the_spent
     r = meshy(mode="poll_fail:3")
     assert (r["rc"], kinds(r)) == (1, ["post", "poll_fail", "poll_fail", "poll_fail"])
     assert (r["budget"]["used_credits"], r["record"]["status"], r["record"]["task_id"]) == (10, "fail", "task-1")
+
+
+def test_a_paid_task_left_without_its_glb_is_resumed_on_the_same_folder_without_a_second_post(meshy):
+    assert meshy(mode="poll_fail:3")["rc"] == 1
+    r = meshy()
+    assert (r["rc"], kinds(r)) == (0, ["post", "poll_fail", "poll_fail", "poll_fail", "poll", "download"])
+    assert (r["budget"], r["record"]["credits_charged"]) == ({"max_credits": 10, "used_credits": 10}, 0)
 
 
 def test_a_task_meshy_ends_as_failed_is_refunded_and_stops_without_a_second_paid_task(meshy):
@@ -187,3 +205,36 @@ def test_a_profile_without_env_file_means_paint_only_and_no_call(meshy):
     r = meshy()
     assert (r["rc"], r["calls"]) == (3, [])
     assert r["out"] == "[meshy_call] từ chối: profile không có paths.env_file: chế độ VẼ MỚI, không gọi Meshy\n"
+
+
+def test_a_second_call_on_the_same_mesh_while_one_runs_is_refused_so_the_budget_is_not_spent_twice(meshy):
+    lock = meshy.budget.with_suffix(".lock")
+    lock.write_text("4242", encoding="utf-8")
+    r = meshy()
+    assert (r["rc"], r["calls"], r["budget"]["used_credits"]) == (3, [], 0)
+    assert r["out"] == (f"[meshy_call] từ chối: {lock.name} có: một lần gọi Meshy khác đang chạy trên mesh này (pid "
+                        "4242); chờ nó xong, hoặc xóa file đó khi không còn process này\n")
+
+
+def test_the_lock_is_freed_after_a_call_so_the_next_approved_call_can_run(meshy):
+    assert meshy()["rc"] == 0
+    assert list(meshy.budget.parent.glob("*.lock")) == []
+
+
+def test_two_calls_started_together_on_one_mesh_post_once_and_spend_one_retexture(meshy):
+    log = meshy.tmp / "meshy.jsonl"
+    env = {**os.environ, "PYTHONPATH": str(HERE / "fake_meshy"), "FAKE_MESHY_LOG": str(log), "FAKE_MESHY_MODE": "",
+           "MESHY_API_KEY": SHELL_KEY}
+    ps = [subprocess.Popen([sys.executable, str(CALL), "texture", "--asset", AID, "--model", str(meshy.model),
+                            "--style-image", str(meshy.tmp / "concept_albedo.png"), "--out", f"work/race-{k}"],
+                           cwd=meshy.tmp, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) for k in range(2)]
+    rcs = sorted(p.wait() for p in ps)
+    posts = [json.loads(l)["kind"] for l in log.read_text().splitlines()].count("post")
+    assert (rcs, posts, json.loads(meshy.budget.read_text())) == ([0, 3], 1, {"max_credits": 10, "used_credits": 10})
+
+
+def test_a_key_line_with_export_is_refused_with_its_fix_because_the_kit_reads_that_line_as_no_key(meshy):
+    (meshy.tmp / ".env").write_text(f"export MESHY_API_KEY={PROJECT_KEY}\n", encoding="utf-8")
+    msg = "[meshy_call] từ chối: .env có `export MESHY_API_KEY=`, kit không đọc dòng đó: bỏ chữ `export ` ở đầu dòng\n"
+    k, r = meshy(cmd="keys"), meshy()
+    assert (k["rc"], k["out"], r["rc"], r["out"], r["calls"]) == (3, msg, 3, msg, [])

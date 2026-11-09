@@ -1,6 +1,7 @@
 """Stand-in for the Meshy HTTP API, loaded by every Python child that has this folder on PYTHONPATH: tests never reach
 api.meshy.ai. It replaces urllib.request.urlopen. FAKE_MESHY_MODE is a comma list of <fault>:<n> (the first n requests
-of that kind fail): post_fail (network error on the POST), poll_fail (HTTP 503 on the task GET), task_failed (the
+of that kind fail): post_fail (connection refused: the POST never left), post_lost (the server creates the task, the
+response is lost as a connection reset), poll_fail (HTTP 503 on the task GET), task_failed (the
 task ends FAILED), download_fail
 (network error on the GLB URL), truncated (GLB cut off), echo_key (HTTP 401 whose body repeats the Authorization
 header). The returned GLB is the uploaded model, as Meshy returns the mesh with original UVs.
@@ -58,15 +59,17 @@ def urlopen(req, timeout=None):
     past = calls()
     store = Path(LOG).with_suffix(".model.glb")
     if method == "POST" and url.endswith("/retexture"):
-        kind = "echo_key" if fail_now("echo_key", past) else "post_fail" if fail_now("post_fail", past) else "post"
+        kind = next((k for k in ("echo_key", "post_fail", "post_lost") if fail_now(k, past)), "post")
         log({"method": method, "url": url, "auth": auth, "kind": kind})
         if kind == "echo_key":
             raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, io.BytesIO(f"bad token {auth}".encode()))
         if kind == "post_fail":
-            raise urllib.error.URLError("connection reset")
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
         body = json.loads(req.data)
         store.write_bytes(base64.b64decode(body["model_url"].split(",", 1)[1]))
-        n = sum(c["kind"] == "post" for c in past) + 1
+        n = sum(c["kind"] in ("post", "post_lost") for c in past) + 1
+        if kind == "post_lost":
+            raise urllib.error.URLError(ConnectionResetError(54, "Connection reset by peer"))
         return Resp(json.dumps({"result": f"task-{n}"}).encode())
     if method == "GET" and (m := re.search(r"/retexture/(task-\d+)$", url)):
         kind = ("poll_fail" if fail_now("poll_fail", past) else "task_failed" if fail_now("task_failed", past)
