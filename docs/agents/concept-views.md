@@ -142,7 +142,7 @@ Kèm `report/VIEWS.md` ngắn. 3 dòng đầu là tóm tắt cho anh (D20.17). P
 
 ## 8. Reviewer `zps-3dp-check-views`
 
-Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agent. Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước.
+Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, trừ file report của mình (D27.5); context mới mỗi lần (D1). Không có tool gọi agent. Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước.
 
 **Kiểm kê phần tử và lỗi ảnh AI** (D25.F, theo `art-quality.md` và `gen-craft.md` của kit), áp cho mọi view:
 - Mọi phần tử nhìn thấy (vật, phụ kiện, motif, chữ, nguồn sáng) phải truy được về concept, guide hoặc thẻ asset. Không truy được → finding `regen` (nếu thay đổi hình) hoặc `note_texture` (nếu chỉ là màu, hoa văn nhỏ).
@@ -165,7 +165,7 @@ Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi
 
 | Loại | Khi nào |
 |---|---|
-| `regen: F<n>, F<m> …` | Lỗi trong hàng "Gen lại" ở mục 5. Mức `blocker` hoặc `major`. Kiểu lô: liệt kê mọi finding `regen` đang mở; mỗi finding ghi rõ view và lỗi |
+| `regen: F<n>, F<m> …` | Lỗi trong hàng "Gen lại" ở mục 5. Mức `blocker` hoặc `major`. **Sai số lượng thành phần so với concept hoặc `blockout.md` (số hàng ván, số cửa, số trụ) luôn là `regen`, không phải `note_texture`** (D27.11; Run 4: `back.png` có 2 hàng ván thay vì 3 mà vẫn PASS). Kiểu lô: liệt kê mọi finding `regen` đang mở; mỗi finding ghi rõ view và lỗi |
 | `regen_front: F<n>` | Chỉ ở lần 2. Front lệch so với cả bộ đến mức không sửa được bằng cách gen lại các view kia (ví dụ màu gỗ của front sai so với concept khi đặt cạnh bộ) (D22.4). Script chạy `redo --step views_front`; `views_rest` chạy lại sau đó |
 | `need_evidence: <ảnh cần thêm>` | Chỉ còn tiêu chí `unclear`, không còn `blocker`, `major` (D21.4). Concept Views làm vòng ngắn, chỉ render ảnh xin thêm vào `vN/review/evidence-<k>/`, không tạo version mới. Không tính vào 3 vòng (`docs/producer.md` §7) |
 | `note_exception: <nội dung>` | Lệch nhỏ về vị trí hoặc số đo |
@@ -191,6 +191,8 @@ Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi
 - `palette_report.py` (từ `.art-production-support/shared/scripts`)
 
 **Mới:** `check_inputs.py`, `pick_bg.py`, `views_sheet.py`, `check_package.py`, `diff_guides.py`.
+
+`views_sheet.py` và mọi sheet duyệt dùng font Noto Sans đi kèm skill (giấy phép OFL), có đủ dấu tiếng Việt (D27.12). Không dùng font hệ thống. Run 4: nhãn "(giữ)" hiện ô vuông. Code hiện tại (`e78c6a7`) còn chọn font hệ thống theo danh sách, và bỏ dấu khi không font nào vẽ được: phải đổi sang font đi kèm.
 
 **Dùng chung với Texture Artist (adapter, D8):** `gen_image_codex.py`. Script nhận prompt và ảnh tham chiếu, gọi `codex exec`, lấy ảnh đầu ra, chép vào thư mục công trình. Lỗi kỹ thuật 3 lần liên tiếp thì dừng và báo.
 

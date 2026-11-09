@@ -52,6 +52,7 @@ Brief của mỗi concept có một **thẻ asset** theo mẫu trong `docs/proje
 ### 1.8 Bàn giao
 
 - Mỗi công trình trong `_approved/<id>/`, đúng tên file theo `GUIDELINE.md`: `concept_albedo.png`, `concept_shadow.png` (chỉ để đọc khối), `asset-card.yaml`, `<id>.material.md`, và `<id>.layout.md` khi profile có `has_map: true`.
+- Thẻ có thêm `view` và `bevel` (`none | toon`); `hidden_sides` đủ 4 mặt; ảnh concept trùng khung, nền phẳng, cạnh dài ≥ 1024 px (D27.6, D27.10). Bo cạnh ghi ở trường `bevel`, không chỉ ghi trong ghi chú chữ. Hướng dẫn đầy đủ cho Concept Artist: `GUIDELINE-concept-artist.md`.
 - **Concept brief chính là `asset-card.yaml`** (D22.3). Các mục 1.2–1.4 (real/texture_only, phần khuất, đối xứng, kích thước asset lẻ) ghi vào các trường `real_texture_only_notes`, `hidden_sides`, `symmetric`, `size_m` của thẻ. Không có file brief riêng.
 - `P intake` kiểm danh sách này. Thiếu hoặc sai thì không đăng ký, Producer báo anh theo nhóm lỗi.
 

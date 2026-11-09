@@ -31,6 +31,8 @@ screen_tris_max_small_ratio: null              # null = chỉ cảnh báo (D7.7)
 
 Hạng chỉ quyết định trần tris. Hạng **không** quyết định độ phân giải texture.
 
+Preset giữ số đo của từng kiểu bevel (D27.10). Hiện có một kiểu: `toon` = bán kính 9 mm, 2 segment. Profile và thẻ chỉ chọn kiểu, không ghi số.
+
 ## 3. Profile dự án
 
 Ngắn, khoảng 15–20 dòng. Không có trường gắn với một loại asset (không có trường "cửa", "tường", "mái").
@@ -49,6 +51,7 @@ style:
   light_convention: unlit_flat | painted_top_light
   top_vs_side_L: 0
   view_bg: null                              # null = pick_bg.py tự chọn
+  bevel: none                                # none | toon: bo cạnh mặc định của dự án; số đo nằm trong preset (D27.10)
 detail_examples:                             # có sau pilot
   geometry: [...]
   texture_only: [...]
@@ -75,14 +78,18 @@ texture_res: null              # null = 2048
 tris_max: null                 # null = theo hạng
 scale_overrides:               # ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
+view: front                    # góc vẽ concept: front | 34 | game_camera (D27.6); 34 hoặc game_camera thì Blockout chạy fit_camera
+bevel: null                    # none | toon; null = theo style.bevel của profile (D27.10)
 symmetric: {left_right: true, front_back: true}
 size_m: null                   # {w, d, h} (mét); bắt buộc khi has_map: false; check_card.py kiểm
-hidden_sides: [...]            # thiết kế phần khuất
+hidden_sides: {back: ..., left: ..., right: ..., top: ...}   # bắt buộc đủ 4 mặt; chưa biết thì ghi đúng chữ "chưa biết" (D27.6)
 real_texture_only_notes: [...]
 ```
 
 - **Độ phân giải texture:** làm theo thẻ asset. Nếu thẻ không ghi, mặc định 2048. Muốn đổi cho một asset cụ thể, anh dùng một agent khác cập nhật sau. Bộ skill không tự thu nhỏ hay phóng to texture.
 - Thẻ asset thắng profile và preset.
+- **Quyết định style mà tool phải đọc có trường riêng** (D27.10), không nằm trong ghi chú chữ tự do. Bo cạnh chỉ đọc từ `bevel` của thẻ và `style.bevel` của profile. Tool không suy ra bevel từ ghi chú. `check_card.py` chỉ cảnh báo khi một ghi chú có "bo cạnh" mà trường `bevel` trống. Run 4: ghi chú "cạnh bo toon" trong thẻ không tới được spec của model (bevel mặc định tắt), mất một vòng model.
+- **Ảnh concept** (D27.6): `concept_albedo.png` và `concept_shadow.png` trùng khung tuyệt đối, nền phẳng một màu, cạnh dài ≥ 1024 px. `check_card.py` kiểm.
 
 ## 5. Skill Project Setup
 

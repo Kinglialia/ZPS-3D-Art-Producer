@@ -83,7 +83,7 @@ Blockout chỉ dùng để đo, không phải model cuối. Detail pass là bắ
 5. **Vật tròn:** đủ segment để viền không gãy ở camera game. Dùng smooth shading.
 6. **Vật phát sáng hoặc chuyển động** (lửa, khói, nước): dùng card unlit.
 7. **Ghi chú real/texture_only của concept** luôn ưu tiên hơn các quy tắc trên.
-8. **Bevel:** tùy chọn trong profile. Nếu bật, bevel dùng cùng ngưỡng pixel.
+8. **Bevel** (D27.10): đọc trường `bevel` của thẻ; thẻ để trống thì đọc `style.bevel` của profile. Giá trị: `none | toon`. `none`: không bo cạnh. `toon`: bật bevel, số đo lấy từ preset. Bevel dùng cùng ngưỡng pixel. Không suy ra bevel từ ghi chú chữ. Code hiện tại (`e2ff049`, `a83f9b1`) còn bật bevel khi dòng `real:` có cụm trong bảng `BEVEL`: phải đổi sang chỉ đọc trường.
 
 ### Lớp 2 — Ví dụ của dự án (trong profile)
 
@@ -148,7 +148,7 @@ Một script `render_review.py`, mở Blender một lần. 3D Artist có bản r
 
 Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A7 và ghi vào `spec.json`. Texture Artist dùng lại khi render `final_lit_vs_concept.png` ở bước `texture` (D22.11).
 
-**check-clay** (Opus, chỉ đọc, context mới mỗi lần). Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước. Không chấm màu, texture.
+**check-clay** (Opus, chỉ đọc, trừ file report của mình (D27.5); context mới mỗi lần). Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước. Không chấm màu, texture.
 
 1. Khối: chấm trên clay. Lỗi "ổ bánh mì" là fail.
 2. Detail pass: đủ chi tiết đổi silhouette. So bảng detail pass với concept.
@@ -165,6 +165,9 @@ Output theo contract reviewer (D14.10, D21.1, `docs/producer.md` §6.1), finding
 
 3D Artist không gọi agent khác (D14.1). Mỗi bước kết thúc bằng báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES`, `docs/producer.md` §6). Nếu cần anh trả lời: `STATUS: NEEDS_CONTEXT` kèm câu hỏi.
 
+- 3D Artist tự ghi file report vào đường dẫn trong brief (D27.5, `docs/producer.md` §6.5).
+- Đã làm một ghi chú của bước trước (TEXTURE NOTE, `note_texture` của bộ view): ghi `RESOLVED_NOTES: <mục>` (D27.8). check-clay xác nhận từng mục trong report.
+
 ## 9. Bước `assemble`
 
 Không còn là việc của 3D Artist (D22.11). Bước này do script `assemble.py` của Producer làm: gắn texture, xuất GLB, QA, kiểm GLB hiển thị đúng, ghép gói cuối và README (`docs/producer.md` §6.4). `assemble.py` dùng các tool của kit liệt kê ở mục 11 (`finalize.py`, `report.py`, `asset_checks/`).
@@ -174,6 +177,8 @@ Không còn là việc của 3D Artist (D22.11). Bước này do script `assembl
 - `screen_tris_check`: tam giác < 10 px ở camera game chỉ là cảnh báo. Báo cáo DUYỆT 1 ghi con số. Nếu profile có `screen_tris_max_small_ratio`, script dùng số đó để chặn.
 
 ## 11. Tool
+
+Part `custom` chỉ gọi hàm có trong `custom_lib.py` của skill (D27.13, `docs/agents/blockout.md` §9). 3D Artist không tự thêm hàm vào thư viện.
 
 Chép từ kit v0.10.4 (khóa, không sửa): `self_build/` (giống Blockout), `asset_checks/` (`mesh_check`, `uv_check`, `export_check`, `screen_tris_check`, `render_rig`), `optimize/bake.py` (chỉ phần unwrap UV, cần xác nhận khi viết code), `finalize.py`, `report.py`.
 

@@ -11,7 +11,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist,
 
 Blockout dựng khối hình học **để đo** cho từng công trình. Blockout là nguồn hình học duy nhất cho Concept Views và 3D Artist. Sau khi duyệt, `sources.json` là nguồn duy nhất cho số hình học ở mọi bước sau (D22.13).
 
-**Dùng cho:** công trình, props cứng, cây và đá low-poly (dùng part `custom`).
+**Dùng cho:** công trình, props cứng, cây và đá low-poly (dùng part `custom`). Part `custom` chỉ gọi hàm có trong `custom_lib.py` của skill (D27.13). Cần hàm mới thì Blockout báo Producer; anh duyệt hàm mới rồi mới commit. Blockout không tự thêm hàm vào thư viện.
 **Không dùng cho:** nhân vật, sinh vật (D9). Nếu gặp loại này, hoặc dáng quá phức tạp so với primitive, Blockout báo Producer.
 
 | Làm | Không làm |
@@ -137,7 +137,7 @@ final/
   - `foot_front_left.png`, `foot_front_right.png`: crop sát góc nền–đất–chân tường, tìm theo bbox của part `tag: base`. Nếu không có part `base`, bỏ crop.
 - Concept và blockout ở cùng góc.
 
-**check-blockout** (model theo `pipeline.toml`, pilot dùng Opus theo D16; chỉ đọc, context mới mỗi lần):
+**check-blockout** (model theo `pipeline.toml`, pilot dùng Opus theo D16; chỉ đọc, trừ file report của mình (D27.5); context mới mỗi lần):
 
 1. Khối: chỉ chấm trên clay. Khối giống ổ bánh mì hoặc hộp trơn là fail, dù IoU cao.
 2. Silhouette so với concept ở cùng góc.
@@ -197,6 +197,7 @@ agents/zps-3dp-check-blockout.md   ← reviewer (D1)
 **Mỗi part:**
 
 - Bắt buộc: `name`, `primitive` (`box` | `wedge` | `cylinder` | `custom`; đúng tập mà `graph.py` của kit nhận, D24.1), `dims` (hoặc `fn` + `args`), `attach`, `material` (mã trong `sources.json`), `role` (`mass` | `marker`).
+- `fn` của part `custom` phải có trong `custom_lib.py` (D27.13). Một wrapper quanh `check_schema.py` từ chối hàm khác. Không sửa `check_schema.py`.
 - Tùy chọn: `tag` (`base` | `roof`), `segments` (8–24), `axis`, `rotation_deg` (chỉ 0, 90, 180, 270; kit từ chối góc khác). `check_schema.py` kiểm cả hai giới hạn này.
 - Part `mirror_of` phải tự ghi `material`, `role` và `tag` (nếu có). Lý do: kit chỉ chép các field hình dạng sang part mirror. `check_schema.py` báo lỗi nếu thiếu.
 

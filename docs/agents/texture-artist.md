@@ -106,10 +106,19 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 
 | Nhóm | Nguyên tắc | Đo |
 |---|---|---|
-| 1. Quy ước ánh sáng | Ánh sáng trong albedo đúng quy ước của style, đồng nhất trên mọi mặt | Chia mặt theo normal. 4 mặt bên cùng tông (chênh ≤ 3 L*). Mặt trên so với mặt bên đúng `top_vs_side_L`. Vùng bị che không tối hơn quy ước. Không AO, glow, highlight cố định |
+| 1. Quy ước ánh sáng | Ánh sáng trong albedo đúng quy ước của style, đồng nhất trên mọi mặt. Mặt trong khe rãnh và hốc lõm không tính vào `light.shaded_share` (D27.9, dưới bảng) | Chia mặt theo normal. 4 mặt bên cùng tông (chênh ≤ 3 L*). Mặt trên so với mặt bên đúng `top_vs_side_L`. Vùng bị che không tối hơn quy ước. Không AO, glow, highlight cố định |
 | 2. Đúng vật liệu | Mỗi vật liệu giống concept và giống asset đã duyệt cùng bộ | dE theo từng mã vật liệu so với concept (≤ 3) và so với asset pilot cùng mã. Mỗi mã đo riêng. Chưa có `pilot_asset` (D21.7): phần so với pilot ghi `not_checked` |
 | 3. Đọc được ở kích thước thật | Ở camera game, vật liệu tách nhau rõ; chi tiết không thành nhiễu | Thu render về cỡ màn hình: chênh L* giữa vật liệu kề nhau, năng lượng nhiễu tần số cao. Nét chi tiết ≥ 4–6 px ở 2048 |
 | 4. Liền mạch | Không lộ seam, không texel trống, không lem ở mip | Seam đo trong 3D (p90 ≤ 4). Đếm texel chưa vẽ hoặc đen. Kiểm padding |
+
+**Mặt khe rãnh trong `light.shaded_share`** (D27.9, code `852e217`):
+- Concept vẽ nét mực trong khe rãnh và hốc lõm. Nét đó không phải bóng bake, nên `tex_measure.py` bỏ các mặt này khỏi phép đo.
+- Cách nhận ra mặt khe: phép thử che tia (`tex.occluded`). Mỗi mặt bắn 25 tia nửa cầu từ 4 điểm trên mặt. Tỉ lệ tia chạm mesh trong `alpha_min_px / px_per_m` mét (đọc từ `spec.json` của `model`) lấy trung vị trên 4 điểm.
+- Mặt có tỉ lệ ≥ `groove_occluded` (mặc định 0,55) là mặt khe. Một tường phẳng hoặc mái chìa chỉ che tối đa 0,48, nên mặt cạnh đai hay dưới nắp vẫn được đo.
+- `light.shaded_share` bỏ texel của mặt khe khỏi cả số texel lẫn trung bình mặt bên. JSON ghi `groove_share` cho từng mã vật liệu. `side_spread_L` và `top_vs_side_L` không đổi.
+- Một texel chỉ tính là bóng khi chính nó tối và vùng lọc thông thấp quanh nó cũng tối.
+- Không lọc nét mực theo màu. Profile không có cờ `style.line_art`.
+- Run 4: nét mực trong khe bị tính là bóng (TIMBER 0,055, IRON 0,037 so với ngưỡng 0,02), check fail ở mọi lần.
 
 **Quy ước ánh sáng trong profile:**
 
@@ -123,7 +132,7 @@ Quy tắc riêng của dự án (ví dụ New Last Order: mái là ngói xếp l
 
 ## 7. Reviewer `zps-3dp-check-texture`
 
-Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1). Producer giao reviewer ở bước `texture` (D14.1). Bước `assemble` không có agent và reviewer; script `assemble.py` kiểm và anh duyệt (D22.11).
+Opus, chỉ đọc, trừ file report của mình (D27.5); context mới mỗi lần, không có tool gọi agent (D1). Producer giao reviewer ở bước `texture` (D14.1). Bước `assemble` không có agent và reviewer; script `assemble.py` kiểm và anh duyệt (D22.11).
 
 **Reviewer nhận:**
 - Render có texture, có ánh sáng: 3/4 trước, cận trước, 3/4 sau, camera game.
@@ -180,6 +189,9 @@ Ghi vào `production/assets/<id>/texture/vN/final/`:
 - Ghi chú cài đặt material cho người nhập vào engine: unlit, base color only.
 
 Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES / PROFILE_HASH`, thêm `UNFIXABLE: yes|no`, và `FIXED:` ở vòng sửa) theo `docs/producer.md` §6.2. Không có `MESHY_CALLS` (D21.2).
+
+- Texture Artist tự ghi file report vào đường dẫn trong brief (D27.5, `docs/producer.md` §6.5).
+- Đã làm một ghi chú của bước trước (TEXTURE NOTE, `note_texture`, mục `ISSUES` của `model`): ghi `RESOLVED_NOTES: <mục>` (D27.8). check-texture xác nhận từng mục trong report.
 
 ## 10. Tool
 

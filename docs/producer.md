@@ -134,7 +134,10 @@ PRIOR:
 
 **Quy tắc chung của 4 reviewer** (D25.B, theo `3d-critic.md` của kit; test D1 kiểm cả 4 file có đủ):
 - Brief kèm **ảnh cùng góc của bản trước** khi đây là vòng sửa, để so trực tiếp.
-- Ghi `EVIDENCE_OPENED`. Finding phải dẫn nhãn ảnh trong danh sách đó.
+- Ghi `EVIDENCE_OPENED`. Finding phải dẫn nhãn ảnh trong danh sách đó. Nhãn không chứa dấu phẩy hay chấm phẩy. Trích dẫn trong `PRIOR` cũng phải dùng **đúng nguyên văn** một nhãn đã liệt kê ở `EVIDENCE_OPENED` (D27.5).
+- Finding loại `note` (`note`, `note_texture`, `note_exception`) luôn ở mức `minor` (D27.5). Hai quy tắc này ghi trong file agent của cả 4 reviewer. Run 4: `ingest` từ chối contract 2 lần vì thiếu chúng.
+- **Reviewer tự ghi file report** (D27.5, mục 6.5). Reviewer chỉ ghi đúng đường dẫn report trong brief, không ghi chỗ nào khác.
+- **`preserve` phải cụ thể** (D27.11): nêu tên các chi tiết nằm cạnh vùng sửa có thể bị đụng tới (ví dụ "nét mực khe nắp", "bản lề trái"). Không ghi chung chung "giữ phần còn lại". Run 4: sửa F6 ở texture v3 xóa mất nét mực khe nắp.
 - Câu cố định trong file agent: "Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí."
 - Không tự đo; số đọc từ JSON của script. Chỉ chấm trong phạm vi bước (ví dụ không chấm màu ở bước clay).
 - **So theo cặp** (D26.1, theo GPTEval3D): ở vòng sửa, với mỗi finding trong `TOP_FIX` vòng trước, reviewer so ảnh cùng góc của bản mới với bản gốc và ghi `COMPARE`: tốt hơn / như cũ / xấu hơn. `PRIOR` phải nhất quán với `COMPARE`: `resolved` cần `better` và bằng chứng cho `acceptance`; `worse` thì là `regressed`. Lệch nhau → `ingest` báo lỗi contract. Lý do: so hai ảnh đặt cạnh nhau ổn định hơn chấm điểm tuyệt đối từng ảnh.
@@ -143,7 +146,8 @@ PRIOR:
 
 - Khi anh `redo` (đợt feedback mới): finding còn mở của bản gốc được chép sang đợt mới, cộng finding của anh. Bộ đếm vòng đặt lại (D11.4).
 - Mỗi key chấm `unclear` trong `RUBRIC` phải có ít nhất một finding mức `unclear` (D22.6).
-- ~~**Tin nhắn trả về cho Producer** chỉ gồm hai dòng `VERDICT` và `COUNTS` (D22.6). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report.~~ **[Sửa sau run 4: reviewer không ghi file report mà trả cả report giữa dòng `--- report ---` và dòng `--- end ---`; Producer ghi nguyên văn tin nhắn vào file report, `ingest` chỉ đọc phần giữa hai dòng đó]**
+- **Tin nhắn trả về cho Producer** chỉ gồm hai dòng `VERDICT` và `COUNTS` (D22.6). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report. **Ngoại lệ** (D27.5): lệnh ghi file report bị chặn thì reviewer trả cả report giữa dòng `--- report ---` và dòng `--- end ---` (mục 6.5).
+- **`P ingest` in luôn lệnh giao việc tiếp theo** (D27.2): khi kết quả ingest dẫn tới một lần giao (reviewer sau worker, worker vòng sửa sau FIX), `ingest` in thêm đúng dòng JSON mà `P brief` sẽ in. Producer giao ngay trong cùng lượt, bớt một lượt mỗi vòng.
 
 **Chọn VERDICT** (theo thứ tự, dừng ở dòng đầu tiên khớp). Finding `preference` không tính vào các dòng dưới:
 
@@ -177,6 +181,9 @@ Giữ như skill nền: `STATUS / OUTPUT / RUBRIC / ISSUES`. Thêm:
 - `PROFILE_HASH: <hash>`: **chép từ brief**. Script tính hash khi sinh brief (mục 10); `ingest` so với hash trong brief. Lệch → báo lỗi, không chuyển trạng thái.
 - `FIXED: F<n>, ...` (vòng sửa): finding worker cho là đã sửa. Chỉ để đối chiếu; reviewer quyết.
 - Texture Artist: `UNFIXABLE: yes|no`.
+- `RESOLVED_NOTES: <mục>, ...` (D27.8): ghi chú của bước trước (TEXTURE NOTE, `note_texture`, ghi chú trong `ISSUES`) mà worker bước này đã làm. Reviewer của bước này xác nhận từng mục trong report. Chỉ mục được xác nhận mới rời khỏi "Việc còn mở" của README (mục 6.4).
+
+Worker tự ghi file report như reviewer (D27.5, mục 6.5).
 
 Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_hash>.json` (mục 6.3).
 
@@ -220,13 +227,27 @@ Sau 3 lần lỗi ở một trong hai trường hợp: `STATUS: BLOCKED`, Produc
 3b. **Dùng `finalize.py` của kit làm cổng** (D24.4): finalize chỉ nhận kết quả QA gắn với sha256 của đúng file GLB này, và từ chối nếu thiếu `mesh_check` hoặc có kết quả fail hoặc lỗi. finalize từ chối → `assemble.py` fail.
 4. **Kiểm GLB hiển thị đúng:** render một bộ nhỏ (3/4 trước, camera game) từ chính file GLB đã xuất, so pixel với render cùng góc của bước `texture`. Lệch quá ngưỡng → fail. Lý do: bắt lỗi phát sinh khi xuất (color space, alpha, unlit) mà render trong Blender không thấy.
 5. Ghép gói cuối: `model/`, `texture/` (chép `albedo` và `notes.md` từ `final/` của bước `texture`), `review/` (sheet DUYỆT 1, render và `final_lit_vs_concept.png` của bước `texture`, ảnh so ở điểm 4, report reviewer).
-6. Ghép `README.md` từ report các bước: dòng đầu là trạng thái và ngày; cách làm (chế độ texture, số lần gọi Meshy tính từ file budget); ngoại lệ (NGOẠI LỆ, TEXTURE NOTE, mục "Blockout tự quyết"); việc còn mở (finding `minor` chưa đóng); những gì chưa kiểm (engine, camera chưa chốt, % tam giác nhỏ).
+6. Ghép `README.md` từ report các bước: dòng đầu là trạng thái và ngày; cách làm (chế độ texture, số lần gọi Meshy tính từ file budget); ngoại lệ (NGOẠI LỆ, TEXTURE NOTE, mục "Blockout tự quyết"); việc còn mở; những gì chưa kiểm (engine, camera chưa chốt, % tam giác nhỏ).
+   **"Việc còn mở"** (D27.8) chỉ lấy finding còn mở trong `findings.json` của **version được duyệt** ở từng bước. Một ghi chú của bước trước rời khỏi danh sách khi worker bước sau ghi nó ở `RESOLVED_NOTES` và reviewer bước đó xác nhận (mục 6.2). Run 4: README liệt kê "3 hàng ván mặt sau" dù model đã dựng. Code hiện tại (`1620c40`) mới làm một trường hợp: bỏ finding `note_texture` khi review texture đã duyệt có `texture_note=pass`.
 7. Pass → `waiting_human` (DUYỆT 2). Fail ở bất kỳ điểm nào → `blocked`, Producer báo anh kèm điểm fail.
 
 Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding để trang duyệt hiện được.
 
+`assemble.py` lấy `production/` từ thư mục đang đứng, giống `producer.py` (D27.7). Thư mục đó không có `production/assets/<id>/status.json` thì script thoát mã 2 trước khi ghi bất kỳ file nào. Lệnh giữ nguyên dạng, nên rule Codex vẫn khớp. Run 4: chạy từ thư mục khác thì script ghi report `blocked` sai chỗ. Code: `9711540`.
+
+### 6.5 Agent tự ghi file report (D27.5)
+
+- Reviewer và worker tự ghi report vào đúng đường dẫn `report` của brief. Không ghi chỗ nào khác.
+- **Đường dự phòng:** lệnh ghi bị chặn thì agent trả cả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi nguyên văn tin nhắn vào file report. `ingest` chỉ đọc phần giữa hai dòng đó, kể cả khi dòng có dấu cách thừa hoặc CRLF.
+- Đường dự phòng phải hiếm. Lý do: report lưu hộ đi qua context Producer.
+- Script ghi mỗi lần dự phòng vào ledger: sự kiện `report_fallback`, kèm vai trò và bước.
+- Settings của project có rule allow cho lệnh ghi dưới `production/`, để bớt lần bị chặn (bản Claude: `templates/settings.snippet.json`).
+- Ngoài đường dự phòng, tin nhắn trả về vẫn chỉ gồm `VERDICT` và `COUNTS` (D22.6).
+- Code hiện tại (`170aadc`) bắt reviewer luôn trả report bằng chữ và Producer luôn lưu hộ. Code phải đổi theo mục này. Hai dòng đánh dấu và cách `ingest` đọc chúng (`170aadc`, `39c8ebf`) giữ cho đường dự phòng.
+
 ## 7. Vòng sửa (D11, D21.1, D21.4, bằng script)
 
+0. **Mục "Hiện hành" của `feedback.md`** (D27.4): `P feedback --action redo` ghi vào Log **và** thêm dòng đó vào "Hiện hành". Văn bản nhiều dòng được nối thành một dòng ở "Hiện hành"; Log giữ nguyên văn. Khi bước đó được duyệt (anh hoặc reviewer duyệt), script xóa các dòng redo của bước khỏi "Hiện hành". Dòng Producer gộp tay thì giữ. Ghi chú chỉ vào Log, vì ghi chú không phải quyết định. Reviewer không báo finding vì "Hiện hành" trống. Run 4: mọi reviewer texture đều báo mục này. Code: `dfba2eb`, `c7a904e`.
 1. **Trần:** tối đa `max_fix_rounds` = 3 vòng mỗi bước, tính trong một đợt feedback. Feedback `redo` của anh mở đợt mới, đặt lại bộ đếm (D11.4).
 2. **Mỗi vòng:** worker sửa đúng các finding liệt kê trong `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất).
 2b. **Brief vòng sửa kèm kết quả script** (D26.4, theo 3DCodeBench): ngoài finding của reviewer, brief liệt kê đường dẫn tới mọi file JSON gate và check **fail** của bản gốc (`gates.py`, `check_*.py`, QA của kit). Worker đọc nguyên văn lỗi của script trước, rồi mới tới nhận xét của reviewer. Lý do: phản hồi xác định từ Blender là thứ giúp vòng sửa hội tụ nhiều nhất.
@@ -234,7 +255,7 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 3. **Tiến bộ** đo trên finding có id, không đo trên tổng số đếm. Một vòng có tiến bộ khi: có ít nhất một finding `blocker` hoặc `major` cũ chuyển `resolved`, và số finding chuyển `regressed` ít hơn số `resolved`. Finding mới phát hiện không tính là thụt lùi, vì reviewer có context mới mỗi lần nên có thể thấy thêm lỗi cũ chưa ai nêu.
 4. **Dừng sớm:** từ vòng 2, nếu vòng không có tiến bộ → `waiting_human`, ghi "không tiến bộ ở vòng N" kèm danh sách finding còn mở.
 4b. **Đổi nhánh không đặt lại bộ đếm** (D25.H): ví dụ Texture Artist chuyển từ Meshy sang VẼ MỚI trong cùng đợt feedback vẫn đếm tiếp vòng cũ. Chỉ feedback `redo` của anh mới mở đợt mới.
-5. **Bản tốt nhất** (D11.3): version có ít finding `blocker` + `major` đang mở nhất (bằng nhau thì version cũ hơn). Brief vòng sửa trỏ tới bản tốt nhất. Khi gửi anh hoặc khi dừng, gửi bản tốt nhất.
+5. **Bản tốt nhất** (D11.3, D27.1): version có ít finding `blocker` + `major` đang mở nhất. Bằng nhau thì chọn version **giải quyết được nhiều** finding `blocker` + `major` hơn. Vẫn bằng nhau thì chọn version cũ hơn. Lý do (Run 4): v2 sửa xong F1 thì reviewer mới thấy F2; cả v1 và v2 đều còn một `major`; quy tắc cũ chọn v1, và vòng sau làm lại F1. Code: `bf10d36`. Brief vòng sửa trỏ tới bản tốt nhất. Khi gửi anh hoặc khi dừng, gửi bản tốt nhất.
 5b. **Không giao bản đỡ tệ nhất như đã đạt** (D25.H): bản gửi anh vì hết vòng, dừng sớm hay ESCALATE mang nhãn **chưa đạt** trên trang duyệt, kèm finding còn mở. Anh vẫn duyệt được; khi đó finding còn mở được ghi vào mục "việc còn mở" của README gói cuối.
 6. **Vòng xin bằng chứng (`need_evidence`):**
    - Chỉ dùng khi không còn `blocker`, `major` đang mở (mục 6.1, bảng VERDICT).
@@ -385,6 +406,14 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 | Mở nhãn | `P compare --reveal`, chỉ sau khi anh đã duyệt hết các asset trong lô so sánh |
 | Pilot | Mỗi runtime so với pilot nằm trong `deliver` của chính nó (D22.10) |
 
+**Ledger ghi thời gian và token theo vai trò** (D27.3):
+- Mỗi lần giao ghi `role` (worker, reviewer, script), thời điểm giao, thời điểm `ingest`, token và thời lượng của subagent.
+- Producer truyền token và thời lượng mà runtime báo vào `P ingest` qua tham số mới. Hiện tại `P ingest` chỉ có `--tokens <N>` (một số cho lần giao).
+- Runtime không báo số thì ledger ghi "không có số", không ghi 0.
+- Script tính thêm **khoảng chờ Producer** = thời điểm giao lần sau − thời điểm ingest lần trước.
+- `P stats <id>` in bảng theo bước: thời gian worker, reviewer, chờ Producer; token worker, reviewer, Producer.
+- Run 4 chỉ có token gộp theo bước, nên chưa biết phần nào phình. Nếu chờ Producer > 15% thời gian bước, xem lại cách điều phối (lý do giữ Producer gọi reviewer: `docs/decisions.md` D27.3).
+
 **`P compare`** tổng hợp từ ledger của hai bên (script ghi `runtime` vào mọi dòng ledger). Theo nguyên tắc Art Learning của kit (D25.J): đếm theo asset, không theo số lần gọi (thử lại trên cùng asset không phải bằng chứng độc lập); ghi cả lần thử bị loại; im lặng không tính là anh duyệt. Cùng nguyên tắc dùng cho việc hạ model sau pilot (D16.3):
 - Số vòng sửa mỗi bước; tỉ lệ anh duyệt ngay lần đầu ở DUYỆT 1 và DUYỆT 2.
 - Số lần `waiting_human` theo lý do.
@@ -417,6 +446,7 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 | `[limits]` và `uses`; `next` chờ slot | `cmd_next` | ~30 dòng |
 | Chép sang `deliver/` (chỉ khi duyệt `assemble`), đánh dấu `rejected` | `approve_step` | ~20 dòng |
 | `P texture-stats`: tổng hợp từ ledger và `texture_spec.json` khi cần | mới | ~30 dòng |
+| D27: `ingest` in lệnh giao tiếp; thời gian và token theo vai trò, "không có số", `P stats`; agent tự ghi report, sự kiện `report_fallback`; `RESOLVED_NOTES` và xác nhận của reviewer | `cmd_ingest`, mới | ~110 dòng |
 | Quyết định không ghi trùng | `human_action` | ~15 dòng |
 | Pilot trước lô sau | `cmd_intake` | ~15 dòng |
 | `P show`, `--bundle` (dùng renderer của Review Board) | mới | ~60 dòng |
