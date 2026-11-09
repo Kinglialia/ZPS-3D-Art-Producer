@@ -68,7 +68,7 @@ Số trong ví dụ chỉ để minh họa định dạng. Khi `has_map: false`,
 | 1 | Đọc nguồn, ghi `sources.json` | `check_inputs.py` |
 | 2 | Đếm thành phần trên concept. Ghi một dòng vào `blockout.md` (ví dụ "4 trụ, 1 cửa, 3 thùng") | Reviewer (tiêu chí 5) |
 | 3 | Đo trên concept riêng, không đo trên map tổng. Lấy cửa làm thước. In bảng đo: param, giá trị, nguồn, cách đo | — |
-| 4 | Viết part graph theo schema `blockout-1` (mục 9). Box, prism, cylinder. Marker nhô hoặc lõm ít nhất 2 cm. Props là part rời. Kích thước lấy từ MAP-LAYOUT (hoặc `size_m` của thẻ asset khi `has_map: false`) nằm trong `fixed_params` | `check_schema.py` |
+| 4 | Viết part graph theo schema `blockout-1` (mục 9). Primitive: `box`, `wedge`, `cylinder`, `custom` (D24.1). Mái dốc dùng `wedge` hoặc `custom`. Marker nhô hoặc lõm ít nhất 2 cm. Props là part rời. Kích thước lấy từ MAP-LAYOUT (hoặc `size_m` của thẻ asset khi `has_map: false`) nằm trong `fixed_params` | `check_schema.py` |
 | 5 | **Khóa tỉ lệ chính trước**: dựng footprint, tường, mái, cửa, các tầng nền. Chạy gate. Chỉ khi các khối này pass mới thêm part phụ | `gates.py`, `check_layout.py` |
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
 | 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
@@ -195,8 +195,8 @@ agents/zps-3dp-check-blockout.md   ← reviewer (D1)
 
 **Mỗi part:**
 
-- Bắt buộc: `name`, `primitive`, `dims` (hoặc `fn` + `args`), `attach`, `material` (mã trong `sources.json`), `role` (`mass` | `marker`).
-- Tùy chọn: `tag` (`base` | `roof`), `segments`, `axis`, `rotation_deg`.
+- Bắt buộc: `name`, `primitive` (`box` | `wedge` | `cylinder` | `custom`; đúng tập mà `graph.py` của kit nhận, D24.1), `dims` (hoặc `fn` + `args`), `attach`, `material` (mã trong `sources.json`), `role` (`mass` | `marker`).
+- Tùy chọn: `tag` (`base` | `roof`), `segments` (8–24), `axis`, `rotation_deg` (chỉ 0, 90, 180, 270; kit từ chối góc khác). `check_schema.py` kiểm cả hai giới hạn này.
 - Part `mirror_of` phải tự ghi `material`, `role` và `tag` (nếu có). Lý do: kit chỉ chép các field hình dạng sang part mirror. `check_schema.py` báo lỗi nếu thiếu.
 
 **Hai loại kiểm:**

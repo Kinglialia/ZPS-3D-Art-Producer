@@ -38,7 +38,7 @@ Ngắn, khoảng 15–20 dòng. Không có trường gắn với một loại as
 ```yaml
 project: <tên>
 preset: topdown-mobile-lowpoly
-paths: {approved: "<thư mục concept>/_approved", production: "production", deliver: "deliver"}
+paths: {approved: "<thư mục concept>/_approved", production: "production", deliver: "deliver", env_file: ".env"}   # env_file: file chứa MESHY_API_KEY (D24.3); không có thì Texture Artist chỉ VẼ MỚI
 has_map: true                                # true: intake bắt buộc có <id>.layout.md; false: W×D×H lấy từ size_m của thẻ asset
 pilot_asset: null                            # mã asset pilot đã duyệt; null = chưa có pilot (D21.7)
 scale_refs:                                  # danh sách mở; mỗi dự án tự đặt tên

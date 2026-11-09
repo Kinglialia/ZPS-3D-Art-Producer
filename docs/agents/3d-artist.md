@@ -113,7 +113,7 @@ Cuối bảng ghi: tris blockout → tris cuối → trần theo hạng; tris/m�
 ## 5. Gộp mesh
 
 1. **Join** mọi part, kể cả props, thành 1 mesh, 1 node, 1 material.
-2. **Không weld. Không boolean.** Union manifold3d chỉ dùng ở gate khi dựng từng part.
+2. **Không weld. Không boolean.** Union manifold3d chỉ dùng ở gate khi dựng từng part. Không đặt `mesh.max_duplicate_verts` trong config: với giá trị mặc định, `mesh_check` của kit chỉ báo đỉnh trùng ở mức info, nên cạnh đã tách không làm fail (D24.6).
 3. **Quét lỗi** (`check_mesh.py`): mặt đồng phẳng trùng nhau, mặt bị che hoàn toàn, mặt ngược normal. Xóa mặt bị che.
 4. **Tách đỉnh** ở cạnh gắt > 20°.
 5. Origin tâm đáy của cả cụm.
@@ -130,6 +130,7 @@ uv.texel_min_px_per_m: 64  # preset; tính ở texture_res
 
 - Làm và giao ở `texture_res` của thẻ asset (mặc định 2048). 3D Artist không đổi độ phân giải sau đó. Đổi cho asset cụ thể là việc của agent khác.
 - UV riêng cho từng mặt, không chồng lấn, một material (theo kit).
+- **Unwrap** (D24.4): dùng hàm `xatlas_unwrap()` trong `optimize/bake.py` của kit (bản chép). File này import `bpy` ngay đầu, nên gọi từ một script mỏng chạy trong Blender (`unwrap.py`, mới), không chạy chế độ `rebake` (vừa unwrap vừa bake). Không viết thuật toán unwrap mới.
 - `check_uv_edge.py` (mới): khoảng cách từ đảo UV tới mép atlas ≥ padding, và texel ≥ mức tối thiểu. Script báo cả số ở 2048 và số tương ứng ở 1024.
 
 ## 7. Bộ render review
@@ -176,7 +177,7 @@ Không còn là việc của 3D Artist (D22.11). Bước này do script `assembl
 
 Chép từ kit v0.10.4 (khóa, không sửa): `self_build/` (giống Blockout), `asset_checks/` (`mesh_check`, `uv_check`, `export_check`, `screen_tris_check`, `render_rig`), `optimize/bake.py` (chỉ phần unwrap UV, cần xác nhận khi viết code), `finalize.py`, `report.py`.
 
-Mới: `check_inputs.py`, `check_detail.py`, `check_mesh.py`, `check_uv_edge.py`, `render_review.py`.
+Mới: `check_inputs.py`, `check_detail.py`, `check_mesh.py`, `check_uv_edge.py`, `render_review.py`, `unwrap.py` (gọi `xatlas_unwrap` của kit, D24.4).
 
 `finalize.py`, `report.py` và `asset_checks/` cũng được `assemble.py` của Producer dùng. Theo D22.12, giữ tool tách khỏi contract: script tool không chứa quy tắc ghi file hay báo cáo của Producer.
 

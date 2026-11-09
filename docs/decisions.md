@@ -210,7 +210,7 @@ Spec: `docs/review-board.md`.
 13. **Chủ `texture/notes.md`:** Texture Artist ghi file này trong `texture/vN/final/`. Ở `assemble`, ~~3D Artist~~ **[Sửa theo D22.11: script `assemble.py`]** chỉ chép file vào gói cuối và ghép README.
 14. **Gọi Meshy** (thay D20.6):
     - Mỗi asset gọi Meshy một lần. Chỉ Texture Artist gọi Meshy.
-    - Lỗi kỹ thuật (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Texture Artist thử lại, tối đa 3 lần, như D8.3. Sau 3 lần lỗi: `STATUS: BLOCKED`, Producer hỏi anh.
+    - **[Sửa theo D24.2: kit trừ budget trước khi gọi; lỗi sau khi task đã tạo thì chờ tiếp `task_id`, không gọi lại]** ~~Lỗi kỹ thuật (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Texture Artist thử lại, tối đa 3 lần, như D8.3.~~ Sau 3 lần lỗi: `STATUS: BLOCKED`, Producer hỏi anh.
     - Texture chưa đạt: Texture Artist sửa qua các vòng review thường.
     - Không sửa được (reviewer trả `TOP_FIX: meshy_regen`, hoặc report của Texture Artist có `UNFIXABLE: yes`): script đặt `waiting_human`. Anh duyệt lần gọi thứ hai. Chỉ khi đó brief tiếp theo mới cho gọi Meshy thêm một lần. Script không tự cho.
     - **[Thay bằng D21.2]** ~~Script đếm số lần gọi Meshy từ report của Texture Artist (`MESHY_CALLS: <n>`). Nếu số này vượt số lần được phép, script báo lệch.~~ `gen_api.py` ghi `budget.json` theo hash mesh; script đọc file đó.
@@ -225,7 +225,7 @@ Spec: `docs/review-board.md`.
 Nguồn: review spec ngày 2026-11-08/09 (mục 1–14), phản biện của anh về Review Board và Codex.
 
 1. **Finding có id, sửa theo lô, tiến bộ theo finding** (thay D11.2, mở rộng D14.10). Finding mang id `F<n>` cố định qua các vòng, script giữ `<bước>/findings.json`. Reviewer ghi `PRIOR: resolved | open | regressed` cho mọi finding đang mở. `TOP_FIX` liệt kê finding cần sửa: kiểu **đơn** cho `structure` (một finding mỗi vòng), kiểu **lô** cho `param`, `regen`, `repaint` (mọi finding cùng loại). Một vòng có tiến bộ khi ít nhất một finding `blocker`/`major` cũ được giải quyết và số `regressed` ít hơn số `resolved`; từ vòng 2, vòng không tiến bộ → `waiting_human`. Lý do: một finding mỗi vòng × 3 vòng không qua được output có hơn 3 lỗi nặng; reviewer có context mới mỗi lần nên tổng số đếm nhiễu.
-2. **Budget Meshy gắn với hash mesh** (thay phần `MESHY_CALLS` của D20.14). `gen_api.py` đọc và ghi `budget.json`, từ chối gọi khi hết lượt; worker không tự khai. Mesh đổi (sau `fix_uv_mesh` hoặc làm lại `model`) → script hỏi anh gọi lại Meshy hay VẼ MỚI. Lý do: sửa mesh làm texture Meshy cũ mất hiệu lực mà đã hết lượt gọi.
+2. **Budget Meshy gắn với hash mesh** (thay phần `MESHY_CALLS` của D20.14). ~~`gen_api.py` đọc và ghi `budget.json`, từ chối gọi khi hết lượt~~ **[Sửa theo D24.2: một file budget theo định dạng kit cho mỗi hash mesh; không sửa `gen_api.py`]**; worker không tự khai. Mesh đổi (sau `fix_uv_mesh` hoặc làm lại `model`) → script hỏi anh gọi lại Meshy hay VẼ MỚI. Lý do: sửa mesh làm texture Meshy cũ mất hiệu lực mà đã hết lượt gọi.
 3. **`approvals`, `review_board` nằm trong `production/policy.yaml`** (sửa D14.4, D19.1, D20.8). `assemble` luôn human, không có khóa. Hash profile bỏ `paths` và khóa bắt đầu bằng `_`. Lý do: đổi người duyệt không được bật cảnh báo "profile đổi" cho mọi asset đang chạy.
 4. **`need_evidence`** chỉ dùng khi không còn finding `blocker`/`major` đang mở. Ảnh ghi vào `vN/review/evidence-<k>/`, không tạo version mới. Lý do: thứ tự khi có cả lỗi nặng và `unclear` chưa rõ; version rỗng làm nhiễu "bản tốt nhất".
 5. **Script làm việc trạng thái** (thay phần "Producer đánh dấu" của D2, sửa D10): `inputs` mỗi version và suy ra version cũ; `PROFILE_HASH` sinh trong brief, so khi ingest; ~~`texture-log.jsonl` ghi khi duyệt bước texture~~ **[Thay bằng D22.17: `P texture-stats` tổng hợp khi cần]**; `check_profile.py` chạy khi intake và sinh brief, agent không chạy lại. Agent không ghi ra ngoài thư mục version.
@@ -275,12 +275,24 @@ Nguồn: review lần 3, ba câu trả lời của anh (agent chỉ chạy qua P
    `zps-3dp-producer` và `zps-3dp-project-setup` giữ tên. Description của mọi agent bước và kiểm mở đầu bằng câu cố định "Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. Không dùng khi người dùng gọi trực tiếp." Các quyết định cũ (D1–D22) giữ tên cũ để đúng lịch sử; spec và checklist dùng tên mới.
 3. **Skill Project Setup chỉ gọi tường minh** (`disable-model-invocation: true`), vì không bao giờ cần tự kích hoạt. Cần kiểm trường này trên bản Claude Code đang dùng (coding-checklist dòng 82).
 
+## D24 — Sửa sau khi đọc code kit v0.10.4 (`905dc93`), và key Meshy của project (2026-11-09)
+
+Nguồn: đọc `src/zps-3d-artist/tools`, `src/zps-concept-views/scripts`, `build.py`, `editions/` của kit. Đọc code, chưa chạy.
+
+1. **Primitive của blockout đúng tập kit nhận:** `box | wedge | cylinder | custom` (spec cũ ghi "prism", kit không có). `rotation_deg` chỉ 0, 90, 180, 270. Mái dốc dùng `wedge` hoặc `custom`. `check_schema.py` kiểm.
+2. **Gọi Meshy qua wrapper `meshy_call.py`, không sửa `gen_api.py`** (sửa D20.14, D21.2). Kit trừ budget *trước* khi gọi, vì lời gọi trả phí mà thất bại vẫn có thể đã tốn credit. Lỗi trước khi task được tạo → wrapper hoàn budget, thử lại. Lỗi sau khi task đã tạo (hết thời gian chờ) → chờ tiếp đúng `task_id`, không tạo task mới, vì gọi lại là trả tiền thêm một lần. Budget theo hash mesh = một file `budget-<mesh_hash>.json` đúng định dạng kit (`max_credits`, `used_credits`).
+3. **Key Meshy lấy từ `.env` trong thư mục project** (anh yêu cầu). Profile có `paths.env_file` (mặc định `.env`; nằm trong `paths` nên không làm đổi hash profile). Wrapper đặt `ZPS_ART_ENV_FILE` cho tiến trình con và xóa `MESHY_API_KEY` khỏi môi trường con, để key của project luôn được dùng. Agent không đọc `.env`; brief không chứa key. `P init` thêm `.env` vào `.gitignore`. Có `env_file` mà thiếu key → `blocked` trước bước `texture`.
+4. **Tận dụng tool của kit:** `assemble.py` dùng `finalize.py` làm cổng (kết quả QA gắn với sha256 của GLB, thiếu `mesh_check` hoặc có fail thì từ chối) và `export_check` với `expect_unlit`. Unwrap dùng `xatlas_unwrap()` trong `bake.py`, gọi từ script mỏng `unwrap.py` chạy trong Blender.
+5. **Cấu trúc hai bản chép từ kit** (cụ thể hóa D6.4): `build.py`, `editions/{claude,codex}/edition.json`, `adapter.md`, `tests/`. Bản Codex thêm hậu tố `-codex` vào tên (như `skill_suffix` của kit). Description ≤ 300 ký tự (Codex rút gọn dài hơn), câu chặn gọi nhầm của D23.2 đứng đầu.
+6. **Không đặt `mesh.max_duplicate_verts`**: `mesh_check` của kit chỉ báo đỉnh trùng ở mức info, nên join không weld không fail.
+7. Hash nội bộ của kit (`code_hash` trong `gates.py`, `render_views.py`; sha256 trong `finalize.py`) là kiểm tươi trong một bước, không trùng với kiểm đầu vào giữa các bước của script Producer. D22.12 giữ nguyên.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
 - Gom rubric của 4 reviewer thành file agent khi viết code (rubric đã nằm trong spec từng agent).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
 - **Cần chạy thử mới biết** (ghi trong `coding-checklist.md`): reviewer ghi đủ `PRIOR`; Claude Code nhận model và resume theo từng lần giao; `codex exec` lồng trong phiên Codex; Meshy giữ UV và số tam giác; runtime báo token theo model.
-- **Chưa đọc code kit v0.10.4** khi review D21–D22. Nhận xét về kiểm trùng giả định tool của kit không tự kiểm hash.
+- Đã đọc code kit v0.10.4 (D24). Các dòng checklist trả lời bằng đọc code vẫn phải chạy thật mới đánh dấu xong.
 
 ## Đã đóng (ghi lại cho rõ)
 

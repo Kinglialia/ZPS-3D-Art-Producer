@@ -63,6 +63,7 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 - Trong `pipeline.toml`, `agent` của mỗi bước là `step-<bước>`, reviewer là `check-<bước>`.
 - Description của mọi agent bước và kiểm mở đầu bằng câu cố định: "Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. Không dùng khi người dùng gọi trực tiếp."
 - Tên vai trò (Blockout, Concept Views, 3D Artist, Texture Artist) chỉ dùng trong văn bản spec để dễ đọc, không dùng làm tên kỹ thuật.
+- **Bản Codex** (D24.5): tên thêm hậu tố `-codex`, ví dụ `zps-3dp-step-model-codex`, theo đúng quy ước `skill_suffix` của kit. Description tối đa 300 ký tự, vì Codex rút gọn description dài hơn (`DESC_MAX` của kit); câu chặn gọi nhầm đặt đầu tiên. Script build kiểm độ dài.
 
 ## 4. Ai duyệt (D14.4, D21.3)
 
@@ -158,23 +159,37 @@ Giữ như skill nền: `STATUS / OUTPUT / RUBRIC / ISSUES`. Thêm:
 - `FIXED: F<n>, ...` (vòng sửa): finding worker cho là đã sửa. Chỉ để đối chiếu; reviewer quyết.
 - Texture Artist: `UNFIXABLE: yes|no`.
 
-Worker không khai số lần gọi Meshy. Script đọc `budget.json` (mục 6.3).
+Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_hash>.json` (mục 6.3).
 
 **Kiểm đầu vào** (D22.12): chỉ script kiểm hash đầu vào, khi sinh brief và khi ingest (mục 11). `check_inputs.py` của agent chỉ kiểm file có tồn tại.
 
 **Brief bước `texture`:** script sinh brief từ các `final/` đã duyệt (`blockout` để đọc `sources.json`, `model`, `views_rest`) và file concept trong `_approved/<id>/`. Script chép mục `ISSUES` của report bước `model` đã duyệt vào brief. Không có file handoff.
 
-### 6.3 Meshy (D20.14, D21.2)
+### 6.3 Meshy (D20.14, D21.2, D24.2, D24.3)
 
-1. **Budget gắn với hash mesh**, không gắn với asset. `production/assets/<id>/texture/budget.json`:
-   ```json
-   {"entries": [{"mesh_hash": "...", "allowed": 1, "used": 0, "credits": 0, "approved_by": "default"}]}
-   ```
-2. Chỉ Texture Artist gọi Meshy, và chỉ qua `gen_api.py`. Wrapper này đọc budget, từ chối khi `used >= allowed`, và ghi `used`, `credits` sau mỗi lần gọi có trừ credit. Script đọc file này; worker không tự khai.
-3. Lỗi kỹ thuật (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Thử lại tối đa 3 lần (như D8.3). Sau 3 lần lỗi: `STATUS: BLOCKED`, Producer hỏi anh.
-4. Texture chưa đạt: Texture Artist sửa qua các vòng review thường.
-5. **Không sửa được** (`TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes`): script đặt `waiting_human`. Anh duyệt → script tăng `allowed` của mesh hiện tại thêm 1 và ghi `approved_by`. Brief sau ghi số lần còn được gọi.
-6. **Mesh đổi** (sau `fix_uv_mesh` hoặc anh làm lại `model`): hash mới có entry mới với `allowed: 0`. Texture cũ làm trên UV cũ, không dùng được. Script đặt `waiting_human` với câu hỏi: "Mesh đổi, texture Meshy cũ mất hiệu lực. Gọi lại Meshy (tốn credit) hay VẼ MỚI?". Anh chọn Meshy → `allowed: 1`; chọn VẼ MỚI → brief ghi chỉ định chế độ.
+**Gọi qua wrapper, không sửa kit.** Texture Artist chỉ gọi Meshy qua `meshy_call.py` (tool của Producer). Wrapper gọi `gen_api.py texture` của kit (chép nguyên, không sửa, theo D2). Chỉ Texture Artist gọi Meshy.
+
+**Key API** (D24.3): lấy từ file `.env` trong thư mục project, đường dẫn ghi ở `paths.env_file` của profile (mặc định `.env`), trong file có dòng `MESHY_API_KEY=...`.
+- Wrapper chạy `gen_api.py` trong tiến trình con với biến môi trường `ZPS_ART_ENV_FILE=<đường dẫn tuyệt đối tới .env>`, và **xóa `MESHY_API_KEY` khỏi môi trường của tiến trình con**. Lý do: gen_api ưu tiên biến môi trường hơn file, nên nếu shell còn key khác thì key của project sẽ bị bỏ qua.
+- Không agent nào đọc, in hay chép nội dung `.env`. Brief không chứa key hay đường dẫn tới `.env`; wrapper tự đọc đường dẫn từ profile.
+- `P init` thêm `.env` vào `.gitignore` của project.
+- Trước khi giao bước `texture`, script chạy `gen_api.py keys` (chỉ báo có hay không, không in key). Profile có `env_file` mà thiếu key → asset `blocked`, Producer hỏi anh. Profile không có `env_file` → VẼ MỚI, như quy tắc cũ "không có key Meshy".
+
+**Budget theo hash mesh, đúng định dạng của kit:** mỗi hash mesh một file `production/assets/<id>/texture/budget-<mesh_hash>.json` dạng `{"max_credits": N, "used_credits": 0}`, với `N = số lần được phép × giá một lần gọi` (giá lấy từ `--dry-run`). Số lần đã gọi = `used_credits / giá`. Script đọc file này; worker không tự khai.
+
+**Kit trừ budget trước khi gọi** (vì lời gọi có trả phí mà thất bại vẫn có thể đã tốn credit). Wrapper xử lý lỗi theo hai trường hợp:
+
+| Lỗi | Nhận biết | Xử lý |
+|---|---|---|
+| Trước khi task được tạo (lỗi mạng, lỗi API lúc gửi) | `task.json` không có `task_id` | Wrapper hoàn lại khoản đã trừ trong file budget, rồi thử lại. Tối đa 3 lần (D8.3) |
+| Sau khi task đã tạo (hết thời gian chờ, lỗi lúc tải file) | `task.json` có `task_id` | **Không tạo task mới.** Chờ tiếp đúng `task_id` đó và tải kết quả, dùng lại hàm `wait` và `download` của gen_api. Tối đa 3 lần |
+
+Sau 3 lần lỗi ở một trong hai trường hợp: `STATUS: BLOCKED`, Producer hỏi anh.
+
+**Các quy tắc còn lại giữ nguyên:**
+1. Texture chưa đạt: Texture Artist sửa qua các vòng review thường.
+2. **Không sửa được** (`TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes`): script đặt `waiting_human`. Anh duyệt → script tăng `max_credits` của file budget hiện tại thêm một lần gọi và ghi ledger ai duyệt. Brief sau ghi số lần còn được gọi.
+3. **Mesh đổi** (sau `fix_uv_mesh` hoặc anh làm lại `model`): hash mới có file budget mới với `max_credits: 0`. Texture cũ làm trên UV cũ, không dùng được. Script đặt `waiting_human` với câu hỏi: "Mesh đổi, texture Meshy cũ mất hiệu lực. Gọi lại Meshy (tốn credit) hay VẼ MỚI?". Anh chọn Meshy → `max_credits` bằng giá một lần gọi; chọn VẼ MỚI → brief ghi chỉ định chế độ.
 
 ### 6.4 Bước `assemble` bằng script (D22.11)
 
@@ -182,10 +197,11 @@ Worker không khai số lần gọi Meshy. Script đọc `budget.json` (mục 6.
 
 1. Kiểm hash mesh khớp hash đã khóa khi duyệt `model`.
 2. Gắn `albedo_<texture_res>.png` vào mesh đã khóa. Xuất GLB cuối: 1 mesh, 1 node, 1 material, unlit, base color only. Lưu `.blend`.
-3. Chạy QA của kit trên GLB cuối: `mesh_check`, `uv_check`, `export_check`, `screen_tris_check`.
+3. Chạy QA của kit trên GLB cuối: `mesh_check`, `uv_check`, `export_check` (với `expect_unlit: true`), `screen_tris_check`. Kết quả ghi vào `evidence/qa/` của thư mục làm việc.
+3b. **Dùng `finalize.py` của kit làm cổng** (D24.4): finalize chỉ nhận kết quả QA gắn với sha256 của đúng file GLB này, và từ chối nếu thiếu `mesh_check` hoặc có kết quả fail hoặc lỗi. finalize từ chối → `assemble.py` fail.
 4. **Kiểm GLB hiển thị đúng:** render một bộ nhỏ (3/4 trước, camera game) từ chính file GLB đã xuất, so pixel với render cùng góc của bước `texture`. Lệch quá ngưỡng → fail. Lý do: bắt lỗi phát sinh khi xuất (color space, alpha, unlit) mà render trong Blender không thấy.
 5. Ghép gói cuối: `model/`, `texture/` (chép `albedo` và `notes.md` từ `final/` của bước `texture`), `review/` (sheet DUYỆT 1, render và `final_lit_vs_concept.png` của bước `texture`, ảnh so ở điểm 4, report reviewer).
-6. Ghép `README.md` từ report các bước: dòng đầu là trạng thái và ngày; cách làm (chế độ texture, số lần gọi Meshy từ `budget.json`); ngoại lệ (NGOẠI LỆ, TEXTURE NOTE, mục "Blockout tự quyết"); việc còn mở (finding `minor` chưa đóng); những gì chưa kiểm (engine, camera chưa chốt, % tam giác nhỏ).
+6. Ghép `README.md` từ report các bước: dòng đầu là trạng thái và ngày; cách làm (chế độ texture, số lần gọi Meshy tính từ file budget); ngoại lệ (NGOẠI LỆ, TEXTURE NOTE, mục "Blockout tự quyết"); việc còn mở (finding `minor` chưa đóng); những gì chưa kiểm (engine, camera chưa chốt, % tam giác nhỏ).
 7. Pass → `waiting_human` (DUYỆT 2). Fail ở bất kỳ điểm nào → `blocked`, Producer báo anh kèm điểm fail.
 
 Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding để trang duyệt hiện được.
@@ -219,7 +235,7 @@ production/                            KHU 2 — LÀM VIỆC. Chỉ script và a
   assets/<id>/
     status.json, brief.md, rubric.md, feedback.md, feedback/
     <bước>/vN/{final, work, review, findings.json, brief-*.md, report-*.md}
-    texture/budget.json
+    texture/budget-<mesh_hash>.json
 
 deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
   nội dung `assemble/vN/final/` đã duyệt: README.md, model/, texture/, review/
@@ -287,7 +303,7 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 
 ## 13. GUIDELINE.md (D14.7)
 
-`P init` sinh `GUIDELINE.md` cho dự án (skill nền). Anh gửi cho Concept Artist, View Artist, AD. Thêm:
+`P init` sinh `GUIDELINE.md` cho dự án (skill nền), và thêm `.env` vào `.gitignore` của project (D24.3). Anh gửi GUIDELINE cho Concept Artist, View Artist, AD. Thêm:
 1. Mẫu `asset-card.yaml` và hướng dẫn từng trường (bắt buộc / bỏ trống thì hiểu thế nào).
 2. Danh sách file bắt buộc trong `_approved/<id>/`, đúng tên file. Tên file trong `_approved/` giờ là quy ước bắt buộc, thay cho "tên tự do" của skill nền.
 3. Cách làm lúc chốt: Concept Artist soạn thẻ từ những gì đã thảo luận, hỏi anh một lần các trường còn trống kèm gợi ý, viết material handoff, chạy `check_card.py`, rồi báo anh. Anh chép thư mục đã đủ vào `_approved/`.
@@ -313,7 +329,7 @@ Sub-agent không chat với anh. Đường duy nhất: worker trả `STATUS: NEE
 
 Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho kết quả tốt hơn.
 
-**Một lõi, hai adapter** (D6.4: một nguồn chung, script build xuất hai bản, bảng khác biệt ở `docs/EDITIONS.md`):
+**Một lõi, hai adapter** (D6.4: một nguồn chung, script build xuất hai bản). **Chép cấu trúc của kit** (D24.5) thay vì thiết kế mới: `build.py`, `editions/{claude,codex}/edition.json` (`skill_suffix`, `display_suffix`, `install_root`), `editions/*/adapter.md`, và thư mục `tests/`. Bảng khác biệt `docs/EDITIONS.md` là tóm tắt của hai thư mục `editions/`:
 
 | Phần | Dùng chung | Theo runtime |
 |---|---|---|
@@ -356,12 +372,13 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 | Thay đổi | Hàm | Ước lượng |
 |---|---|---|
 | Gate `review_human`, `checks_human`; bỏ `final_human_gate` | `cmd_ingest`, `advance` | ~25 dòng |
-| `assemble.py` (mục 6.4) | mới | ~150 dòng (phần lớn gọi tool của kit) |
+| `assemble.py` (mục 6.4), dùng `finalize.py` và `export_check` của kit | mới | ~80 dòng |
+| `meshy_call.py`: key từ `.env` của project, budget theo hash mesh, hoàn budget hoặc chờ tiếp `task_id` khi lỗi | mới | ~70 dòng |
 | `policy.yaml`, `P approvals set` (+ `--confirm-spend`), `P delegate` | mới + `cmd_ingest` | ~50 dòng |
 | Contract reviewer: `COUNTS`, `TOP_FIX` theo bước và kiểu sửa, `PRIOR`; `findings.json` theo version; chép finding khi `redo` | `cmd_ingest`, `parse_contract`, `review_brief` | ~90 dòng |
 | Tiến bộ theo finding, dừng sớm, bản tốt nhất | `cmd_ingest`, `worker_brief` | ~40 dòng |
 | `need_evidence` trong `vN/review/evidence-<k>/`, không tạo version, so hash `final/` | `cmd_brief`, `cmd_ingest` | ~30 dòng |
-| `fix_uv_mesh` → redo model; Meshy budget theo hash mesh; câu hỏi khi mesh đổi | `cmd_ingest`, mới | ~50 dòng |
+| `fix_uv_mesh` → redo model; file budget theo hash mesh; câu hỏi khi mesh đổi; kiểm key trước bước `texture` | `cmd_ingest`, mới | ~50 dòng |
 | `PROFILE_HASH` sinh trong brief, so khi ingest; hash bỏ `paths` và khóa `_` | mới | ~30 dòng |
 | `inputs` mỗi version, suy ra version cũ, cảnh báo theo hash | mới + `warnings_for` | ~60 dòng |
 | `[limits]` và `uses`; `next` chờ slot | `cmd_next` | ~30 dòng |

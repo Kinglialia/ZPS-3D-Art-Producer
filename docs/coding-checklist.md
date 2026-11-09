@@ -4,16 +4,16 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 
 | # | Agent | Việc cần kiểm | Nguồn | Kết quả |
 |---|---|---|---|---|
-| 1 | Blockout | `graph.py` của kit bỏ qua field lạ (`role`, `tag`), không báo lỗi | blockout.md §10 | |
-| 2 | Blockout | `gates.py` đọc khóa config `contact_dist_m`, `contact_samples`, `inset_depth_tolerance`. `config.yaml` dùng đúng tên này | blockout.md §10 | |
-| 3 | Blockout | `bootstrap.py` tìm thư viện ở `agents/zps-3dp-step-blockout/tools/.deps/blender-py<ver>`. Chạy `setup_deps.sh` trước các script chạy trong Blender | blockout.md §10 | |
-| 4 | Blockout | `assembly.py` chạy được bằng Python thường (không Blender) khi graph chỉ có primitive. Dùng blockout mẫu để thử | blockout.md §9 | |
+| 1 | Blockout | `graph.py` của kit bỏ qua field lạ (`role`, `tag`), không báo lỗi | blockout.md §10 | Đọc code 905dc93: `expand_parts` giữ nguyên dict của part, các hàm chỉ dùng `.get`; field lạ được giữ và bỏ qua. Chưa chạy |
+| 2 | Blockout | `gates.py` đọc khóa config `contact_dist_m`, `contact_samples`, `inset_depth_tolerance`. `config.yaml` dùng đúng tên này | blockout.md §10 | Đọc code 905dc93: đúng tên, nằm dưới `self_build.gates` của config (spec `config` ghi đè được). Chưa chạy |
+| 3 | Blockout | `bootstrap.py` tìm thư viện ở `agents/zps-3dp-step-blockout/tools/.deps/blender-py<ver>`. Chạy `setup_deps.sh` trước các script chạy trong Blender | blockout.md §10 | Đọc code 905dc93: `bootstrap.deps_dir()` = `tools/.deps/blender-py<major><minor>`. Chưa chạy |
+| 4 | Blockout | `assembly.py` chạy được bằng Python thường (không Blender) khi graph chỉ có primitive. Dùng blockout mẫu để thử | blockout.md §9 | Đọc code 905dc93: docstring ghi chạy bằng `python3` khi không có part `custom` (cần bpy pip khi có). Chưa chạy |
 | 5 | Blockout | Mask từ `concept_mask.py` được `raster.concept_mask` của kit đọc đúng là mask (trắng trên nền đen, viền đen) | blockout.md §8 | |
-| 6 | 3D Artist | `bake.py` của kit ở chế độ `rebake` có tách riêng phần unwrap UV được không, hay phải viết script unwrap mới | 3d-artist.md §12 | |
-| 7 | 3D Artist | Join không weld: `mesh_check` của kit có thể báo đỉnh trùng ở cạnh đã tách. Đặt ngưỡng đúng trong spec | 3d-artist.md §12 | |
+| 6 | 3D Artist | `bake.py` của kit ở chế độ `rebake` có tách riêng phần unwrap UV được không, hay phải viết script unwrap mới | 3d-artist.md §12 | Đọc code 905dc93: `xatlas_unwrap()` là hàm riêng nhưng file import `bpy` ở đầu; gọi từ script chạy trong Blender (D24.4). Chưa chạy |
+| 7 | 3D Artist | Join không weld: `mesh_check` của kit có thể báo đỉnh trùng ở cạnh đã tách. Đặt ngưỡng đúng trong spec | 3d-artist.md §12 | Đọc code 905dc93: `duplicate_verts` chỉ là info trừ khi đặt `mesh.max_duplicate_verts`; không đặt (D24.6). Chưa chạy |
 | 8 | Texture Artist | `gen_api.py texture` (Meshy) cần mạng. Bản Codex xin phép mạng ở phiên gốc | texture-artist.md §10, D6.4 | |
 | 9 | Concept Views, Texture Artist | `codex exec -m gpt-6-astra -s workspace-write -i …` với khung prompt cố định: Astra lưu ảnh đúng đường dẫn và ghi `result.json`; nếu không, dự phòng lấy từ `~/.codex/generated_images/`. Có tốn lượt Codex | D8, D18 | Cờ `-i` và `-m` có trong `codex exec --help` (2026-11-08) |
-| 10 | Concept Views | `measure_views.py` sau khi sửa tách nền theo màu khóa toàn ảnh: khe giữa cột không còn bị tính là vật thể | review-kit G1 | |
+| 10 | Concept Views | `measure_views.py` sau khi sửa tách nền theo màu khóa toàn ảnh: khe giữa cột không còn bị tính là vật thể | review-kit G1 | Đọc code 905dc93: `flood_background` chỉ lấy vùng nền nối với mép ảnh, nên cần sửa G1. Chưa chạy |
 | 11 | Codex | Sub-agent Codex gọi được sub-agent 3 tầng (D14.1 không còn cần, ghi lại để tham khảo) | D6.2 (đã thay bằng D14.1) | Đã thử với Codex 0.164 ngày 2026-11-08: 3 tầng chạy được |
 | 12 | Review Board | Producer tải ảnh và ghi dữ liệu lên trang claude.ai; anh bấm Duyệt thì agent đọc được; GLB nhúng base64 trong JSON hiện được trên điện thoại | D19 | Đã thử 2026-11-08: chạy được cả ba. glTF JSON có `data:` thì lỗi |
 | 13 | Concept Views | `diff_guides.py` phát hiện đúng view nào đổi guide khi blockout lên version (thử: đổi một cửa sổ mặt sau) | concept-views.md §9 | |
@@ -44,18 +44,18 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 38 | Producer | Hết vòng 3 vẫn FIX: script quay về bản tốt nhất và đặt `waiting_human`; trang duyệt hiện bản đó và finding còn mở | producer.md §7, D20.5 | |
 | 39 | Producer | `VERDICT: ESCALATE` đặt `waiting_human` ngay, không chạy thêm vòng; trang duyệt hiện lý do | producer.md §7, D20.5 | |
 | 40 | Producer | Vòng `need_evidence` không tính vào 3 vòng; cùng bước xin `need_evidence` lần thứ hai → `waiting_human`; bộ đếm này đặt lại khi anh gửi feedback (`redo`) | producer.md §7, D20.5, D20.15 | |
-| 41 | Producer | `TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes` → script đặt `waiting_human`, không tự cho gọi Meshy lần hai; chỉ sau khi anh duyệt, script tăng `allowed` trong `budget.json` và brief tiếp theo ghi số lần còn được gọi | producer.md §6.3, D20.14, D21.2 | |
+| 41 | Producer | `TOP_FIX: meshy_regen` hoặc `UNFIXABLE: yes` → script đặt `waiting_human`, không tự cho gọi Meshy lần hai; chỉ sau khi anh duyệt, script tăng `max_credits` của file budget hiện tại thêm một lần gọi và brief tiếp theo ghi số lần còn được gọi | producer.md §6.3, D20.14, D24.2 | |
 | 42 | Producer | Duyệt `model`: script ghi hash `<tên>-untextured.glb` vào `status.json`; **[Sửa theo D22.11]** `assemble.py` fail và đặt `blocked` khi hash lệch | 3d-artist.md §3, D20.7, D22.11 | |
 | 43 | Producer | `approvals` trong `policy.yaml` có khóa lạ (ví dụ `views`, `views_front`, `assemble`) → script từ chối; `P approvals set` cũng từ chối | producer.md §4, D20.8, D21.3 | |
 | 44 | Producer | Report worker thiếu `PROFILE_HASH` → `ingest` báo lỗi định dạng; hash phải khớp hash script ghi trong brief | producer.md §6.2, D21.5 | |
 | 45 | Producer | **[Thay bằng D21.2]** ~~Report Texture Artist thiếu `MESHY_CALLS`…~~ `gen_api.py` từ chối gọi khi `used >= allowed` của hash mesh hiện tại; script đọc `budget.json`, không đọc số worker khai | producer.md §6.3, D21.2 | |
-| 46 | Texture Artist | Lỗi kỹ thuật khi gọi Meshy (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tăng `used` trong `budget.json`; thử lại tối đa 3 lần, rồi `STATUS: BLOCKED` | texture-artist.md §2.2, D20.14, D21.2 | |
+| 46 | Texture Artist | **[Sửa theo D24.2]** Lỗi trước khi task được tạo: `meshy_call.py` hoàn khoản đã trừ trong file budget rồi thử lại. Lỗi sau khi task đã tạo: chờ tiếp đúng `task_id`, không tạo task mới. Tối đa 3 lần, rồi `STATUS: BLOCKED`. Thử bằng cách giả lỗi mạng ở hai thời điểm | texture-artist.md §2.2, D24.2 | |
 | 47 | Blockout | `has_map: false`: `sources.json` lấy W×D×H từ `size_m`, `character_h` từ `scale_refs`, `door_h` từ `scale_overrides` hoặc đo trên concept (có ghi cách đo); `files.layout` trỏ tới `asset-card.yaml`; `check_layout.py` so bbox với `size_m` | blockout.md §2, §5, D20.12 | |
 | 48 | Review Board | `views_front` và `texture` ở `waiting_human` hiện đúng tóm tắt (`VIEWS.md`, `texture/notes.md`) và lý do gửi anh (từ report reviewer, hoặc report worker khi `BLOCKED` / `UNFIXABLE`) | review-board.md §2, D20.16 | |
 | 49 | Producer | Reviewer ghi đủ `PRIOR` cho mọi finding đang mở. Thử trên một asset thật, đo tỉ lệ thiếu dòng; nếu cao, đưa danh sách finding vào brief dưới dạng mẫu điền sẵn | producer.md §6.1, D21.1 | |
 | 50 | Producer | `TOP_FIX` kiểu đơn có đúng một id; kiểu lô có đủ mọi finding đang mở cùng loại; sai thì `ingest` báo lỗi | producer.md §6.1, D21.1 | |
 | 51 | Blockout | Sửa theo lô loại `param`: `check_fix.py` chạy sau từng finding, không chỉ một lần cuối vòng | blockout.md §3, D21.1 | |
-| 52 | Producer | Mesh đổi sau khi đã gọi Meshy: hash mới có entry `allowed: 0`; script đặt `waiting_human` với câu hỏi gọi lại Meshy hay VẼ MỚI | producer.md §6.3, D21.2 | |
+| 52 | Producer | Mesh đổi sau khi đã gọi Meshy: hash mới có file budget mới với `max_credits: 0`; script đặt `waiting_human` với câu hỏi gọi lại Meshy hay VẼ MỚI | producer.md §6.3, D21.2, D24.2 | |
 | 53 | Producer | Hash profile: chuẩn hóa YAML (sắp xếp khóa, bỏ `paths` và khóa `_`); đổi `_source` hay `paths` không đổi hash; `approvals set` không bật cảnh báo | producer.md §10, D21.3 | |
 | 54 | Producer | `need_evidence` ghi vào `vN/review/evidence-<k>/`, không tạo version; reviewer chấm lại chính `vN`; không được dùng khi còn `blocker`/`major` | producer.md §7, D21.4 | |
 | 55 | Producer | `inputs` mỗi version; blockout lên version thì view và model dựng từ bản cũ hiện nhãn "cũ" trên trang duyệt mà Producer không làm gì | producer.md §11, D21.5 | |
@@ -78,7 +78,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 72 | 3D Artist, Texture Artist | Số hình học chỉ đọc từ `sources.json`; đổi `size_m` trong thẻ sau khi blockout đã duyệt không làm đổi số mà 3D Artist dùng, mà bật cảnh báo đổi thẻ | producer.md §10, D22.13 | |
 | 73 | Producer | Claude Code: resume đúng subagent cũ bằng SendMessage với agent id lấy từ kết quả lần giao trước | producer.md §16 | |
 | 74 | Codex | `codex exec` gọi lồng từ bên trong một phiên Codex chạy được và lấy được ảnh; nếu không, bản Codex dùng tool ảnh có sẵn | producer.md §16, D18 | |
-| 75 | Texture Artist | Meshy retexture với `enable_original_uv: true` giữ nguyên UV và số tam giác trên một mesh thật | texture-artist.md §2.2, D21.2 | |
+| 75 | Texture Artist | Meshy retexture với `enable_original_uv: true` giữ nguyên UV và số tam giác trên một mesh thật | texture-artist.md §2.2, D21.2 | Đọc code 905dc93: `gen_api` gửi `enable_original_uv: True`; docstring ghi chưa thử với dịch vụ thật. Chưa chạy |
 | 76 | — | Đọc code kit v0.10.4: tool của kit có tự kiểm hash hay không. Nếu có, xem lại D22.12 | D22.12 | |
 | 77 | Producer | `assemble.py` so pixel GLB với render bước `texture`: chọn ngưỡng; thử với một GLB cố ý sai color space để chắc script bắt được | producer.md §6.4, D22.11 | |
 | 78 | Mọi reviewer | Test D1 kiểm 4 file reviewer có đủ quy tắc chung theo contract mới: finding có id, `PRIOR`, `TOP_FIX` kiểu đơn/lô, chỉ trả 2 dòng | D1, D22.7 | |
@@ -86,3 +86,8 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 80 | Producer | A/B: mỗi runtime so tris/m² và dE với pilot trong `deliver` của chính nó | producer.md §16, D22.10 | |
 | 81 | Mọi agent | Gọi "ZPS - 3D Artist", "ZPS Texture Artist" trong một phiên có cài cả kit và bộ Producer: Claude chọn skill của kit, không chọn `zps-3dp-step-*`. Thử cả khi không nói tên, chỉ mô tả việc ("dựng model cho concept này") | producer.md §3, D23.2 | |
 | 82 | Project Setup | Frontmatter `disable-model-invocation: true` có trên bản Claude Code đang dùng; skill không tự kích hoạt; gọi `/zps-3dp-project-setup` vẫn chạy. Bản Codex: tìm cơ chế tương đương | project-profile.md §5, D23.3 | |
+| 83 | Blockout | `check_schema.py` từ chối primitive ngoài `box`, `wedge`, `cylinder`, `custom` và `rotation_deg` không phải bội số của 90, trước khi `graph.py` báo lỗi | blockout.md §9, D24.1 | |
+| 84 | Texture Artist | `meshy_call.py` gọi `gen_api.py` với `ZPS_ART_ENV_FILE` trỏ tới `.env` của project và không có `MESHY_API_KEY` trong môi trường con: thử khi shell đang có một key khác, xác nhận key của project được dùng (xem bằng `gen_api.py keys` và log, không in key) | producer.md §6.3, D24.3 | |
+| 85 | Producer | Agent không đọc `.env`: brief không chứa key hay đường dẫn `.env`; `P init` thêm `.env` vào `.gitignore`; profile có `env_file` mà thiếu key → `blocked` trước bước `texture` | producer.md §6.3, D24.3 | |
+| 86 | Producer | `assemble.py` dùng `finalize.py` của kit: GLB có QA fail hoặc thiếu `mesh_check` → finalize từ chối → `assemble.py` fail | producer.md §6.4, D24.4 | |
+| 87 | Producer | Build bản Codex: tên agent có hậu tố `-codex`; description mọi skill và agent ≤ 300 ký tự, câu chặn gọi nhầm đứng đầu; build fail nếu vượt | producer.md §3, §16, D24.5 | |

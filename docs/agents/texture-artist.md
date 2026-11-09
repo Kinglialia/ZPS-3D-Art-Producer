@@ -34,7 +34,7 @@ Script kiểm hash mesh khi sinh brief (D22.12). Texture Artist chỉ kiểm cá
 
 ## 2.1 Chọn chế độ: Meshy rồi SỬA, hay VẼ MỚI
 
-Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu anh hoặc Producer đã chỉ định cách làm, làm theo chỉ định đó. Nếu không có key Meshy: VẼ MỚI.
+Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu anh hoặc Producer đã chỉ định cách làm, làm theo chỉ định đó. Nếu profile không có `paths.env_file`: VẼ MỚI. Có `env_file` mà thiếu key thì script đã chặn trước khi giao bước (`docs/producer.md` §6.3).
 
 `texture_complexity.py` đo 5 chỉ số:
 
@@ -57,15 +57,15 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 - Chỉ dùng **retexture** trên mesh đã khóa, gửi kèm `enable_original_uv: true`. **Không dùng Meshy remesh.**
 - Ảnh tham chiếu style: concept albedo.
 - Trước mỗi lần gọi: chạy `--dry-run` để xem giá.
-- **Budget gắn với hash mesh** (D21.2, `production/assets/<id>/texture/budget.json`, `docs/producer.md` §6.3). `gen_api.py` đọc budget của hash mesh hiện tại, từ chối gọi khi `used >= allowed`, và tự ghi `used`, `credits` sau mỗi lần gọi có trừ credit. Mặc định `allowed: 1` cho mesh đầu tiên. Script tăng `allowed` khi anh duyệt lần gọi thêm. Giới hạn `meshy = 1` trong `[limits]` bảo đảm không gọi song song.
+- **Gọi qua `meshy_call.py`** (D24.2), không gọi thẳng `gen_api.py`. Wrapper lấy key từ `.env` của project (D24.3), quản budget theo hash mesh trong file `texture/budget-<mesh_hash>.json` đúng định dạng của kit, và xử lý lỗi (`docs/producer.md` §6.3). Texture Artist không đọc `.env`, không truyền key. Giới hạn `meshy = 1` trong `[limits]` bảo đảm không gọi song song.
 - Sau khi Meshy trả file: chạy `uv_check` và `mesh_check`. Nếu UV hoặc số tam giác đổi, loại file đó.
 - **Gọi một lần cho mỗi mesh** (D20.14, D21.2). Texture Artist là agent duy nhất gọi Meshy.
 - **Mesh đổi** (sau `fix_uv_mesh` hoặc anh làm lại `model`): texture Meshy cũ làm trên UV cũ, không dùng được. Script hỏi anh gọi lại Meshy hay VẼ MỚI trước khi giao bước `texture`. Brief ghi chỉ định đó.
-- **Lỗi kỹ thuật** (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Texture Artist thử lại, tối đa 3 lần (như D8.3). Sau 3 lần lỗi: `STATUS: BLOCKED` kèm lỗi. Producer hỏi anh.
+- **Lỗi kỹ thuật:** kit trừ budget trước khi gọi. Lỗi trước khi task được tạo: wrapper hoàn budget và thử lại. Lỗi sau khi task đã tạo (hết thời gian chờ, lỗi tải file): wrapper chờ tiếp đúng `task_id` đó, **không tạo task mới**. Tối đa 3 lần (như D8.3). Sau 3 lần: `STATUS: BLOCKED` kèm lỗi, Producer hỏi anh (D24.2, sửa D20.14).
 - Lỗi sửa được (bóng bake, chi tiết thừa, lệch tông, seam, hoa văn lem): chế độ SỬA trên lớp Meshy, qua các vòng review thường.
 - **Không sửa được:** check-texture trả `TOP_FIX: meshy_regen`, hoặc Texture Artist ghi `UNFIXABLE: yes` kèm lý do. Script đặt `waiting_human`. Anh duyệt lần gọi thứ hai. Chỉ khi brief tiếp theo ghi "được gọi Meshy thêm một lần", Texture Artist mới gọi lại. Script không tự cho.
 - Nếu lần hai vẫn không dùng được: chế độ VẼ MỚI.
-- Không tự khai số lần gọi trong báo cáo (D21.2, thay `MESHY_CALLS` của D20.14). Script đọc `budget.json`.
+- Không tự khai số lần gọi trong báo cáo (D21.2, thay `MESHY_CALLS` của D20.14). Script tính từ file budget: số lần = `used_credits / giá`.
 - Ghi số lần gọi, số lần thử lại do lỗi kỹ thuật và credit đã dùng vào `texture/notes.md`.
 
 ## 3. Chế độ SỬA (trên lớp Meshy)
@@ -151,7 +151,7 @@ Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1).
 |---|---|---|
 | `repaint: F<n>, F<m> …` | Texture Artist, sửa theo crop. Kiểu lô (D21.1): mọi finding `repaint` đang mở; mỗi finding ghi rõ vùng và lỗi | Lỗi vẽ, sửa được |
 | `fix_uv_mesh: <mô tả>` | Script chạy `redo --step model` (D14.10). DUYỆT 1 lại | Lỗi do UV, mesh, normal |
-| `meshy_regen: <lý do>` | Script đặt `waiting_human`. Anh duyệt lần gọi Meshy thứ hai; script tăng `allowed` trong `budget.json`, brief tiếp theo ghi số lần còn được gọi (mục 2.2, D20.14, D21.2) | `blocker`: hỏng cả style hoặc phần lớn bề mặt, không sửa được |
+| `meshy_regen: <lý do>` | Script đặt `waiting_human`. Anh duyệt lần gọi Meshy thứ hai; script tăng `max_credits` của file budget hiện tại thêm một lần gọi, brief tiếp theo ghi số lần còn được gọi (mục 2.2, D20.14, D21.2) | `blocker`: hỏng cả style hoặc phần lớn bề mặt, không sửa được |
 | `need_evidence: <ảnh cần thêm>` | Texture Artist, vòng ngắn chỉ render ảnh xin thêm vào `vN/review/evidence-<k>/`, không tạo version mới (D21.4). Không tính vào 3 vòng (`docs/producer.md` §7) | Chỉ còn tiêu chí `unclear`, không còn `blocker`, `major` |
 | `note: <nội dung>` | Ghi vào `texture/notes.md` | `minor`, không chặn |
 
@@ -183,7 +183,7 @@ Báo cáo contract của worker (`STATUS / OUTPUT / RUBRIC / ISSUES / PROFILE_HA
 - `project_concept.py` (zps-3d-artist), **có sửa**: 8 view, trọng số theo góc nhìn, loại vùng bị che, lấp vùng khuất trong 3D. Ghi phần sửa trong `SOURCE.md`.
 - `render_model.py`, `inspect_model.py`, `palette_report.py` (`.art-production-support/shared/scripts`).
 
-- `gen/gen_api.py` (zps-3d-artist), chỉ lệnh `texture` cho Meshy retexture, **có sửa** (D21.2): đọc và ghi `budget.json` theo hash mesh, từ chối gọi khi hết lượt. Ghi phần sửa trong `SOURCE.md`.
+- `gen/gen_api.py` (zps-3d-artist), chỉ lệnh `texture` cho Meshy retexture, **chép nguyên, không sửa** (D24.2, thay D21.2). Mọi lần gọi đi qua `meshy_call.py` của Producer.
 
 **Mới:** `base_fill.py`, `render_paint_views.py`, `seam_fix.py`, `crop_edit.py`, `tex_measure.py`, `texture_complexity.py`, `tone_fix.py`.
 
