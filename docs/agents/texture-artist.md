@@ -1,6 +1,6 @@
 # Spec — sub-agent Texture Artist (v1.2)
 
-Tên kỹ thuật: `zps-3dp-texture-artist`. Tên hiển thị: ZPS-3DP - Texture Artist. Reviewer: `zps-3dp-review-texture`.
+Tên kỹ thuật: `zps-3dp-step-texture`. Tên hiển thị: 3DP Step · Texture. Reviewer: `zps-3dp-check-texture` (D23.2).
 Duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D1, D6, D7, D8, D10, D11, D21, D22).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, zps-texture-review, zps-3d-artist `project_concept.py`).
 
@@ -8,7 +8,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-surface, z
 
 ## 1. Vai trò
 
-Texture Artist làm bước `texture` của pipeline (D14.2), giữa `model` và `assemble`. Script sinh brief từ các `final/` đã duyệt (`blockout` để đọc `sources.json`, `model`, `views_rest`) và file concept trong `_approved/<id>/`. Script chép mục `ISSUES` của report bước `model` đã duyệt vào brief. Không có file handoff. Texture Artist tự chọn chế độ (mục 2.1, D17), gọi Meshy khi cần, làm texture albedo theo `texture_res`, rồi ghi báo cáo contract. Producer giao review-texture và đếm vòng sửa (D14.1). Texture Artist không gọi reviewer, không gọi agent khác. Chỉ đọc file và thư mục brief chỉ định.
+Texture Artist làm bước `texture` của pipeline (D14.2), giữa `model` và `assemble`. Script sinh brief từ các `final/` đã duyệt (`blockout` để đọc `sources.json`, `model`, `views_rest`) và file concept trong `_approved/<id>/`. Script chép mục `ISSUES` của report bước `model` đã duyệt vào brief. Không có file handoff. Texture Artist tự chọn chế độ (mục 2.1, D17), gọi Meshy khi cần, làm texture albedo theo `texture_res`, rồi ghi báo cáo contract. Producer giao check-texture và đếm vòng sửa (D14.1). Texture Artist không gọi reviewer, không gọi agent khác. Chỉ đọc file và thư mục brief chỉ định.
 
 **Dùng cho:** công trình, props cứng, cây và đá low-poly (D9). Version sau có dùng chung cho nhóm nhân vật hay không: chưa chốt.
 
@@ -63,7 +63,7 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 - **Mesh đổi** (sau `fix_uv_mesh` hoặc anh làm lại `model`): texture Meshy cũ làm trên UV cũ, không dùng được. Script hỏi anh gọi lại Meshy hay VẼ MỚI trước khi giao bước `texture`. Brief ghi chỉ định đó.
 - **Lỗi kỹ thuật** (hết thời gian chờ, lỗi mạng, lỗi API không trừ credit) không tính là một lần gọi. Texture Artist thử lại, tối đa 3 lần (như D8.3). Sau 3 lần lỗi: `STATUS: BLOCKED` kèm lỗi. Producer hỏi anh.
 - Lỗi sửa được (bóng bake, chi tiết thừa, lệch tông, seam, hoa văn lem): chế độ SỬA trên lớp Meshy, qua các vòng review thường.
-- **Không sửa được:** review-texture trả `TOP_FIX: meshy_regen`, hoặc Texture Artist ghi `UNFIXABLE: yes` kèm lý do. Script đặt `waiting_human`. Anh duyệt lần gọi thứ hai. Chỉ khi brief tiếp theo ghi "được gọi Meshy thêm một lần", Texture Artist mới gọi lại. Script không tự cho.
+- **Không sửa được:** check-texture trả `TOP_FIX: meshy_regen`, hoặc Texture Artist ghi `UNFIXABLE: yes` kèm lý do. Script đặt `waiting_human`. Anh duyệt lần gọi thứ hai. Chỉ khi brief tiếp theo ghi "được gọi Meshy thêm một lần", Texture Artist mới gọi lại. Script không tự cho.
 - Nếu lần hai vẫn không dùng được: chế độ VẼ MỚI.
 - Không tự khai số lần gọi trong báo cáo (D21.2, thay `MESHY_CALLS` của D20.14). Script đọc `budget.json`.
 - Ghi số lần gọi, số lần thử lại do lỗi kỹ thuật và credit đã dùng vào `texture/notes.md`.
@@ -87,7 +87,7 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 | 4 | **Chiếu lên UV.** Chiếu 8 view, trọng số theo mức mặt nhìn thẳng vào camera. Loại vùng bị che ở từng view | `project_concept.py` (bản chép, có sửa) |
 | 5 | **Lấp vùng khuất trong không gian 3D.** Lấy màu từ điểm lân cận trên model, ưu tiên điểm cùng hướng normal. Nếu không có điểm phù hợp, giữ màu nền của bước 1 | `project_concept.py` (có sửa) |
 | 6 | **Sửa seam trong không gian 3D.** Tìm pixel seam từ mask UV, tô lại bằng trung bình có trọng số của điểm lân cận trên model. Chỉ gọi Codex sửa crop khi script không xử lý được | `seam_fix.py` (mới) |
-| 7 | Tự kiểm, ghi báo cáo. Producer giao review-texture (D14.1) | `tex_measure.py`, reviewer |
+| 7 | Tự kiểm, ghi báo cáo. Producer giao check-texture (D14.1) | `tex_measure.py`, reviewer |
 
 - Với asset rất đơn giản, bước 1 cộng nét vẽ ở bước 3 có thể là đủ.
 - **Không chiếu ảnh view của Concept Views lên model.** Ảnh view vẽ trên blockout, không phải mesh cuối. Ảnh view chỉ là ảnh tham chiếu.
@@ -121,7 +121,7 @@ style:
 
 Quy tắc riêng của dự án (ví dụ New Last Order: mái là ngói xếp lớp theo dốc, tường đọc ra từng viên đá, viền vàng dừng đúng mép khung) nằm trong **rubric theo loại**, mục `texture` (`production/rubrics/<loại>.md`, D14.6), không nằm trong agent.
 
-## 7. Reviewer `zps-3dp-review-texture`
+## 7. Reviewer `zps-3dp-check-texture`
 
 Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1). Producer giao reviewer ở bước `texture` (D14.1). Bước `assemble` không có agent và reviewer; script `assemble.py` kiểm và anh duyệt (D22.11).
 
@@ -166,7 +166,7 @@ Script của Producer làm (D11, D14.10, D21.1, `docs/producer.md` §7): tối �
 Ghi vào `production/assets/<id>/texture/vN/final/`:
 
 - `albedo_<texture_res>.png`.
-- **Bộ render có texture** (D22.11; trước đây 3D Artist render ở `assemble`): có texture, có ánh sáng, alpha bật: 3/4 trước, cận trước, 3/4 sau, camera game; cùng góc bản unlit; thumbnail ở kích thước thật. Bộ này dùng cho review-texture và cho sheet DUYỆT 2. `assemble.py` render lại 3/4 trước và camera game từ GLB để so pixel với bộ này.
+- **Bộ render có texture** (D22.11; trước đây 3D Artist render ở `assemble`): có texture, có ánh sáng, alpha bật: 3/4 trước, cận trước, 3/4 sau, camera game; cùng góc bản unlit; thumbnail ở kích thước thật. Bộ này dùng cho check-texture và cho sheet DUYỆT 2. `assemble.py` render lại 3/4 trước và camera game từ GLB để so pixel với bộ này.
 - **`final_lit_vs_concept.png`** (D22.11): model có texture, cùng góc và hướng nắng với concept có bóng (hướng nắng lấy từ `spec.json` của bước `model`), đặt cạnh concept đó.
 - `texture_spec.json`: đề xuất, điểm số và lý do chọn chế độ (mục 2.1).
 - `notes.md` (trong gói cuối là `texture/notes.md`): phương pháp, số lần gọi Meshy, số lần thử lại do lỗi kỹ thuật, credit, đã sửa gì. Texture Artist là chủ file này; ở `assemble`, script `assemble.py` chỉ chép (D20.13, D22.11).

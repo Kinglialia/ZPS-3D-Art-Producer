@@ -72,7 +72,7 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 
 **Agent nhận:** ở vòng sửa sau, brief của worker có đường dẫn ảnh đã khoanh và danh sách "1: … 2: …". Reviewer của vòng đó nhận cùng danh sách để kiểm từng điểm.
 
-*Đề xuất, chờ duyệt:* script đổi mỗi vùng khoanh thành một finding của anh, id `H<n>`, mức `major`, ghi vào `findings.json` của version đang chờ duyệt (D22.1). Reviewer ghi `PRIOR` cho từng `H<n>` như mọi finding khác (D21.1). Bước không có reviewer (`assemble`): anh tự đóng finding khi duyệt.
+**Finding của anh** (D23.1): script đổi mỗi vùng khoanh thành một finding của anh, id `H<n>`, mức `major`, ghi vào `findings.json` của version đang chờ duyệt (D22.1). Reviewer ghi `PRIOR` cho từng `H<n>` như mọi finding khác (D21.1). Bước không có reviewer (`assemble`): anh tự đóng finding khi duyệt.
 
 **v2 (làm sau):** ghim trên model 3D. Anh chạm vào bề mặt model, ghim hiện ra kèm ghi chú. Agent nhận tọa độ 3D, tên part gần nhất (script đổi từ bbox của part) và ảnh chụp góc nhìn có ghim.
 
@@ -118,5 +118,5 @@ Chỉ dùng khi so Claude Code với Codex (`docs/producer.md` §16). Chỉ có 
 - Mỗi asset trong lô so sánh: hai bản đặt cạnh nhau ở cùng bước, nhãn **A** và **B**. Nhãn gán ngẫu nhiên theo từng asset, lưu ở `ab/mapping.json`. Trang không hiện tên runtime, tên model hay đường dẫn có chứa tên runtime.
 - Ảnh ở cùng góc, cùng kích thước, đặt thẳng hàng để so. Model 3D hai bản xoay đồng bộ.
 - Nút Duyệt, Cần sửa, Ghi chú cho từng bản. Script ghi về đúng thư mục của runtime đó (`production-claude/` hoặc `production-codex/`).
-- *Đề xuất, chờ duyệt:* nút **Bản nào tốt hơn** (A, B, ngang nhau). Script ghi vào `ab/preferences.jsonl` để `P compare` tổng hợp.
+- Nút **Bản nào tốt hơn** (A, B, ngang nhau) (D23.1). Script ghi vào `ab/preferences.jsonl` để `P compare` tổng hợp.
 - `P compare --reveal` chỉ mở nhãn sau khi anh đã duyệt hết các asset trong lô so sánh.

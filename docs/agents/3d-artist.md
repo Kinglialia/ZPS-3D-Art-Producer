@@ -1,6 +1,6 @@
 # Spec — sub-agent 3D Artist (v1.2)
 
-Tên kỹ thuật: `zps-3dp-3d-artist`. Tên hiển thị: ZPS-3DP - 3D Artist.
+Tên kỹ thuật: `zps-3dp-step-model`. Tên hiển thị: 3DP Step · Model. Reviewer: `zps-3dp-check-clay` (D23.2).
 Duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D1–D14, D16, D21, D22).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist, zps-surface, zps-texture-review).
 
@@ -49,7 +49,7 @@ Số hình học (W×D×H, `door_h`, `character_h`, camera) lấy từ `sources.
 | A5 | **UV** theo profile (mục 6) | `uv_check` của kit, `check_uv_edge.py` |
 | A6 | QA của kit: `mesh_check`, `uv_check`, `export_check`, `screen_tris_check` | Script |
 | A7 | Render bộ review (mục 7) | — |
-| A8 | Ghi báo cáo contract. Producer giao review-clay. Nếu FIX, Producer giao lại với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Ghi `FIXED:` | Reviewer |
+| A8 | Ghi báo cáo contract. Producer giao check-clay. Nếu FIX, Producer giao lại với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Ghi `FIXED:` | Reviewer |
 | A9 | Duyệt theo `approvals.model` (D14.4). Khi duyệt, script **khóa mesh**: ghi hash của `<tên>-untextured.glb` vào `status.json`, giống khóa Blockout. Từ đây không ai sửa mesh hay UV. Nếu buộc phải sửa, tạo version mới và đi lại từ A6. Mesh đổi thì budget Meshy của mesh cũ không dùng cho mesh mới; script hỏi anh trước bước `texture` (D21.2) | Anh hoặc chính sách |
 
 **Đầu ra bước `model`:** `production/assets/<id>/model/vN/final/`
@@ -147,7 +147,7 @@ Một script `render_review.py`, mở Blender một lần. 3D Artist có bản r
 
 Hướng nắng của concept có bóng: 3D Artist ước lượng ở bước A7 và ghi vào `spec.json`. Texture Artist dùng lại khi render `final_lit_vs_concept.png` ở bước `texture` (D22.11).
 
-**review-clay** (Opus, chỉ đọc, context mới mỗi lần):
+**check-clay** (Opus, chỉ đọc, context mới mỗi lần):
 
 1. Khối: chấm trên clay. Lỗi "ổ bánh mì" là fail.
 2. Detail pass: đủ chi tiết đổi silhouette. So bảng detail pass với concept.

@@ -58,7 +58,7 @@ Các điểm này lộ ra khi đọc code kit, trước khi viết code. Nguyên
 2. **[Thay bằng D14.1]** ~~Agent nào làm thì tự gọi reviewer của mình.~~ Blockout gọi review-blockout, Concept Views gọi review-views, 3D Artist gọi review-clay, Texture Artist gọi review-texture. Sub-agent được gọi sub-agent (Claude Code: tối đa 3 tầng dưới phiên chính; Codex 0.164: đã thử thật 3 tầng). Dự phòng: nếu agent không có tool gọi agent, agent trả `review: pending`, và agent gọi nó tự gọi reviewer. Reviewer không có tool gọi agent.
 3. **[Thay bằng D14 (mở đầu: contract báo cáo)]** ~~**Báo cáo ngắn theo mẫu cố định.** Agent trả về Producer: `asset | gate | status | sheet | summary`, vài dòng.~~ Worker ghi `STATUS / OUTPUT / RUBRIC / ISSUES`. Ảnh và chi tiết nằm trong file, không nằm trong báo cáo.
 4. **Hai runtime: Claude Code và Codex.** Một nguồn chung, không phụ thuộc runtime. Mỗi runtime có một adapter riêng (gọi agent, chạy Blender, mạng, ảnh, Review Board). Một script build xuất ra hai bản. Bảng khác biệt ghi trong `docs/EDITIONS.md`. Thứ tự làm: bản Claude, chạy thử, rồi bản Codex. Bản Codex: Blender chạy ngoài sandbox; quyền mạng và sandbox cấp ở phiên gốc, vì sub-agent Codex dùng chung quyền của phiên gốc.
-5. **Tên.** Tên kỹ thuật `zps-3dp-<vai>` (ví dụ `zps-3dp-3d-artist`). Tên hiển thị `ZPS-3DP - <Vai>`. Tiền tố này tránh trùng với skill `zps-3d-artist`, `zps-concept-views` của kit đang cài.
+5. **Tên.** **[Sửa theo D23.2: agent đặt theo bước, `zps-3dp-step-<bước>`, `zps-3dp-check-<bước>`]** ~~Tên kỹ thuật `zps-3dp-<vai>` (ví dụ `zps-3dp-3d-artist`). Tên hiển thị `ZPS-3DP - <Vai>`.~~ Tiền tố này tránh trùng với skill `zps-3d-artist`, `zps-concept-views` của kit đang cài.
 
 ## D7 — Spec 3D Artist v1 (2026-11-08)
 
@@ -259,14 +259,26 @@ Nguồn: review lần 3, ba câu trả lời của anh (agent chỉ chạy qua P
 17. **Bỏ `P explain` và `texture-log.jsonl`** (đề xuất kèm D21). Câu "vì sao" trả lời bằng lý do và finding trên trang duyệt; thống kê texture dùng `P texture-stats` lúc cần.
 18. **Thứ tự code theo lát dọc 6 giai đoạn** (`docs/producer.md` §18). GĐ 1 kiểm phần rủi ro nhất: reviewer ghi đủ `PRIOR`, vòng sửa theo finding hội tụ.
 
+## D23 — Duyệt 3 đề xuất còn mở và đổi tên agent (2026-11-09)
+
+1. **Duyệt 3 đề xuất kèm D21, D22:** vùng anh khoanh trên Review Board thành finding `H<n>` (review-board §4); nút "Bản nào tốt hơn" trên trang so cặp A/B (review-board §8); hash concept theo nội dung file (producer §11).
+2. **Agent đặt tên theo bước pipeline** (sửa D6.5). Lý do: tên theo vai trò trùng với skill của kit (`zps-concept-views`, `zps-3d-artist`, `zps-texture-artist`), anh gọi "ZPS - 3D Artist" thì Claude có thể chọn nhầm. Tên mới:
+
+   | Cũ | Mới | Tên hiển thị |
+   |---|---|---|
+   | `zps-3dp-blockout` | `zps-3dp-step-blockout` | 3DP Step · Blockout |
+   | `zps-3dp-concept-views` | `zps-3dp-step-views` | 3DP Step · Views |
+   | `zps-3dp-3d-artist` | `zps-3dp-step-model` | 3DP Step · Model |
+   | `zps-3dp-texture-artist` | `zps-3dp-step-texture` | 3DP Step · Texture |
+   | `zps-3dp-review-blockout`, `-views`, `-clay`, `-texture` | `zps-3dp-check-blockout`, `-views`, `-clay`, `-texture` | 3DP Check · … |
+
+   `zps-3dp-producer` và `zps-3dp-project-setup` giữ tên. Description của mọi agent bước và kiểm mở đầu bằng câu cố định "Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. Không dùng khi người dùng gọi trực tiếp." Các quyết định cũ (D1–D22) giữ tên cũ để đúng lịch sử; spec và checklist dùng tên mới.
+3. **Skill Project Setup chỉ gọi tường minh** (`disable-model-invocation: true`), vì không bao giờ cần tự kích hoạt. Cần kiểm trường này trên bản Claude Code đang dùng (coding-checklist dòng 82).
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
 - Gom rubric của 4 reviewer thành file agent khi viết code (rubric đã nằm trong spec từng agent).
 - Texture Artist có dùng chung cho nhóm nhân vật ở version sau không.
-- **Đề xuất còn chờ anh duyệt** (đã viết vào spec, đánh dấu "đề xuất, chờ duyệt"):
-  - Vùng anh khoanh trên Review Board thành finding `H<n>`, theo dõi `PRIOR` như finding của reviewer (review-board §4).
-  - Nút "Bản nào tốt hơn" trên trang so cặp A/B (review-board §8).
-  - Hash concept theo nội dung file thay cho thời gian sửa (producer §11).
 - **Cần chạy thử mới biết** (ghi trong `coding-checklist.md`): reviewer ghi đủ `PRIOR`; Claude Code nhận model và resume theo từng lần giao; `codex exec` lồng trong phiên Codex; Meshy giữ UV và số tam giác; runtime báo token theo model.
 - **Chưa đọc code kit v0.10.4** khi review D21–D22. Nhận xét về kiểm trùng giả định tool của kit không tự kiểm hash.
 

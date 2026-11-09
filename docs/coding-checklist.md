@@ -6,7 +6,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 |---|---|---|---|---|
 | 1 | Blockout | `graph.py` của kit bỏ qua field lạ (`role`, `tag`), không báo lỗi | blockout.md §10 | |
 | 2 | Blockout | `gates.py` đọc khóa config `contact_dist_m`, `contact_samples`, `inset_depth_tolerance`. `config.yaml` dùng đúng tên này | blockout.md §10 | |
-| 3 | Blockout | `bootstrap.py` tìm thư viện ở `agents/zps-3dp-blockout/tools/.deps/blender-py<ver>`. Chạy `setup_deps.sh` trước các script chạy trong Blender | blockout.md §10 | |
+| 3 | Blockout | `bootstrap.py` tìm thư viện ở `agents/zps-3dp-step-blockout/tools/.deps/blender-py<ver>`. Chạy `setup_deps.sh` trước các script chạy trong Blender | blockout.md §10 | |
 | 4 | Blockout | `assembly.py` chạy được bằng Python thường (không Blender) khi graph chỉ có primitive. Dùng blockout mẫu để thử | blockout.md §9 | |
 | 5 | Blockout | Mask từ `concept_mask.py` được `raster.concept_mask` của kit đọc đúng là mask (trắng trên nền đen, viền đen) | blockout.md §8 | |
 | 6 | 3D Artist | `bake.py` của kit ở chế độ `rebake` có tách riêng phần unwrap UV được không, hay phải viết script unwrap mới | 3d-artist.md §12 | |
@@ -61,7 +61,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 55 | Producer | `inputs` mỗi version; blockout lên version thì view và model dựng từ bản cũ hiện nhãn "cũ" trên trang duyệt mà Producer không làm gì | producer.md §11, D21.5 | |
 | 56 | Producer | **[Thay bằng D22.17]** `P texture-stats` tổng hợp đúng từ ledger và các `texture_spec.json`; không có file `texture-log.jsonl` | producer.md §17, D22.17 | |
 | 57 | Producer | **[Thay bằng D22.11]** `assemble.py`: 1 mesh / 1 node / 1 material, unlit, độ phân giải texture, hash mesh, đủ file gói, README ghép đúng từ report; fail → `blocked`, không có vòng sửa | producer.md §6.4, D22.11 | |
-| 58 | Producer | `pilot_asset: null`: `intake --all` từ chối; so với pilot ghi `not_checked` ở review-clay và `tex_measure.py`, không lỗi | producer.md §9, D21.7 | |
+| 58 | Producer | `pilot_asset: null`: `intake --all` từ chối; so với pilot ghi `not_checked` ở check-clay và `tex_measure.py`, không lỗi | producer.md §9, D21.7 | |
 | 59 | Producer | `approvals set model reviewer` không có `--confirm-spend` → từ chối | producer.md §4, D21.8 | |
 | 60 | Producer | `[limits]`: đếm slot theo tiến trình đang chạy thật, không theo trạng thái `running` (asset `running` có thể đang chờ reviewer, không giữ Blender) | producer.md §12, D21.9 | |
 | 61 | Producer | Claude Code: lời gọi subagent nhận `model` theo từng lần giao, để `pipeline.toml` quyết model | producer.md §16, D16.5 | |
@@ -84,3 +84,5 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 78 | Mọi reviewer | Test D1 kiểm 4 file reviewer có đủ quy tắc chung theo contract mới: finding có id, `PRIOR`, `TOP_FIX` kiểu đơn/lô, chỉ trả 2 dòng | D1, D22.7 | |
 | 79 | Producer | Adapter quy đổi `opus`/`sonnet`/`haiku` sang model thật; ledger ghi model thật mỗi lần giao | producer.md §16, D22.9 | |
 | 80 | Producer | A/B: mỗi runtime so tris/m² và dE với pilot trong `deliver` của chính nó | producer.md §16, D22.10 | |
+| 81 | Mọi agent | Gọi "ZPS - 3D Artist", "ZPS Texture Artist" trong một phiên có cài cả kit và bộ Producer: Claude chọn skill của kit, không chọn `zps-3dp-step-*`. Thử cả khi không nói tên, chỉ mô tả việc ("dựng model cho concept này") | producer.md §3, D23.2 | |
+| 82 | Project Setup | Frontmatter `disable-model-invocation: true` có trên bản Claude Code đang dùng; skill không tự kích hoạt; gọi `/zps-3dp-project-setup` vẫn chạy. Bản Codex: tìm cơ chế tương đương | project-profile.md §5, D23.3 | |

@@ -1,6 +1,6 @@
 # Spec — sub-agent Concept Views (v1.2)
 
-Tên kỹ thuật: `zps-3dp-concept-views`. Tên hiển thị: ZPS-3DP - Concept Views. Reviewer: `zps-3dp-review-views`.
+Tên kỹ thuật: `zps-3dp-step-views`. Tên hiển thị: 3DP Step · Views. Reviewer: `zps-3dp-check-views` (D23.2).
 Duyệt: 2026-11-08. v1.1: 2026-11-09 (D21). v1.2: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D1–D9, D21, D22).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-concept-views).
 
@@ -48,7 +48,7 @@ Concept Views chạy ở **hai bước** của pipeline (D14.2). Mỗi bước k
 | 3 | Chọn màu nền: lấy từ profile; nếu không có, chọn màu xa nhất với bảng màu concept. Ghi `bg_color.json` | `pick_bg.py` |
 | 4 | Đo màu từng vật liệu trên concept albedo, ghi `concept_colors.json` (tên vật liệu = mã trong `sources.json`) | `palette_report.py` |
 | 5 | Gen **front** (mục 4) | `gen_image_codex.py` |
-| 6 | Đo front, ghi báo cáo. Producer giao review-views (chỉ front) | `measure_views.py` |
+| 6 | Đo front, ghi báo cáo. Producer giao check-views (chỉ front) | `measure_views.py` |
 
 **Đầu ra bước `views_front`:** `production/assets/<id>/views_front/vN/final/`
 
@@ -67,7 +67,7 @@ final/
 | 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước (brief trỏ thẳng tới `views_front/vN/final/`, không chép sang, D22.14) + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
 | 2 | Đo cả bộ. Gen lại view có lỗi hình trước khi báo cáo | `measure_views.py` |
 | 3 | Tạo sheet 5 view, tóm tắt, README 4 mục (mục 6) | `views_sheet.py`, `check_package.py` |
-| 4 | Ghi báo cáo. Producer giao review-views (cả bộ). Vòng sửa: gen lại **mọi** view có trong `TOP_FIX: regen` (kiểu lô, D21.1), giữ nguyên các view khác. Ghi `FIXED:` | — |
+| 4 | Ghi báo cáo. Producer giao check-views (cả bộ). Vòng sửa: gen lại **mọi** view có trong `TOP_FIX: regen` (kiểu lô, D21.1), giữ nguyên các view khác. Ghi `FIXED:` | — |
 | 5 | Duyệt theo `approvals.views_rest` (D14.4) | Anh hoặc chính sách |
 
 Chỉ đọc file và thư mục brief chỉ định.
@@ -140,7 +140,7 @@ Nếu một điều không đúng, báo cáo `STATUS: BLOCKED`.
 
 Kèm `report/VIEWS.md` ngắn. 3 dòng đầu là tóm tắt cho anh (D20.17). Phần sau: điểm số, view gen lại và vì sao, NGOẠI LỆ, TEXTURE NOTE.
 
-## 8. Reviewer `zps-3dp-review-views`
+## 8. Reviewer `zps-3dp-check-views`
 
 Model theo `pipeline.toml` (pilot: Opus, D16), chỉ đọc, context mới mỗi lần (D1). Không có tool gọi agent.
 

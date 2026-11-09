@@ -86,7 +86,7 @@ real_texture_only_notes: [...]
 
 ## 5. Skill Project Setup
 
-Tên kỹ thuật: `zps-3dp-project-setup`. Đây là **skill chạy trong phiên chính**, không phải sub-agent, vì phải hỏi anh.
+Tên kỹ thuật: `zps-3dp-project-setup`. Đây là **skill chạy trong phiên chính**, không phải sub-agent, vì phải hỏi anh. Skill này chỉ gọi tường minh (frontmatter `disable-model-invocation: true`, D23.3): Producer nạp khi `check_profile.py` báo thiếu, hoặc anh gọi `/zps-3dp-project-setup`. Không tự kích hoạt theo nội dung chat.
 
 | Việc | Cách làm |
 |---|---|

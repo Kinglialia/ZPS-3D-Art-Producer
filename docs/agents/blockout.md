@@ -1,6 +1,6 @@
 # Spec — sub-agent Blockout (v1.3)
 
-Tên kỹ thuật: `zps-3dp-blockout`. Tên hiển thị: ZPS-3DP - Blockout. Reviewer: `zps-3dp-review-blockout` (D6.5).
+Tên kỹ thuật: `zps-3dp-step-blockout`. Tên hiển thị: 3DP Step · Blockout. Reviewer: `zps-3dp-check-blockout` (D6.5, đổi tên theo D23.2).
 
 Duyệt: 2026-11-08. Sửa v1.1 cùng ngày (D5). v1.2: 2026-11-09 (D21). v1.3: 2026-11-09 (D22). Quyết định nền: `docs/decisions.md` (D1–D5, D21, D22).
 Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist, zps-concept-views).
@@ -73,7 +73,7 @@ Số trong ví dụ chỉ để minh họa định dạng. Khi `has_map: false`,
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
 | 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
 | 8 | Render bộ review (mục 6). Ghi báo cáo contract (`STATUS / OUTPUT / RUBRIC / ISSUES`), rồi dừng | — |
-| 9 | Producer giao review-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Mỗi finding một lần `apply_edit.py`, chạy `check_fix.py` sau mỗi lần. Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
+| 9 | Producer giao check-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Mỗi finding một lần `apply_edit.py`, chạy `check_fix.py` sau mỗi lần. Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
 | 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash | Anh hoặc chính sách |
 
 Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc file và thư mục brief chỉ định.
@@ -137,7 +137,7 @@ final/
   - `foot_front_left.png`, `foot_front_right.png`: crop sát góc nền–đất–chân tường, tìm theo bbox của part `tag: base`. Nếu không có part `base`, bỏ crop.
 - Concept và blockout ở cùng góc.
 
-**review-blockout** (model theo `pipeline.toml`, pilot dùng Opus theo D16; chỉ đọc, context mới mỗi lần):
+**check-blockout** (model theo `pipeline.toml`, pilot dùng Opus theo D16; chỉ đọc, context mới mỗi lần):
 
 1. Khối: chỉ chấm trên clay. Khối giống ổ bánh mì hoặc hộp trơn là fail, dù IoU cao.
 2. Silhouette so với concept ở cùng góc.
@@ -165,8 +165,8 @@ Nếu Blockout thấy kích thước trong MAP-LAYOUT có vấn đề, Blockout 
 ## 8. Tổ chức file
 
 ```
-agents/zps-3dp-blockout/
-  zps-3dp-blockout.md        ← file agent: quy trình + quy tắc cốt lõi
+agents/zps-3dp-step-blockout/
+  zps-3dp-step-blockout.md        ← file agent: quy trình + quy tắc cốt lõi
   references/
     part-graph.md            ← hợp đồng schema blockout-1, kiểu attach, quy tắc dựng
     craft.md                 ← chép từ kit: blockout.md §A, technique.md §1–2, preflight
@@ -182,7 +182,7 @@ agents/zps-3dp-blockout/
     render_review.py, concept_mask.py      ← mới
     setup_deps.sh            ← rút gọn từ kit
   SOURCE.md                  ← nguồn kit v0.10.4, commit 905dc93, danh sách file đã chép kèm sha256
-agents/zps-3dp-review-blockout.md   ← reviewer (D1)
+agents/zps-3dp-check-blockout.md   ← reviewer (D1)
 ```
 
 - Blockout giữ bản chép riêng. Blockout không trỏ sang 3D Artist (D2). Không sửa code đã chép.
@@ -212,5 +212,5 @@ agents/zps-3dp-review-blockout.md   ← reviewer (D1)
 
 - `graph.py` của kit đọc các field bằng `.get`, nên có thể bỏ qua field lạ như `role` và `tag`. Phải chạy thử để xác nhận.
 - `gates.py` đọc khóa config `contact_dist_m`, `contact_samples`, `inset_depth_tolerance` (đổi tên bên trong). `config.yaml` phải dùng đúng tên này.
-- `bootstrap.py` tìm thư viện ở `agents/zps-3dp-blockout/tools/.deps/blender-py<ver>`. Cần chạy `setup_deps.sh` trước các script chạy trong Blender.
+- `bootstrap.py` tìm thư viện ở `agents/zps-3dp-step-blockout/tools/.deps/blender-py<ver>`. Cần chạy `setup_deps.sh` trước các script chạy trong Blender.
 - Nguồn tham khảo cho các điểm thêm ở D4: Code-as-Room, LL3M, arjun988/blender-skills (qa-review, vehicle proportion-blockout), Epic Modular Level Design.

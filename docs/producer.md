@@ -1,6 +1,6 @@
 # Spec — Producer (v2)
 
-Tên kỹ thuật: `zps-3dp-producer`. Tên hiển thị: ZPS-3DP - Producer.
+Tên kỹ thuật: `zps-3dp-producer`. Tên hiển thị: ZPS-3DP · Producer.
 v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21, D22). Quyết định nền: `docs/decisions.md` (D14, D21, D22 và các quyết định trước còn hiệu lực).
 
 **Nền:** skill `producer` anh đã làm (`producer-skill.zip`: `SKILL.md`, `scripts/producer.py`, `references/`, `templates/`). Spec này giữ cơ chế của skill đó và ghi những chỗ thay đổi.
@@ -37,11 +37,11 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 
 | # | `id` | Worker | Kiểm | Gate |
 |---|---|---|---|---|
-| 1 | `blockout` | `zps-3dp-blockout` | `zps-3dp-review-blockout` | `review_human` |
-| 2 | `views_front` | `zps-3dp-concept-views` | `zps-3dp-review-views` (chỉ front) | `review` |
-| 3 | `views_rest` | `zps-3dp-concept-views` | `zps-3dp-review-views` (cả bộ) | `review_human` |
-| 4 | `model` | `zps-3dp-3d-artist` | `zps-3dp-review-clay` | `review_human` (DUYỆT 1) |
-| 5 | `texture` | `zps-3dp-texture-artist` | `zps-3dp-review-texture` | `review` |
+| 1 | `blockout` | `zps-3dp-step-blockout` | `zps-3dp-check-blockout` | `review_human` |
+| 2 | `views_front` | `zps-3dp-step-views` | `zps-3dp-check-views` (chỉ front) | `review` |
+| 3 | `views_rest` | `zps-3dp-step-views` | `zps-3dp-check-views` (cả bộ) | `review_human` |
+| 4 | `model` | `zps-3dp-step-model` | `zps-3dp-check-clay` | `review_human` (DUYỆT 1) |
+| 5 | `texture` | `zps-3dp-step-texture` | `zps-3dp-check-texture` | `review` |
 | 6 | `assemble` | Script `assemble.py`, không có agent (D22.11) | Kiểm trong chính script (mục 6.4) | `checks_human` (DUYỆT 2) |
 
 **Ba loại gate:**
@@ -55,8 +55,14 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 - **Producer sắp xếp reviewer** qua script. Worker không gọi reviewer, không gọi agent khác.
 - Bỏ `final_human_gate`, vì `assemble` đã có gate người duyệt (D14.3).
 - Model của từng bước có agent theo D16: pilot dùng Opus cho mọi bước; sau pilot hạ từng bước theo bảng D16.2.
-- `assemble` không có agent (D22.11): mọi việc của bước này là việc xác định. Texture đã được review-texture chấm trên model ở bước `texture`.
+- `assemble` không có agent (D22.11): mọi việc của bước này là việc xác định. Texture đã được check-texture chấm trên model ở bước `texture`.
 - Mỗi bước khai báo loại `TOP_FIX` được phép và kiểu sửa (mục 6).
+
+**Tên agent và chặn gọi nhầm** (D23.2, thay phần tên agent của D6.5):
+- Agent của Producer đặt tên theo **bước pipeline**, không theo vai trò: worker `zps-3dp-step-<bước>`, reviewer `zps-3dp-check-<bước>`. Tên hiển thị `3DP Step · <Bước>`, `3DP Check · <Bước>`. Lý do: kit có `zps-concept-views`, `zps-3d-artist`, `zps-texture-artist`; tên theo vai trò làm Claude chọn nhầm khi anh gọi skill của kit.
+- Trong `pipeline.toml`, `agent` của mỗi bước là `step-<bước>`, reviewer là `check-<bước>`.
+- Description của mọi agent bước và kiểm mở đầu bằng câu cố định: "Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. Không dùng khi người dùng gọi trực tiếp."
+- Tên vai trò (Blockout, Concept Views, 3D Artist, Texture Artist) chỉ dùng trong văn bản spec để dễ đọc, không dùng làm tên kỹ thuật.
 
 ## 4. Ai duyệt (D14.4, D21.3)
 
@@ -264,7 +270,7 @@ Mỗi version ghi trong `status.json` các đầu vào đã dùng. Script là t�
 - **Version cũ:** một version là "cũ" khi đầu vào của nó khác bản đã duyệt hiện tại của bước trước. Script tự suy ra; Producer không đánh dấu tay. Trang duyệt hiện nhãn "dựng từ blockout v1 — cũ".
 - **Cảnh báo ⚠:** concept, thẻ, profile hoặc art direction đổi sau khi asset bắt đầu. Hỏi anh làm lại hay giữ, rồi `P ack <id>`.
 - **Dùng lại:** worker bước sau đọc `inputs` của version trước (qua brief) để biết phần nào giữ được, ví dụ `diff_guides.py` của Concept Views.
-- Concept dùng hash nội dung file, không dùng thời gian sửa: chép lại cùng file không bật cảnh báo (đề xuất, chờ duyệt).
+- Concept dùng hash nội dung file, không dùng thời gian sửa: chép lại cùng file không bật cảnh báo (D23.1).
 
 ## 12. Giới hạn chạy song song (D21.9)
 
@@ -340,7 +346,7 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - Thời gian thực mỗi bước và cả asset.
 - Chi phí: token theo model (nếu runtime báo được), credit Meshy.
 - Số lần reviewer chấm lệch so với quyết định của anh (cùng chỉ số với D16.3).
-- Bên nào anh chọn ở nút "Bản nào tốt hơn" (đề xuất, chờ duyệt).
+- Bên nào anh chọn ở nút "Bản nào tốt hơn" (D23.1).
 - Tỉ lệ pass lần đầu của script kiểm mỗi bước.
 
 Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet, Codex dùng model của nó). Kết luận là "bộ nào tốt hơn cho việc này", không tách riêng runtime hay model.
@@ -376,9 +382,9 @@ Code theo lát dọc. Mỗi giai đoạn chạy được trên asset pilot rồi
 | GĐ | Nội dung | Kiểm chứng chính |
 |---|---|---|
 | 0 | Sửa tài liệu: concept brief = thẻ asset, `out-of-scope-changes.md`, mẫu rubric chỉ có tiêu chí và tham chiếu AD | — |
-| 1 | Lõi `producer.py` (state, finding theo version, vòng sửa, policy, limits, kiểm hash) + `blockout` + `review-blockout` + trang duyệt local tối thiểu | Reviewer ghi đủ `PRIOR`; vòng sửa theo finding hội tụ; model và resume theo từng lần giao trên Claude Code |
+| 1 | Lõi `producer.py` (state, finding theo version, vòng sửa, policy, limits, kiểm hash) + `blockout` + `check-blockout` + trang duyệt local tối thiểu | Reviewer ghi đủ `PRIOR`; vòng sửa theo finding hội tụ; model và resume theo từng lần giao trên Claude Code |
 | 2 | `views_front`, `views_rest`, `gen_image_codex.py`, `regen_front` | Ảnh view đúng guide; front không bị chấm lại |
-| 3 | `model`, `review-clay`, khóa mesh | Detail pass, UV, DUYỆT 1 |
+| 3 | `model`, `check-clay`, khóa mesh | Detail pass, UV, DUYỆT 1 |
 | 4 | `texture` (budget Meshy theo hash mesh), `assemble.py` | Meshy giữ UV; GLB hiển thị khớp render của bước `texture` |
 | 5 | Review Board đầy đủ: khoanh vùng, trang remote, `P show`, quyết định không ghi trùng | Trên điện thoại và trang local |
 | 6 | Bản Codex, adapter, A/B | `codex exec` lồng trong Codex; báo cáo token |
