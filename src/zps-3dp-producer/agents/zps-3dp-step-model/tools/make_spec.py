@@ -27,8 +27,8 @@ KEPT = ("sun", "concept_cam")
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
         "detail.bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "dimensions")
 DIM_TOLERANCE = 0.02
-BEVEL = re.compile(r"(?<!không )\b(cạnh bo|bo cạnh|bo tròn cạnh|cạnh bo tròn|vát cạnh|cạnh vát|bevel|bevelled edges?|"
-                   r"rounded edges?|chamfered edges?)\b", re.I)
+BEVEL = re.compile(r"(?<!không )(?<!no )\b(cạnh bo|bo cạnh|bo tròn cạnh|cạnh bo tròn|vát cạnh|cạnh vát|bevell?ed edges?|"
+                   r"bevel|rounded edges?|chamfered edges?)\b", re.I)
 
 
 def yaml_load(path):

@@ -144,8 +144,15 @@ def test_a_real_note_asking_for_rounded_edges_turns_bevel_on_over_the_profile_so
     assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (True, 'thẻ asset real_texture_only_notes "cạnh bo"')
 
 
+@pytest.mark.parametrize("note, phrase", [("real: beveled edges on every plank.", "beveled edges"),
+                                           ("real: Cạnh Vát nhẹ ở thân.", "Cạnh Vát")])
+def test_the_bevel_table_matches_either_spelling_and_any_case(make_spec, note, phrase):
+    _, s = make_spec(card={"real_texture_only_notes": [note]})
+    assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (True, f'thẻ asset real_texture_only_notes "{phrase}"')
+
+
 @pytest.mark.parametrize("note", ["texture_only: viền gỗ bo cạnh chỉ vẽ, không dựng.", "real: cạnh sắc, không bo cạnh.",
-                                  "real: tấm khóa vát góc có lỗ khóa.", "real: cạnh bonsai."])
+                                  "real: tấm khóa vát góc có lỗ khóa.", "real: cạnh bonsai.", "real: hard edges, no bevel."])
 def test_bevel_stays_off_for_paint_only_negated_or_corner_cut_notes(make_spec, note):
     _, s = make_spec(card={"real_texture_only_notes": [note]})
     assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (False, "mặc định")
