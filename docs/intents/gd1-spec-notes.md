@@ -16,3 +16,14 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 6. `hidden_sides` "chưa biết" has no machine form. Code needs at least one non-empty string.
 7. `producer.md` §9 pilot rule does not say if a finished pilot still blocks. Code: finished assets do not block.
 8. Batch estimate (`producer.md` §9, D25.I, checklist 95) has no GĐ 1 ticket. Deferred.
+
+## From T2 (contract and findings)
+
+1. `producer.md` §6.1 `PRIOR` format has no evidence slot, but checklist row 88 needs evidence for `resolved`. Code adds `| evidence: <label>` to each PRIOR line.
+2. `producer.md` §8 puts `review/` next to `final/`; `agents/blockout.md` §4 puts `review/` inside `final/`. One must change.
+3. Checklist row 67: no field ties a finding to a rubric key. Code checks counts only (unclear keys ≤ open unclear findings).
+4. `COUNTS` can be computed from FINDINGS and PRIOR, so it is redundant. Code checks it against the findings.
+5. `FIXED:` in the worker report (§6.2) is read by no script, only by the reviewer.
+6. `need_evidence` TOP_FIX id form is not stated in §6.1.
+7. §6.1 `note_*` finding kinds "do not cause FIX", but a blocker/major note would force FIX with no valid TOP_FIX. Not reachable in GĐ 1.
+8. Worker reply to Producer cut to the `STATUS` line only (token saving; the script reads the file).

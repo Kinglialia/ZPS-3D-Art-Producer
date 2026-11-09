@@ -59,10 +59,10 @@ Shared rules for every ticket:
 
 - **Builds.** The ingest state machine of `docs/producer.md` §3, §4, §7, §8.
 - **Blocked by.** T2.
-- **Writes.** `S/scripts/core/loop.py`, `S/scripts/core/policy.py`, `S/scripts/core/briefs.py`, `S/scripts/producer.py` (subcommands `approvals`, `delegate` only), `S/templates/policy.yaml`, `tests/test_loop.py`, `tests/test_policy.py`.
+- **Writes.** `S/scripts/core/loop.py`, `S/scripts/core/policy.py`, `S/scripts/core/briefs.py`, `S/scripts/core/findings.py` (wire `progress`/`best_version`), `tests/conftest.py`, `S/scripts/producer.py` (subcommands `approvals`, `delegate` only), `S/templates/policy.yaml`, `tests/test_loop.py`, `tests/test_policy.py`.
 - **Acceptance.** Checklist rows 20, 24, 26, 27, 38, 39, 40, 43, 54, 59, 65, 66, 70 (local part), 94 (label only), 99 (copy picked variant to `final/`), 101.
   - Steps with `enabled = false` are never dispatched; approving the last enabled step leaves the asset at a clear `done_gd1` style state, not at a disabled step's `todo`.
-  - Remove `final_human_gate` default.
+  - Remove `final_human_gate` default. Remove the `handoff.md` line from the worker brief (§6.2: no handoff file).
   - Max 3 rounds per feedback round; `redo` resets counters and copies open findings to the new round.
   - Progress: ≥1 old blocker/major resolved and regressed < resolved. From round 2, no progress → `waiting_human` with reason.
   - Best version: fewest open blocker+major, tie → older. Fix brief points to the best version and lists failed gate/check JSON files of it (D26.4).
