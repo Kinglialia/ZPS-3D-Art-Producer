@@ -7,9 +7,16 @@ import re
 import shutil
 from pathlib import Path
 
-from .hashes import concept_images, latest_mtime, warnings_for
+import check_card
+import check_profile
+
+from .hashes import latest_mtime, warnings_for
 from .state import (ARCHIVE, ASSETS, ROOT, TEMPLATES, all_status, die, ledger, load_st, now, rel,
                     rubric_approved, save_st)
+
+SCRIPTS = Path(__file__).resolve().parents[1]
+PROFILE = ROOT / "PROJECT-PROFILE.yaml"
+ERROR_LABELS = {"files": "Thiếu file", "type": "Loại chưa hỗ trợ v1", "card": "Thẻ sai"}
 
 FEEDBACK_TMPL = """# Feedback — {title}
 
@@ -24,7 +31,9 @@ def init(a):
     for d in (ROOT, ASSETS, ARCHIVE, ROOT / "rubrics"):
         d.mkdir(parents=True, exist_ok=True)
     concepts = Path(os.path.expanduser(a.concepts)).resolve()
-    fill = {"{{PROJECT}}": a.project, "{{CONCEPTS}}": str(concepts), "{{DATE}}": dt.date.today().isoformat()}
+    fill = {"{{PROJECT}}": a.project, "{{CONCEPTS}}": str(concepts), "{{DATE}}": dt.date.today().isoformat(),
+            "{{CHECK_CARD}}": f"{SCRIPTS / '.deps/venv/bin/python'} {SCRIPTS / 'check_card.py'}",
+            "{{PROFILE}}": str(PROFILE.resolve())}
 
     def put(src: Path, dst: Path):
         if dst.exists():
@@ -45,8 +54,17 @@ def init(a):
                        ("schedule.md", "# Schedule\n\n<!-- Mỗi milestone một dòng: `- YYYY-MM-DD · việc`. Có thể kèm link tới Sheet/Calendar gốc. -->\n")):
         if not (ROOT / name).exists():
             (ROOT / name).write_text(body, encoding="utf-8")
+    ignore_env()
     print("Xong. Duyệt rubric trong production/rubrics/ (đổi `status: draft` thành `status: approved`), "
           "gửi GUIDELINE.md cho Concept Artist và AD.")
+
+
+def ignore_env():
+    g = Path(".gitignore")
+    lines = g.read_text(encoding="utf-8").splitlines() if g.exists() else []
+    if ".env" not in (l.strip() for l in lines):
+        g.write_text("".join(l + "\n" for l in lines) + ".env\n", encoding="utf-8")
+        print("thêm .env vào .gitignore")
 
 
 def create_asset(cfg: dict, aid: str, title: str, typ: str, priority: int, deadline: str | None,
@@ -60,7 +78,8 @@ def create_asset(cfg: dict, aid: str, title: str, typ: str, priority: int, deadl
     if not rub_src.exists():
         rub_src = ROOT / "rubrics" / "default.md"
     d.mkdir(parents=True)
-    src_note = f"\nConcept đã duyệt: `{concept_dir}`\n" if concept_dir else ""
+    src_note = (f"\nConcept đã duyệt: `{concept_dir}`\nThẻ asset: `{concept_dir / 'asset-card.yaml'}`\n"
+                if concept_dir else "")
     (d / "brief.md").write_text(
         f"# Brief — {title}\n{src_note}\n<!-- Yêu cầu gốc, sát lời người dùng. Không sửa sau khi chốt; bổ sung ở mục Làm rõ. -->\n\n## Làm rõ\n",
         encoding="utf-8")
@@ -84,13 +103,32 @@ def new(a, cfg: dict):
           + ("" if st["state"] == "todo" else f"; rubric chưa duyệt, duyệt xong thì `ready {a.id}`"))
 
 
-def scan_approved(cfg: dict) -> dict:
+def load_profile() -> dict:
+    if not PROFILE.exists():
+        die(f"chưa có {rel(PROFILE)}: nạp skill zps-3dp-project-setup")
+    errs = check_profile.check(PROFILE)
+    if errs:
+        die("profile sai:\n" + "\n".join(f"  {e}" for e in errs))
+    return check_profile.load_yaml(PROFILE)
+
+
+def group_errors(errs: dict[str, list[tuple[str, str]]]) -> list[str]:
+    lines = []
+    for group, label in ERROR_LABELS.items():
+        items = [f"{aid} ({'; '.join(m for g, m in e if g == group)})" for aid, e in errs.items()
+                 if any(g == group for g, _ in e)]
+        if items:
+            lines.append(f"{label} ({len(items)}): {', '.join(items)}")
+    return lines
+
+
+def scan_approved(cfg: dict, has_map: bool) -> dict:
     root = cfg["paths"]["approved"]
     if not root or not root.exists():
         die("chưa cấu hình [paths].approved trong pipeline.toml hoặc thư mục không tồn tại")
     known = {s["id"]: s for s in all_status()}
     archived = {p.name for p in ARCHIVE.glob("*")} if ARCHIVE.exists() else set()
-    g = {"new": [], "few": [], "bad_name": [], "loose": [], "changed": [], "registered": []}
+    g = {"new": [], "bad_name": [], "loose": [], "changed": [], "registered": [], "errors": {}}
     for p in sorted(root.iterdir()):
         if p.name.startswith("."):
             continue
@@ -103,38 +141,57 @@ def scan_approved(cfg: dict) -> dict:
             (g["changed"] if "concept đổi sau khi bắt đầu" in warnings_for(cfg, st) else g["registered"]).append(p.name)
         elif p.name in archived:
             g["registered"].append(p.name)
+        elif errs := check_card.check(p, has_map):
+            g["errors"][p.name] = errs
         else:
-            n = len(concept_images(p))
-            (g["new"] if n >= cfg["intake"]["min_images"] else g["few"]).append(f"{p.name} ({n} ảnh)" if n < cfg["intake"]["min_images"] else p.name)
+            g["new"].append(p.name)
     return g
 
 
 def run(a, cfg: dict):
-    g = scan_approved(cfg)
-    if not a.ids and not a.all:
-        labels = {"new": "Mới, đủ ảnh", "few": "Mới, ít ảnh (có thể thiếu view)", "changed": "Concept đổi sau khi bắt đầu",
-                  "bad_name": "Tên thư mục sai quy ước", "loose": "File rời (không thuộc building nào)",
-                  "registered": "Đã đăng ký"}
-        for k, lab in labels.items():
-            if g[k]:
-                print(f"{lab} ({len(g[k])}): {', '.join(g[k])}")
-        print("Đăng ký: `intake --all` (nhóm 'Mới, đủ ảnh') hoặc `intake <id> ... [--priority 1]`")
-        return
+    prof = load_profile()
     root = cfg["paths"]["approved"]
-    ids = [x.split(" ")[0] for x in g["new"]] if a.all else a.ids
-    if not ids:
-        print("Không có building mới đủ ảnh.")
+    g = scan_approved(cfg, prof["has_map"])
+    no_pilot = prof["pilot_asset"] is None
+    if not a.ids and not a.all:
+        labels = {"changed": "Concept đổi sau khi bắt đầu", "bad_name": "Tên thư mục sai quy ước",
+                  "loose": "File rời", "registered": "Đã đăng ký"}
+        lines = [f"Mới, đủ file ({len(g['new'])}): {', '.join(g['new'])}"] if g["new"] else []
+        lines += group_errors(g["errors"])
+        lines += [f"{lab} ({len(g[k])}): {', '.join(g[k])}" for k, lab in labels.items() if g[k]]
+        if lines:
+            print("\n".join(lines))
+        print("Chưa có pilot (pilot_asset: null): đăng ký từng asset, `intake <id>`." if no_pilot else
+              "Đăng ký: `intake --all` (nhóm 'Mới, đủ file') hoặc `intake <id> ... [--priority 1]`")
         return
-    done = []
-    for aid in ids:
-        if not (root / aid).is_dir():
-            die(f"không có thư mục {root / aid}")
-        create_asset(cfg, aid, aid.replace("-", " ").title(), cfg["intake"]["type"], a.priority, a.deadline, root / aid)
-        done.append(aid)
-    rub = ROOT / cfg["intake"]["rubric"]
-    print(f"Đã đăng ký {len(done)}: {', '.join(done)}.")
-    if not rubric_approved(rub):
-        print(f"Rubric {rel(rub)} chưa duyệt: asset nằm ở draft. Người dùng duyệt xong thì `ready {' '.join(done)}`.")
+    if no_pilot:
+        if a.all or len(a.ids) > 1:
+            die("pilot_asset: null, chưa có pilot: chỉ đăng ký từng asset gọi đích danh (`intake <id>`), không dùng --all hay nhiều id")
+        busy = [s["id"] for s in all_status() if not s["state"].startswith("done")]
+        if busy:
+            die(f"pilot_asset: null, chưa có pilot: chưa đăng ký asset mới khi còn asset đang chạy: {', '.join(busy)}")
+    if a.all:
+        ids = g["new"]
+        if g["errors"]:
+            print("\n".join(group_errors(g["errors"])))
+    else:
+        ids = a.ids
+        for aid in ids:
+            if not (root / aid).is_dir():
+                die(f"không có thư mục {root / aid}")
+        bad = {aid: e for aid in ids if (e := check_card.check(root / aid, prof["has_map"]))}
+        if bad:
+            die("không đăng ký:\n" + "\n".join(group_errors(bad)))
+    if not ids:
+        print("Không có asset mới đủ file.")
+        return
+    created = [create_asset(cfg, aid, aid.replace("-", " ").title(),
+                            check_profile.load_yaml(root / aid / check_card.CARD)["type"], a.priority, a.deadline,
+                            root / aid) for aid in ids]
+    print(f"Đã đăng ký {len(ids)}: {', '.join(ids)}.")
+    drafts = [st["id"] for st in created if st["state"] == "draft"]
+    if drafts:
+        print(f"Rubric chưa duyệt: {', '.join(drafts)} nằm ở draft. Người dùng duyệt xong thì `ready {' '.join(drafts)}`.")
 
 
 def ready(a):

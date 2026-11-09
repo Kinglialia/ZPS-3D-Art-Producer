@@ -1,0 +1,25 @@
+# Profile dự án. Chỉ ghi những gì giống nhau cho mọi asset. Skill Project Setup điền cùng người dùng.
+# Không ghi approvals và review_board: hai mục này nằm trong production/policy.yaml.
+# Khóa bắt đầu bằng _ và mục paths không tính vào hash profile.
+project: Tên dự án
+preset: topdown-mobile-lowpoly               # phải có file presets/<preset>.yaml trong bộ skill
+paths: {approved: "concepts/_approved", production: "production", deliver: "deliver", env_file: ".env"}   # env_file: chứa MESHY_API_KEY. Bỏ khóa này thì Texture chỉ VẼ MỚI
+has_map: false                               # true: mỗi asset cần <id>.layout.md. false: mỗi thẻ asset cần size_m
+pilot_asset: null                            # mã asset pilot đã duyệt. null = chưa có pilot
+scale_refs:                                  # danh sách mở; mỗi dự án tự đặt tên
+  - {name: nhân vật, height_m: 1.6, _source: "mặc định"}
+hidden_side_rules:                           # quy tắc phần khuất mặc định
+  - "tường trơn"
+  - "chỉ kéo dài hoa văn hoặc gờ có sẵn"
+  - "cửa sổ chỉ khi mảng tường > 3,6 m: tối đa 1 cửa, đặt giữa, copy mẫu của chính nhà"
+style:
+  light_convention: unlit_flat               # unlit_flat | painted_top_light
+  top_vs_side_L: 0
+  view_bg: null                              # null = pick_bg.py tự chọn
+texture_simple:
+  max_materials: 2
+  max_color_clusters: 6
+# detail_examples:                           # có sau pilot
+#   geometry: []
+#   texture_only: []
+# overrides: {}                              # chỉ khi cần đổi số của preset

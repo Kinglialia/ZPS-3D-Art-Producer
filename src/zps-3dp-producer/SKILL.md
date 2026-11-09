@@ -7,7 +7,9 @@ description: Art Producer điều phối pipeline asset (concept đã duyệt �
 
 Bạn là người điều phối, không phải người làm. Bạn giao việc cho subagent, nhận báo cáo ngắn, cập nhật trạng thái qua script, và để quyết định thẩm mỹ cho người dùng.
 
-Trong file này, `P` = `python3 .claude/skills/zps-3dp-producer/scripts/producer.py`, chạy từ gốc project. Cài skill ở chỗ khác thì đổi đường dẫn.
+Trong file này, `P` = `.claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py`, chạy từ gốc project. Cài skill ở chỗ khác thì đổi đường dẫn.
+
+Script cần PyYAML trong venv. Nếu `P` báo không thấy python hoặc `yaml`, bảo người dùng chạy một lần: `bash .claude/skills/zps-3dp-producer/scripts/setup_deps.sh`.
 
 ## Bốn nguyên tắc
 
@@ -17,6 +19,8 @@ Trong file này, `P` = `python3 .claude/skills/zps-3dp-producer/scripts/producer
 4. **Không tự xem output, trừ khi có cờ.** Không mở ảnh, log hay thư mục work/. Người dùng xem trên review page. Chỉ mở 1–2 ảnh preview khi người dùng yêu cầu hoặc khi reviewer ESCALATE.
 
 ## Mở session
+
+Kiểm profile: chạy `<venv python> .claude/skills/zps-3dp-producer/scripts/check_profile.py production/PROJECT-PROFILE.yaml`. Không in gì là đủ. Thiếu file hoặc có lỗi thì nạp skill `zps-3dp-project-setup` và làm cùng người dùng; không sinh brief khi profile chưa hợp lệ.
 
 Chạy `P next`. Nếu hook SessionStart đã in kết quả này vào context thì không chạy lại. Output gồm việc tiếp theo của từng asset, deadline và milestone sắp tới, các ruling gần nhất, và cảnh báo ⚠ khi concept hoặc art direction đổi sau khi asset bắt đầu. Chỉ đọc thêm file khi việc đang làm cần đến, ví dụ `assets/<id>/feedback.md` khi xử lý feedback của asset đó.
 
@@ -42,9 +46,12 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 Người dùng tự chép concept đã duyệt vào `_approved/<building-id>/`. Chỉ đăng ký khi người dùng bảo, không tự quét rồi tự làm.
 
-- "Còn gì chưa làm?" → `P intake` (chỉ liệt kê). Báo lại theo nhóm, nhất là nhóm ít ảnh, tên sai quy ước và file rời, vì đó là lỗi chép tay người dùng cần sửa.
-- "Làm hết" → `P intake --all`. Nhóm ít ảnh bị bỏ qua: nhắc người dùng, họ gọi đích danh nếu cố ý.
-- "Làm trước X, Y" → `P intake x y --priority 1`.
+Mỗi thư mục cần đủ `concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`, `<id>.material.md`, và `<id>.layout.md` khi profile có `has_map: true`. `type` lấy từ thẻ. `character`, `creature`: v1 chưa hỗ trợ. Script kiểm, bạn không tự mở file.
+
+- "Còn gì chưa làm?" → `P intake` (chỉ liệt kê). Báo lại theo nhóm: asset đủ file, thiếu file, thẻ sai, loại chưa hỗ trợ, tên sai quy ước, file rời. Các nhóm lỗi là việc người dùng hoặc Concept Artist cần sửa.
+- "Làm hết" → `P intake --all`. Asset lỗi bị bỏ qua và được liệt kê.
+- "Làm trước X, Y" → `P intake x y --priority 1`. Có asset lỗi thì không đăng ký asset nào.
+- Profile có `pilot_asset: null`: `--all` và nhiều id bị từ chối. Chỉ đăng ký từng asset, và chỉ khi không còn asset nào đang chạy. Báo người dùng lý do, không tự lách.
 
 Asset nhận rubric chung của loại (`production/rubrics/<type>.md`). Rubric loại chưa duyệt (dòng đầu `status: draft`) thì asset nằm ở draft: đưa rubric cho người dùng duyệt **một lần cho cả loạt**, sửa theo góp ý, đổi dòng đầu thành `<!-- status: approved -->`, rồi `P ready <id> <id> ...`. Lần sau rubric đã duyệt, asset vào thẳng todo.
 

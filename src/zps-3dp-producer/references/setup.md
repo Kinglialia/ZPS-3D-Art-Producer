@@ -1,10 +1,10 @@
 # Cài đặt và tuỳ chỉnh
 
-Cần Python 3.11+ (`python3 --version`). Không cần cài thư viện.
+Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong venv của skill.
 
 ## Cài skill (một lần cho mỗi project Claude Code)
 
-1. Copy thư mục skill vào `.claude/skills/zps-3dp-producer/`.
+1. Copy thư mục skill vào `.claude/skills/zps-3dp-producer/`. Rồi chạy một lần: `bash .claude/skills/zps-3dp-producer/scripts/setup_deps.sh`. Lệnh này tạo `scripts/.deps/venv` (pyyaml, pytest, Pillow) và chạy lại được. Từ đây `P` là python của venv này chạy `producer.py`.
 2. Copy 3 file trong `templates/agents/` vào `.claude/agents/`. Sửa dòng `skills:` của modeller.md cho khớp `name` trong frontmatter skill modeller. Agent phải cùng phạm vi với skill: skill ở `~/.claude/skills/` thì agent đặt ở `~/.claude/agents/`.
 3. Thêm vào `CLAUDE.md` của project (file này luôn được nạp, nên skill được kích hoạt kể cả khi người dùng chỉ nói "tiếp tục"):
    ```markdown
@@ -19,12 +19,15 @@ Cần Python 3.11+ (`python3 --version`). Không cần cài thư viện.
 ## Project mới
 
 ```
-python3 .claude/skills/zps-3dp-producer/scripts/producer.py init --project "New Last Order" --concepts "~/MyWorks/Concepts/New Last Order"
+.claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py init --project "New Last Order" --concepts "~/MyWorks/Concepts/New Last Order"
 ```
 
 Lệnh này tạo (không ghi đè file đã có):
 - `production/`: pipeline.toml đã điền đường dẫn, `rubrics/` (default, building), ledger.md, schedule.md.
-- Trong thư mục concept: `_approved/` và `GUIDELINE.md` đã điền tên project và đường dẫn.
+- Trong thư mục concept: `_approved/` và `GUIDELINE.md` đã điền tên project, đường dẫn và lệnh `check_card.py`.
+- `.env` trong `.gitignore` của project, để key Meshy không bị commit.
+
+Lệnh này không tạo `production/PROJECT-PROFILE.yaml`. Skill Project Setup tạo file này cùng người dùng, theo mẫu `templates/PROJECT-PROFILE.yaml`. Chưa có profile hợp lệ thì `P intake` từ chối. Kiểm profile bằng `scripts/check_profile.py production/PROJECT-PROFILE.yaml` (cùng python của venv). Profile nêu `preset` thì file `presets/<preset>.yaml` trong bộ skill phải có.
 
 Sau đó:
 1. Gửi `GUIDELINE.md` cho Concept Artist, View Concept Artist và AD khi làm việc với họ. Gửi file, không dán nội dung, để luôn chỉ có một bản. Sửa guideline thì tăng số phiên bản ở dòng đầu.
@@ -40,7 +43,6 @@ Mọi thay đổi workflow nằm ở `production/pipeline.toml`:
 - **Đổi model:** sửa `model`; `escalate_model` dùng khi vòng sửa vượt `resume_rounds`.
 - **Đổi output bắt buộc:** sửa `outputs`. Thiếu file thì asset bị blocked.
 - **Đổi chuẩn preview:** sửa `[preview].spec`. Brief đưa nguyên văn cho worker.
-- **Ngưỡng ảnh concept:** `[intake].min_images`.
 - **Bỏ review cho bước rẻ:** `gate = "none"`. Bước cần mắt người dùng: `gate = "human"`.
 
 Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline mới ngay. Đổi `id` của bước mà asset đang đứng ở đó thì `validate` báo lỗi: sửa `stage` trong status.json của asset đó.
