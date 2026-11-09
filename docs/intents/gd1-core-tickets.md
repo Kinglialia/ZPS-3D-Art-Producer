@@ -131,10 +131,11 @@ Shared rules for every ticket:
 
 - **Builds.** A synthetic asset and one test that runs the whole blockout flow.
 - **Blocked by.** T4, T5, T6, T7.
-- **Writes.** `tests/fixtures/pilot/**`, `tests/test_e2e_blockout.py`.
+- **Writes.** `tests/fixtures/pilot/**`, `tests/test_e2e_blockout.py`, `S/scripts/core/state.py` (`cleanup`/`archive` accept `done_enabled`), `S/agents/zps-3dp-step-blockout/zps-3dp-step-blockout.md` (run Blender through the brief's PID line), `S/scripts/core/state.py` and `S/templates/pipeline.toml` (drop the dead `[review].reviewer_agent` default).
 - **Acceptance.**
   - Fixture: a box house with a gable roof and a door, `has_map: false`, `size_m`, simple generated concept PNGs, valid profile and card.
   - Test: `P init` → `P intake <id>` → `P brief` → fake worker report → `P ingest` → fake reviewer FIX with 4 major findings → batch fix round → reviewer resolves 2 (progress) → round 3 no progress → `waiting_human`; then `P feedback redo` resets; then PASS → `waiting_human` → approve → `rejected` marks. Assert literal values.
   - A second test runs the real blockout checks and `gates.py` on a fixture `part_graph.json` (`blender` marker).
-  - Total non-Blender suite time under 10 s.
+  - Total non-Blender suite time stays under 15 s (it was 12 s before T8).
+  - Round numbers follow D11.1 (a round is a fix): early stop fires at the review of v3, the cap at the review of v4.
 - **Verify.** `S/scripts/.deps/venv/bin/python -m pytest -q tests`; `root-only` for the `blender` marker.

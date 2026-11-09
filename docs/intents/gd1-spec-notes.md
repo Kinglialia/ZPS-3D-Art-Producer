@@ -50,3 +50,14 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 6. `pipeline.toml` short agent names (`step-blockout`) differ from the real agent names. Brief now prints the full name (T4).
 7. D11.6 asks for a history of each feedback round. Nothing reads it; the ledger already holds it. Not added.
 8. Added: `P delegate model` also needs `--confirm-spend` (same Meshy cost as `approvals set model reviewer`).
+
+## From T4 (hashes, limits, preflight)
+
+1. `producer.md` §11 concept hash "các file `_approved/<id>/`" includes the card, which has its own hash too. Code excludes the card from the concept hash, so "concept đổi" and "thẻ đổi" stay separate.
+2. `producer.md` §11: `inputs.concept`, `inputs.card`, `inputs.art_direction` per version have no reader in GĐ 1. Warnings use one `sources` record per asset.
+3. `producer.md` §12, D21.9: slots count real processes, but the spec does not say who writes the PID. The brief now gives the agent a PID line.
+4. Checklist row 90 names xatlas, but no step `uses` it. Preflight records it and does not block on it.
+5. `project-profile.md` §3 says no `env_file` means paint only; D24.3 says the default is `.env`. Code defaults to `.env`.
+6. Reviewer reports carry no `PROFILE_HASH` (§6.2), so a profile change between worker and reviewer shows only as a warning.
+7. Kit `preflight.py` reports `fail` unless the kit has its own venv with numpy and trimesh.
+8. `producer.md` §14 1b: preflight "once per session" and "again after a tool or config change". The cache has no automatic expiry. SKILL.md tells the Producer to re-run it after a change.
