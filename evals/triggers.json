@@ -1,0 +1,95 @@
+{
+  "about": "Trigger evals per skill and agent (D25.E), kit format per target. build.py checks the static part; docs/EDITIONS.md says how to run the live eval.",
+  "targets": {
+    "zps-3dp-producer": {
+      "rule": "Trigger when the user asks to run, continue, review or report on the 3D asset pipeline of a project with _approved concepts. Do not trigger when the user names a kit skill or asks for one-off art work outside the pipeline.",
+      "cases": [
+        {"query": "làm 3D cho các concept trong _approved", "should_trigger": true, "kind": "positive", "why": "Start the pipeline on approved concepts"},
+        {"query": "asset kho-lua tới đâu rồi?", "should_trigger": true, "kind": "positive", "why": "Progress question"},
+        {"query": "kho-lua: mái thấp quá, làm lại blockout", "should_trigger": true, "kind": "positive", "why": "Feedback on a pipeline asset"},
+        {"query": "còn concept nào chưa làm?", "should_trigger": true, "kind": "positive", "why": "Intake listing"},
+        {"query": "tiếp tục", "should_trigger": true, "kind": "edge", "why": "Argued: the project CLAUDE.md line points every asset request at the Producer"},
+        {"query": "ZPS - 3D Artist dựng model cái rương", "should_trigger": false, "kind": "negative", "why": "Kit skill zps-3d-artist named by its display name"},
+        {"query": "vẽ concept 3 view cho cái đèn", "should_trigger": false, "kind": "negative", "why": "Concept art: kit zps-concept-artist"},
+        {"query": "ZPS Texture Artist vẽ texture cho cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-texture-artist named"}
+      ]
+    },
+    "zps-3dp-project-setup": {
+      "rule": "Explicit call only (disable-model-invocation). The Producer loads it when the profile is missing or invalid.",
+      "cases": [
+        {"query": "/zps-3dp-project-setup", "should_trigger": true, "kind": "positive", "why": "Explicit call"},
+        {"query": "tạo profile cho dự án mới", "should_trigger": false, "kind": "negative", "why": "Implicit request: the skill never triggers by itself"},
+        {"query": "đổi người duyệt bước model thành reviewer", "should_trigger": false, "kind": "negative", "why": "P approvals set in the Producer, not Project Setup"},
+        {"query": "ZPS - Art Bible viết art direction cho dự án", "should_trigger": false, "kind": "negative", "why": "Kit zps-art-bible-artist-direction"}
+      ]
+    },
+    "zps-3dp-step-blockout": {
+      "rule": "Run only on a Producer brief for the blockout step.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/blockout/v1/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/blockout/v1/report-worker.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "dựng blockout nhanh cho cái nhà kho này", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-3d-artist self-build"},
+        {"query": "ZPS - 3D Artist làm part graph cho cái rương", "should_trigger": false, "kind": "negative", "why": "Kit zps-3d-artist named"}
+      ]
+    },
+    "zps-3dp-step-views": {
+      "rule": "Run only on a Producer brief for views_front or views_rest.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/views_front/v1/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/views_front/v1/report-worker.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "ZPS - Concept Views vẽ 5 view cho cái đèn", "should_trigger": false, "kind": "negative", "why": "Kit zps-concept-views named"},
+        {"query": "gen 5 mặt cho concept cái đèn", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-concept-views"}
+      ]
+    },
+    "zps-3dp-step-model": {
+      "rule": "Run only on a Producer brief for the model step.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/model/v2/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/model/v2/report-worker.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "ZPS - 3D Artist dựng model cái rương", "should_trigger": false, "kind": "negative", "why": "Kit zps-3d-artist named"},
+        {"query": "dựng model cho concept này", "should_trigger": false, "kind": "negative", "why": "No brief, no name: kit zps-3d-artist"},
+        {"query": "giảm mặt model này xuống 1500 tris", "should_trigger": false, "kind": "negative", "why": "Optimization: kit zps-3d-artist"}
+      ]
+    },
+    "zps-3dp-step-texture": {
+      "rule": "Run only on a Producer brief for the texture step.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/texture/v1/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/texture/v1/report-worker.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "ZPS Texture Artist vẽ texture cho model cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-texture-artist named"},
+        {"query": "vẽ lại texture cái thùng, model giữ nguyên", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-texture-artist"}
+      ]
+    },
+    "zps-3dp-check-blockout": {
+      "rule": "Run only on a Producer review brief for the blockout step.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/blockout/v1/brief-review.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/blockout/v1/report-review.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "review blockout này giúp anh", "should_trigger": false, "kind": "negative", "why": "No brief: the 3d-critic agent of kit zps-3d-artist"}
+      ]
+    },
+    "zps-3dp-check-views": {
+      "rule": "Run only on a Producer review brief for views_front or views_rest.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/views_rest/v1/brief-review.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/views_rest/v1/report-review.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "5 view concept này có khớp nhau không", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-concept-views"}
+      ]
+    },
+    "zps-3dp-check-clay": {
+      "rule": "Run only on a Producer review brief for the model step.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/model/v2/brief-review.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/model/v2/report-review.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "kiểm model GLB này có lỗi mesh không", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-3d-artist review"}
+      ]
+    },
+    "zps-3dp-check-texture": {
+      "rule": "Run only on a Producer review brief for the texture step.",
+      "cases": [
+        {"query": "Đọc `production/assets/kho-lua/texture/v1/brief-review.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/texture/v1/report-review.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "ZPS Texture Review chấm texture model này", "should_trigger": false, "kind": "negative", "why": "Kit zps-texture-review named"}
+      ]
+    },
+    "zps-3dp-check-ab": {
+      "rule": "Run only on a P ab judge brief: a blind pairwise comparison of two final packages.",
+      "cases": [
+        {"query": "Đọc `ab/judge/kho-lua/o1/brief.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `ab/judge/kho-lua/o1/report.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "P ab judge dispatch"},
+        {"query": "so hai bản model này bản nào đẹp hơn", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-artistic-critique"}
+      ]
+    }
+  }
+}

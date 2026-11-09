@@ -73,6 +73,15 @@ def test_approvals_set_writes_the_file_prints_one_line_and_ledgers_the_words_of_
     assert "approvals blockout=reviewer · by: blockout để reviewer duyệt" in (prod / "ledger.md").read_text(encoding="utf-8")
 
 
+def test_project_setup_sets_the_review_board_through_the_same_single_writer(prod, capsys):
+    setp("review_board", "local+remote", by="dùng cả điện thoại")
+    assert (capsys.readouterr().out, policy.load()["review_board"]) == ("OK: approvals review_board=local+remote\n",
+                                                                        "local+remote")
+    with pytest.raises(ProducerError) as e:
+        setp("review_board", "remote")
+    assert str(e.value) == "review_board phải là local|local+remote"
+
+
 def test_delegate_model_also_needs_confirm_spend_because_it_spends_the_same_credit(prod):
     with pytest.raises(ProducerError) as e:
         policy.delegate(Namespace(step="model", ids=["house-a"], by="", confirm_spend=False))

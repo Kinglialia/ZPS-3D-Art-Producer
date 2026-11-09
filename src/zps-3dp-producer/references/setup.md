@@ -1,27 +1,28 @@
 # Cài đặt và tuỳ chỉnh
 
-Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong venv của skill.
+Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong venv của skill. Việc riêng của runtime (cách gọi agent, hook, quyền, sandbox, lệnh mở phiên mới) nằm trong `references/runtime.md`.
 
-## Cài skill (một lần cho mỗi project Claude Code)
+## Cài bộ skill (một lần cho mỗi project, chạy lại khi nâng cấp)
 
-1. Copy thư mục skill vào `.claude/skills/zps-3dp-producer/`. Rồi chạy một lần: `bash .claude/skills/zps-3dp-producer/scripts/setup_deps.sh`. Lệnh này tạo `scripts/.deps/venv` (pyyaml, pytest, Pillow) và chạy lại được. Từ đây `P` là python của venv này chạy `producer.py`.
-2. Copy 3 file trong `templates/agents/` vào `.claude/agents/`. Sửa dòng `skills:` của modeller.md cho khớp `name` trong frontmatter skill modeller. Agent phải cùng phạm vi với skill: skill ở `~/.claude/skills/` thì agent đặt ở `~/.claude/agents/`.
-3. Thêm vào `CLAUDE.md` của project (file này luôn được nạp, nên skill được kích hoạt kể cả khi người dùng chỉ nói "tiếp tục"):
+1. Trong repo bộ skill: `python3 build.py`. Lệnh tạo `dist/zps-3dp-claude-v<ver>/` và `dist/zps-3dp-codex-v<ver>/`, và dừng khi một kiểm tĩnh sai.
+2. `python3 dist/zps-3dp-<runtime>-v<ver>/install.py --project <thư mục project>`. Lệnh chép hai skill (`zps-3dp-producer`, `zps-3dp-project-setup`) vào thư mục skill của runtime. Bản Claude Code chép thêm file agent vào thư mục agent của project. Thư mục `agents/` trong skill giữ `tools/` và `references/` của từng agent; file agent đọc chúng qua dòng `TOOLS:` của brief, nên bản chép phẳng vẫn đúng đường dẫn. Cài lại thì skill cũ được thay, các thư mục `.deps/` được giữ.
+3. Chạy một lần: `bash .claude/skills/zps-3dp-producer/scripts/setup_deps.sh` (tạo `scripts/.deps/venv` với pyyaml, pytest, Pillow, numpy). Rồi `bash .../agents/<agent>/tools/setup_deps.sh` cho bốn agent bước (`zps-3dp-step-blockout`, `-views`, `-model`, `-texture`). Từ đây `P` là python của venv chạy `producer.py`.
+4. Làm các việc của runtime trong `references/runtime.md`: hook mở phiên và quyền (Claude Code), rules Blender ngoài sandbox (Codex).
+5. Thêm vào file hướng dẫn luôn được nạp của project (Claude Code: `CLAUDE.md`; Codex: `AGENTS.md`), để skill được dùng kể cả khi người dùng chỉ nói "tiếp tục":
    ```markdown
    Project này dùng skill zps-3dp-producer để điều phối art. Mọi việc về asset, concept trong _approved, feedback, tiến độ: dùng skill zps-3dp-producer, bắt đầu từ output của `producer.py next`.
    ```
-4. Gộp `templates/settings.snippet.json` vào `.claude/settings.json`:
-   - Hook SessionStart in `next --session` vào context khi mở session.
-   - Allow rules để subagent chạy nền không kẹt chờ xin quyền. Cú pháp rule có thể khác giữa các bản Claude Code; không ăn thì thêm bằng `/permissions`.
-5. Mở session mới (agent file chỉ nạp lúc khởi động), chạy `/agents` để thấy modeller, texturer, reviewer.
-6. Chạy tay `codex exec` một lần với skill texture để chắc cú pháp gọi skill và quyền ghi file khi chạy không tương tác. Sửa `external_command` trong pipeline.toml cho khớp.
+6. Mở phiên mới để runtime nạp skill và agent.
+
+Đổi prompt agent hoặc script: sửa `src/` trong repo bộ skill, build và cài lại. Không sửa bản đã cài.
 
 ## Lệnh môi trường và chính sách duyệt
 
 - `P preflight [--kit <đường dẫn preflight.py>]`: kiểm Blender (`BLENDER`, rồi Blender.app, rồi PATH), codex CLI, `MESHY_API_KEY` trong `paths.env_file` của profile (mặc định `.env`; script không in key), và `preflight.py` của kit khi có (mặc định skill `zps-3d-artist` cạnh skill này). Ghi `production/preflight.json`. Chạy một lần mỗi phiên.
-- `P approvals set <bước> <human|reviewer> --by "<nguyên văn>"`: ghi `production/policy.yaml`. `model reviewer` cần `--confirm-spend`.
+- `P approvals set <bước> <human|reviewer> --by "<nguyên văn>"`: ghi `production/policy.yaml`. `model reviewer` cần `--confirm-spend`. `P approvals set review_board <local|local+remote> --by "<nguyên văn>"`: đổi trang duyệt.
 - `P delegate <bước> <id> ... --by "<nguyên văn>"`: reviewer duyệt bước đó cho các asset này. Thứ tự: `delegate` > `approvals` > `human`.
 - `[limits]` trong `pipeline.toml`: số tiến trình cùng lúc. Worker ghi PID mỗi lệnh Blender vào `production/pids/blender/<id>.pid` (brief ghi lệnh mẫu); `gen_image_codex.py` tự ghi `production/pids/codex_image/<id>-<pid>.pid` cho mỗi lần chạy. `P next` chỉ đếm PID còn sống.
+- `PRODUCER_ROOT`: thư mục làm việc (mặc định `production`); gói cuối vào thư mục `deliver` cùng hậu tố (`production-codex` → `deliver-codex`). Dùng khi so A/B hai runtime.
 
 ## Project mới
 
@@ -34,33 +35,30 @@ Lệnh này tạo (không ghi đè file đã có):
 - Trong thư mục concept: `_approved/` và `GUIDELINE.md` đã điền tên project, đường dẫn và lệnh `check_card.py`.
 - `.env` trong `.gitignore` của project, để key Meshy không bị commit.
 
-Lệnh này không tạo `production/PROJECT-PROFILE.yaml`. Skill Project Setup tạo file này cùng người dùng, theo mẫu `templates/PROJECT-PROFILE.yaml`. Chưa có profile hợp lệ thì `P intake` từ chối. Kiểm profile bằng `scripts/check_profile.py production/PROJECT-PROFILE.yaml` (cùng python của venv). Profile nêu `preset` thì file `presets/<preset>.yaml` trong bộ skill phải có.
+Lệnh này không tạo `production/PROJECT-PROFILE.yaml`. Skill `zps-3dp-project-setup` tạo file này cùng người dùng, theo mẫu `templates/PROJECT-PROFILE.yaml`. Chưa có profile hợp lệ thì `P intake` từ chối. Kiểm profile bằng `scripts/check_profile.py production/PROJECT-PROFILE.yaml` (cùng python của venv). Profile nêu `preset` thì file `presets/<preset>.yaml` trong bộ skill phải có.
 
 Sau đó:
 1. Gửi `GUIDELINE.md` cho Concept Artist, View Concept Artist và AD khi làm việc với họ. Gửi file, không dán nội dung, để luôn chỉ có một bản. Sửa guideline thì tăng số phiên bản ở dòng đầu.
 2. AD tạo `art-direction/README.md` theo format trong guideline. Chưa có cũng chạy được; brief sẽ ghi "chưa có art direction".
 3. Duyệt `production/rubrics/building.md`, đổi dòng đầu thành `<!-- status: approved -->`.
 
-Muốn đổi guideline cho mọi project sau này: sửa `templates/GUIDELINE.md` trong skill. Project đã tạo giữ bản riêng của nó.
+Muốn đổi guideline cho mọi project sau này: sửa `templates/GUIDELINE.md` trong `src/`, build và cài lại. Project đã tạo giữ bản riêng của nó.
 
 ## Sửa pipeline
 
 Mọi thay đổi workflow nằm ở `production/pipeline.toml`:
-- **Thêm bước:** thêm khối `[[steps]]` đúng vị trí, tạo file agent trong `.claude/agents/`, mở session mới. Id của bước cũng là tag `steps:` mà AD dùng trong README art direction.
-- **Đổi model:** sửa `model`; `escalate_model` dùng khi vòng sửa vượt `resume_rounds`.
+- **Thêm bước:** thêm khối `[[steps]]` đúng vị trí. Agent mới: thêm file agent vào `src/zps-3dp-producer/agents/` của repo bộ skill, thêm câu mẫu vào `evals/triggers.json`, build và cài lại, mở phiên mới. Id của bước cũng là tag `steps:` mà AD dùng trong README art direction.
+- **Đổi model:** sửa `model`; `escalate_model` dùng khi vòng sửa vượt `resume_rounds`. Tên chung `opus`, `sonnet`, `haiku`; runtime đổi sang model thật (`references/runtime.md`, mục Model).
 - **Đổi output bắt buộc:** sửa `outputs`. Thiếu file thì asset bị blocked.
 - **Đổi chuẩn preview:** sửa `[preview].spec`. Brief đưa nguyên văn cho worker.
-- **Bỏ review cho bước rẻ:** `gate = "none"`. Bước cần mắt người dùng: `gate = "human"`.
+- **Lệnh ngoài:** `external_command` của bước (biến `{request}`, `{vdir}`, `{log}`); brief ghi lệnh cho worker chạy nền.
+- **Ai duyệt bước:** `gate = "review"` (reviewer duyệt), `"review_human"` (reviewer chấm, người duyệt theo `policy.yaml`), `"checks_human"` (script kiểm, người dùng duyệt).
 
 Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline mới ngay. Đổi `id` của bước mà asset đang đứng ở đó thì `validate` báo lỗi: sửa `stage` trong status.json của asset đó.
 
-## Thêm worker gọi công cụ ngoài
-
-Mẫu như texturer: model rẻ (sonnet), không preload skill. Lệnh ngoài đặt trong `external_command` của bước. Biến: `{request}`, `{vdir}`, `{log}`.
-
 ## Review page
 
-`P serve` mở http://127.0.0.1:8765 (chỉ máy local). Trang `index.html` đọc `/api/board`. Nút Duyệt, Cần sửa, Ghi chú ghi thẳng vào feedback.md và status.json.
+`P serve` mở http://127.0.0.1:8765 (chỉ máy local). Trang `index.html` đọc `/api/board`. Nút Duyệt, Cần sửa, Ghi chú ghi thẳng vào feedback.md và status.json. `P ab board` mở trang so cặp A/B ở http://127.0.0.1:8766 (`SKILL.md`, mục So A/B).
 
 ## Dọn file
 

@@ -10,3 +10,4 @@ output/
 .worktrees/
 **/.deps/
 .pytest_cache/
+dist/

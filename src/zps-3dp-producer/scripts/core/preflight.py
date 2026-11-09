@@ -9,10 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .state import ROOT, SKILL_DIR, now, rel, write_atomic
+from .state import ROOT, SKILL_DIR, SUFFIX, now, rel, write_atomic
 
 OUT = ROOT / "preflight.json"
-KIT_SIBLING = SKILL_DIR.parent / "zps-3d-artist" / "tools" / "preflight.py"
+KIT_SIBLING = SKILL_DIR.parent / f"zps-3d-artist{SUFFIX}" / "tools" / "preflight.py"
 MAC_BLENDER = Path("/Applications/Blender.app/Contents/MacOS/Blender")
 
 

@@ -1,0 +1,12 @@
+{
+  "edition": "codex",
+  "title": "Codex",
+  "skill_suffix": "-codex",
+  "display_suffix": " - Codex",
+  "install_root": ".agents/skills",
+  "agents_root": null,
+  "models": {"opus": null, "sonnet": null, "haiku": null},
+  "agent_file": true,
+  "openai_yaml": true,
+  "exclude": ["templates/settings.snippet.json"]
+}

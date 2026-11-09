@@ -60,9 +60,14 @@ def guard(step: str, who: str, confirm_spend: bool):
 
 
 def set_approval(a):
-    guard(a.step, a.who, a.confirm_spend)
+    """`set review_board local|local+remote` too: Project Setup writes the whole policy through this one writer."""
     pol = load()
-    pol.setdefault("approvals", {})[a.step] = a.who
+    if a.step == "review_board":
+        a.who in BOARDS or die(f"review_board phải là {'|'.join(BOARDS)}")
+        pol["review_board"] = a.who
+    else:
+        guard(a.step, a.who, a.confirm_spend)
+        pol.setdefault("approvals", {})[a.step] = a.who
     save(pol)
     ledger(f"approvals {a.step}={a.who} · by: {a.by}")
     print(f"OK: approvals {a.step}={a.who}")
