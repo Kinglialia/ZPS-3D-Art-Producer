@@ -3,9 +3,10 @@ save the PNG and `regions.json` under `assets/<id>/feedback/<step>-v<N>-<k>/`.""
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
-from .state import ASSETS, die, rel, write_atomic
+from .state import ASSETS, ProducerError, die, rel, write_atomic
 
 SHAPES = ("circle", "rect", "free")
 MAX_REGIONS, MAX_POINTS, MAX_NOTE = 50, 500, 500
@@ -48,40 +49,47 @@ def check(regions, files: dict, card: str) -> list[dict]:
 
 def draw(src: Path, marks: list[dict], out: Path):
     from PIL import Image, ImageDraw, ImageFont
-    im = Image.open(src)
-    if im.mode in ("RGBA", "LA", "P"):
-        im = Image.alpha_composite(Image.new("RGBA", im.size, GREY), im.convert("RGBA"))
-    im = im.convert("RGB")
-    W, H = im.size
-    w, r = max(3, round(max(W, H) / 250)), max(9, round(max(W, H) / 60))
-    font = ImageFont.load_default(size=round(r * 1.3))
-    d = ImageDraw.Draw(im)
-    for m in marks:
-        c = m["coords"]
-        if m["shape"] == "free":
-            pts = [(x * W, y * H) for x, y in c]
-            d.line(pts, fill=RED, width=w, joint="curve")
-            ax, ay = pts[0]
-        else:
-            box = (c[0] * W, c[1] * H, c[2] * W, c[3] * H)
-            (d.ellipse if m["shape"] == "circle" else d.rectangle)(box, outline=RED, width=w)
-            ax, ay = box[:2]
-        d.ellipse((ax - r, ay - r, ax + r, ay + r), fill=RED)
-        d.text((ax, ay), str(m["n"]), fill=WHITE, font=font, anchor="mm")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    im.save(out)
+    try:
+        im = Image.open(src)
+        if im.mode in ("RGBA", "LA", "P"):
+            im = Image.alpha_composite(Image.new("RGBA", im.size, GREY), im.convert("RGBA"))
+        im = im.convert("RGB")
+        W, H = im.size
+        w, r = max(3, round(max(W, H) / 250)), max(9, round(max(W, H) / 60))
+        font = ImageFont.load_default(size=round(r * 1.3))
+        d = ImageDraw.Draw(im)
+        for m in marks:
+            c = m["coords"]
+            if m["shape"] == "free":
+                pts = [(x * W, y * H) for x, y in c]
+                d.line(pts, fill=RED, width=w, joint="curve")
+                ax, ay = pts[0]
+            else:
+                box = (c[0] * W, c[1] * H, c[2] * W, c[3] * H)
+                (d.ellipse if m["shape"] == "circle" else d.rectangle)(box, outline=RED, width=w)
+                ax, ay = box[:2]
+            d.ellipse((ax - r, ay - r, ax + r, ay + r), fill=RED)
+            d.text((ax, ay), str(m["n"]), fill=WHITE, font=font, anchor="mm")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        im.save(out)
+    except Exception as ex:  # noqa: BLE001
+        die(f"{rel(src)}: không vẽ được vùng khoanh ({type(ex).__name__})")
 
 
 def save(aid: str, tag: str, marks: list[dict], files: dict) -> Path:
     """One folder per send: `<tag>-<k>`; one annotated PNG per marked image. Sets `png` on each mark."""
     base = ASSETS / aid / "feedback"
     d = base / f"{tag}-{1 + sum(p.is_dir() for p in base.glob(f'{tag}-*'))}"
-    for name in dict.fromkeys(m["image"] for m in marks):
-        png = d / (name.replace("/", "_").rsplit(".", 1)[0] + ".png")
-        mine = [m for m in marks if m["image"] == name]
-        draw(files[name], mine, png)
-        for m in mine:
-            m["png"] = rel(png)
+    try:
+        for name in dict.fromkeys(m["image"] for m in marks):
+            png = d / (name.replace("/", "_").rsplit(".", 1)[0] + ".png")
+            mine = [m for m in marks if m["image"] == name]
+            draw(files[name], mine, png)
+            for m in mine:
+                m["png"] = rel(png)
+    except ProducerError:
+        shutil.rmtree(d, ignore_errors=True)
+        raise
     return d
 
 

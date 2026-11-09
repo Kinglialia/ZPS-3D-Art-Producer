@@ -29,7 +29,9 @@ HOSTS = ("127.0.0.1", "localhost")
 MAX_BODY = 1 << 20
 GLB_MAX = 15 << 20
 BUNDLE_PX = 1024
-CROP = re.compile(r"(^|[_-])(crop|foot)([_-]|$)", re.I)
+CROP_BYTES = 2 << 20
+BUNDLE_MAX = 25 << 20
+CROP =re.compile(r"(^|[_-])(crop|foot)([_-]|$)", re.I)
 
 
 def build_outputs(_cfg: dict):
@@ -167,12 +169,14 @@ def data_uri(f: Path, mime: str | None = None, raw: bytes | None = None) -> str:
 
 
 def is_crop(f: Path) -> bool:
-    """A detail crop keeps its pixels in `--bundle`: evidence renders, and `crop*`, `foot_*` names."""
-    return any(re.fullmatch(r"evidence-\d+", x) for x in f.parent.parts) or bool(CROP.search(f.stem))
+    """A detail crop keeps its pixels in `--bundle` up to CROP_BYTES: evidence renders, and `crop*`, `foot_*` names."""
+    named = any(re.fullmatch(r"evidence-\d+", x) for x in f.parent.parts) or bool(CROP.search(f.stem))
+    return named and f.stat().st_size <= CROP_BYTES
 
 
 def bundled(f: Path) -> str:
-    """`--bundle` image: long side ≤ 1024 px (JPEG, or PNG with alpha); crops and small images keep their bytes."""
+    """`--bundle` image: long side ≤ 1024 px (JPEG, or PNG with alpha); crops up to CROP_BYTES and small images keep
+    their bytes."""
     from PIL import Image
     try:
         im = Image.open(f)
@@ -225,7 +229,11 @@ def show(a):
             return bundled(f)
         return quote(os.path.relpath(f.resolve(), out.parent.resolve()).replace(os.sep, "/"))
     views = [asset_view(cfg, st, sid, n, link) for sid, n in cards]
-    write_atomic(out, page({"project": cfg.get("project", {}).get("name", "Producer"), "assets": views}, "static"))
+    html = page({"project": cfg.get("project", {}).get("name", "Producer"), "assets": views}, "static")
+    if a.bundle and (size := len(html.encode())) > BUNDLE_MAX:
+        die(f"{a.id}: --bundle ra {size / 2**20:.1f} MB, lớn hơn {BUNDLE_MAX / 2**20:.1f} MB: hạ xuống bằng "
+            f"`show {a.id} --step <bước>` hoặc bỏ --bundle")
+    write_atomic(out, html)
     print(f"OK: {rel(out)} ({out.stat().st_size // 1024} KB)"
           + (f"; GLB lớn hơn {GLB_MAX >> 20} MB không nhúng: {', '.join(big)}" if big else ""))
 
@@ -238,7 +246,7 @@ def dashboard():
 def make_server(port: int):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    from .loop import human_action
+    from .loop import act
 
     class Handler(BaseHTTPRequestHandler):
         def send(self, code: int, body: bytes, ctype: str):
@@ -284,11 +292,12 @@ def make_server(port: int):
                 if not isinstance(data.get("offer", ""), str | None):
                     raise ValueError("offer phải là chuỗi")
                 with locked():
-                    msg, code = human_action(data["id"], data["action"], data.get("text", ""), data.get("step"),
-                                             data.get("regions"), data.get("offer")), 200
+                    (applied, msg), code = act(data["id"], data["action"], data.get("text", ""), data.get("step"),
+                                               data.get("regions"), data.get("offer")), 200
             except Exception as ex:  # noqa: BLE001
-                msg, code = f"Lỗi: {ex}", 400
-            self.send(code, json.dumps({"message": msg}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+                (applied, msg), code = (False, f"Lỗi: {ex}"), 400
+            self.send(code, json.dumps({"applied": applied, "message": msg}, ensure_ascii=False).encode(),
+                      "application/json; charset=utf-8")
 
         def log_message(self, *_):
             pass

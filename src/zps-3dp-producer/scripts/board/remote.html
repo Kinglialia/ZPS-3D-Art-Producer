@@ -28,7 +28,7 @@
       return { ok: false, message: `Đã có quyết định lúc ${when(S.fb[body.offer])}` };
     await db.collection("feedback").add({ aid: body.id, key: body.offer || null, action: body.action, text: body.text || "",
                                            step: body.step || null, regions: body.regions || null, at: new Date().toISOString() });
-    return { ok: true, message: "Đã gửi. Producer kéo về khi anh báo, và ở đầu phiên sau." };
+    return { ok: true, applied: true, message: "Đã gửi. Producer kéo về khi anh báo, và ở đầu phiên sau." };
   };
   let started = false;
   const timer = setTimeout(() => started || say("Chưa đọc được dữ liệu của trang. Thử mở lại sau."), 10000);

@@ -63,12 +63,13 @@ def close_human(aid: str, sid: str, n: int):
 
 
 def mark_lines(doc: dict | None) -> list[str]:
-    """Open H findings of marked regions, one line per annotated image, for the fix and review briefs."""
+    """Open H findings of marked regions, one line per annotated image, for the fix and review briefs. The note of a
+    region stays in the finding's `repair` and `acceptance`, which the briefs already point to."""
     by = {}
     for i, f in open_of(doc).items():
         if m := f.get("mark"):
-            by.setdefault(m["png"], []).append(f"{m['n']} ({i}) {f['repair']}")
-    return [f"`{png}`: " + "; ".join(items) for png, items in by.items()]
+            by.setdefault(m["png"], []).append(f"vùng {m['n']} ({i})")
+    return [f"`{png}`: " + ", ".join(items) for png, items in by.items()]
 
 
 def carry(aid: str, found: dict, src: str, dst: dict, m: int) -> list[str]:

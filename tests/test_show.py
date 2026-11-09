@@ -102,6 +102,32 @@ def test_bundle_scales_images_to_1024_px_keeps_crops_and_embeds_everything_in_on
     assert page.stat().st_size < 400_000
 
 
+def noise(path, size):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.frombytes("RGB", size, os.urandom(size[0] * size[1] * 3)).save(path)
+
+
+def test_bundle_scales_a_crop_over_the_byte_cap_so_one_render_cannot_swell_the_file(project, capsys):
+    noise(ROOT / FINAL / "review/crop_roof.png", (700, 700))
+    noise(ROOT / FINAL / "review/crop_door.png", (1300, 1300))
+    assert (ROOT / FINAL / "review/crop_door.png").stat().st_size > board.CROP_BYTES > (
+        ROOT / FINAL / "review/crop_roof.png").stat().st_size
+    show(capsys, bundle=True)
+    a = payload(ROOT / "show/house-a-bundle.html")["assets"][0]
+    assert {i["n"]: decoded(i["u"])[1] for i in a["images"] if "crop" in i["n"]} == {
+        "review/crop_roof.png": (700, 700), "review/crop_door.png": (1024, 1024)}
+
+
+def test_bundle_over_the_total_cap_is_refused_and_names_the_way_out(project, capsys, monkeypatch):
+    (ROOT / FINAL / "assembled.glb").write_bytes(b"g" * (1200 * 1024))
+    monkeypatch.setattr(board, "BUNDLE_MAX", 1 << 20)
+    with pytest.raises(ProducerError) as ex:
+        show(capsys, bundle=True)
+    assert re.fullmatch(r"house-a: --bundle ra 1\.\d MB, lớn hơn 1\.0 MB: hạ xuống bằng `show house-a --step <bước>` "
+                        r"hoặc bỏ --bundle", str(ex.value))
+    assert not (ROOT / "show/house-a-bundle.html").exists()
+
+
 def test_a_glb_over_15_mb_stays_out_of_the_file_and_the_output_says_so(project, capsys):
     (ROOT / FINAL / "assembled.glb").write_bytes(b"g" * (15 * 2**20 + 1))
     out = show(capsys, bundle=True)

@@ -181,13 +181,22 @@ def test_escalate_goes_to_the_human_at_once_without_another_round(flow):
 def test_each_offer_has_its_own_key_so_a_board_click_names_the_offer_it_answers(flow):
     flow.work()
     flow.review(verdict="ESCALATE", top_fix=None, findings=[finding("F1", "major", "param")])
-    assert flow.st["offer_key"] == "blockout-v1-1"
+    assert flow.st["offer_key"] == "house-a-blockout-v1-1"
     flow.human("redo", "mái cao hơn")
     assert flow.st["offer_key"] is None
     flow.work()
     flow.review(verdict="ESCALATE", top_fix=None, findings=[], counts=counts(major=2), prior=["- F1: open", "- H1: open"],
                 compare="H1=same")
-    assert (flow.st["offer"], flow.st["offer_key"]) == (1, "blockout-v1-2")
+    assert (flow.st["offer"], flow.st["offer_key"]) == (1, "house-a-blockout-v1-2")
+
+
+def test_two_assets_offered_the_same_step_and_version_never_share_an_offer_key_so_one_approval_cannot_block_the_other(flow):
+    intake.new(Namespace(id="house-b", title="House B", type="asset", priority=2, deadline=None), load_cfg())
+    intake.ready(Namespace(ids=["house-b"]))
+    a, b = flow.st, load_st("house-b")
+    loop.offer(a, "blockout", 2)
+    loop.offer(b, "blockout", 2)
+    assert (a["offer_key"], b["offer_key"]) == ("house-a-blockout-v2-1", "house-b-blockout-v2-1")
 
 
 def need_evidence_v1(f):

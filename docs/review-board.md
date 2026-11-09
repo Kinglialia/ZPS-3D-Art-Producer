@@ -51,7 +51,7 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 **Zoom ảnh:**
 - Hai ngón để zoom và kéo. Chạm hai lần để phóng to hoặc thu nhỏ nhanh.
 - Ảnh tải lên là ảnh gốc, không phải ảnh thu nhỏ trong sheet.
-- `P show --bundle` vẫn thu ảnh về khoảng 1024 px; bản đó chỉ để xem nhanh.
+- `P show --bundle` vẫn thu ảnh về khoảng 1024 px; bản đó chỉ để xem nhanh. Crop trên 2 MB cũng bị thu. File trên 25 MB bị từ chối: chọn `--step` hoặc bỏ `--bundle`.
 
 ## 4. Khoanh vùng (v1: trên ảnh)
 
@@ -72,7 +72,7 @@ Anh duyệt chủ yếu bằng hình (D20.17). Hình đặt trên cùng. Chữ �
 - JSON: `[{n, image, shape, coords, note}]`.
 - Đặt trong `production/assets/<id>/feedback/<bước>-v<N>-<số đợt>/`.
 
-**Agent nhận:** ở vòng sửa sau, brief của worker có đường dẫn ảnh đã khoanh và danh sách "1: … 2: …". Reviewer của vòng đó nhận cùng danh sách để kiểm từng điểm.
+**Agent nhận:** ở vòng sửa sau, brief của worker có đường dẫn ảnh đã khoanh và danh sách "vùng 1 (H1), vùng 2 (H2)"; ghi chú của từng vùng nằm trong finding, không lặp trong brief. Reviewer của vòng đó nhận cùng danh sách để kiểm từng điểm.
 
 **Finding của anh** (D23.1): script đổi mỗi vùng khoanh thành một finding của anh, id `H<n>`, mức `major`, ghi vào `findings.json` của version đang chờ duyệt (D22.1). Reviewer ghi `PRIOR` cho từng `H<n>` như mọi finding khác (D21.1). Bước không có reviewer (`assemble`): anh tự đóng finding khi duyệt.
 

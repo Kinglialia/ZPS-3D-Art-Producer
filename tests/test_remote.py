@@ -1,11 +1,12 @@
+import io
 import json
 from argparse import Namespace
 
 import pytest
 from PIL import Image
 
-from core import findings, loop, policy, remote
-from core.state import ROOT, ProducerError, load_st, save_st, vdir
+from core import findings, intake, loop, policy, remote
+from core.state import ROOT, ProducerError, load_cfg, load_st, save_st, vdir
 from test_board import AID, project  # noqa: F401
 
 URL = "https://claude.ai/artifact/abc"
@@ -89,6 +90,22 @@ def test_a_new_offer_gets_a_new_row_and_the_push_lists_every_open_offer(remote_o
     assert ([w["doc_id"] for w in out["writes"]], out["url"]) == (["p20261109T110000~house-a", "p20261109T110000"], URL)
 
 
+def test_rows_of_two_assets_waiting_at_the_same_step_and_version_carry_different_keys_so_the_page_decides_each_alone(
+        remote_on, capsys):
+    intake.new(Namespace(id="house-b", title="House B", type="asset", priority=2, deadline=None), load_cfg())
+    intake.ready(Namespace(ids=["house-b"]))
+    (review := vdir("house-b", "blockout", 2) / "final/review").mkdir(parents=True)
+    Image.new("RGB", (200, 100), "white").save(review / "game_cam.png")
+    st = load_st("house-b")
+    loop.offer(st, "blockout", 2, note="duyệt")
+    save_st(st | {"state": "waiting_human", "versions": {"blockout": 2}})
+    capsys.readouterr()
+    prepare(capsys, url=URL)
+    d = remote_on / f"production/board/push/{PUSH}/offers"
+    assert [json.loads((d / f"{PUSH}~{a}.json").read_text(encoding="utf-8"))["key"] for a in (AID, "house-b")] == [
+        KEY, "house-b-blockout-v2-1"]
+
+
 def test_a_glb_over_15_mb_is_not_packed_and_the_output_says_so(remote_on, capsys):
     (ROOT / "assets/house-a/blockout/v2/final/assembled.glb").write_bytes(b"g" * (15 * 2**20 + 1))
     out = prepare(capsys, url=URL)
@@ -147,4 +164,19 @@ def test_remote_regions_are_drawn_from_the_local_original_and_become_h_findings(
 def test_a_bad_row_is_reported_in_one_line_and_never_retried(remote_on, capsys, body, err):
     inbox(remote_on, "e", body)
     assert pull(capsys) == [err, "board pull: 1 dòng mới"]
+    assert pull(capsys) == ["board pull: 0 dòng mới"]
+
+
+def test_an_unreadable_original_ends_its_pull_row_in_one_line_and_never_blocks_the_rows_after_it(remote_on, capsys):
+    lineup = vdir(AID, "blockout", 2) / "final/review/lineup.png"
+    buf = io.BytesIO()
+    Image.effect_noise((600, 600), 80).convert("RGB").save(buf, "PNG")
+    lineup.write_bytes(buf.getvalue()[:2000])
+    mark = {"n": 1, "image": "review/lineup.png", "shape": "rect", "coords": [0.1, 0.1, 0.5, 0.5], "note": "lệch"}
+    inbox(remote_on, "r1", row(regions=[mark], at="2026-11-09T10:00:00Z"))
+    inbox(remote_on, "r2", row(text="xem cửa", at="2026-11-09T10:05:00Z"))
+    lines = pull(capsys)
+    assert lines[0] == f"r1: LỖI: {FINAL}/review/lineup.png: không vẽ được vùng khoanh (OSError)"
+    assert lines[1].startswith("r2: house-a: đã ghi feedback.") and lines[2] == "board pull: 2 dòng mới"
+    assert (remote.load_state()["pulled"], (ROOT / "assets/house-a/feedback").exists()) == (["r1", "r2"], False)
     assert pull(capsys) == ["board pull: 0 dòng mới"]

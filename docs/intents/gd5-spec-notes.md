@@ -34,3 +34,11 @@ Points the build found in the spec. Each one names the source and what the code 
 16. GĐ 4 note 3 (Meshy or VẼ MỚI on the board): done. The Duyệt button reads "Gọi Meshy thêm (N credit)" and a "VẼ MỚI" button sends `paint`. The CLI keeps `P meshy <id> paint`.
 17. Verification limits: touch ran as CDP touch events in Chrome with iPhone 14 emulation, not on an iPhone. The remote page ran with a stub `claude.use("db")` on a local server, not on claude.ai. Checklist rows 12, 32 and 34 stay open for a real run.
 18. Checklist row 62 (A/B board): only the local half. With `PRODUCER_ROOT=production-codex`, the board payload, the `P show` page and its file name hold no runtime name. `P ab board` is GĐ 6.
+
+## Review fixes
+
+19. `offer_key` is `<asset>-<step>-v<n>-<k>`. Before, two assets at the same step and version shared a key, and the remote page blocked the second asset after the first decision.
+20. A send that dies (a bad image, a missing lock file) writes nothing: no `H` finding, no feedback folder, no `feedback.md` line. The order is validate, decide, then write. A redo writes the folder first, because its findings point at the PNG.
+21. The board reply is `{applied, message}`. `applied` is false for a skipped click, and the page then keeps the marks and the draft. The remote page sets `applied: true` when the row is queued; a skip there shows in `P board pull`.
+22. `P show --bundle` scales a crop above 2 MB like any other image and refuses a file above 25 MB.
+23. Briefs list the annotated image with region numbers and ids. The region text stays in the finding (`repair`, `acceptance`) and shows once in the reviewer PRIOR line.

@@ -267,7 +267,7 @@ function controls(a, items, open) {
     let r;
     try { r = await transport.send(body); } catch (ex) { r = { ok: false, message: `Lỗi: ${ex.message || ex}` }; }
     msgs[a.id] = r.message;
-    if (r.ok) { delete marks[a.id]; delete drafts[a.id]; }
+    if (r.ok && r.applied) { delete marks[a.id]; delete drafts[a.id]; }
     reload();
   };
   const rows = L.map((m, k) => $("div", { className: "mrow" },
@@ -323,7 +323,7 @@ const LIVE = {
   load: async () => (await fetch("/api/board")).json(),
   send: async body => {
     const r = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    return { ok: r.ok, message: (await r.json()).message };
+    return { ok: r.ok, ...(await r.json()) };
   },
 };
 const STATIC = { load: async () => JSON.parse(document.getElementById("board-data").textContent), send: null };

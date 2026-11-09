@@ -156,15 +156,53 @@ def test_needs_fix_at_assemble_puts_the_regions_on_the_step_the_user_picks(proje
         "repaint", {"png": "production/assets/house-a/feedback/assemble-v1-1/review_final_lit_vs_concept.png", "n": 1})
 
 
-def test_fix_and_review_briefs_list_each_region_with_the_annotated_image(real):
+def test_fix_and_review_briefs_list_the_annotated_image_with_region_numbers_and_ids_but_not_the_notes(real):
     loop.human_action(AID, "redo", "mái phẳng", "blockout", regions=[RECT, FREE], offer=KEY)
-    want = (f"`{FOLDER}/review_game_cam.png`: 1 (H2) mái thấp; 2 (H3) xem vùng khoanh")
+    want = f"`{FOLDER}/review_game_cam.png`: vùng 1 (H2), vùng 2 (H3)"
     doc = findings.load(AID, "blockout", 2)
     assert findings.mark_lines(doc) == [want]
     cfg = load_cfg()
     st, step = load_st(AID), step_of(cfg, "blockout")[1]
-    assert f"   - Vùng người dùng khoanh: {want}" in briefs.worker_brief(cfg, st, step, 3, True, "h", None, ROOT / "p.yaml", {})
-    assert f"- Vùng người dùng khoanh, kiểm từng vùng: {want}" in briefs.review_brief(cfg, st, step, 3)
+    worker = briefs.worker_brief(cfg, st, step, 3, True, "h", None, ROOT / "p.yaml", {})
+    review = briefs.review_brief(cfg, st, step, 3)
+    assert f"   - Vùng người dùng khoanh: {want}" in worker
+    assert f"- Vùng người dùng khoanh, kiểm từng vùng: {want}" in review
+    assert (worker.count("mái thấp"), review.count("mái thấp")) == (0, 1)
+
+
+def test_a_region_note_shows_once_in_the_review_brief_in_the_prior_line_not_again_in_the_region_list(real):
+    note = "n" * 500
+    marks = [RECT | {"n": k, "note": note} for k in range(1, 51)]
+    loop.human_action(AID, "redo", "", "blockout", regions=marks, offer=KEY)
+    cfg = load_cfg()
+    st, step = load_st(AID), step_of(cfg, "blockout")[1]
+    assert (briefs.review_brief(cfg, st, step, 3).count(note), briefs.worker_brief(
+        cfg, st, step, 3, True, "h", None, ROOT / "p.yaml", {}).count(note)) == (50, 0)
+
+
+def test_an_approve_that_dies_writes_no_finding_folder_or_feedback_line_so_a_retry_never_doubles_them(real):
+    review = vdir(AID, "model", 1) / "final/review"
+    review.mkdir(parents=True)
+    Image.new("RGB", (100, 100), "white").save(review / "game_cam.png")
+    st = load_st(AID)
+    st |= {"stage": "model", "versions": {"blockout": 2, "model": 1}, "approved": {"blockout": 2}, "offer": 1,
+           "offer_key": "model-v1-1"}
+    save_st(st)
+    lock = "production/assets/house-a/model/v1/final/house-a-untextured.glb"
+    send = lambda: loop.human_action(AID, "approve", "ok", None, regions=[RECT | {"image": "review/game_cam.png"}],  # noqa: E731
+                                     offer="model-v1-1")
+    for _ in range(2):
+        with pytest.raises(ProducerError) as ex:
+            send()
+        assert str(ex.value) == f"{lock}: không có file để khóa khi duyệt"
+    a = real / "production/assets/house-a"
+    said = "approve" in (a / "feedback.md").read_text(encoding="utf-8")
+    assert (findings.load(AID, "model", 1), (a / "feedback").exists(), said, load_st(AID)["state"],
+            load_st(AID).get("decisions")) == (None, False, False, "waiting_human", None)
+    (real / lock).write_text("blend", encoding="utf-8")
+    send()
+    assert (sorted(findings.load(AID, "model", 1)["findings"]), sorted(p.name for p in (a / "feedback").iterdir()),
+            (a / "feedback.md").read_text(encoding="utf-8").count("approve")) == (["H1"], ["model-v1-1"], 1)
 
 
 def test_the_meshy_question_answers_with_its_own_buttons_so_approve_never_hides_a_credit_spend(project):
@@ -198,6 +236,18 @@ def test_the_board_posts_regions_and_the_offer_key_and_a_path_in_a_region_gets_4
     code, msg = post_json(server, {"id": AID, "action": "redo", "text": "", "step": "blockout", "offer": KEY,
                                    "regions": [RECT]})
     assert (code, msg.split(". Tiếp")[0]) == (200, "house-a: làm lại blockout từ v2; khoanh 1 vùng → H1")
+
+
+def test_the_board_reply_says_applied_false_for_a_skipped_click_so_the_page_keeps_the_marks(real, server):
+    stale = {"id": AID, "action": "note", "text": "", "offer": "blockout-v2-0", "regions": [RECT]}
+    code, raw = post_raw(server, stale)
+    assert (code, json.loads(raw)) == (200, {
+        "applied": False,
+        "message": "house-a: bỏ qua note: lần đưa duyệt blockout-v2-0 đã qua (hiện tại: blockout-v2-1)"})
+    code, raw = post_raw(server, stale | {"offer": KEY})
+    assert (code, json.loads(raw)["applied"]) == (200, True)
+    approve = {"id": AID, "action": "approve", "offer": KEY}
+    assert [json.loads(post_raw(server, approve)[1])["applied"] for _ in range(2)] == [True, False]
 
 
 @pytest.mark.parametrize("body, err", [

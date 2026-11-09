@@ -127,10 +127,11 @@ def set_aside(rep):
 
 def offer(st: dict, sid: str, n: int, **kw):
     """D22.8 per offer: an offered version takes a new decision, also when it was decided in an earlier round.
-    `offer_key` names this offer, so a board click answers the offer it saw and no later one."""
+    `offer_key` names this offer, so a board click answers the offer it saw and no later one. It starts with the asset
+    id: pages that list several assets key their decisions by it alone."""
     st.setdefault("decisions", {}).pop(f"{sid} v{n}", None)
     st["offers"] = st.get("offers", 0) + 1
-    st |= {"offer": n, "offer_key": f"{sid}-v{n}-{st['offers']}", **kw}
+    st |= {"offer": n, "offer_key": f"{st['id']}-{sid}-v{n}-{st['offers']}", **kw}
 
 
 def valid(rep, parsed: tuple):
@@ -389,10 +390,16 @@ def shown(st: dict, step: str) -> int | None:
     return st["approved"].get(step) or st["versions"].get(step)
 
 
-def human_action(aid: str, action: str, text: str, step_id: str | None = None, regions=None,
-                 offer: str | None = None) -> str:
+def human_action(*args, **kw) -> str:
+    return act(*args, **kw)[1]
+
+
+def act(aid: str, action: str, text: str, step_id: str | None = None, regions=None,
+        offer: str | None = None) -> tuple[bool, str]:
     """One decision per offer (D22.8), from the CLI, the local board or a remote row. `offer` is the offer the page
-    showed; `regions` are marks on images of the current card (review-board.md §4)."""
+    showed; `regions` are marks on images of the current card (review-board.md §4). Returns (applied, message):
+    applied is False for a skipped call, so a page keeps the user's marks. Nothing reaches the disk before the
+    decision can no longer die."""
     from .board import build_outputs, view_images
     cfg = load_cfg()
     st = load_st(aid)
@@ -409,55 +416,64 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None, r
     answer = action in ("approve", "paint") and st.get("ask") and st["state"] == "waiting_human" and target == st["stage"]
     old = done.get(key) if action != "note" else None
     if old and (offer and old.get("offer") == offer or not (send_back or answer)):
-        return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {old['at']}"
+        return False, f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {old['at']}"
     if offer is not None and offer != st.get("offer_key") and (action != "note" or regions is not None):
-        return f"{aid}: bỏ qua {action}: lần đưa duyệt {offer} đã qua (hiện tại: {st.get('offer_key') or 'không chờ duyệt'})"
+        return False, (f"{aid}: bỏ qua {action}: lần đưa duyệt {offer} đã qua "
+                       f"(hiện tại: {st.get('offer_key') or 'không chờ duyệt'})")
     if action == "paint" and not answer:
         die(f"{aid}: không có câu hỏi Meshy đang chờ")
     if action == "redo" and step["gate"] == "checks_human" and not step.get("agent"):
         die(f"{aid}: {target} không có vòng sửa: chọn bước sửa, `--step texture` (vẽ lại) hoặc `--step model` (mesh, UV)")
     if action == "redo" and (st.get("ask") or {}).get("kind") == "mesh_changed" and target == "texture":
         die(f"{aid}: đang chờ chọn Meshy hay VẼ MỚI cho mesh mới: duyệt = gọi Meshy, `meshy {aid} paint` = VẼ MỚI")
-    marks, folder = None, None
+    marks, files, tag, folder = None, None, None, None
     if regions is not None:
         card = shown(st, st["stage"])
         files = dict((name, p) for p, name in view_images(cfg, st, st["stage"], card))
         marks = annotate.check(regions, files, f"{aid} {st['stage']} v{card}")
         n or die(f"{aid}: {target} chưa có version để gắn vùng khoanh")
-        folder = annotate.save(aid, f"{st['stage']}-v{card}", marks, files)
+        tag = f"{st['stage']}-v{card}"
     raw = text.strip()
     text = raw or "(không ghi chú)"
-    append_feedback(aid, target, n, action, text + (f" · khoanh: {rel(folder)}" if folder else ""))
     waiting = st["state"] == "waiting_human" and target == st["stage"]
 
-    def decide() -> list[str]:
+    def decide():
         done[key] = {"action": action, "at": now(), "offer": st.get("offer_key")}
-        return findings.add_human(aid, step, n, None, marks) if marks and waiting and action != "redo" else []
+
+    def keep():
+        nonlocal folder
+        folder = annotate.save(aid, tag, marks, files) if marks else None
+        append_feedback(aid, target, n, action, text + (f" · khoanh: {rel(folder)}" if folder else ""))
+
+    def settle() -> list[str]:
+        keep()
+        return findings.add_human(aid, step, n, None, marks) if marks and waiting else []
 
     ids, msg = [], "đã ghi feedback"
     if answer:
-        ids = decide()
+        decide()
         msg = texture.resolve(st, "call" if action == "approve" else "paint", policy.BY["human"])
-    elif action == "approve":
-        if not waiting:
+        ids = settle()
+    elif action == "approve" and waiting:
+        decide()
+        approve(cfg, st, step, n, policy.BY["human"])
+        ids = settle()
+        if not step.get("reviewer"):
+            findings.close_human(aid, target, n)
+        msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
+    elif action == "redo" and st["state"] in REDO_FROM:
+        decide()
+        st.pop("ask", None)
+        keep()
+        got = redo(cfg, st, i, step, n, raw or (None if marks else text), marks or ())
+        ids = got[len(got) - len(marks):] if marks else []
+        msg = f"làm lại {target}" + (f" từ v{n}" if n else "")
+    else:
+        if action == "approve":
             msg = f"đã ghi feedback; {aid} không chờ duyệt {target} (state={st['state']})"
-        else:
-            ids = decide()
-            if not step.get("reviewer"):
-                findings.close_human(aid, target, n)
-            approve(cfg, st, step, n, policy.BY["human"])
-            msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
-    elif action == "redo":
-        if st["state"] not in REDO_FROM:
+        elif action == "redo":
             msg = f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau"
-        else:
-            decide()
-            st.pop("ask", None)
-            got = redo(cfg, st, i, step, n, raw or (None if marks else text), marks or ())
-            ids = got[len(got) - len(marks):] if marks else []
-            msg = f"làm lại {target}" + (f" từ v{n}" if n else "")
-    elif marks and waiting:
-        ids = findings.add_human(aid, step, n, None, marks)
+        ids = settle()
     if marks:
         annotate.record(folder, marks, ids)
         msg += (f"; khoanh {len(marks)} vùng → {', '.join(ids)}" if ids else
@@ -465,4 +481,4 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None, r
     save_st(st)
     ledger(f"{aid} · người dùng {action} {target} · {text[:80]}")
     build_outputs(cfg)
-    return f"{aid}: {msg}. Tiếp: {next_action(st)}"
+    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}"
