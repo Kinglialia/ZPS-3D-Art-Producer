@@ -42,6 +42,8 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **blocked:** đọc ghi chú. Nếu thông tin thiếu là thứ bạn có (từ brief, art direction, hoặc lời người dùng trong chat), bổ sung vào mục "Làm rõ" của `assets/<id>/brief.md`, rồi chạy `P retry <id>` và giao lại. Nếu chỉ người dùng trả lời được thì hỏi người dùng.
 
+**Bước view gọi Codex** (`views_front`, `views_rest`): mỗi ảnh tốn lượt Codex của người dùng. Ghi chú blocked có lỗi `gen_image_codex` (3 lần lỗi kỹ thuật) thì hỏi người dùng cách xử lý; không tự đổi sang tool ảnh khác (D15.2). Ghi lựa chọn bằng `P rule`, rồi `P retry <id>`.
+
 **Báo cáo sai hash:** `ingest` báo `PROFILE_HASH ... khác brief` thì yêu cầu worker chép đúng dòng `PROFILE_HASH` ở đầu brief. `ingest` hoặc `brief` báo "final/ đã duyệt bị sửa" thì hỏi người dùng làm lại bước đó hay không.
 
 **waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`. Mỗi version chỉ nhận một Duyệt hoặc Cần sửa; `redo` cho bản đã duyệt mở vòng mới và version mới.

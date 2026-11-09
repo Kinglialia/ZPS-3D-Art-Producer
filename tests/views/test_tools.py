@@ -174,6 +174,17 @@ def test_views_sheet_puts_concept_and_5_views_over_their_overlays_and_records_wh
                                            "package.readme": ("pass", []), "package.flip": ("pass", [])})
 
 
+def test_views_sheet_marks_kept_views_in_the_label_strip_only_so_the_user_sees_which_views_are_new(tmp_path):
+    f, front, card, concept = view_set(tmp_path)
+    shots = []
+    for kept in ((), ("--kept", "back,left")):
+        tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, *kept)
+        shots.append(Image.open(f / "report/VIEWS_sheet.png").convert("RGB"))
+    strip, cells = (0, 0, 2004, 12 + 22), (0, 12 + 22, 2004, 720)
+    assert (shots[0].crop(strip).tobytes() != shots[1].crop(strip).tobytes(),
+            shots[0].crop(cells).tobytes() == shots[1].crop(cells).tobytes()) == (True, True)
+
+
 def test_check_package_fails_a_view_changed_after_the_sheet_because_the_user_approves_the_sheet(tmp_path):
     f, front, card, concept = view_set(tmp_path)
     tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)

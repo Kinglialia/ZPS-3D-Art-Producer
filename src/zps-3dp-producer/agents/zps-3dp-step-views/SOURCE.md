@@ -1,7 +1,7 @@
 # Nguồn
 
 ZPS Art Assets Kit v0.10.4, commit `905dc93` (`upstream/zps-art-assets-kit-v0.10.4/src/`).
-Không sửa file chép nguyên. `tests/views/test_source.py` so sha256 với kit.
+Không sửa file chép nguyên. `tests/views/test_views_source.py` so sha256 với kit.
 
 ## Chép nguyên
 

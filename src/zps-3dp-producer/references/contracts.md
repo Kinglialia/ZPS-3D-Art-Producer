@@ -40,7 +40,9 @@ production/                     # trong project Claude Code; chỉ script và su
 - `evidence`, `evidence_used`: vòng bằng chứng đang chạy (`version`, `k`, `hash` của `final/`) và số lần đã xin trong đợt.
 - `offer`, `label`: version đưa người dùng duyệt và nhãn ("chưa đạt" khi chưa qua).
 - `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt. Script xóa khóa này mỗi lần đưa vN cho người dùng duyệt, nên một lần đưa nhận một quyết định.
-- `worker_agent_id`: subagent worker để resume vòng sửa.
+- `worker_agent_id`: subagent worker để resume vòng sửa. Mở lại một bước khác bước đang chạy thì xóa, vì worker cũ có context của bước khác.
+- `reopened`: số lần reviewer mở lại bước trước (`regen_front`) trong đợt feedback. Lần thứ hai → `waiting_human`. `redo` của người dùng đặt về 0.
+- `prior[<bước>]`: bản đã duyệt của bước sau khi một bước trước nó làm lại. Brief lần dựng đầu của bước đó trỏ tới bản này để giữ phần không đổi. Duyệt bước đó thì xóa.
 
 ## Art direction trong brief
 
@@ -54,7 +56,7 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | todo | bước chưa bắt đầu | `brief` → running (tạo vN mới) |
 | running | worker đang làm | `ingest` → review / waiting_human / blocked / bước sau |
 | review | worker xong, chờ giao reviewer | `brief` → reviewing |
-| reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · ESCALATE → waiting_human |
+| reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · `regen_front` → fix của `views_front` · ESCALATE → waiting_human |
 | fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate) |
 | evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
@@ -116,6 +118,8 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
  "findings": {"F1": {"priority", "kind", "status", "first_v", "last_v", "region", …, "acceptance"}}}
 ```
 Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
+
+`TOP_FIX: regen_front: F<n>` ở `views_rest` (D22.4): script chép F<n> sang `findings.json` của bản `views_front` đã duyệt với id mới của bản đó, loại `regen`, và đặt `top_fix` của bản đó là id mới. Rồi `views_front` vào vòng sửa từ bản đó, như `redo`. Front duyệt lại thì `views_rest` dựng lại từ đầu. Finding mới ở bước có `regions` (`pipeline.toml`) mở đầu `region` bằng một tên trong đó; loại `regen_front` thì không. Loại `note*` chỉ ở mức `minor`.
 
 `redo` ghi lời người dùng thành finding `H<k>` (`major`, loại đầu tiên trong `top_fix` của bước) vào `findings.json` của version bị trả về, tạo file nếu chưa có. Reviewer vòng sau ghi `PRIOR` cho `H<k>` như mọi finding.
 

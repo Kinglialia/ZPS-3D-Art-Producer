@@ -1,7 +1,9 @@
 """Review sheet of the view set, crops, and the mirrored side view (concept-views.md §7, §3).
 
-  python3 tools/views_sheet.py make --final <V/final> --concept <concept_albedo.png> --front <front.png> [--crop <view>:x0,y0,x1,y1 ...]
-      Row 1: concept, front, back, left, right, top. Row 2: report/overlay_<view>.png with score, IoU, dE from
+  python3 tools/views_sheet.py make --final <V/final> --concept <concept_albedo.png> --front <front.png>
+          [--kept back,left] [--crop <view>:x0,y0,x1,y1 ...]
+      Row 1: concept, front, back, left, right, top; --kept views (copied from the prior approved set) are labelled
+      "(giữ)". Row 2: report/overlay_<view>.png with score, IoU, dE from
       report/report.json. Row 3: the crops, in pixels of the view image. Writes <final>/report/VIEWS_sheet.png and
       VIEWS_sheet.json (sha256 of the 5 view files, which check_package.py compares).
   python3 tools/views_sheet.py crop --image <png> --box x0,y0,x1,y1 --out <png> [--scale 2]
@@ -51,7 +53,8 @@ def make(a):
     paths = {v: a.front if v == "front" else os.path.join(a.final, f"{v}.png") for v in VIEWS}
     rdir = os.path.join(a.final, "report")
     rep = json.load(open(os.path.join(rdir, "report.json"), encoding="utf-8"))
-    rows = [[("concept", Image.open(a.concept))] + [(v, Image.open(paths[v])) for v in VIEWS],
+    kept = set((a.kept or "").split(","))
+    rows = [[("concept", Image.open(a.concept))] + [(v + " (giữ)" * (v in kept), Image.open(paths[v])) for v in VIEWS],
             [(f"{v} {label(rep['views'].get(v))}", Image.open(os.path.join(rdir, f"overlay_{v}.png")))
              for v in VIEWS if os.path.isfile(os.path.join(rdir, f"overlay_{v}.png"))]]
     crops = [c.split(":", 1) for c in a.crop or []]
@@ -94,6 +97,7 @@ def main():
     m.add_argument("--concept", required=True)
     m.add_argument("--front", required=True)
     m.add_argument("--crop", action="append")
+    m.add_argument("--kept")
     c = sub.add_parser("crop")
     c.add_argument("--image", required=True)
     c.add_argument("--box", required=True)
