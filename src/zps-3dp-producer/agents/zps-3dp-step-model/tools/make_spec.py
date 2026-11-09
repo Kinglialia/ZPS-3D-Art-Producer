@@ -5,8 +5,9 @@ Geometry comes only from B/sources.json (D22.13): W x D x H, character_h, door_h
 includes_base: false takes W x D x H from B/assembly.json instead, because layout then leaves the base out.
 Other numbers follow D13, later wins: skill default < preset < profile `overrides` < asset card.
   tris cap: card tris_max, else tiers[card tier]; texture_res: card, else 2048; uv padding and texel minimum;
-  detail.relief_min_px 3, detail.alpha_min_px 16, detail.bevel false (profile overrides.detail changes them);
-  detail.bevel true when a `real:` line of card real_texture_only_notes has a BEVEL phrase.
+  detail.relief_min_px 3, detail.alpha_min_px 16 (profile overrides.detail changes them);
+  model.bevel: card `bevel`, else profile `style.bevel`, else none (D27.10). none = false; toon = the preset's
+  bevel.toon numbers (radius_m, segments). Nothing else turns bevel on, notes and overrides included.
 spec["sources"] names the layer of every number ("mặc định" = skill default).
 Keeps `sun` and `concept_cam` of an existing F/spec.json: the worker sets them at A7.
 Prints one line. Exit 0, 2 on error.
@@ -14,21 +15,17 @@ Prints one line. Exit 0, 2 on error.
 import argparse
 import json
 import os
-import re
 import sys
-import unicodedata
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import common  # noqa: E402
 
 TOOL = "model/make_spec"
-DEFAULTS = {"texture_res": 2048, "detail": {"relief_min_px": 3, "alpha_min_px": 16, "bevel": False}}
+DEFAULTS = {"texture_res": 2048, "detail": {"relief_min_px": 3, "alpha_min_px": 16}}
 KEPT = ("sun", "concept_cam")
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
-        "detail.bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "dimensions")
+        "bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "dimensions")
 DIM_TOLERANCE = 0.02
-BEVEL = re.compile(r"(?<!không )(?<!no )\b(cạnh bo|bo cạnh|bo tròn cạnh|cạnh bo tròn|vát cạnh|cạnh vát|bevell?ed edges?|"
-                   r"bevel|rounded edges?|chamfered edges?)\b", re.I)
 
 
 def yaml_load(path):
@@ -53,22 +50,25 @@ def layered(layers):
     return out, src
 
 
-def card_bevel(card):
-    """The first BEVEL phrase in a `real:` line of the card notes, or None."""
-    for n in card.get("real_texture_only_notes") or []:
-        t = unicodedata.normalize("NFC", str(n)).strip()
-        m = BEVEL.search(t) if t.casefold().startswith("real:") else None
-        if m:
-            return m.group(0)
-    return None
+def bevel(card, prof, preset):
+    """(spec.model.bevel, source): false for none, else {style, radius_m, segments} from preset bevel.<style>."""
+    if card.get("bevel") is not None:
+        style, src = card["bevel"], "thẻ asset bevel"
+    elif (prof.get("style") or {}).get("bevel") is not None:
+        style, src = prof["style"]["bevel"], "profile style.bevel"
+    else:
+        style, src = "none", "mặc định"
+    if style == "none":
+        return False, src
+    return {"style": style, **preset["bevel"][style]}, f"{src}; số: preset bevel.{style}"
 
 
 def build(a):
     s = common.read_json(os.path.join(a.blockout, "sources.json"))
-    card, prof = yaml_load(a.card), yaml_load(a.profile)
-    p, src = layered([("mặc định", DEFAULTS), ("preset", yaml_load(a.preset)), ("profile overrides", prof.get("overrides"))])
-    if bevel := card_bevel(card):
-        p["detail"]["bevel"], src["detail.bevel"] = True, f'thẻ asset real_texture_only_notes "{bevel}"'
+    card, prof, preset = yaml_load(a.card), yaml_load(a.profile), yaml_load(a.preset)
+    p, src = layered([("mặc định", DEFAULTS), ("preset", preset), ("profile overrides", prof.get("overrides"))])
+    p["detail"].pop("bevel", None)
+    bev, src["bevel"] = bevel(card, prof, preset)
     aid = str(card.get("asset") or os.path.basename(os.path.dirname(os.path.abspath(a.card))))
     tier = card.get("tier") or "standard"
     if card.get("tris_max"):
@@ -94,7 +94,7 @@ def build(a):
         "uv": {"resolution": res, "min_padding_px": int(p["uv"]["padding_px"]), "allow_overlap": False,
                "allow_out_of_bounds": False},
         "export": {"path": f"{aid}-untextured.glb", "skip_export": True},
-        "model": {"texel_min_px_per_m": float(p["uv"]["texel_min_px_per_m"]), **p["detail"],
+        "model": {"texel_min_px_per_m": float(p["uv"]["texel_min_px_per_m"]), **p["detail"], "bevel": bev,
                   "target_px_height": p["camera"]["target_px_height"],
                   "px_per_m": round(p["camera"]["target_px_height"] / dims[2], 2),
                   "character_h": s["character_h"], "door_h": s.get("door_h")},

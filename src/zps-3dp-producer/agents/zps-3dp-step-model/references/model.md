@@ -15,7 +15,7 @@ Lớp 1, quy tắc chung:
 5. Vật tròn: đủ segment để viền không gãy ở camera game. `join_mesh.py` đặt smooth shading và tách cạnh > 20°.
 6. Vật phát sáng hoặc chuyển động (lửa, khói, nước): card unlit.
 7. Ghi chú real/texture_only của thẻ (`real_texture_only_notes`) thắng các quy tắc trên.
-8. Bevel chỉ khi `spec.model.bevel` là true, cùng ngưỡng pixel. `make_spec.py` bật bevel khi một dòng `real:` của thẻ có cụm trong bảng `BEVEL` (vd "cạnh bo"), và ghi cụm đó vào `sources`.
+8. Bevel chỉ khi `spec.model.bevel` khác `false`, cùng ngưỡng pixel. Dùng đúng `radius_m` và `segments` của `spec.model.bevel`. `make_spec.py` lấy kiểu bevel từ trường `bevel` của thẻ, không có thì `style.bevel` của profile; số lấy từ preset (D27.10). Ghi chú chữ của thẻ không bật bevel.
 
 Lớp 2: `detail_examples` của profile (`geometry`, `texture_only`), có sau pilot. Không có thì chỉ dùng lớp 1.
 

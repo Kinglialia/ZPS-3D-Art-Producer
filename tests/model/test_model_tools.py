@@ -115,7 +115,7 @@ def test_the_spec_takes_geometry_from_sources_json_and_the_rest_from_preset_with
                   "target_px_height": 400, "px_per_m": 108.11, "character_h": 1.6, "door_h": 1.8},
         "sources": {"tris_cap": "preset tiers.standard", "texture_res": "mặc định", "uv.padding_px": "preset",
                     "uv.texel_min_px_per_m": "preset", "detail.relief_min_px": "mặc định",
-                    "detail.alpha_min_px": "mặc định", "detail.bevel": "mặc định", "camera.target_px_height": "preset",
+                    "detail.alpha_min_px": "mặc định", "bevel": "mặc định", "camera.target_px_height": "preset",
                     "screen_tris_max_small_ratio": "preset", "dimensions": "sources.json layout",
                     "camera": "sources.json camera", "character_h": "sources.json", "door_h": "sources.json"}}
     assert "screen_tris" not in s and "sun" not in s
@@ -136,26 +136,31 @@ def test_card_beats_profile_overrides_beat_preset_beat_skill_default_d13(make_sp
         "detail.relief_min_px": "profile overrides"}
 
 
-def test_a_real_note_asking_for_rounded_edges_turns_bevel_on_over_the_profile_so_clay_review_does_not_send_it_back(
-        make_spec):
-    notes = ["real: thân hộp, nắp vòm, cạnh bo toon; chưa yêu cầu nội thất.", "real: tấm khóa vát góc có lỗ khóa."]
-    _, s = make_spec(card={"real_texture_only_notes": notes},
-                     profile={"overrides": {"detail": {"bevel": False}}})
-    assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (True, 'thẻ asset real_texture_only_notes "cạnh bo"')
+TOON = {"style": "toon", "radius_m": 0.009, "segments": 2}
 
 
-@pytest.mark.parametrize("note, phrase", [("real: beveled edges on every plank.", "beveled edges"),
-                                           ("real: Cạnh Vát nhẹ ở thân.", "Cạnh Vát")])
-def test_the_bevel_table_matches_either_spelling_and_any_case(make_spec, note, phrase):
-    _, s = make_spec(card={"real_texture_only_notes": [note]})
-    assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (True, f'thẻ asset real_texture_only_notes "{phrase}"')
+@pytest.mark.parametrize("card, style, want", [
+    ({"bevel": "toon"}, None, (TOON, "thẻ asset bevel; số: preset bevel.toon")),
+    ({}, "toon", (TOON, "profile style.bevel; số: preset bevel.toon")),
+    ({"bevel": "none"}, "toon", (False, "thẻ asset bevel")),
+    ({"bevel": None}, "toon", (TOON, "profile style.bevel; số: preset bevel.toon")),
+    ({}, None, (False, "mặc định")),
+])
+def test_bevel_comes_from_the_card_field_over_the_profile_field_with_numbers_from_the_preset_d27_10(
+        make_spec, card, style, want):
+    profile = {"style": PROFILE["style"] | {"bevel": style}} if style else {}
+    _, s = make_spec(card=card, profile=profile)
+    assert (s["model"]["bevel"], s["sources"]["bevel"]) == want
 
 
-@pytest.mark.parametrize("note", ["texture_only: viền gỗ bo cạnh chỉ vẽ, không dựng.", "real: cạnh sắc, không bo cạnh.",
-                                  "real: tấm khóa vát góc có lỗ khóa.", "real: cạnh bonsai.", "real: hard edges, no bevel."])
-def test_bevel_stays_off_for_paint_only_negated_or_corner_cut_notes(make_spec, note):
-    _, s = make_spec(card={"real_texture_only_notes": [note]})
-    assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (False, "mặc định")
+@pytest.mark.parametrize("card, profile", [
+    ({"real_texture_only_notes": ["real: thân hộp, nắp vòm, cạnh bo toon."]}, {}),
+    ({}, {"overrides": {"detail": {"bevel": True}}}),
+])
+def test_bevel_stays_off_for_notes_and_profile_overrides_because_only_the_two_fields_decide_it_d27_10(
+        make_spec, card, profile):
+    _, s = make_spec(card=card, profile=profile)
+    assert (s["model"]["bevel"], s["sources"]["bevel"]) == (False, "mặc định")
 
 
 def test_a_rerun_keeps_the_sun_and_concept_camera_the_worker_set(make_spec):
