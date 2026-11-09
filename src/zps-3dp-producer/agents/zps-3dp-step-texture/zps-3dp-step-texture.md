@@ -31,7 +31,7 @@ Chi tiết từng chế độ, `notes.md`, `texture_spec.json`: `references/text
 
 ## Vòng sửa
 
-Brief ghi bản gốc `P` và `TOP_FIX`. Chép `P/final/` vào `F`, trừ `review/`. Đọc trước JSON fail mà brief liệt kê, rồi tới finding.
+Brief ghi bản gốc `P` và `TOP_FIX`. Chép `P/final/` vào `F`, cả `review/` (`id_map.*`, `meshy_albedo.png`, `checks/meshy.json` là bằng chứng của lớp đang sửa), trừ file bước 5–6 ghi lại: `review/lit_*`, `review/unlit_*`, `review/thumb.png`, `review/renders.json`, `review/render_texture.json`, `review/checks/tex_measure.json`. Đọc trước JSON fail mà brief liệt kê, rồi tới finding.
 - `repaint`: mọi finding trong `TOP_FIX`, mỗi finding một crop (`references/texture.md` mục 5); giữ `preserve`.
 - `meshy_regen`: brief có `MESHY_CALLS` ≥ 1 thì gọi Meshy một lần và làm lại chế độ SỬA trên lớp mới; brief có `MODE: VẼ MỚI` hoặc không còn lần gọi thì VẼ MỚI.
 - Mesh và UV không sửa ở đây: lỗi do UV, mesh, normal chỉ đi qua reviewer (`fix_uv_mesh`).

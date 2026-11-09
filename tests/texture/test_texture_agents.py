@@ -108,3 +108,11 @@ def test_every_blender_command_goes_through_the_brief_blender_path():
     text, _ = commands()
     assert re.findall(r"(?<![A-Z_])blender -b", text) == []
     assert "`BL` = `BLENDER -b --python-exit-code 1 --python`" in front(WORKER)[1]
+
+
+def test_a_fix_round_keeps_the_review_evidence_of_the_version_it_fixes_and_rerenders_only_what_steps_5_and_6_write():
+    _, body = front(WORKER)
+    assert ("Chép `P/final/` vào `F`, cả `review/` (`id_map.*`, `meshy_albedo.png`, `checks/meshy.json` là bằng chứng "
+            "của lớp đang sửa), trừ file bước 5–6 ghi lại: `review/lit_*`, `review/unlit_*`, `review/thumb.png`, "
+            "`review/renders.json`, `review/render_texture.json`, `review/checks/tex_measure.json`.") in body
+    assert "trừ `review/`" not in body
