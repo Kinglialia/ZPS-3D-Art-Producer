@@ -52,6 +52,8 @@ def main():
         if ok and g["images"]:
             from PIL import Image
             im = Image.open(io.BytesIO(g["images"][0])).convert("RGB")
+            checks.append(tex.check("meshy.image_px", "info", list(im.size), a.res,
+                                    note="scaled to --res" if im.size != (a.res, a.res) else None))
             os.makedirs(os.path.dirname(os.path.abspath(a.albedo_out)), exist_ok=True)
             im.resize((a.res, a.res), Image.LANCZOS).save(a.albedo_out)
         elif ok:

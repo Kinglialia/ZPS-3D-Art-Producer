@@ -326,6 +326,7 @@ def run(a):
             (ROOT / "pids" / res).mkdir(parents=True, exist_ok=True)
     extra = []
     if sid == texture.STEP and s in ("todo", "fix", "running"):
+        st.get("concept_dir") or die(f"{a.id}: bước {sid} cần concept trong _approved/ (asset tạo bằng `new` không có)")
         g = texture.gate(st, prof, model_glb(st), Path(st["concept_dir"]) / "concept_albedo.png")
         if isinstance(g, tuple):
             return stop(a, cfg, st, sid, s, *g)

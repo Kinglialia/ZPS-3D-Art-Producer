@@ -37,6 +37,14 @@ def test_a_profile_without_env_file_paints_and_opens_no_budget(tmp_path):
     assert budgets(tmp_path) == {}
 
 
+def test_an_asset_without_an_approved_concept_folder_stops_with_one_line_not_a_traceback(tmp_path):
+    f = to_texture(tmp_path)
+    st = f.st() | {"concept_dir": None}
+    (tmp_path / A / "status.json").write_text(json.dumps(st), encoding="utf-8")
+    assert f.p("brief", AID, ok=False) == (
+        "LỖI: pilot-house: bước texture cần concept trong _approved/ (asset tạo bằng `new` không có)\n")
+
+
 def test_a_worker_unfixable_on_the_first_build_asks_the_user_and_approval_rebuilds_with_one_more_call(tmp_path):
     f = to_texture(tmp_path)
     f.work("t1", meshy="", unfixable=True, issues="lớp Meshy sai style toàn bộ")
