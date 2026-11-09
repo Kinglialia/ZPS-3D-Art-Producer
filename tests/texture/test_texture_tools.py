@@ -283,3 +283,120 @@ def test_seam_fix_makes_both_sides_of_every_uv_seam_match(m, tmp_path):
                    "--out", tmp_path / "b.png", "--padding", "4")
     rec = json.loads((tmp_path / "b.json").read_text())
     assert rc == 0 and rec["seam_p90_before"] > 20 and rec["seam_p90_after"] < 1.0, rec
+
+
+GROOVE_RES = 256
+
+
+def ring_quads(levels, w):
+    """Side quads of a box whose outline steps in by `inset` at each (z, inset) level, as kit grooved_box builds it."""
+    rings = [[(sx * (w / 2 - i), sy * (w / 2 - i), z) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))] for z, i in levels]
+    return [(lo[k], lo[(k + 1) % 4], hi[(k + 1) % 4], hi[k]) for lo, hi in zip(rings, rings[1:]) for k in range(4)]
+
+
+def slab(lo, hi):
+    (x0, y0, z0), (x1, y1, z1) = lo, hi
+    c = [(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
+    return [tuple(c[i] for i in q) for q in glbkit.FACES.values()]
+
+
+def quads_model(d, parts, margin=0.1):
+    """A model final/ of parts {name: (material, quads)}, each quad its own square UV island inside a grid cell,
+    `margin` of the cell left empty on each side; reach of a groove = 16 px / px_per_m = 0.044 m."""
+    cols = int(np.ceil(np.sqrt(sum(len(q) for _, q in parts.values()))))
+    v, uv, f, part_f = [], [], [], {}
+    for name, (_, quads) in parts.items():
+        part_f[name] = []
+        for q in quads:
+            k, base = len(f) // 2, len(v)
+            c, r = k % cols, k // cols
+            v += q
+            uv += [((c + margin + (1 - 2 * margin) * du) / cols, (r + margin + (1 - 2 * margin) * dv) / cols)
+                   for du, dv in ((0, 0), (1, 0), (1, 1), (0, 1))]
+            tris = [(base, base + 1, base + 2), (base, base + 2, base + 3)]
+            f += tris
+            part_f[name] += tris
+    v, uv, f = np.array(v, float), np.array(uv), np.array(f)
+    (d / "parts").mkdir(parents=True)
+    (d / "review").mkdir()
+    glbkit.write(d / f"{AID}-untextured.glb", v, uv, f)
+    for name, tris in part_f.items():
+        glbkit.write(d / "parts" / f"{name}.glb", v, np.zeros((len(v), 2)), np.array(tris))
+    (d / "part_graph.json").write_text(json.dumps({"parts": [{"name": n, "material": m} for n, (m, _) in parts.items()]}),
+                                      encoding="utf-8")
+    (d / "review/join.json").write_text(json.dumps({"checks": [{"check": "join.origin_offset_m", "value": [0, 0, 0]}]}),
+                                        encoding="utf-8")
+    (d / "spec.json").write_text(json.dumps({"asset": AID, "uv": {"resolution": GROOVE_RES},
+                                             "model": {"px_per_m": 363.64, "alpha_min_px": 16}}), encoding="utf-8")
+    return d
+
+
+def grooved_model(d):
+    """Body 1 m TIMBER, a groove 2 cm wide and 2 cm deep round the four sides at z 0.5, a 0.1 m band under a STONE lid
+    that overhangs by 0.1 m."""
+    body = ring_quads([(0, 0), (0.49, 0), (0.49, 0.02), (0.51, 0.02), (0.51, 0), (0.9, 0), (1.0, 0)], 1.0)
+    return quads_model(d, {"body": ("TIMBER", body), "lid": ("STONE", slab((-0.6, -0.6, 1.0), (0.6, 0.6, 1.1)))})
+
+
+def groove_texture(gm, tmp, ao=0.0):
+    """Base fill, concept ink (L* 5) on every groove face, grain; ao: L* taken off the band under the lid overhang."""
+    g, tm = tex.load_map(gm / f"{AID}-untextured.glb", GROOVE_RES)
+    img = tex.load_rgb(base_fill_at(gm, tmp))
+    lab = tex.lab(img)
+    lab[..., 0] += np.where(tm.inside, np.random.default_rng(5).normal(0, 2.0, tm.face.shape), 0)
+    x, y = np.abs(tm.pos[..., 0]), np.abs(tm.pos[..., 1])
+    groove = tm.inside & (np.maximum(x, y) < 0.499) & (tm.pos[..., 2] > 0.489) & (tm.pos[..., 2] < 0.511)
+    lab[..., 0] = np.where(groove, 5, lab[..., 0])
+    band = tm.inside & (tm.pos[..., 2] > 0.95) & (tm.pos[..., 2] < 0.999) & (np.maximum(x, y) < 0.501)
+    lab[..., 0] -= np.where(band, ao, 0)
+    return np.where(tm.inside[..., None], tex.lab_to_rgb(lab), img), float(groove.sum())
+
+
+def base_fill_at(gm, tmp):
+    out = tmp / f"base_{gm.name}.png"
+    rc, msg = tool("base_fill.py", "--final", tmp / "F", "--model", gm, "--concept-colors", colors(tmp), "--profile",
+                   profile(tmp), "--res", GROOVE_RES, "--out", out, "--padding", "4")
+    assert rc == 0, msg
+    return out
+
+
+def measure_groove(gm, tmp, img):
+    final = tmp / "G"
+    (final / "review").mkdir(parents=True, exist_ok=True)
+    tex.save_rgb(img, final / f"albedo_{GROOVE_RES}.png")
+    rc, out = tool("tex_measure.py", "--final", final, "--glb", gm / f"{AID}-untextured.glb", "--model", gm, "--albedo",
+                   final / f"albedo_{GROOVE_RES}.png", "--concept-colors", colors(tmp), "--profile", profile(tmp),
+                   "--pilot", "none")
+    r = json.loads((final / "review/checks/tex_measure.json").read_text())
+    return {c["check"]: (c["status"], c["value"]) for c in r["checks"]}, r["data"]
+
+
+def test_concept_ink_in_a_narrow_groove_is_line_art_not_baked_shading_run4(tmp_path):
+    gm = grooved_model(tmp_path / "model")
+    img, inked = groove_texture(gm, tmp_path)
+    assert inked > 0
+    c, data = measure_groove(gm, tmp_path, img)
+    assert c["light.shaded_share.TIMBER"] == ("pass", 0.0), c
+    assert data["codes"]["TIMBER"]["groove_share"] == pytest.approx(4 / 16, abs=0.01)
+
+
+def test_baked_ao_under_an_overhang_still_fails_next_to_an_inked_groove(tmp_path):
+    gm = grooved_model(tmp_path / "model")
+    img, _ = groove_texture(gm, tmp_path, ao=18)
+    c, _ = measure_groove(gm, tmp_path, img)
+    assert c["light.shaded_share.TIMBER"][0] == "fail" and c["light.shaded_share.TIMBER"][1] > 0.05, c
+
+
+def test_a_bright_side_beside_a_dark_island_in_the_atlas_is_not_counted_as_shaded_run4(tmp_path):
+    gm = quads_model(tmp_path / "tight", {"body": ("TIMBER", slab((-0.5, -0.5, 0), (0.5, 0.5, 1)))}, margin=0.01)
+    g, tm = tex.load_map(gm / f"{AID}-untextured.glb", GROOVE_RES)
+    img = tex.load_rgb(base_fill_at(gm, tmp_path))
+    names = np.vectorize(face_name)(np.where(tm.inside, tm.face, 0))
+    rows = np.indices(names.shape)[0]
+    toward = np.sign(rows[names == "+X"].mean() - rows[names == "-Y"].mean())
+    dark = tm.inside & (names == "-Y") & (toward * (rows - np.median(rows[names == "-Y"])) > 0)
+    lab = tex.lab(img)
+    lab[..., 0] = np.where(dark, 0, lab[..., 0])
+    c, _ = measure_groove(gm, tmp_path, np.where(tm.inside[..., None], tex.lab_to_rgb(lab), img))
+    side = tm.inside & np.isin(names, WALLS)
+    assert c["light.shaded_share.TIMBER"] == ("fail", round(dark.sum() / side.sum(), 4)), c

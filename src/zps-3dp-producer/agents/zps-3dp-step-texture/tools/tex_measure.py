@@ -6,7 +6,10 @@ Usage: python3 T/tex_measure.py --final F --glb <locked GLB> --model M --albedo 
 Per material code (CIE L*, dE76):
   1 light     light.side_spread_L.<c>: max - min of the four side means <= side_spread_L
               light.top_vs_side_L.<c>: |top - side - style.top_vs_side_L| <= top_tol_L
-              light.shaded_share.<c>: share of texels whose low-pass L* is shade_L below the side mean <= shaded_share
+              light.shaded_share.<c>: share of texels whose L* and low-pass L* are both shade_L below the side mean
+                <= shaded_share (a bright texel beside a dark island of the atlas is not shaded). Texels and side
+                mean leave out groove faces, where the concept draws line art: tex.occluded >= groove_occluded within
+                M/spec.json model.alpha_min_px / model.px_per_m metres (data codes.<c>.groove_share).
   2 material  material.dE_concept.<c>: median colour of the code against concept_colors.json <= dE_concept
               material.dE_pilot: not_checked without a pilot (D21.7); with one too, since the pilot package has no ID map
   3 read      read.adjacent_dL (info): smallest L* gap between codes that share a mesh edge
@@ -30,7 +33,7 @@ import id_map  # noqa: E402
 import tex  # noqa: E402
 
 LIMITS = {"side_spread_L": 3.0, "top_tol_L": 3.0, "shade_L": 8.0, "shaded_share": 0.02, "dE_concept": 3.0,
-          "seam_p90": 4.0, "unpainted": 0.001, "padding_empty": 0.01}
+          "seam_p90": 4.0, "unpainted": 0.001, "padding_empty": 0.01, "groove_occluded": 0.55}
 SIDES = ("+X", "-X", "+Y", "-Y")
 
 
@@ -57,6 +60,10 @@ def measure(a, lim, top_l):
     lab = tex.lab(img)
     code = np.asarray(codes, object)[np.where(tm.inside, tm.face, 0)]
     side = tex.side_of(tm.nrm.reshape(-1, 3)).reshape(tm.face.shape)
+    model = json.load(open(os.path.join(a.model, "spec.json"), encoding="utf-8")).get("model") or {}
+    reach = model.get("alpha_min_px", 0) / model["px_per_m"] if model.get("px_per_m") else 0
+    groove = tex.occluded(g["v"], g["f"], reach) >= lim["groove_occluded"] if reach else np.zeros(len(g["f"]), bool)
+    groove = tm.inside & groove[np.where(tm.inside, tm.face, 0)]
     concept = json.load(open(a.concept_colors, encoding="utf-8"))
     checks, data = [], {"codes": {}}
     r = max(1, res // 64)
@@ -65,6 +72,7 @@ def measure(a, lim, top_l):
         sides = {s: float(lab[mc & (side == s), 0].mean()) for s in SIDES if (mc & (side == s)).any()}
         row = data["codes"][c] = {"side_L": {s: round(v, 2) for s, v in sides.items()}}
         if sides:
+            row["groove_share"] = round(float(groove[mc & np.isin(side, SIDES)].mean()), 4)
             spread = max(sides.values()) - min(sides.values())
             checks.append(tex.check(f"light.side_spread_L.{c}", "pass" if spread <= lim["side_spread_L"] else "fail",
                                     round(spread, 2), lim["side_spread_L"]))
@@ -74,9 +82,11 @@ def measure(a, lim, top_l):
                 d = float(lab[top, 0].mean()) - mean_side
                 checks.append(tex.check(f"light.top_vs_side_L.{c}", "pass" if abs(d - top_l) <= lim["top_tol_L"] else
                                         "fail", round(d, 2), top_l))
-            m = mc & np.isin(side, SIDES)
+            m = mc & ~groove & np.isin(side, SIDES)
             low = tex.blur(lab[..., 0], m, r)
-            share = float((low[m] < mean_side - lim["shade_L"]).mean())
+            ref = [lab[m & (side == s), 0].mean() for s in SIDES if (m & (side == s)).any()]
+            dark = float(np.mean(ref)) - lim["shade_L"] if ref else 0.0
+            share = float(((low[m] < dark) & (lab[m, 0] < dark)).mean()) if ref else 0.0
             checks.append(tex.check(f"light.shaded_share.{c}", "pass" if share <= lim["shaded_share"] else "fail",
                                     round(share, 4), lim["shaded_share"]))
         if c in concept:

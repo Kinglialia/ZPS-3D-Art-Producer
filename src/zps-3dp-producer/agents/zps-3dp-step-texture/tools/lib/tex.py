@@ -287,3 +287,40 @@ def seam_spread(img, idx, gid):
 
 def mesh_area(v, f):
     return float(np.linalg.norm(np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]]), axis=1).sum() / 2)
+
+
+def occluded(v, f, reach, polars=(30, 60, 80), k=8):
+    """Per face, the median over 4 points on it of the share of hemisphere rays (the normal, then k azimuths at each
+    polar angle in degrees) that hit the mesh within reach metres. One flat wall or overhang blocks at most 12 of the 25
+    rays (0.48); a groove or recess, with walls on two or more sides, scores more."""
+    tri = v[f]
+    n = face_normals(v, f)
+    cen = tri.mean(1)
+    rad = np.linalg.norm(tri - cen[:, None], axis=2).max(1)
+    e1, e2 = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+    bary = np.array([[1, 1, 1], [4, 1, 1], [1, 4, 1], [1, 1, 4]]) / np.array([[3], [6], [6], [6]])
+    th = np.radians(np.r_[0, np.repeat(polars, k)])
+    ph = np.r_[0, np.tile(2 * np.pi * (np.arange(k) + 0.5) / k, len(polars))]
+    out = np.zeros(len(f))
+    for i in range(len(f)):
+        near = np.flatnonzero(np.linalg.norm(cen - cen[i], axis=1) <= reach + rad + rad[i])
+        near = near[near != i]
+        if not len(near):
+            continue
+        a = np.cross(n[i], (1.0, 0, 0) if abs(n[i][0]) < 0.9 else (0, 1.0, 0))
+        a /= np.linalg.norm(a)
+        b = np.cross(n[i], a)
+        d = np.cos(th)[:, None] * n[i] + np.sin(th)[:, None] * (np.cos(ph)[:, None] * a + np.sin(ph)[:, None] * b)
+        o = bary @ tri[i] + 1e-5 * n[i]
+        E1, E2 = e1[near], e2[near]
+        pv = np.cross(d[:, None], E2[None])
+        det = np.einsum("kmj,mj->km", pv, E1)
+        inv = 1 / np.where(np.abs(det) < 1e-12, np.nan, det)
+        tv = o[:, None] - tri[near, 0][None]
+        qv = np.cross(tv, E1[None])
+        u = np.einsum("pmj,kmj->pkm", tv, pv) * inv
+        w = np.einsum("pmj,kj->pkm", qv, d) * inv
+        t = np.einsum("pmj,mj->pm", qv, E2)[:, None] * inv
+        hit = (u >= 0) & (w >= 0) & (u + w <= 1) & (t > 0) & (t <= reach)
+        out[i] = np.median(hit.any(-1).mean(-1))
+    return out
