@@ -23,7 +23,7 @@ def box(size=(1.0, 1.0, 1.0)):
 
 
 def write(path, v, uv, f, png: bytes | None = None, unlit=False):
-    zup_to_gltf = np.array([[1.0, 0, 0], [0, 0, -1.0], [0, 1.0, 0]])
+    zup_to_gltf = np.array([[1.0, 0, 0], [0, 0, 1.0], [0, -1.0, 0]])
     pos = (np.asarray(v, float) @ zup_to_gltf.T).astype("<f4")
     tex = np.c_[np.asarray(uv)[:, 0], 1 - np.asarray(uv)[:, 1]].astype("<f4")
     idx = np.asarray(f, "<u4").reshape(-1)
