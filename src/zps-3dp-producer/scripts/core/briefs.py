@@ -225,6 +225,9 @@ def review_brief(cfg, st, step, n) -> str:
         f"- Profile dự án (`hidden_side_rules`, `scale_refs`): `{rel(ROOT / 'PROJECT-PROFILE.yaml')}`.",
         f"- {ad_text(cfg, {sid, 'review'})}",
         *(f"- Vùng người dùng khoanh, kiểm từng vùng: {x}" for x in findings.mark_lines(base)),
+        *([f"- Ghi chú bước trước worker ghi đã làm (RESOLVED_NOTES): {', '.join(claimed)}; region, acceptance trong "
+           + ", ".join(f"`{rel(findings.path(aid, s, int(v[1:])))}`" for s, v in dict.fromkeys(
+               tuple(x.split()[:2]) for x in claimed)) + "."] if claimed else []),
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "
            f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n else
           [f"- Bản gốc v{m}: ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`; finding đủ trường "

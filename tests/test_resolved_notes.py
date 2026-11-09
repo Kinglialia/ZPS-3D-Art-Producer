@@ -31,8 +31,12 @@ def test_the_model_worker_is_asked_which_notes_it_did_and_its_reviewer_confirms_
     assert "RESOLVED_NOTES: <ghi chú bạn đã làm, trong: views_rest v1 F1, views_rest v1 F2> | none" in (
         f.cp["m1 brief"]["text"].splitlines())
     out = f.brief("m1 review brief")
-    assert ("RESOLVED_CONFIRMED: <mục có bằng chứng trên ảnh, trong RESOLVED_NOTES: views_rest v1 F1> | none"
-            in f.cp["m1 review brief"]["text"].splitlines())
+    rows = f.cp["m1 review brief"]["text"].splitlines()
+    assert ("RESOLVED_CONFIRMED: <mục có bằng chứng trên ảnh, trong RESOLVED_NOTES: views_rest v1 F1> | none" in rows,
+            "- Ghi chú bước trước worker ghi đã làm (RESOLVED_NOTES): views_rest v1 F1; region, acceptance trong "
+            f"`{A}/views_rest/v1/findings.json`." in rows) == (True, True)
+    assert max(len(f.cp[k]["text"].replace(str(tmp_path.resolve()), "").encode()) for k in ("m1 brief", "m1 review brief")
+               ) < 4096
     rep = tmp_path / out["report"]
     body = dict(verdict="PASS", counts=counts(), top_fix=None, evidence="lit_34_front.png")
     rep.write_text(report(**body, extra="RESOLVED_CONFIRMED: views_rest v1 F2\n"), encoding="utf-8")
@@ -43,3 +47,4 @@ def test_the_model_worker_is_asked_which_notes_it_did_and_its_reviewer_confirms_
     f.p("ingest", AID)
     doc = json.loads((tmp_path / A / "model/v1/findings.json").read_text(encoding="utf-8"))
     assert doc["resolved_notes"] == ["views_rest v1 F1"]
+

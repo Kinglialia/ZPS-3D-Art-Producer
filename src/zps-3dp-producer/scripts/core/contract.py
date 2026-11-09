@@ -30,7 +30,8 @@ WRAPPED = re.compile(r"^--- report ---[ \t\r]*\n(.*?)^--- end ---[ \t\r]*$", re.
 
 
 def unwrap(text: str) -> str:
-    """A reviewer returns its report between `--- report ---` and `--- end ---`; the Producer saves the whole reply."""
+    """D27.5 fallback: an agent whose report write was blocked returns the report between `--- report ---` and
+    `--- end ---`, and the Producer saves the whole reply as the report file."""
     m = WRAPPED.search(text)
     return m.group(1) if m else text
 

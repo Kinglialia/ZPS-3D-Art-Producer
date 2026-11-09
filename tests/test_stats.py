@@ -1,6 +1,8 @@
 """`P stats` (D27.3): time and tokens per step and role, and the Producer wait. Run 4 knew only tokens per step, so the
 decision to keep the reviewer with the Producer rests on this table: a Producer wait over 15% of a step is a review."""
 from core import stats
+from flowkit import AID
+from test_resolved_notes import to_model
 
 CFG = {"steps": [{"id": "blockout"}, {"id": "views_front"}, {"id": "model"}]}
 
@@ -23,3 +25,11 @@ def test_stats_splits_each_step_by_role_and_counts_only_the_gaps_the_producer_ow
         "|---|---|---|---|---|---|---|",
         "| blockout | 19m20s | 7m00s | 1m30s | 80000 | 20000 (+1 không có số) | 1 |",
         "| views_front | không có số | — | — | không có số | — | 0 |"]
+
+
+def test_p_stats_reads_the_dispatches_of_a_real_run_one_row_per_step_d27_3(tmp_path):
+    f = to_model(tmp_path)
+    rows = f.p("stats", AID).splitlines()
+    assert rows[0] == "| Bước | Worker | Reviewer | Chờ Producer | Token worker | Token reviewer | report_fallback |"
+    assert [r.split(" | ")[0] for r in rows[2:]] == ["| blockout", "| views_front", "| views_rest"]
+    assert all(r.endswith(" | không có số | không có số | 0 |") for r in rows[2:])
