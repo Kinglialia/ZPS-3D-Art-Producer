@@ -52,7 +52,7 @@ python3 dist/zps-3dp-codex-v0.6.0/installer/codex_rules.py           # xem trư�
 python3 dist/zps-3dp-codex-v0.6.0/installer/codex_rules.py --write   # ghi file rules
 ```
 
-Rule chỉ cho phép `<Blender> -b --python <script đã cài>.py -- …`, `<Blender> -b --python-exit-code 1 --python <script đã cài>.py -- …`, `assemble.py --blender <Blender> -- …` và `producer.py preflight` bằng python venv của skill. Codex chỉ so phần đầu lệnh, nên mỗi rule dừng ở chỗ chương trình thôi đọc option: Blender chuyển phần sau `--` cho script, `assemble.py` chỉ đọc tham số vị trí sau `--`, `preflight` không có option (kit ở chỗ khác: biến `PRODUCER_KIT`). `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py` không bao giờ khớp. Chạy lại sau mỗi lần nâng cấp, rồi khởi động lại Codex.
+Rule chỉ cho phép `<Blender> -b --python <script đã cài>.py -- …`, `<Blender> -b --python-exit-code 1 --python <script đã cài>.py -- …`, `assemble.py --blender <Blender> -- …` và `producer.py preflight` bằng python venv của skill. Codex chỉ so phần đầu lệnh, nên mỗi rule dừng ở chỗ chương trình thôi đọc option: Blender chuyển phần sau `--` cho script, `assemble.py` chỉ đọc tham số vị trí sau `--`, `preflight` không có option (kit ở chỗ khác: biến `PRODUCER_KIT`). `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py` không bao giờ khớp. `self_build/assembly.py`, `param_fit.py`, `apply_edit.py` chạy `parts_lib.py` do agent viết, nên cũng không khớp: lệnh Blender của chúng (part `custom`) chờ người dùng duyệt từng lần. Chạy lại sau mỗi lần nâng cấp, rồi khởi động lại Codex.
 
 ## So A/B
 

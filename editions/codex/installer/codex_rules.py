@@ -9,7 +9,8 @@ installer/codex_rules.py (v0.10.4). The rule allows only these literal commands:
   <Producer venv python> <scripts/producer.py> preflight                    (it starts Blender and the kit preflight)
 A Codex rule matches only the start of a command, so each rule ends where the program stops reading options: Blender
 gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and preflight has no
-options. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Any other command still runs in the sandbox
+options. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Scripts that run code the agent
+wrote (AGENT_CODE: graph.py loads <work>/parts_lib.py) never match either. Any other command still runs in the sandbox
 or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
 
 Usage (run outside Codex, from the project, after install.py):
@@ -32,6 +33,7 @@ FILE = "zps-3dp-producer.rules"
 MAC_BLENDER = "/Applications/Blender.app/Contents/MacOS/Blender"
 PRODUCER = "zps-3dp-producer-codex"
 NETWORK_SCRIPTS = ("gen_api.py", "generate_image.py", "meshy_call.py", "gen_image_codex.py")
+AGENT_CODE = ("self_build/assembly.py", "self_build/param_fit.py", "self_build/apply_edit.py")
 SPAWNERS = ("scripts/assemble.py",)
 
 
@@ -50,9 +52,14 @@ def scripts(root: Path, network: bool = False) -> list[str]:
     out = []
     for base in skill_dirs(root):
         for p in sorted(base.rglob("*.py")):
-            if ".deps" not in p.parts and "__pycache__" not in p.parts and (p.name in NETWORK_SCRIPTS) == network:
+            if ".deps" not in p.parts and "__pycache__" not in p.parts and (p.name in NETWORK_SCRIPTS) == network \
+                    and not p.as_posix().endswith(AGENT_CODE):
                 out.append(str(p))
     return out
+
+
+def agent_code(root: Path) -> list[str]:
+    return [str(p) for base in skill_dirs(root) for p in sorted(base.rglob("*.py")) if p.as_posix().endswith(AGENT_CODE)]
 
 
 def q(s) -> str:
@@ -92,6 +99,7 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
              ([blender, "-b", "--python-expr", "print(1)"], None),
              ([blender, "-b", "--python", "/tmp/other.py", "--"], None)]
     cases += [([blender, "-b", "--python", n, "--", "generate"], None) for n in scripts(root, network=True)]
+    cases += [([blender, "-b", "--python", n, "--", "--work", "w"], None) for n in agent_code(root)]
     if venv_py:
         py, spawner = str(venv_py), str(prod / SPAWNERS[0])
         cases += [([py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"], "allow"),
