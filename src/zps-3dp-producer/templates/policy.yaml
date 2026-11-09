@@ -1,0 +1,7 @@
+# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)
+approvals:
+  blockout: human
+  views_rest: human
+  model: human
+review_board: local
+delegations: []

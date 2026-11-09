@@ -1,30 +1,77 @@
-"""Ingest state machine: worker and reviewer reports, gates, approve, retry, human feedback."""
+"""Ingest state machine (docs/producer.md §3, §4, §7, §8): rounds, early stop, need_evidence, redo, gates, approve."""
 from __future__ import annotations
 
-from . import findings
+import hashlib
+import shutil
+
+from . import findings, policy
 from .contract import parse_review, parse_worker
-from .state import ASSETS, die, ledger, load_cfg, load_st, now, rel, save_st, step_of, vdir
+from .state import ASSETS, ROOT, die, ledger, load_cfg, load_st, now, rel, save_st, step_of, vdir
+
+NOT_PASSED = "chưa đạt"
+REDOING = "**đang làm lại**\n\n"
+REDO_FROM = ("todo", "fix", "review", "evidence", "waiting_human", "blocked", "done", "done_enabled")
+NEXT = "next"
+MOVES = {
+    ("todo", "dispatch"): "running", ("fix", "dispatch"): "running", ("running", "dispatch"): "running",
+    ("review", "dispatch"): "reviewing", ("reviewing", "dispatch"): "reviewing",
+    ("evidence", "dispatch"): "evidence_running", ("evidence_running", "dispatch"): "evidence_running",
+    ("running", "worker_done"): "review", ("running", "checks_done"): "waiting_human", ("running", "stuck"): "blocked",
+    ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
+    ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence",
+    ("reviewing", "await_approval"): "waiting_human", ("reviewing", "ask_human"): "waiting_human",
+    ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT,
+    ("blocked", "retry"): "running", ("blocked", "retry_evidence"): "evidence", ("blocked", "retry_todo"): "todo",
+    **{(s, "redo"): "fix" for s in REDO_FROM},
+}
 
 
-def advance(cfg: dict, st: dict, i: int):
-    steps = cfg["steps"]
-    st["fix_round"] = 0
-    st["worker_agent_id"] = None
-    st["note"] = ""
-    if i + 1 < len(steps):
-        st["stage"] = steps[i + 1]["id"]
-        st["state"] = "todo"
-    elif cfg["review"]["final_human_gate"]:
-        st["state"] = "waiting_human"
-        st["final_pending"] = True
-        st["note"] = "Duyệt cuối"
-    else:
+def fresh() -> dict:
+    return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0,
+            "offer": None, "label": "", "note": ""}
+
+
+def move(st: dict, event: str, cfg: dict | None = None):
+    nxt = MOVES.get((st["state"], event)) or die(f"{st['id']}: không {event} được ở state={st['state']}")
+    if nxt != NEXT:
+        st["state"] = nxt
+        return
+    i, _ = step_of(cfg, st["stage"])
+    st |= fresh() | {"worker_agent_id": None}
+    after = cfg["steps"][i + 1] if i + 1 < len(cfg["steps"]) else None
+    if after is None:
         st["state"] = "done"
+    elif not after["enabled"]:
+        st["state"], st["note"] = "done_enabled", f"bước {after['id']} chưa bật"
+    else:
+        st["stage"], st["state"] = after["id"], "todo"
 
 
-def approve_step(cfg: dict, st: dict, i: int, step: dict):
-    st["approved"][step["id"]] = st["versions"].get(step["id"])
-    advance(cfg, st, i)
+def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int, max_rounds: int, progressed: bool,
+                 evidence_used: int) -> tuple[str, str | None]:
+    """§7: what a valid review leads to. fix_round is the fix round that built the reviewed version (0 = first build)."""
+    if verdict == "ESCALATE":
+        return "ask_human", "reviewer ESCALATE"
+    if verdict == "PASS":
+        return ("approve", None) if auto else ("await_approval", None)
+    if top_kind == "need_evidence":
+        return ("ask_human", "xin bằng chứng lần 2") if evidence_used else ("need_evidence", None)
+    if fix_round >= max_rounds:
+        return "ask_human", f"hết {max_rounds} vòng sửa"
+    if fix_round >= 2 and not progressed:
+        return "ask_human", f"không tiến bộ ở vòng {fix_round}"
+    return "fix", None
+
+
+def review_base(st: dict, n: int) -> int | None:
+    return n if st.get("evidence") else st.get("fix_base")
+
+
+def tree_hash(d) -> str:
+    h = hashlib.sha256()
+    for p in sorted(x for x in d.rglob("*") if x.is_file()):
+        h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()
 
 
 def next_action(st: dict) -> str:
@@ -33,18 +80,25 @@ def next_action(st: dict) -> str:
         return f"chờ người dùng duyệt brief + rubric → `ready {aid}`"
     if s in ("todo", "fix"):
         return f"giao worker → `brief {aid}`"
+    if s == "evidence":
+        return f"giao worker render bằng chứng → `brief {aid}`"
     if s == "review":
         return f"giao reviewer → `brief {aid}`"
-    if s in ("running", "reviewing"):
-        name = "report-worker.md" if s == "running" else "report-review.md"
+    if s in ("running", "reviewing", "evidence_running"):
         n = st.get("versions", {}).get(st["stage"])
-        if n and (vdir(aid, st["stage"], n) / name).exists():
+        d = vdir(aid, st["stage"], n) if n else None
+        rep = {"running": "report-worker.md", "reviewing": "report-review.md"}.get(s)
+        if s == "evidence_running" and st.get("evidence"):
+            rep = f"review/evidence-{st['evidence']['k']}/report-worker.md"
+        if d and rep and (d / rep).exists():
             return f"có báo cáo → `ingest {aid}`"
         return f"đang chờ subagent (mất kết nối thì `brief {aid}` để giao lại)"
     if s == "waiting_human":
         return f"chờ người dùng: {st.get('note') or 'duyệt'} (review page)"
     if s == "blocked":
         return f"xử lý: {st.get('note')} → bổ sung rồi `retry {aid}`"
+    if s == "done_enabled":
+        return "xong các bước đang bật"
     return "xong"
 
 
@@ -61,64 +115,149 @@ def valid(rep, parsed: tuple):
     return out
 
 
+def worker_report(st: dict, rep, agent_id) -> dict:
+    c = valid(rep, parse_worker(read_report(rep)))
+    if agent_id:
+        st["worker_agent_id"] = agent_id
+    return c
+
+
+def stuck(c: dict) -> str | None:
+    return f"{c['STATUS']}: {c.get('ISSUES', '')}" if c["STATUS"] in ("NEEDS_CONTEXT", "BLOCKED") else None
+
+
+def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
+    c = worker_report(st, d / "report-worker.md", a.agent_id)
+    st["last_rubric"] = c.get("RUBRIC", "")
+    missing = [o for o in step["outputs"] if not (d / o).exists()]
+    if why := stuck(c) or (missing and "thiếu output bắt buộc: " + ", ".join(missing)):
+        move(st, "stuck")
+        st["note"] = why
+    elif step["gate"] == "checks_human":
+        move(st, "checks_done")
+        st["note"], st["offer"] = f"duyệt {step['id']} v{n}", n
+    else:
+        move(st, "worker_done")
+        st["note"] = ""
+    return f"worker {c['STATUS']}", ""
+
+
+def on_evidence(cfg, st, step, d, n, a) -> tuple[str, str]:
+    tag = f"evidence-{st['evidence']['k']}"
+    c = worker_report(st, d / "review" / tag / "report-worker.md", a.agent_id)
+    if why := stuck(c):
+        move(st, "stuck")
+        st["note"] = why
+    elif tree_hash(d / "final") != st["evidence"]["hash"]:
+        move(st, "stuck")
+        st["evidence"], st["note"] = None, f"{tag}: final/ đổi trong vòng bằng chứng, bỏ kết quả"
+    else:
+        move(st, "worker_done")
+        st["note"] = ""
+    return f"{tag} {c['STATUS']}", ""
+
+
+def take_variant(d, pick: str):
+    src = d / "variants" / pick
+    if not src.is_dir():
+        die(f"PICK {pick}: không có {rel(src)}/")
+    a = d / "variants" / "a"
+    if a.exists():
+        shutil.rmtree(d / "final")
+    else:
+        shutil.move(str(d / "final"), str(a))
+    shutil.copytree(src, d / "final")
+
+
+def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
+    aid, sid, r = st["id"], step["id"], cfg["review"]
+    rep = d / "report-review.md"
+    rv = valid(rep, parse_review(read_report(rep)))
+    doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv, step, n))
+    who = "human"
+    if step["gate"] == "review":
+        who = "reviewer"
+    elif rv["verdict"] == "PASS" and step["gate"] == "review_human":
+        who = policy.approver(policy.load(), sid, aid)
+    if rv["pick"] and rv["pick"] != "a":
+        take_variant(d, rv["pick"])
+    findings.save(aid, sid, doc)
+    rvs = st.setdefault("round_versions", [])
+    if n not in rvs:
+        rvs.append(n)
+    base = findings.load(aid, sid, st.get("fix_base"))
+    event, reason = review_event(rv["verdict"], (rv["top_fix"] or {}).get("kind"), who != "human",
+                                 st.get("fix_round", 0), r["max_fix_rounds"], bool(base) and findings.progress(base, doc),
+                                 st.get("evidence_used", 0))
+    st["evidence"] = None
+    st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
+    best = findings.best_version([findings.load(aid, sid, v) for v in rvs])
+    if event == "approve":
+        approve(cfg, st, step, n, "reviewer" if who == "reviewer" else policy.BY[who])
+    elif event == "await_approval":
+        move(st, event)
+        st |= {"note": f"duyệt {sid} v{n}", "offer": n, "label": ""}
+    elif event == "ask_human":
+        move(st, event)
+        ids = ", ".join(findings.open_of(findings.load(aid, sid, best)))
+        st |= {"note": reason + (f"; còn mở: {ids}" if ids else ""), "offer": best, "label": NOT_PASSED}
+    elif event == "fix":
+        move(st, event)
+        st["fix_round"] = st.get("fix_round", 0) + 1
+        st |= {"fix_base": best, "note": f"vòng sửa {st['fix_round']}/{r['max_fix_rounds']}"}
+    else:
+        move(st, event)
+        st["evidence_used"] = st.get("evidence_used", 0) + 1
+        k = 1 + sum(1 for _ in (d / "review").glob("evidence-*"))
+        st |= {"evidence": {"version": n, "k": k, "hash": tree_hash(d / "final")},
+               "note": "xin bằng chứng: " + ", ".join(rv["top_fix"]["ids"])}
+    return f"review {rv['verdict']} ({findings.short(findings.open_counts(doc))})", reason or ""
+
+
+HANDLERS = {"running": on_worker, "evidence_running": on_evidence, "reviewing": on_review}
+
+
 def ingest(a):
     from .board import build_outputs
     cfg = load_cfg()
     st = load_st(a.id)
-    i, step = step_of(cfg, st["stage"])
+    _, step = step_of(cfg, st["stage"])
     n = st["versions"].get(step["id"])
-    d = vdir(a.id, step["id"], n) if n else None
-    r = cfg["review"]
-    if st["state"] == "running":
-        rep = d / "report-worker.md"
-        c = valid(rep, parse_worker(read_report(rep)))
-        if a.agent_id:
-            st["worker_agent_id"] = a.agent_id
-        st["last_rubric"] = c.get("RUBRIC", "")
-        missing = [o for o in step["outputs"] if not (d / o).exists()]
-        if c["STATUS"] in ("NEEDS_CONTEXT", "BLOCKED"):
-            st["state"], st["note"] = "blocked", f"{c['STATUS']}: {c.get('ISSUES', '')}"
-        elif missing:
-            st["state"], st["note"] = "blocked", "thiếu output bắt buộc: " + ", ".join(missing)
-        elif step["gate"] == "checks_human":
-            st["state"], st["note"] = "waiting_human", f"duyệt {step['id']} v{n}"
-        else:
-            st["state"], st["note"] = "review", ""
-        event = f"worker {c['STATUS']}"
-    elif st["state"] == "reviewing":
-        rep = d / "report-review.md"
-        rv = valid(rep, parse_review(read_report(rep)))
-        doc = valid(rep, findings.apply(findings.load(a.id, step["id"], st.get("fix_base")), rv, step, n))
-        findings.save(a.id, step["id"], doc)
-        v = rv["verdict"]
-        st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
-        if v == "PASS" and step["gate"] == "review_human":
-            st["state"], st["note"] = "waiting_human", f"duyệt {step['id']} v{n}"
-        elif v == "PASS":
-            approve_step(cfg, st, i, step)
-        elif v == "FIX":
-            st["fix_round"] = st.get("fix_round", 0) + 1
-            if st["fix_round"] > r["max_fix_rounds"]:
-                st["state"] = "waiting_human"
-                st["note"] = f"{step['id']}: quá {r['max_fix_rounds']} vòng sửa, cần người dùng quyết"
-            else:
-                st["state"], st["note"] = "fix", f"vòng sửa {st['fix_round']}/{r['max_fix_rounds']}"
-        else:
-            st["state"], st["note"] = "waiting_human", f"reviewer ESCALATE ở {step['id']} v{n}"
-        event = f"review {v} ({findings.short(findings.open_counts(doc))})"
-    else:
-        die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
+    h = HANDLERS.get(st["state"]) or die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
+    event, reason = h(cfg, st, step, vdir(a.id, step["id"], n), n, a)
     save_st(st)
-    ledger(f"{a.id} · {step['id']} v{n} · {event} · {st.get('last_rubric', '')}")
+    ledger(f"{a.id} · {step['id']} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else ""))
     build_outputs(cfg)
     print(f"{a.id}: {event} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
 
 
+def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
+    sid = step["id"]
+    st["approved"][sid] = n
+    st.setdefault("rejected", {})[sid] = [v for v in range(1, st["versions"][sid] + 1) if v != n]
+    if sid == "assemble":
+        out = ROOT.parent / "deliver" / st["id"]
+        if out.exists():
+            shutil.rmtree(out)
+        shutil.copytree(vdir(st["id"], sid, n) / "final", out)
+    ledger(f"{st['id']} · {sid} v{n} · duyệt bởi {by}")
+    move(st, "approve", cfg)
+
+
+def redo(cfg: dict, st: dict, i: int, target: str, n: int | None):
+    move(st, "redo")
+    st |= fresh() | {"stage": target, "fix_round": 1, "fix_base": n, "round_versions": [n] if n else [],
+                     "note": "làm lại theo feedback người dùng"}
+    for s in cfg["steps"][i:]:
+        st["approved"].pop(s["id"], None)
+    readme = ROOT.parent / "deliver" / st["id"] / "README.md"
+    if readme.exists() and not (t := readme.read_text(encoding="utf-8")).startswith(REDOING):
+        readme.write_text(REDOING + t, encoding="utf-8")
+
+
 def retry(a):
     st = load_st(a.id)
-    if st["state"] != "blocked":
-        die(f"{a.id} không ở state blocked")
-    st["state"] = "running" if st["versions"].get(st["stage"]) else "todo"
+    move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
     st["note"] = ""
     save_st(st)
     ledger(f"{a.id} · retry")
@@ -132,6 +271,12 @@ def append_feedback(aid: str, st: dict, action: str, text: str, step: str):
         f.write(f"- {now()} · {tag} · {action} · {text.strip()}\n")
 
 
+def shown(st: dict, step: str) -> int | None:
+    if step == st["stage"] and st.get("offer"):
+        return st["offer"]
+    return st["approved"].get(step) or st["versions"].get(step)
+
+
 def human_action(aid: str, action: str, text: str, step_id: str | None = None) -> str:
     from .board import build_outputs
     cfg = load_cfg()
@@ -139,31 +284,28 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
     if action not in ("approve", "redo", "note"):
         die("action phải là approve | redo | note")
     target = step_id or st["stage"]
-    step_of(cfg, target)
+    i, step = step_of(cfg, target)
+    n = shown(st, target)
+    key = f"{target} v{n}"
+    done = st.setdefault("decisions", {})
+    if action != "note" and key in done:
+        return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {done[key]['at']}"
     append_feedback(aid, st, action, text or "(không ghi chú)", target)
     msg = "đã ghi feedback"
     if action == "approve":
-        if st["state"] != "waiting_human":
-            msg = f"đã ghi feedback; {aid} không chờ duyệt (state={st['state']})"
-        elif st.get("final_pending"):
-            st["state"], st["note"] = "done", ""
-            st.pop("final_pending", None)
-            msg = "đã duyệt cuối → done"
+        if st["state"] != "waiting_human" or target != st["stage"]:
+            msg = f"đã ghi feedback; {aid} không chờ duyệt {target} (state={st['state']})"
         else:
-            i, step = step_of(cfg, st["stage"])
-            approve_step(cfg, st, i, step)
-            msg = f"đã duyệt {step['id']} → {st['stage']}/{st['state']}"
+            done[key] = {"action": action, "at": now()}
+            approve(cfg, st, step, n, policy.BY["human"])
+            msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
     elif action == "redo":
-        if st["state"] in ("running", "reviewing", "draft"):
+        if st["state"] not in REDO_FROM:
             msg = f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau"
         else:
-            i, _ = step_of(cfg, target)
-            st["stage"], st["state"], st["fix_round"] = target, "fix", 1
-            st["note"] = "làm lại theo feedback người dùng"
-            st.pop("final_pending", None)
-            for s in cfg["steps"][i:]:
-                st["approved"].pop(s["id"], None)
-            msg = f"làm lại {target}"
+            done[key] = {"action": action, "at": now()}
+            redo(cfg, st, i, target, n)
+            msg = f"làm lại {target}" + (f" từ v{n}" if n else "")
     save_st(st)
     ledger(f"{aid} · người dùng {action} {target} · {text.strip()[:80]}")
     build_outputs(cfg)

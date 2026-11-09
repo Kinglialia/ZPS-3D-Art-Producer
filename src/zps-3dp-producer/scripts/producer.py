@@ -4,7 +4,7 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · intake · new · ready · next · brief · ingest · retry · ack · feedback · rule
+Lệnh chính:  init · intake · new · ready · next · brief · ingest · retry · ack · feedback · approvals · delegate · rule
              ledger · dashboard · serve · validate · cleanup · archive
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
@@ -69,6 +69,16 @@ def cmd_feedback(a):
     print(human_action(a.id, a.action, a.text, a.step))
 
 
+def cmd_approvals(a):
+    from core.policy import set_approval
+    set_approval(a)
+
+
+def cmd_delegate(a):
+    from core.policy import delegate
+    delegate(a)
+
+
 def cmd_rule(a):
     from core.state import rule
     rule(a)
@@ -130,6 +140,12 @@ def main():
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
+    x = sub.add_parser("approvals", help="đổi người duyệt một bước trong policy.yaml")
+    x.add_argument("op", choices=["set"]); x.add_argument("step"); x.add_argument("who")
+    x.add_argument("--by", required=True, help="nguyên văn lời người dùng"); x.add_argument("--confirm-spend", action="store_true")
+    x = sub.add_parser("delegate", help="ủy quyền reviewer duyệt bước này cho các asset")
+    x.add_argument("step"); x.add_argument("ids", nargs="+"); x.add_argument("--by", default="")
+    x.add_argument("--confirm-spend", action="store_true")
     sub.add_parser("rule", help="ghi quyết định Producer tự đưa ra").add_argument("text")
     x = sub.add_parser("ledger", help="xem cuối ledger")
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
