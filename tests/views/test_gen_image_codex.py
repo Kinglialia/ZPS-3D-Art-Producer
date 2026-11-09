@@ -80,6 +80,18 @@ def test_an_image_with_a_long_side_of_1040_px_or_less_is_a_technical_failure(gen
     assert r["record"]["errors"][0] == "ảnh 1024x1024, cạnh dài cần > 1040 px"
 
 
+def test_relative_reference_paths_reach_codex_as_absolute_ones_because_codex_runs_in_the_out_folder(gen, monkeypatch):
+    monkeypatch.chdir(gen.tmp)
+    rel = [r.name for r in gen.refs]
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                        "--prompt", "front.md", *[f"--image={r}" for r in rel], "--out", "work/gen/front-1.png"],
+                       capture_output=True, text=True, env={**os.environ, "PATH": fake_codex.install(gen.tmp / "bin"),
+                                                            "FAKE_CODEX_LOG": str(gen.tmp / "rel.jsonl"),
+                                                            "FAKE_CODEX_PID_FILE": str(gen.pid)})
+    argv = json.loads((gen.tmp / "rel.jsonl").read_text().splitlines()[0])["argv"]
+    assert (p.returncode, [a for a in argv if a.startswith("--image=")]) == (0, [f"--image={r}" for r in gen.refs])
+
+
 def test_portrait_size_goes_into_the_frame_for_a_tall_object(gen):
     r = gen(size="1024x1536")
     assert r["rc"] == 0 and "\nSIZE: 1024x1536\n" in r["calls"][0]["prompt"]

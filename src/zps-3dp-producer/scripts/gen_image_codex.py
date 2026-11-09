@@ -50,7 +50,7 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
     for p in (out, result):
         p.unlink(missing_ok=True)
     cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(out.parent),
-           "-s", "workspace-write", "--skip-git-repo-check", *[f"--image={i}" for i in a.image], "-"]
+           "-s", "workspace-write", "--skip-git-repo-check", *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
     start = time.time() - 1
     try:
         p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=a.timeout)
