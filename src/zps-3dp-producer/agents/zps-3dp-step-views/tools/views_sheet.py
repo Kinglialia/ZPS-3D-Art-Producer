@@ -6,7 +6,7 @@
       "(giữ)". Row 2: report/overlay_<view>.png with score, IoU, dE from
       report/report.json. Row 3: the crops, in pixels of the view image. Writes <final>/report/VIEWS_sheet.png and
       VIEWS_sheet.json (sha256 of the 5 view files, which check_package.py compares).
-      Labels use the first font of FONTS that draws every letter, else the default font without diacritics.
+      Labels use the Noto Sans that ships with the skill (fonts/, OFL); without it, the default font and no diacritics.
   python3 tools/views_sheet.py crop --image <png> --box x0,y0,x1,y1 --out <png> [--scale 2]
   python3 tools/views_sheet.py flip --src <left.png> --out <right.png>    right = left mirrored (symmetric left_right)
 Prints one line. Exit 0, 2 on error.
@@ -22,11 +22,8 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 VIEWS = ("front", "back", "left", "right", "top")
 CELL, PAD, HEAD = 320, 12, 22
-FONTS = ("/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial Unicode.ttf",
-         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-         "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/noto/NotoSans-Regular.ttf")
+FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "fonts", "NotoSans-Regular.ttf")
 FONT_SIZE = 13
-NO_GLYPH = "\U000F0000"
 
 
 def sha(p):
@@ -49,18 +46,10 @@ def cell(im):
     return c
 
 
-def draws(font, text):
-    box = font.getmask(NO_GLYPH)
-    return all((m.size, bytes(m)) != (box.size, bytes(box)) for m in map(font.getmask, set(text) - {" "}))
-
-
 def fit(text):
-    """(font, text) for a label: a font of FONTS that draws every letter, else the default font and ASCII text."""
-    for p in FONTS:
-        if os.path.isfile(p):
-            font = ImageFont.truetype(p, FONT_SIZE)
-            if draws(font, text):
-                return font, text
+    """(font, text) for a label: the bundled FONT, else the default font and ASCII text."""
+    if os.path.isfile(FONT):
+        return ImageFont.truetype(FONT, FONT_SIZE), text
     text = text.replace("đ", "d").replace("Đ", "D")
     return ImageFont.load_default(), unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode()
 

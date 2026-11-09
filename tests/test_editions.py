@@ -178,6 +178,18 @@ def test_install_copies_skills_and_flat_agents_and_an_upgrade_keeps_only_the_ven
             (tmp_path / ".claude/skills/zps-3dp-project-setup/SKILL.md").is_file()) == (True, False, True)
 
 
+@pytest.mark.parametrize("edition", ["claude", "codex"])
+def test_both_editions_install_the_bundled_font_byte_for_byte_where_views_sheet_looks_d27_12(dist, tmp_path, edition):
+    import hashlib
+    cli(sys.executable, tree(dist, edition) / "install.py", tmp_path, "--project", str(tmp_path))
+    root = tmp_path / (".claude/skills/zps-3dp-producer" if edition == "claude" else ".agents/skills/zps-3dp-producer-codex")
+    views = "zps-3dp-step-views" + ("" if edition == "claude" else "-codex")
+    font = root / f"agents/{views}/tools/../../../fonts/NotoSans-Regular.ttf"
+    src = REPO / "src/zps-3dp-producer/fonts"
+    assert (hashlib.sha256(font.read_bytes()).digest(), (font.parent / "OFL.txt").read_text(encoding="utf-8")) == (
+        hashlib.sha256((src / "NotoSans-Regular.ttf").read_bytes()).digest(), (src / "OFL.txt").read_text(encoding="utf-8"))
+
+
 def test_install_refuses_a_symlinked_skill_folder_and_deletes_nothing_in_its_target(dist, tmp_path):
     t, mine = tree(dist, "claude"), tmp_path / "my-skill"
     (mine / "scripts").mkdir(parents=True)

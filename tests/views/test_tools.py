@@ -190,15 +190,18 @@ def missing(font, ch):
     return (m.size, bytes(m)) == (box.size, bytes(box))
 
 
-def test_views_sheet_labels_draw_vietnamese_letters_or_fall_back_to_ascii_never_the_missing_glyph_box(monkeypatch):
+VIETNAMESE = "aàáảãạăằắẳẵặâầấẩẫậđeèéẻẽẹêềếểễệiìíỉĩịoòóỏõọôồốổỗộơờớởỡợuùúủũụưừứửữựyỳýỷỹỵ"
+
+
+def test_views_sheet_labels_use_the_bundled_noto_sans_on_every_machine_and_it_draws_every_vietnamese_letter_d27_12(
+        monkeypatch, tmp_path):
     sys.path.insert(0, str(TOOLS))
     import views_sheet
-    labels = ("back (giữ)", "front không đo")
-    for text in labels:
-        font, drawn = views_sheet.fit(text)
-        assert (drawn == text or drawn.isascii(), [c for c in drawn if c != " " and missing(font, c)]) == (True, [])
-    monkeypatch.setattr(views_sheet, "FONTS", ())
-    assert [views_sheet.fit(t)[1] for t in labels] == ["back (giu)", "front khong do"]
+    font, drawn = views_sheet.fit("back (giữ)")
+    letters = VIETNAMESE + VIETNAMESE.upper()
+    assert (font.getname(), drawn, [c for c in letters if missing(font, c)]) == (("Noto Sans", "Regular"), "back (giữ)", [])
+    monkeypatch.setattr(views_sheet, "FONT", str(tmp_path / "none.ttf"))
+    assert [views_sheet.fit(t)[1] for t in ("back (giữ)", "front không đo")] == ["back (giu)", "front khong do"]
 
 
 def test_check_package_fails_a_view_changed_after_the_sheet_because_the_user_approves_the_sheet(tmp_path):
