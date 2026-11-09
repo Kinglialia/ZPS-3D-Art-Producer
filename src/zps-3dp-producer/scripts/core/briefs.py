@@ -80,10 +80,17 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, prese
     if fix and m:
         pd = vdir(aid, step["id"], m)
         bad = failed_checks(pd)
-        tf = (findings.load(aid, step["id"], m) or {}).get("top_fix")
+        doc = findings.load(aid, step["id"], m) or {}
+        tf = doc.get("top_fix")
+        fp = f"`{rel(findings.path(aid, step['id'], m))}`"
+        human = [i for i, f in findings.open_of(doc).items() if i.startswith("H")]
         why = (f"Sửa đúng `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}`; repair, preserve, acceptance của từng id trong "
-               f"`{rel(findings.path(aid, step['id'], m))}`. Rồi tới feedback mới nhất của người dùng trong feedback.md."
+               f"{fp}. Rồi tới feedback mới nhất của người dùng trong feedback.md."
                if tf else "Lý do phải sửa: feedback mới nhất của người dùng trong feedback.md.")
+        if human:
+            why = (f"Ưu tiên 1, feedback của người dùng: sửa {', '.join(f'`{i}`' for i in human)} (nguyên văn trong "
+                   f"`acceptance` của {fp} và feedback.md). Đối chiếu từng ý với concept; không bỏ ý nào. "
+                   + (f"Sau đó: `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}` của reviewer." if tf else ""))
         lines += [
             f"{k}. Bản gốc: `{rel(pd)}/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
             *([f"{k + 1}. Đọc trước nguyên văn lỗi script của bản gốc: {', '.join(f'`{b}`' for b in bad)}."] if bad else []),

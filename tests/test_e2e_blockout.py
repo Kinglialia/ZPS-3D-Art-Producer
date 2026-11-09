@@ -278,7 +278,9 @@ def test_redo_opens_a_new_feedback_round_from_the_offered_version_with_counters_
 
 def test_redo_carries_the_open_findings_of_the_offered_version_into_the_new_round(flow):
     text, review = flow["v4 brief"]["text"], flow["v4 review brief"]["text"]
-    assert f"7. Bản gốc: `{V}2/`" in text and "Sửa đúng `TOP_FIX: param: F3, F4`" in text and "Đây là vòng sửa 1." in text
+    assert f"7. Bản gốc: `{V}2/`" in text and "Đây là vòng sửa 1." in text
+    assert "8. Ưu tiên 1, feedback của người dùng: sửa `H1`" in text
+    assert text.index("`H1`") < text.index("Sau đó: `TOP_FIX: param: F3, F4` của reviewer.")
     assert "\nCOMPARE: F3=?; F4=?\n" in review and f"- Bản gốc v2: ảnh cùng góc `{V}2/final/`" in review
     assert "\nPRIOR:\n- F3: ? | evidence: ? | acceptance: đỉnh mái 3.2 m trên clay_front\n- F4: ? |" in review
     assert "\n- H1: ? | evidence: ? | acceptance: đạt yêu cầu của người dùng: mái chìa thêm 10 cm\n" in review
