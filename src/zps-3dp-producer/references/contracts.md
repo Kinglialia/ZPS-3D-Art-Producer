@@ -108,6 +108,7 @@ RUBRIC: <key>=pass|fail; ...
 ISSUES: <tối đa 2 vấn đề hoặc none>
 PROFILE_HASH: <chép từ brief>        bắt buộc; khác giá trị trong brief → ingest báo lỗi
 FIXED: F<n>, ...                     vòng sửa; chỉ để reviewer đối chiếu
+RESOLVED_NOTES: <bước> vN F<k>, ...  ghi chú còn mở của bước trước mà worker đã làm (brief liệt kê), hoặc none
 ```
 
 Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`meshy_regen`), hoặc blocked khi bước này không có Meshy.
@@ -123,6 +124,7 @@ TOP_FIX: <loại>: F<n>[, F<m>]        chỉ khi FIX
 EVIDENCE_OPENED: <nhãn ảnh, file đã mở>
 COMPARE: F<n>=better|same|worse; ... vòng sửa: mọi id trong TOP_FIX của bản gốc
 PICK: a|b|c                          chỉ khi TOP_FIX của bản gốc là param
+RESOLVED_CONFIRMED: <bước> vN F<k>, ... mục RESOLVED_NOTES của worker có bằng chứng trên ảnh, hoặc none
 FINDINGS:                            chỉ finding mới, id từ next_id của bản gốc
 - F<n> [blocker|major|minor|preference|unclear] <loại>
   region: … | viewing_condition: … | evidence: …
@@ -137,6 +139,7 @@ PRIOR:                               đúng mọi finding đang mở của bản
 - `evidence` của finding mới và của `PRIOR … resolved` chứa ít nhất một nhãn trong `EVIDENCE_OPENED` (so chuỗi con, không phân biệt hoa thường, nhãn có hoặc không có đuôi file).
 - `PRIOR` có đúng các id đang mở (`open`, `regressed`) của bản gốc. Id mới không trùng id cũ.
 - `COMPARE` đủ id; `resolved` cần `better`; `worse` cần `regressed`.
+- `RESOLVED_NOTES`, `RESOLVED_CONFIRMED`: mỗi mục dạng `<bước> vN F<k>`. `RESOLVED_CONFIRMED` chỉ gồm mục có trong `RESOLVED_NOTES` của report worker cùng version (D27.8).
 - `COUNTS` bằng số finding đang mở sau khi áp `PRIOR`.
 - Số key `unclear` trong `RUBRIC` ≤ số finding `unclear` đang mở.
 - VERDICT: `PASS` khi không còn `blocker`, `major`, `unclear` đang mở (`preference`, `minor` không chặn). `FIX` khi còn.
@@ -150,7 +153,7 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
 {"version": N, "base": M|null, "top_fix": {"kind": k, "ids": [..]}|null, "pick": "a"|null, "next_id": K,
  "findings": {"F1": {"priority", "kind", "status", "first_v", "last_v", "region", …, "acceptance"}}}
 ```
-Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
+`resolved_notes` (chỉ khi có): ghi chú của bước trước mà reviewer xác nhận (`RESOLVED_CONFIRMED`), cộng các mục của bản gốc. `assemble.py` bỏ các mục này khỏi "Việc còn mở" của README khi version đó được duyệt. Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
 
 `TOP_FIX: regen_front: F<n>` ở `views_rest` (D22.4): script chép F<n> sang `findings.json` của bản `views_front` đã duyệt với id mới của bản đó, loại `regen`, và đặt `top_fix` của bản đó là id mới. Rồi `views_front` vào vòng sửa từ bản đó, như `redo`. Front duyệt lại thì `views_rest` dựng lại từ đầu. Finding mới ở bước có `regions` (`pipeline.toml`) mở đầu `region` bằng một tên trong đó; loại `regen_front` thì không. Loại `note*` chỉ ở mức `minor`.
 

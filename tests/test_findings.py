@@ -318,3 +318,13 @@ def test_a_views_rest_finding_opens_with_its_view_so_front_is_judged_only_throug
     assert errs_of(None, step=REST, counts=counts(major=4), top_fix="regen_front: F4", findings=fs) == [
         "F1: region phải mở đầu bằng back|left|right|top, vd `back: …`",
         "F2: region phải mở đầu bằng back|left|right|top, vd `back: …`"]
+
+
+def test_a_confirmed_note_carries_into_the_next_round_so_the_approved_fix_version_still_drops_it_d27_8():
+    base, _ = apply(None, rv(counts=counts(major=1), findings=[finding("F1", "major", "structure")],
+                             extra="RESOLVED_CONFIRMED: views_rest v2 F2\n"), STEP, 1)
+    doc, errs = apply(base, rv(verdict="PASS", top_fix=None, counts=counts(), compare="F1=better",
+                               prior=["- F1: resolved | evidence: clay_front"],
+                               extra="RESOLVED_CONFIRMED: views_rest v2 F3\n"), STEP, 2)
+    assert (base["resolved_notes"], doc["resolved_notes"], errs) == (
+        ["views_rest v2 F2"], ["views_rest v2 F2", "views_rest v2 F3"], [])

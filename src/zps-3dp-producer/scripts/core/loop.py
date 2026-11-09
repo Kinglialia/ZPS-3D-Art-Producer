@@ -245,6 +245,10 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     aid, sid, r = st["id"], step["id"], cfg["review"]
     rep = d / "report-review.md"
     rv = valid(rep, parse_review(read_report(rep)))
+    wr = d / "report-worker.md"
+    claimed = parse_worker(read_report(wr))[0]["RESOLVED_NOTES"] if wr.exists() else []
+    if extra := [x for x in rv["confirmed"] if x not in claimed]:
+        die(f"{rel(rep)} sai contract: RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
     doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv, step, n))
     who = "human"
     if step["gate"] == "review":

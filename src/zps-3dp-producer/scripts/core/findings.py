@@ -158,6 +158,8 @@ def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[s
                  **{k: v for k, v in f.items() if k not in ("priority", "kind")}}
     doc = {"version": n, "base": base["version"] if base else None, "top_fix": rv["top_fix"], "pick": rv["pick"],
            "next_id": max([nxt - 1] + [int(i[1:]) for i in fs if i.startswith("F")]) + 1, "findings": fs}
+    if notes := list(dict.fromkeys((base or {}).get("resolved_notes", []) + rv.get("confirmed", []))):
+        doc["resolved_notes"] = notes
     c = open_counts(doc)
     if rv["counts"] != c:
         errs.append("COUNTS phải là " + "; ".join(f"{k}={v}" for k, v in c.items()))

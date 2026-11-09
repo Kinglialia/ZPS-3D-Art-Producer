@@ -15,8 +15,8 @@ CONFIDENCE = ("high", "medium", "low")
 RUBRIC_VALUES = ("pass", "fail", "unclear")
 PICKS = ("a", "b", "c")
 BLOCKS = {"FINDINGS", "PRIOR"}
-REVIEW_KEYS = {"VERDICT", "RUBRIC", "COUNTS", "TOP_FIX", "EVIDENCE_OPENED", "COMPARE", "PICK"} | BLOCKS
-WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", "UNFIXABLE"}
+REVIEW_KEYS = {"VERDICT", "RUBRIC", "COUNTS", "TOP_FIX", "EVIDENCE_OPENED", "COMPARE", "PICK", "RESOLVED_CONFIRMED"} | BLOCKS
+WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", "UNFIXABLE", "RESOLVED_NOTES"}
 NONE = {"", "-", "—", "none"}
 
 KEY = re.compile(r"^\s*([A-Z_]+):\s*(.*)$")
@@ -25,6 +25,7 @@ HEAD = re.compile(rf"^-\s*({FID})\s*\[(\w+)\]\s*(\S*)\s*$")
 PRIOR = re.compile(rf"^-\s*({FID})\s*:\s*([^|\s]*)(.*)$")
 SPLIT = re.compile(rf"\s*\|\s*(?=(?:{'|'.join(FIELDS)})\s*:)")
 FALLBACK = "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`."
+NOTE_ID = re.compile(r"^\w+ v\d+ [FH]\d+$")
 WRAPPED = re.compile(r"^--- report ---[ \t\r]*\n(.*?)^--- end ---[ \t\r]*$", re.M | re.S)
 
 
@@ -61,9 +62,18 @@ def pairs(s: str) -> list[tuple[str, str]]:
             if p.strip()]
 
 
+def note_ids(c: dict, key: str, errs: list[str]) -> list[str]:
+    """D27.8: `<step> vN F<k>` items of RESOLVED_NOTES (worker) and RESOLVED_CONFIRMED (reviewer)."""
+    s = c.get(key, "")
+    ids = [] if s.lower() in NONE else [x.strip() for x in s.split(",") if x.strip()]
+    errs += [f"{key}: '{x}' phải là <bước> vN F<k>" for x in ids if not NOTE_ID.match(x)]
+    return ids
+
+
 def parse_worker(text: str) -> tuple[dict, list[str]]:
     c = parse_contract(text, WORKER_KEYS)
     errs = []
+    c["RESOLVED_NOTES"] = note_ids(c, "RESOLVED_NOTES", errs)
     if c.get("STATUS") not in WORKER_STATUS:
         errs.append(f"STATUS phải là {'|'.join(sorted(WORKER_STATUS))}")
     if not c.get("PROFILE_HASH"):
@@ -160,4 +170,5 @@ def parse_review(text: str) -> tuple[dict, list[str]]:
             errs.append(f"PRIOR {fid}: resolved cần evidence dẫn nhãn trong EVIDENCE_OPENED")
         prior[fid] = s
     return {"verdict": v, "rubric": rubric, "counts": counts, "top_fix": top_fix, "evidence": labels,
-            "compare": compare, "pick": pick, "findings": findings, "prior": prior}, errs
+            "compare": compare, "pick": pick, "findings": findings, "prior": prior,
+            "confirmed": note_ids(c, "RESOLVED_CONFIRMED", errs)}, errs

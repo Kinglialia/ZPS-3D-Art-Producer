@@ -114,11 +114,13 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         if (v := st["approved"].get(prev)) and (issues := handoff_issues(st, prev, v)):
             lines.append(f"{k}. ISSUES của report worker `{prev}` v{v}: {issues}")
             k += 1
+    notes = []
     for prev in step["inputs"]:
         v = st["approved"].get(prev)
         if v and (ids := [i for i, f in findings.open_of(findings.load(aid, prev, v)).items() if f["kind"] in findings.NOTE]):
             lines.append(f"{k}. Ghi chú còn mở của reviewer `{prev}` v{v}: {', '.join(ids)} trong "
                          f"`{rel(findings.path(aid, prev, v))}` (`note_texture`: TEXTURE NOTE, `note_exception`: NGOẠI LỆ).")
+            notes += [f"{prev} v{v} {i}" for i in ids]
             k += 1
     if not fix and (pv := (st.get("prior") or {}).get(step["id"])):
         lines.append(f"{k}. Bản đã duyệt trước của bước này (dựng từ đầu vào cũ): `{rel(vdir(aid, step['id'], pv) / 'final')}/`. "
@@ -179,6 +181,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "ISSUES: <tối đa 2 vấn đề còn lại, hoặc none>",
         "PROFILE_HASH: <chép dòng PROFILE_HASH ở đầu brief này>",
         *(["FIXED: F<n>, ...   (id bạn cho là đã sửa; reviewer quyết)"] if fix else []),
+        *([f"RESOLVED_NOTES: <ghi chú bạn đã làm, trong: {', '.join(notes)}> | none"] if notes else []),
         "```",
         "Tin nhắn trả về cho Producer: chỉ dòng STATUS.",
         "",
@@ -204,6 +207,8 @@ def review_brief(cfg, st, step, n) -> str:
     tie = sorted((k for k in step["top_fix"] if k in findings.TIE_RANK), key=lambda k: -findings.TIE_RANK[k])
     single = [k for k in step["top_fix"] if k in findings.SINGLE]
     notes = [k for k in step["top_fix"] if k in findings.NOTE]
+    wr = d / "report-worker.md"
+    claimed = parse_worker(wr.read_text(encoding="utf-8"))[0]["RESOLVED_NOTES"] if wr.exists() else []
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
         "",
@@ -237,6 +242,8 @@ def review_brief(cfg, st, step, n) -> str:
         "EVIDENCE_OPENED: <nhãn ảnh và file đã mở>",
         *([f"COMPARE: {'; '.join(f'{i}=?' for i in cmp_ids)}"] if cmp_ids else []),
         *(["PICK: a|b|c"] if pick else []),
+        *([f"RESOLVED_CONFIRMED: <mục có bằng chứng trên ảnh, trong RESOLVED_NOTES: {', '.join(claimed)}> | none"]
+          if claimed else []),
         "FINDINGS:",
         f"- F{nxt} [blocker|major|minor|preference|unclear] <{'|'.join(step['top_fix'])}>",
         "  region: … | viewing_condition: … | evidence: <nhãn trong EVIDENCE_OPENED> …",

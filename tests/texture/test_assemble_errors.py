@@ -82,26 +82,28 @@ def test_run_from_outside_the_project_it_refuses_before_it_writes_anything(tmp_p
     assert list(other.iterdir()) == []
 
 
-def finding_doc(t: Path, step: str, n: int, **fs):
+def finding_doc(t: Path, step: str, n: int, notes=(), **fs):
     d = t / "production/assets" / AID / step / f"v{n}"
     d.mkdir(parents=True, exist_ok=True)
     (d / "findings.json").write_text(json.dumps({"version": n, "findings": {
         i: {"priority": "minor", "kind": kind, "status": "open", "region": region, "repair": "sửa"}
-        for i, (kind, region) in fs.items()}}), encoding="utf-8")
+        for i, (kind, region) in fs.items()}, **({"resolved_notes": list(notes)} if notes else {})}), encoding="utf-8")
     return d
 
 
-def test_the_readme_leaves_out_a_texture_note_once_the_approved_texture_review_passed_texture_note(tmp_path,
-                                                                                                    monkeypatch):
-    """Run 4: "Việc còn mở" listed views_rest F2 (back has 3 board rows), which model built and texture checked."""
+def test_the_readme_drops_a_note_only_when_a_later_approved_reviewer_confirmed_the_worker_did_it_d27_8(tmp_path,
+                                                                                                      monkeypatch):
+    """Run 4: "Việc còn mở" listed views_rest F2 (back has 3 board rows), which model built. A texture review with
+    `texture_note=pass` no longer drops it: only RESOLVED_CONFIRMED of an approved version does."""
     import assemble
     monkeypatch.chdir(tmp_path)
-    st = {"id": AID, "approved": {"views_front": 3, "views_rest": 2, "texture": 4}}
+    st = {"id": AID, "approved": {"views_front": 3, "views_rest": 2, "model": 2, "texture": 4}}
     finding_doc(tmp_path, "views_front", 3, F4=("regen", "front: đinh"))
-    finding_doc(tmp_path, "views_rest", 2, F2=("note_texture", "back: hàng ván"))
+    finding_doc(tmp_path, "views_rest", 2, F2=("note_texture", "back: hàng ván"), F3=("note_texture", "top: rêu"))
     tex = finding_doc(tmp_path, "texture", 4)
-    assert assemble.open_work(st) == ["- views_front v3 F4 [minor] front: đinh: sửa",
-                                      "- views_rest v2 F2 [minor] back: hàng ván: sửa"]
     (tex / "report-review.md").write_text("--- report ---\nVERDICT: PASS\nRUBRIC: light=pass; texture_note=pass\n"
                                           "--- end ---\n", encoding="utf-8")
-    assert assemble.open_work(st) == ["- views_front v3 F4 [minor] front: đinh: sửa"]
+    finding_doc(tmp_path, "model", 3, notes=["views_rest v2 F3"])
+    finding_doc(tmp_path, "model", 2, notes=["views_rest v2 F2"])
+    assert assemble.open_work(st) == ["- views_front v3 F4 [minor] front: đinh: sửa",
+                                      "- views_rest v2 F3 [minor] top: rêu: sửa"]
