@@ -3,7 +3,7 @@
 Usage: python3 tools/check_schema.py --work <dir> [--out <json>]
 Checks: header, unique part names, fixed_params (+ _fixed_reason), required fields (a mirror_of part writes its own
 material, role and tag, because the kit copies only shape fields), primitive, rotation_deg,
-segments, enums, connected (every part reaches the root through attach.to / mirror_of.of:
+segments, enums, custom_fn (a `custom` part names a function of custom_lib.FUNCTIONS, D27.13), connected (every part reaches the root through attach.to / mirror_of.of:
 orphans and cycles), order (parent listed earlier, as graph.py requires), mirror (a mirror_of part whose
 source uses inset_into or through_axis, or whose source's parent may sit off the mirror plane: the kit
 copies the source's parent, contact and depth, so gates.py crashes or fails on it).
@@ -16,7 +16,9 @@ import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
+import custom_lib  # noqa: E402
 
 TOOL = "blockout/check_schema"
 HEADER = {"schema": "blockout-1", "units": "m", "up": "+Z", "front": "-Y"}
@@ -135,6 +137,8 @@ def run(graph):
         "schema.rotation": [p["name"] for p in parts if p.get("rotation_deg", 0) not in (0, 90, 180, 270)],
         "schema.segments": [p["name"] for p in parts if "segments" in p and not segments_ok(p, params)],
         "schema.enums": [f"{p['name']}: {k}" for p in parts for k, ok in ENUMS.items() if k in p and p[k] not in ok],
+        "schema.custom_fn": [f"{p['name']}: {p.get('fn')}" for p in real
+                             if p.get("primitive") == "custom" and p.get("fn") not in custom_lib.FUNCTIONS],
     }
     checks = [common.check(k, "fail" if v else "pass", value=sorted(v)) for k, v in found.items()]
     orphans, cycles, order = connected(parts)

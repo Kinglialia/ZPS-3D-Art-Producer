@@ -89,7 +89,7 @@ def test_worker_points_only_at_references_and_tools_that_exist():
 
 def test_every_flag_the_worker_passes_is_one_its_tool_accepts():
     _, body = front(WORKER)
-    calls = re.findall(r"`(?:PY|BL) T/([\w/<>]+\.py)([^`]*)`", body)
+    calls = re.findall(r"`(?:PY|BL) T/([\w/<>.-]+\.py)([^`]*)`", body)
     assert len(calls) == 12
     vpy = AGENT / "tools/.deps/venv/bin/python"
     for script, args in calls:
@@ -99,9 +99,10 @@ def test_every_flag_the_worker_passes_is_one_its_tool_accepts():
             assert all(f'"{f}"' in text for f in flags), (script, flags)
             continue
         py = str(vpy) if vpy.is_file() else sys.executable
-        if script.startswith("self_build/") and not vpy.is_file():
+        target = args.split()[:1] if script.endswith("build_parts.py") else []
+        if (script.startswith("self_build/") or target) and not vpy.is_file():
             continue
-        out = subprocess.run([py, str(AGENT / "tools" / script), "--help"], capture_output=True, text=True).stdout
+        out = subprocess.run([py, str(AGENT / "tools" / script), *target, "--help"], capture_output=True, text=True).stdout
         assert all(f in out for f in flags), (script, flags, out[-300:])
 
 

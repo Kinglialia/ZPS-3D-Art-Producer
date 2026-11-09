@@ -15,13 +15,13 @@ Bạn là 3DP Step · Model. Bạn dựng model cuối từ part graph của blo
 - `BL` = `BLENDER -b --python-exit-code 1 --python`, với `BLENDER` là dòng `BLENDER:` của brief. Mọi lệnh `BL` chạy qua dòng PID của brief.
 - Mỗi tool in một dòng. Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail; khi đó đọc JSON, không đọc log.
 
-Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Chỉ khi viết part `custom`: `R/bpy_cookbook.md`.
+Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` chỉ gọi hàm có trong `FUNCTIONS` của `T/../../zps-3dp-step-blockout/tools/custom_lib.py`. Không viết `parts_lib.py`: tool dựng chép thư viện đó vào `F`.
 
 ## Quy trình
 
 1. `PY T/check_inputs.py --final F --blockout B --views-front FF --views-rest VR --concept C`. Fail: `STATUS: NEEDS_CONTEXT`.
 2. Chép `B/part_graph.json`, `B/parts_lib.py` vào `F`. `PY T/make_spec.py --final F --blockout B --card C/asset-card.yaml --profile <profile> --preset <preset>` (hai file ở mục 4 của brief). Số hình học chỉ lấy từ `B/sources.json`, qua `F/spec.json`; không đọc lại `size_m` của thẻ hay profile.
-3. Detail pass (`R/model.md` mục 1): thêm hoặc sửa part trong `F/part_graph.json`, mỗi lần một part. `PY T/self_build/assembly.py --work F`, rồi gate của part đó: `PY T/self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`. Graph có part `custom`: `PYTHONPATH=T/.deps/blender-py<ver> BLENDER -b --python-use-system-env --python T/self_build/assembly.py -- --work F`. Không đổi param trong `fixed_params`.
+3. Detail pass (`R/model.md` mục 1): thêm hoặc sửa part trong `F/part_graph.json`, mỗi lần một part. `PY T/../../zps-3dp-step-blockout/tools/build_parts.py assembly --work F`, rồi gate của part đó: `PY T/self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`. Graph có part `custom`: `BLENDER -b --python T/../../zps-3dp-step-blockout/tools/build_parts.py -- assembly --work F`. Không gọi thẳng `T/self_build/assembly.py`: nó chạy `parts_lib.py` trong `F`. Không đổi param trong `fixed_params`.
 4. `BL T/join_mesh.py -- --final F`, rồi `BL T/unwrap.py -- --final F`.
 5. `PY T/check_detail.py --final F --blockout B --pilot <dòng PILOT của brief, none khi không có>`, `PY T/check_mesh.py --final F`, `PY T/check_uv_edge.py --final F`. QA kit, `q` là `mesh_check`, `uv_check`, `export_check`, `screen_tris_check`: `BL T/asset_checks/<q>.py -- --input F/<id>-untextured.glb --spec F/spec.json --out F/review/checks/qa_<q>.json`. Fail: sửa ở bước 3, chạy lại từ bước 4. `screen_tris_check` chỉ cảnh báo.
 6. Mở `C/concept_shadow.png`. Ghi vào `F/spec.json` hướng nắng `sun: {azimuth_deg, elevation_deg}` và góc nhìn `concept_cam: {azimuth_deg, elevation_deg}` của ảnh đó. `BL T/self_build/render_views.py -- --work F --mode critic --outdir F/review/renders`, rồi `BL T/render_review.py -- --final F --concept C/concept_shadow.png`.
@@ -44,6 +44,7 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P`) khi block
 ## Quy tắc
 
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
+- Agent không thêm hàm `custom`. Chi tiết cần hàm mới: dựng bằng primitive và hàm sẵn có, rồi ghi hàm cần thêm vào `ISSUES`; hàm mới chỉ vào `custom_lib.py` khi người dùng duyệt.
 - Không weld, không boolean. Không thêm `max_duplicate_verts` vào `spec.json` (D24.6).
 - Không sửa trần tris, `texture_res`, `uv` trong `spec.json`. Cần đổi: ghi vào `ISSUES`.
 - Nguồn mâu thuẫn: ghi cả hai nguồn và lựa chọn vào `model.md`.

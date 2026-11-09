@@ -23,7 +23,7 @@
 |---|---|---|
 | `name` | có | duy nhất |
 | `primitive` | có (trừ `mirror_of`) | `box` (dims w,d,h), `wedge` (dims w,d,h; dốc lên về +Y), `cylinder` (dims radius,height), `custom` |
-| `dims` / `fn` + `args` | có | `custom`: hàm trong `parts_lib.py`, trả `bmesh` đặt tâm tại bbox; 3 arg đầu là w,d,h hoặc ghi thêm `dims` |
+| `dims` / `fn` + `args` | có | `custom`: tên một hàm trong `FUNCTIONS` của `tools/custom_lib.py` (`check_schema` kiểm), trả `bmesh` đặt tâm tại bbox; 3 arg đầu là w,d,h hoặc ghi thêm `dims` |
 | `attach` | có | `null` chỉ cho part đầu tiên (gốc) |
 | `material` | có | mã trong `sources.json` `materials` |
 | `role` | có | `mass` (khối chính) hoặc `marker` (mốc đo, nhô ≥ 2 cm) |
