@@ -1,0 +1,33 @@
+# Blockout: the kit config keys the copied self_build tools read (lib/common.load_config).
+# Values as kit v0.10.4 config.yaml, except paths.blender. A task spec "config" block overrides any key.
+
+paths:
+  blender: blender   # PATH lookup; P preflight records the real binary
+
+optimize:
+  raster_size: 512
+
+self_build:
+  rollouts: 3
+  part_max_attempts: 3
+  critic_cycles: 3
+  revert_tolerance: 0.005
+  render_size: 1024
+  critic_max_long_edge: 1568
+  gates:
+    contact_min_ratio: 0.05
+    penetration_max_ratio: 0.02
+    floater_span_ratio: 0.01
+    bbox_tolerance: 0.10
+    contact_dist_m: 0.001
+    inset_depth_tolerance: 0.2
+    contact_samples: 4000
+  param_fit:
+    enabled: true
+    time_limit_s: 300
+    max_evals: 300
+    max_param_change: 0.3
+    min_gain: 0.005
+    raster_size: 256
+    worst_penalty: 0.5
+    regularization: 0.001
