@@ -6,6 +6,7 @@ Cần Python 3.11+ (dùng tomllib).
 
 Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · meshy · approvals
              delegate · rule · ledger · dashboard · serve · show · board · validate · cleanup · archive · texture-stats
+             ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
 from __future__ import annotations
@@ -19,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 
-UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve", "show", "texture-stats"}
+UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve", "show", "texture-stats", "ab", "compare"}
 
 
 def cmd_init(a):
@@ -124,6 +125,20 @@ def cmd_board(a):
     getattr(remote, a.op)(a)
 
 
+def cmd_ab(a):
+    from core import ab
+    if a.op == "prefer":
+        a.id and a.choice or ab.die("ab prefer <asset> <A|B|tie> --by \"<nguyên văn>\"")
+        print(ab.prefer(a.id, a.choice, a.by, "chat"))
+    else:
+        getattr(ab, a.op)(a)
+
+
+def cmd_compare(a):
+    from core.ab import compare
+    compare(a)
+
+
 def cmd_serve(a):
     from core.board import serve
     serve(a.port)
@@ -175,7 +190,7 @@ def main(argv: list[str] | None = None):
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
     x.add_argument("--regions", help="JSON vùng khoanh [{n, image, shape, coords, note}] trên ảnh của thẻ đang chờ")
     x.add_argument("--offer", help="khóa lần đưa duyệt mà người dùng đã thấy; khóa cũ thì bỏ qua")
-    x = sub.add_parser("approvals", help="đổi người duyệt một bước trong policy.yaml")
+    x = sub.add_parser("approvals", help="đổi người duyệt một bước (hoặc review_board local|local+remote) trong policy.yaml")
     x.add_argument("op", choices=["set"]); x.add_argument("step"); x.add_argument("who")
     x.add_argument("--by", required=True, help="nguyên văn lời người dùng"); x.add_argument("--confirm-spend", action="store_true")
     x = sub.add_parser("delegate", help="ủy quyền reviewer duyệt bước này cho các asset")
@@ -196,6 +211,13 @@ def main(argv: list[str] | None = None):
     x.add_argument("op", choices=["prepare", "pull"]); x.add_argument("--url", help="prepare: URL artifact của trang (lưu lại)")
     x.add_argument("--redo", action="store_true", help="prepare: đẩy lại mọi asset đang chờ (lần đẩy trước hỏng)")
     x.add_argument("--dir", help="pull: out_dir đã đưa cho ArtifactData list (mặc định production/board/inbox)")
+    x = sub.add_parser("ab", help="so A/B hai runtime: board = trang so cặp mù; prefer = ghi bản tốt hơn; "
+                                  "judge = giao reviewer so cặp; side = nội bộ của board")
+    x.add_argument("op", choices=["board", "prefer", "judge", "side"]); x.add_argument("id", nargs="?")
+    x.add_argument("choice", nargs="?", choices=["A", "B", "tie"]); x.add_argument("--by", default="")
+    x.add_argument("--port", type=int, default=8766)
+    sub.add_parser("compare", help="tổng hợp A/B theo asset; --reveal mở nhãn khi lô đã duyệt hết").add_argument(
+        "--reveal", action="store_true")
     sub.add_parser("validate", help="kiểm tra cấu hình và status")
     x = sub.add_parser("cleanup", help="xoá work/ của phiên bản không được duyệt (mặc định dry-run)")
     x.add_argument("id"); x.add_argument("--yes", action="store_true"); x.add_argument("--all", action="store_true")

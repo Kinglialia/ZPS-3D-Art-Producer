@@ -15,7 +15,7 @@ production/                     # trong project Claude Code; chỉ script và su
   preflight.json                # P preflight ghi; P next, P brief đọc
   pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; gen_image_codex.py ghi <id>-<pid>.pid mỗi lần chạy; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
-  ledger.md                     # append-only: sự kiện + RULING
+  ledger.md                     # append-only: `- <giờ> · <runtime> · <sự kiện>` + RULING
   .lock                         # mỗi lệnh ghi và mỗi nút trên review page giữ flock file này
   schedule.md                   # `- YYYY-MM-DD · milestone`
   dashboard.md                  # tự sinh
@@ -52,6 +52,19 @@ production/                     # trong project Claude Code; chỉ script và su
 - `paint_for`: 12 ký tự đầu hash mesh mà người dùng chọn VẼ MỚI; brief `texture` của mesh đó ghi `MODE: VẼ MỚI`.
 - `meshy_price`: giá một lần retexture, đọc từ `gen_api.py texture --dry-run` khi sinh brief.
 - `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.
+- `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên. `ingest --tokens N` thêm `tokens` cho lần giao cuối.
+- `offer_log`: mỗi lần đưa người dùng duyệt hoặc hỏi `{key, step, v, why, verdict, at}`; quyết định Duyệt / Cần sửa / VẼ MỚI của người dùng thêm `decision`, `decided`. Ghi chú không phải quyết định. `P compare` đọc trường này.
+- `approved_at[<bước>]`: lúc bước được duyệt.
+
+## Runtime và A/B
+
+`runtime.json` trong thư mục skill (build ghi): `runtime`, `suffix`, `models`, `agent_file`. `PRODUCER_RUNTIME` ghi đè; cây `src/` là `src`. `PRODUCER_ROOT=production-<runtime>` chỉ nhận lệnh ghi của runtime đó; gói cuối vào `deliver-<runtime>/`.
+
+`ab/` ở gốc project (chung hai runtime):
+- `mapping.json`: `{"assets": {<id>: {"A": <runtime>, "B": <runtime>}}}`, nhãn ngẫu nhiên, gán một lần cho asset có ở cả hai thư mục.
+- `preferences.jsonl`: mỗi lần bấm "Bản nào tốt hơn" `{asset, choice: A|B|tie, text, by, at}`; dòng cuối của asset là lựa chọn.
+- `judge/<id>/concept/`, `judge/<id>/o<k>/{X,Y}/`: bản chép ảnh gói cuối; lần 1 X = A, lần 2 X = B. `brief.md`, `report.md` (`WINNER: <tiêu chí>=X|Y|tie; …`, `EVIDENCE_OPENED`), `result.json` (theo nhãn A/B). Hai lần lệch nhau thì tiêu chí đó hòa.
+- `compare.md`: bản cuối của `P compare`.
 
 ## Budget Meshy
 

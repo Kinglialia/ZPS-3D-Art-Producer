@@ -2,6 +2,7 @@ const MODEL_VIEWER_VERSION = "3.5.0";
 const MODEL_VIEWER_URL = `https://cdn.jsdelivr.net/npm/@google/model-viewer@${MODEL_VIEWER_VERSION}/dist/model-viewer.min.js`;
 const SWIPE_PX = 50, MAX_ZOOM = 6, TAP_ZOOM = 2.5, DOUBLE_TAP_MS = 300, MIN_MARK = 0.01, STEP_MARK = 0.003, MAX_POINTS = 500;
 const ACTIONS = [["Duyệt", "approve"], ["Cần sửa", "redo"], ["Ghi chú", "note"]];
+const PREFER = [["A tốt hơn", "A"], ["B tốt hơn", "B"], ["Ngang nhau", "tie"]];
 const SHAPES = [["circle", "○", "Vòng tròn"], ["rect", "▭", "Chữ nhật"], ["free", "✎", "Nét tự do"]];
 const LIGHT = "--bg:#f6f6f4;--card:#fff;--fg:#1d1d1f;--muted:#6b6b6b;--line:#ddd;--accent:#2f6fde;--warn:#b7791f;color-scheme:light";
 const DARK = "--bg:#151517;--card:#1f1f22;--fg:#eee;--muted:#9a9a9a;--line:#333;--accent:#6a9bff;--warn:#f0b429;color-scheme:dark";
@@ -55,6 +56,14 @@ button.ok{background:var(--accent);color:#fff;border-color:var(--accent)}
 #ov .bar input{flex:1;min-width:0;font:16px system-ui;padding:8px;border-radius:6px;border:1px solid #fff4;background:#111;color:#fff}
 #ov .bar button{padding:8px 12px}
 #ov .cap{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:12px;pointer-events:none}
+.pair{margin:0 auto 20px;max-width:1600px}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.cols .card{margin:0;max-width:none}
+#ab3d{position:fixed;inset:0;z-index:9;background:#000;display:grid;grid-template-columns:1fr 1fr;color:#fff}
+#ab3d model-viewer{width:100%;height:100%}
+#ab3d .half{position:relative}
+#ab3d .lab{position:absolute;top:10px;left:10px;font:600 18px system-ui}
+#ab3d .x{position:absolute;top:10px;right:10px;background:#000a;color:#fff;border:1px solid #fff4;min-width:44px;min-height:44px}
 `;
 
 const $ = (tag, props = {}, ...kids) => {
@@ -305,12 +314,49 @@ function card(a) {
     can ? controls(a, items, open) : null);
 }
 
+function sync3d(urls) {
+  const mvs = urls.map(u => $("model-viewer", { src: u, cameraControls: true }));
+  let busy = false;
+  mvs.forEach((m, i) => m.addEventListener("camera-change", e => {
+    if (busy || e.detail?.source !== "user-interaction") return;
+    const o = mvs[1 - i], c = m.getCameraOrbit();
+    busy = true;
+    o.cameraOrbit = `${c.theta}rad ${c.phi}rad ${c.radius}m`;
+    o.fieldOfView = `${m.getFieldOfView()}deg`;
+    busy = false;
+  }));
+  const box = $("div", { id: "ab3d" }, mvs.map((m, i) => $("div", { className: "half" }, m, $("span", { className: "lab", textContent: "AB"[i] }))),
+    $("button", { className: "x", textContent: "×", onclick: () => box.remove() }));
+  document.body.append(box);
+}
+
+function pairRow(r) {
+  const out = $("div", { className: "msg", textContent: msgs["pair-" + r.asset] || "" });
+  const pick = async choice => {
+    let res;
+    try { res = await transport.prefer({ asset: r.asset, choice }); } catch (ex) { res = { message: `Lỗi: ${ex.message || ex}` }; }
+    msgs["pair-" + r.asset] = res.message;
+    reload();
+  };
+  const glbs = r.sides.map(s => s.glb);
+  return $("section", { className: "pair" },
+    $("h2", { textContent: r.title }),
+    $("div", { className: "cols" }, r.sides.map(card)),
+    $("div", { className: "row" },
+      glbs.length === 2 && glbs.every(Boolean) ? $("button", { textContent: "Model 3D A | B xoay cùng lúc", onclick: () => sync3d(glbs) }) : null,
+      $("span", { className: "muted", textContent: "Bản nào tốt hơn?" }),
+      transport.prefer ? PREFER.map(([t, c]) => $("button", { textContent: t, className: r.prefer === c ? "ok" : "", onclick: () => pick(c) })) : null),
+    out);
+}
+
 function render(p) {
   last = p;
   document.title = `Review · ${p.project}`;
-  if (p.assets.some(a => a.glb) && !document.getElementById("mv"))
+  const cards = p.pairs ? p.pairs.flatMap(r => r.sides) : p.assets;
+  if (cards.some(a => a.glb) && !document.getElementById("mv"))
     document.head.append($("script", { id: "mv", type: "module", src: MODEL_VIEWER_URL }));
-  document.getElementById("app").replaceChildren(...(p.assets.length ? p.assets.map(card)
+  const body = p.pairs ? p.pairs.map(pairRow) : p.assets.map(card);
+  document.getElementById("app").replaceChildren(...(body.length ? body
     : [$("p", { className: "muted", textContent: p.empty || "Không có asset nào chờ duyệt." })]));
 }
 
@@ -319,12 +365,14 @@ async function reload() {
   catch (ex) { document.getElementById("app").replaceChildren($("p", { className: "msg", textContent: `Lỗi tải board: ${ex.message || ex}` })); }
 }
 
+const post = async (url, body) => {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return { ok: r.ok, ...(await r.json()) };
+};
 const LIVE = {
   load: async () => (await fetch("/api/board")).json(),
-  send: async body => {
-    const r = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    return { ok: r.ok, ...(await r.json()) };
-  },
+  send: body => post("/api/feedback", body),
+  prefer: body => post("/api/prefer", body),
 };
 const STATIC = { load: async () => JSON.parse(document.getElementById("board-data").textContent), send: null };
 
