@@ -6,6 +6,7 @@
       "(giữ)". Row 2: report/overlay_<view>.png with score, IoU, dE from
       report/report.json. Row 3: the crops, in pixels of the view image. Writes <final>/report/VIEWS_sheet.png and
       VIEWS_sheet.json (sha256 of the 5 view files, which check_package.py compares).
+      Labels use the first font of FONTS that draws every letter, else the default font without diacritics.
   python3 tools/views_sheet.py crop --image <png> --box x0,y0,x1,y1 --out <png> [--scale 2]
   python3 tools/views_sheet.py flip --src <left.png> --out <right.png>    right = left mirrored (symmetric left_right)
 Prints one line. Exit 0, 2 on error.
@@ -15,11 +16,17 @@ import hashlib
 import json
 import os
 import sys
+import unicodedata
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 VIEWS = ("front", "back", "left", "right", "top")
 CELL, PAD, HEAD = 320, 12, 22
+FONTS = ("/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial Unicode.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+         "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/noto/NotoSans-Regular.ttf")
+FONT_SIZE = 13
+NO_GLYPH = "\U000F0000"
 
 
 def sha(p):
@@ -40,6 +47,22 @@ def cell(im):
     c = Image.new("RGB", (CELL, CELL), "white")
     c.paste(im, ((CELL - im.width) // 2, (CELL - im.height) // 2), im)
     return c
+
+
+def draws(font, text):
+    box = font.getmask(NO_GLYPH)
+    return all((m.size, bytes(m)) != (box.size, bytes(box)) for m in map(font.getmask, set(text) - {" "}))
+
+
+def fit(text):
+    """(font, text) for a label: a font of FONTS that draws every letter, else the default font and ASCII text."""
+    for p in FONTS:
+        if os.path.isfile(p):
+            font = ImageFont.truetype(p, FONT_SIZE)
+            if draws(font, text):
+                return font, text
+    text = text.replace("đ", "d").replace("Đ", "D")
+    return ImageFont.load_default(), unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode()
 
 
 def label(r):
@@ -67,7 +90,8 @@ def make(a):
         y = PAD + i * (HEAD + CELL + PAD)
         for j, (text, im) in enumerate(row):
             x = PAD + j * (CELL + PAD)
-            d.text((x, y), text, fill="black")
+            font, text = fit(text)
+            d.text((x, y), text, fill="black", font=font)
             sheet.paste(cell(im), (x, y + HEAD))
     out = os.path.join(rdir, "VIEWS_sheet.png")
     sheet.save(out)

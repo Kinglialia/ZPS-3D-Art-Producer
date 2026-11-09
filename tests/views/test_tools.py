@@ -185,6 +185,22 @@ def test_views_sheet_marks_kept_views_in_the_label_strip_only_so_the_user_sees_w
             shots[0].crop(cells).tobytes() == shots[1].crop(cells).tobytes()) == (True, True)
 
 
+def missing(font, ch):
+    m, box = font.getmask(ch), font.getmask("\U000F0000")
+    return (m.size, bytes(m)) == (box.size, bytes(box))
+
+
+def test_views_sheet_labels_draw_vietnamese_letters_or_fall_back_to_ascii_never_the_missing_glyph_box(monkeypatch):
+    sys.path.insert(0, str(TOOLS))
+    import views_sheet
+    labels = ("back (giữ)", "front không đo")
+    for text in labels:
+        font, drawn = views_sheet.fit(text)
+        assert (drawn == text or drawn.isascii(), [c for c in drawn if c != " " and missing(font, c)]) == (True, [])
+    monkeypatch.setattr(views_sheet, "FONTS", ())
+    assert [views_sheet.fit(t)[1] for t in labels] == ["back (giu)", "front khong do"]
+
+
 def test_check_package_fails_a_view_changed_after_the_sheet_because_the_user_approves_the_sheet(tmp_path):
     f, front, card, concept = view_set(tmp_path)
     tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)
