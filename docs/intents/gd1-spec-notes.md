@@ -50,3 +50,12 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 6. `pipeline.toml` short agent names (`step-blockout`) differ from the real agent names. Brief now prints the full name (T4).
 7. D11.6 asks for a history of each feedback round. Nothing reads it; the ledger already holds it. Not added.
 8. Added: `P delegate model` also needs `--confirm-spend` (same Meshy cost as `approvals set model reviewer`).
+
+## From T7 (local board)
+
+1. `review-board.md` §2 asks for the review sheet of the step, but `agents/blockout.md` §4 names no sheet file for blockout. The board uses `review/game_cam.png` as the main image.
+2. `agents/blockout.md` §4 makes `blockout.md` start with version and hash, but the board shows its first 3 lines as the summary. One visible line would be a hash. The spec should say which lines are the summary.
+3. The `cũ` label cannot appear in GĐ 1: blockout has no previous step.
+4. `review-board.md` §2 "ai cần duyệt": at `waiting_human` it is always the user, so no policy lookup is needed.
+5. Added: the local server refuses requests from other hosts and non-JSON posts, so a page in another browser tab cannot approve an asset.
+6. Not tested: pinch with two fingers, swipe, phone, dark mode.
