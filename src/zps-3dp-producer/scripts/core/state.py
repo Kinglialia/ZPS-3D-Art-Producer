@@ -91,12 +91,15 @@ def load_cfg() -> dict:
         s.setdefault("concept", None)
         s.setdefault("regions", [])
         s.setdefault("issues", [])
+        s.setdefault("review_inputs", s["inputs"])
         s.setdefault("lock", None)
         s.setdefault("pilot", False)
         if bad := [x for x in s["inputs"] if x not in ids[:i]]:
             die(f"step {s['id']}: inputs {', '.join(bad)} không phải bước trước nó")
         if bad := [x for x in s["issues"] if x not in s["inputs"]]:
             die(f"step {s['id']}: issues {', '.join(bad)} không nằm trong inputs của bước")
+        if bad := [x for x in s["review_inputs"] if x not in s["inputs"]]:
+            die(f"step {s['id']}: review_inputs {', '.join(bad)} không nằm trong inputs của bước")
         if s["gate"] not in GATES:
             die(f"step {s['id']}: gate phải là {' | '.join(sorted(GATES))}")
         if s["gate"] != "checks_human":

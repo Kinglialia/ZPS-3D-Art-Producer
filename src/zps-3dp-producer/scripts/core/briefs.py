@@ -59,8 +59,8 @@ def concept_files(st, step) -> list[str]:
     return [x for x in names if not x.endswith(".layout.md") or (d / x).is_file()]
 
 
-def input_finals(st, step) -> list[tuple[str, Path]]:
-    return [(p, vdir(st["id"], p, v) / "final") for p in step["inputs"] if (v := st["approved"].get(p))]
+def input_finals(st, ids: list[str]) -> list[tuple[str, Path]]:
+    return [(p, vdir(st["id"], p, v) / "final") for p in ids if (v := st["approved"].get(p))]
 
 
 def handoff_issues(st, prev: str, v: int) -> str | None:
@@ -103,7 +103,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         k += 1
     lines.append(f"{k}. {ad_text(cfg, {step['id']})}")
     k += 1
-    for prev, fd in input_finals(st, step):
+    for prev, fd in input_finals(st, step["inputs"]):
         lines.append(f"{k}. Đầu ra đã duyệt của bước `{prev}`: `{rel(fd)}/`.")
         k += 1
     for prev in step["issues"]:
@@ -203,7 +203,8 @@ def review_brief(cfg, st, step, n) -> str:
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
         *([f"- Concept đã duyệt để đối chiếu, trong `{st['concept_dir']}`: chỉ "
            + ", ".join(f"`{x}`" for x in concept_files(st, step)) + "."] if st.get("concept_dir") else []),
-        *(f"- Đầu ra đã duyệt của bước `{p}` (đầu vào, không chấm lại): `{rel(fd)}/`." for p, fd in input_finals(st, step)),
+        *(f"- Đầu ra đã duyệt của bước `{p}` (đầu vào, không chấm lại): `{rel(fd)}/`."
+          for p, fd in input_finals(st, step["review_inputs"])),
         f"- Profile dự án (`hidden_side_rules`, `scale_refs`): `{rel(ROOT / 'PROJECT-PROFILE.yaml')}`.",
         f"- {ad_text(cfg, {sid, 'review'})}",
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "

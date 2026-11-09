@@ -189,10 +189,15 @@ def test_the_required_outputs_carry_the_asset_id_so_a_missing_mesh_blocks_ingest
     assert flow["m1 worker"]["out"] == "pilot-house: worker DONE → model/review. Tiếp: giao reviewer → `brief pilot-house`\n"
 
 
-def test_check_clay_reviews_model_against_the_three_inputs_with_the_structure_and_param_kinds(flow):
+def test_check_clay_reviews_model_against_the_blockout_only_with_the_structure_and_param_kinds(flow):
+    """The clay reviewer never opens the views; listing them only spent its tokens."""
     t = flow["m1 review brief"]["text"]
     assert flow["m1 review brief"]["out"]["agent"] == "zps-3dp-check-clay"
-    assert missing(t, f"- Đầu ra đã duyệt của bước `views_rest` (đầu vào, không chấm lại): `{A}/views_rest/v2/final/`.",
+    assert [l for l in t.splitlines() if l.startswith("- Đầu ra đã duyệt")] == [
+        f"- Đầu ra đã duyệt của bước `blockout` (đầu vào, không chấm lại): `{A}/blockout/v1/final/`."]
+    assert [l.split(": chỉ ")[1] for l in t.splitlines() if l.startswith("- Concept đã duyệt")] == [
+        "`concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`."]
+    assert missing(t,
                    "- F1 [blocker|major|minor|preference|unclear] <structure|param>",
                    "TOP_FIX: <structure|param|need_evidence>: F<n>[, F<m>]") == []
 

@@ -3,6 +3,7 @@
 # gate: review (reviewer PASS → bước sau) | review_human (reviewer PASS → người duyệt) | checks_human (script pass → người duyệt)
 # top_fix: loại TOP_FIX reviewer được dùng ở bước này; `need_evidence` dùng được ở mọi bước có reviewer.
 # inputs: bước đã duyệt mà brief trỏ tới `final/` (mặc định: bước liền trước).
+# review_inputs: bước trong inputs mà brief reviewer trỏ tới `final/` (mặc định: inputs).
 # concept: file trong _approved/<id>/ bước cần đọc; {id} = mã asset (mặc định: mọi file bắt buộc).
 # regions: `region` của finding mới mở đầu bằng một trong các tên này, vd `back: mép mái`.
 # outputs, lock: {id} = mã asset. lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
@@ -72,6 +73,7 @@ gate = "review_human"
 uses = ["blender"]
 top_fix = ["structure", "param"]
 inputs = ["blockout", "views_front", "views_rest"]
+review_inputs = ["blockout"]
 concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
 pilot = true
 lock = "final/{id}-untextured.glb"
