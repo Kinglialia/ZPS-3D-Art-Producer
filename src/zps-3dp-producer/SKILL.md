@@ -44,6 +44,8 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **Bước view gọi Codex** (`views_front`, `views_rest`): mỗi ảnh tốn lượt Codex của người dùng. Ghi chú blocked có lỗi `gen_image_codex` (3 lần lỗi kỹ thuật) thì hỏi người dùng cách xử lý; không tự đổi sang tool ảnh khác (D15.2). Ghi lựa chọn bằng `P rule`, rồi `P retry <id>`.
 
+**Bước model** (DUYỆT 1): duyệt `model` thì script khóa sha256 của `<id>-untextured.glb` (`locked` trong status.json). Từ đó không ai sửa mesh hay UV. Người dùng muốn sửa: `P feedback <id> "<nguyên văn>" --action redo --step model`. Reviewer texture trả `fix_uv_mesh` thì script tự mở lại `model`; lần thứ hai trong một đợt feedback thì hỏi người dùng.
+
 **Báo cáo sai hash:** `ingest` báo `PROFILE_HASH ... khác brief` thì yêu cầu worker chép đúng dòng `PROFILE_HASH` ở đầu brief. `ingest` hoặc `brief` báo "final/ đã duyệt bị sửa" thì hỏi người dùng làm lại bước đó hay không.
 
 **waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`. Mỗi version chỉ nhận một Duyệt hoặc Cần sửa; `redo` cho bản đã duyệt mở vòng mới và version mới.
