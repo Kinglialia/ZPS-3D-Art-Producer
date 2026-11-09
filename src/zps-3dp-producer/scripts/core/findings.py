@@ -215,8 +215,12 @@ def progress(base: dict, doc: dict) -> bool:
 
 
 def best_version(docs: list[dict | None]) -> int | None:
-    """§7.5: fewest open blocker+major; a tie goes to the older version."""
+    """§7.5: fewest open blocker+major; then most blocker+major resolved; then the older version.
+    A newer version that resolved an old finding and shows only a newly seen one beats its base."""
     docs = [d for d in docs if d]
     if not docs:
         return None
-    return min(docs, key=lambda d: (sum(f["priority"] in BM for f in open_of(d).values()), d["version"]))["version"]
+
+    def bm(d, states):
+        return sum(f["priority"] in BM and f["status"] in states for f in d["findings"].values())
+    return min(docs, key=lambda d: (bm(d, OPEN), -bm(d, ("resolved",)), d["version"]))["version"]

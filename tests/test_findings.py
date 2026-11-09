@@ -195,6 +195,15 @@ def test_best_version_has_fewest_open_blocker_major_and_ties_go_to_the_older_ver
     assert best_version([]) is None
 
 
+
+def test_best_version_prefers_the_version_that_resolved_a_major_when_open_counts_tie():
+    # Run 4: v2 fixed F1 and the reviewer then saw F2; the fix brief must start from v2, not rebuild v1.
+    v1 = doc_of(1, F1=("open", "major"))
+    v2 = doc_of(2, F1=("resolved", "major"), F2=("open", "major"))
+    v3 = doc_of(3, F1=("resolved", "major"), F2=("open", "major"))
+    assert best_version([v1, v2]) == 2
+    assert best_version([v1, v2, v3]) == 2
+
 def run(cwd, *args, ok=True):
     r = subprocess.run([sys.executable, str(P), *args], cwd=cwd, capture_output=True, text=True)
     assert (r.returncode == 0) is ok, r.stderr
