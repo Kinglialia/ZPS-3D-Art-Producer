@@ -6,7 +6,7 @@ import re
 import shutil
 
 from . import annotate, findings, hashes, policy, texture
-from .contract import parse_contract, parse_findings, parse_review, parse_worker
+from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
 from .state import ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, step_of, vdir
 
 NOT_PASSED = "chưa đạt"
@@ -117,7 +117,7 @@ def next_action(st: dict) -> str:
 def read_report(rep) -> str:
     if not rep.exists():
         die(f"chưa có báo cáo {rel(rep)}")
-    return rep.read_text(encoding="utf-8")
+    return unwrap(rep.read_text(encoding="utf-8"))
 
 
 def set_aside(rep):

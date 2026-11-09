@@ -6,6 +6,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 - Codex không có file agent riêng. Gọi `spawn_agent` với đúng nội dung sau:
   > Vai của bạn nằm trong `<agent_file>`: đọc file đó trước tiên. Rồi đọc `<brief>`: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
+- `role` là `reviewer`: hai câu cuối đổi thành "Trả cả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`."
 - `agent_file` là khóa của `P brief`. Dòng `tools:` trong file agent không áp dụng trên Codex.
 - Sub-agent dùng chung quyền mạng và sandbox của phiên gốc.
 

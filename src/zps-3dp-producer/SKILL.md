@@ -40,11 +40,13 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
 2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (`references/runtime.md`, mục Resume), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent` (`references/runtime.md`, mục Gọi agent), truyền `model` tường minh khi khác null, prompt đúng như sau:
    > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
+
+   `role` là `reviewer`: hai câu cuối của prompt đổi thành "Trả cả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`."
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
 4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash, chờ xong, rồi `P ingest <id>`.
 5. `P brief` in một dòng thay cho JSON khi bước `texture` dừng trước khi giao (thiếu key Meshy, câu hỏi Meshy): làm theo phần "Tiếp" của dòng đó.
 
-**Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Runtime báo số token của lần giao thì thêm `--tokens <N>`. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format; không tự sửa report.
+**Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): reviewer trả report thì ghi nguyên văn cả tin nhắn vào `<report>` trước. Rồi chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Runtime báo số token của lần giao thì thêm `--tokens <N>`. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format (reviewer trả report mới: ghi đè `<report>`); không tự sửa report.
 
 **blocked:** đọc ghi chú. Nếu thông tin thiếu là thứ bạn có (từ brief, art direction, hoặc lời người dùng trong chat), bổ sung vào mục "Làm rõ" của `assets/<id>/brief.md`, rồi chạy `P retry <id>` và giao lại. Nếu chỉ người dùng trả lời được thì hỏi người dùng.
 

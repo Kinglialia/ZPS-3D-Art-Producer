@@ -143,7 +143,7 @@ PRIOR:
 
 - Khi anh `redo` (đợt feedback mới): finding còn mở của bản gốc được chép sang đợt mới, cộng finding của anh. Bộ đếm vòng đặt lại (D11.4).
 - Mỗi key chấm `unclear` trong `RUBRIC` phải có ít nhất một finding mức `unclear` (D22.6).
-- **Tin nhắn trả về cho Producer** chỉ gồm hai dòng `VERDICT` và `COUNTS` (D22.6). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report.
+- ~~**Tin nhắn trả về cho Producer** chỉ gồm hai dòng `VERDICT` và `COUNTS` (D22.6). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report.~~ **[Sửa sau run 4: reviewer không ghi file report mà trả cả report giữa dòng `--- report ---` và dòng `--- end ---`; Producer ghi nguyên văn tin nhắn vào file report, `ingest` chỉ đọc phần giữa hai dòng đó]**
 
 **Chọn VERDICT** (theo thứ tự, dừng ở dòng đầu tiên khớp). Finding `preference` không tính vào các dòng dưới:
 

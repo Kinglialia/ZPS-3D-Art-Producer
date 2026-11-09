@@ -203,10 +203,11 @@ def review_brief(cfg, st, step, n) -> str:
     nxt = (base or {}).get("next_id", 1)
     tie = sorted((k for k in step["top_fix"] if k in findings.TIE_RANK), key=lambda k: -findings.TIE_RANK[k])
     single = [k for k in step["top_fix"] if k in findings.SINGLE]
+    notes = [k for k in step["top_fix"] if k in findings.NOTE]
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
         "",
-        "Bạn chấm độc lập. Không sửa output, chỉ ghi report.",
+        "Bạn chấm độc lập. Không sửa file nào.",
         "",
         "## Chấm cái gì",
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
@@ -227,7 +228,8 @@ def review_brief(cfg, st, step, n) -> str:
            f"`v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."] if pick else []),
         "",
         "## Báo cáo",
-        f"Ghi vào `{rel(d / 'report-review.md')}`, mở đầu đúng format, mỗi khóa một dòng:",
+        "Trả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi tin nhắn đó "
+        f"vào `{rel(d / 'report-review.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
         f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear; ...",
@@ -245,6 +247,9 @@ def review_brief(cfg, st, step, n) -> str:
         "```",
         f"- FINDINGS chỉ ghi finding mới, id từ F{nxt}, đủ mọi trường; evidence dẫn nhãn trong EVIDENCE_OPENED. "
         "Không có finding mới: `FINDINGS: none`.",
+        "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
+        "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
+        *([f"- Loại {', '.join(f'`{k}`' for k in notes)}: mức `minor`."] if notes else []),
         *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`; "
            + "; ".join(f"`{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
                        if k in findings.REOPEN) + "."] if step["regions"] else []),
@@ -260,7 +265,7 @@ def review_brief(cfg, st, step, n) -> str:
         "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- COUNTS: số finding đang mở (mới + open/regressed). Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
-        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT và COUNTS.",
+        "Tin nhắn cuối chỉ gồm report, giữa dòng `--- report ---` và dòng `--- end ---`.",
     ]
     return "\n".join(lines) + "\n"
 

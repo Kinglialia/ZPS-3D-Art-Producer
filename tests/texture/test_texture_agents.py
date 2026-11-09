@@ -41,7 +41,7 @@ def test_reviewer_is_read_only_and_carries_the_common_rules():
     for rule in ("Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí.",
                  "Không tự đo", "EVIDENCE_OPENED", "`PRIOR`", "**mọi** finding đang mở", "kể cả `H<n>`", "`COMPARE`",
                  "`repaint` mọi finding `repaint` đang mở", "`need_evidence`", "`superseded`", "`preference`",
-                 "chỉ dòng `VERDICT` và dòng `COUNTS`", "Chỉ chấm trong phạm vi bước",
+                 "giữa dòng `--- report ---` và dòng `--- end ---`", "Chỉ chấm trong phạm vi bước",
                  "Không dùng % hay IoU chuẩn hóa theo bbox làm ngưỡng",
                  "Cùng mức: `fix_uv_mesh` trước `meshy_regen` trước `repaint`"):
         assert rule in body, rule

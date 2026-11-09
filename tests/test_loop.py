@@ -555,3 +555,27 @@ def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_
     flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better; H1=better",
                 prior=["- F1: resolved | evidence: clay_front", "- H1: resolved | evidence: clay_front"])
     assert (flow.st["approved"], current(flow)) == ({"blockout": 2}, ["- giữ mái ngói đỏ (Producer gộp)"])
+
+
+def test_a_reviewer_reply_saved_whole_with_its_report_markers_ingests_like_the_bare_report(flow):
+    """Run 4: every reviewer returned its report as text, and the Producer saved the reply as report-review.md."""
+    flow.work()
+    out = flow.brief()
+    body = report(counts=counts(major=1), findings=[finding("F1", "major")])
+    (flow.root / out["report"]).write_text(f"Đã chấm v1.\n--- report ---\n{body}--- end ---\n", encoding="utf-8")
+    assert flow.call(loop.ingest, Namespace(id=AID, agent_id=None)).startswith(
+        "house-a: review FIX (major=1) → blockout/fix.")
+
+
+def test_the_review_brief_asks_for_the_report_as_text_and_states_the_label_rule_that_ingest_enforces(flow):
+    """Run 4: ingest refused a PRIOR whose evidence named `unlit_close_front (lock crop)` for the label
+    `v2 unlit_close_front`."""
+    flow.work()
+    text = flow.text(flow.brief())
+    assert [l for l in text.splitlines() if "--- report ---" in l or "nguyên văn" in l] == [
+        "Trả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi tin nhắn đó "
+        f"vào `production/assets/{AID}/blockout/v1/report-review.md`. Report mở đầu đúng format, mỗi khóa một dòng:",
+        "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
+        "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
+        "Tin nhắn cuối chỉ gồm report, giữa dòng `--- report ---` và dòng `--- end ---`."]
+    assert "mức `minor`" not in text

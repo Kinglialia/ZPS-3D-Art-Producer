@@ -112,7 +112,7 @@ Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`
 
 Script (`report-script.md`, bước có `script` trong `pipeline.toml`, ví dụ `assemble`): `STATUS`, `OUTPUT`, `ISSUES`, `PROFILE_HASH` như worker (`PROFILE_HASH` là tham số cuối của lệnh), rồi `EVIDENCE_OPENED` và `FINDINGS` mỗi điểm fail một finding. `ingest` ghi các finding đó vào `findings.json` của version để trang duyệt hiện. `DONE` → waiting_human; `BLOCKED` → blocked.
 
-Reviewer (`report-review.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
+Reviewer (`report-review.md`). Reviewer trả report giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi nguyên văn cả tin nhắn vào file; `ingest` chỉ đọc phần giữa hai dòng đó.
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear; ...

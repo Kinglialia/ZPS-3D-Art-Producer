@@ -42,7 +42,7 @@ def test_reviewer_is_read_only_and_carries_the_common_rules():
     for rule in ("Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí.",
                  "Không tự đo", "EVIDENCE_OPENED", "`PRIOR`", "**mọi** finding đang mở", "kể cả `H<n>`", "`COMPARE`",
                  "`PICK`", "`structure` đúng một id", "`param` mọi finding `param` đang mở", "`need_evidence`",
-                 "`superseded`", "`preference`", "chỉ dòng `VERDICT` và dòng `COUNTS`", "Chỉ chấm trong phạm vi bước"):
+                 "`superseded`", "`preference`", "giữa dòng `--- report ---` và dòng `--- end ---`", "Chỉ chấm trong phạm vi bước"):
         assert rule in body, rule
     for field in ("region", "viewing_condition", "evidence", "consequence", "confidence", "repair", "preserve",
                   "acceptance"):

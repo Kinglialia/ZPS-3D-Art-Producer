@@ -24,6 +24,13 @@ FID = r"[FH]\d+"
 HEAD = re.compile(rf"^-\s*({FID})\s*\[(\w+)\]\s*(\S*)\s*$")
 PRIOR = re.compile(rf"^-\s*({FID})\s*:\s*([^|\s]*)(.*)$")
 SPLIT = re.compile(rf"\s*\|\s*(?=(?:{'|'.join(FIELDS)})\s*:)")
+WRAPPED = re.compile(r"^--- report ---$\n(.*?)^--- end ---$", re.M | re.S)
+
+
+def unwrap(text: str) -> str:
+    """A reviewer returns its report between `--- report ---` and `--- end ---`; the Producer saves the whole reply."""
+    m = WRAPPED.search(text)
+    return m.group(1) if m else text
 
 
 def parse_contract(text: str, keys: set[str]) -> dict:

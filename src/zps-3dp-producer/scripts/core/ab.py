@@ -290,14 +290,15 @@ def judge_brief(aid: str, d: Path, k: int, lab: dict) -> str:
         "- Hai bản có cùng bộ ảnh, cùng tên file. Mở ảnh cùng tên của X và Y cạnh nhau.", "",
         "## Tiêu chí", crit, "",
         "## Báo cáo",
-        f"Ghi vào `{rel(d / 'report.md')}`, đúng hai dòng:",
+        "Trả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi tin nhắn đó "
+        f"vào `{rel(d / 'report.md')}`. Report đúng hai dòng:",
         "```", f"WINNER: {shape}", "EVIDENCE_OPENED: <ảnh đã mở, cách nhau bằng dấu phẩy>", "```",
-        "Chỉ trả về dòng `DONE`.", ""])
+        "Tin nhắn cuối chỉ gồm report, giữa dòng `--- report ---` và dòng `--- end ---`.", ""])
 
 
 def take(d: Path, k: int) -> dict:
-    from .contract import parse_contract
-    c = parse_contract((d / "report.md").read_text(encoding="utf-8"), {"WINNER", "EVIDENCE_OPENED"})
+    from .contract import parse_contract, unwrap
+    c = parse_contract(unwrap((d / "report.md").read_text(encoding="utf-8")), {"WINNER", "EVIDENCE_OPENED"})
     w = dict(pairs(c.get("WINNER", "")))
     errs = [f"thiếu {x}" for x in CRITERIA if x not in w] + [f"{x}={v} phải là X|Y|tie" for x, v in w.items()
                                                               if x in CRITERIA and v not in ("X", "Y", "tie")]
