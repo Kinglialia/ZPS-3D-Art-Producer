@@ -168,6 +168,19 @@ def test_install_copies_skills_and_flat_agents_and_an_upgrade_keeps_only_the_ven
             (tmp_path / ".claude/skills/zps-3dp-project-setup/SKILL.md").is_file()) == (True, False, True)
 
 
+def test_install_refuses_a_symlinked_skill_folder_and_deletes_nothing_in_its_target(dist, tmp_path):
+    t, mine = tree(dist, "claude"), tmp_path / "my-skill"
+    (mine / "scripts").mkdir(parents=True)
+    (mine / "scripts/mine.py").write_text("my own file", encoding="utf-8")
+    (tmp_path / ".claude/skills").mkdir(parents=True)
+    (tmp_path / ".claude/skills/zps-3dp-producer").symlink_to(mine, target_is_directory=True)
+    r = subprocess.run([sys.executable, str(t / "install.py"), "--project", str(tmp_path)], capture_output=True, text=True)
+    assert (r.returncode, r.stdout) == (2, f"{tmp_path.resolve() / '.claude/skills/zps-3dp-producer'} là symlink tới "
+                                           f"{mine.resolve()}: không cài, để khỏi xoá file ở đó. Gỡ symlink rồi chạy lại.\n")
+    assert ((mine / "scripts/mine.py").read_text(encoding="utf-8"), sorted(p.name for p in mine.rglob("*")),
+            (tmp_path / ".claude/skills/zps-3dp-project-setup").exists()) == ("my own file", ["mine.py", "scripts"], False)
+
+
 FAKE_CODEX = r'''import ast, json, re, sys
 a = sys.argv[1:]
 rules = open(a[a.index("--rules") + 1], encoding="utf-8").read()

@@ -37,6 +37,10 @@ def main() -> int:
         return 2
     plan = [(HERE / "skills" / s, proj / m["install_root"] / s) for s in m["skills"]]
     plan += [(HERE / "agents" / f"{n}.md", proj / m["agents_root"] / f"{n}.md") for n in m["agents"]] if m["agents_root"] else []
+    if links := [dst for src, dst in plan if src.is_dir() and dst.is_symlink()]:
+        print("\n".join(f"{d} là symlink tới {d.resolve()}: không cài, để khỏi xoá file ở đó. Gỡ symlink rồi chạy lại."
+                        for d in links))
+        return 2
     for src, dst in plan:
         print(f"{'(thử) ' if a.dry_run else ''}{src.relative_to(HERE)} → {dst}")
         if a.dry_run:
