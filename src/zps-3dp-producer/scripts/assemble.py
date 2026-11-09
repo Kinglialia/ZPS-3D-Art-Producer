@@ -253,6 +253,8 @@ def main():
     a = p.parse_args()
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", a.id):
         p.error(f"id '{a.id}' không hợp lệ: chỉ gồm a-z, 0-9 và '-'")
+    if not (st := ROOT / "assets" / a.id / "status.json").is_file():
+        p.error(f"không thấy {st}: chạy lệnh từ gốc project")
     d = vdir(a.id, "assemble", a.version)
     for sub in ("final", "work"):
         shutil.rmtree(d / sub, ignore_errors=True)

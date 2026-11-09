@@ -68,3 +68,15 @@ def test_an_id_that_leaves_the_assets_folder_is_refused_before_assemble_deletes_
     assert (r.returncode, r.stderr.splitlines()[-1]) == (
         2, "assemble.py: error: id '../../outside' không hợp lệ: chỉ gồm a-z, 0-9 và '-'")
     assert keep.read_text(encoding="utf-8") == "keep"
+
+
+def test_run_from_outside_the_project_it_refuses_before_it_writes_anything(tmp_path):
+    """Run 4: started from another folder, assemble.py wrote a blocked report under that folder."""
+    project(tmp_path)
+    other = tmp_path / "other"
+    other.mkdir()
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--", AID, "1",
+                        "abc123"], cwd=other, capture_output=True, text=True)
+    assert (r.returncode, r.stderr.splitlines()[-1]) == (
+        2, f"assemble.py: error: không thấy production/assets/{AID}/status.json: chạy lệnh từ gốc project")
+    assert list(other.iterdir()) == []
