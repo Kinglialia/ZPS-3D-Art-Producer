@@ -73,7 +73,7 @@ def test_param_variants_run_their_own_checks_so_a_picked_variant_carries_its_own
 
 def test_worker_reads_blockout_md_sections_from_a_shipped_reference_with_the_summary_first():
     _, body = front(WORKER)
-    assert "docs/" not in body and "`references/part-graph.md` mục `blockout.md`" in body
+    assert "docs/" not in body and "`R/part-graph.md` mục `blockout.md`" in body
     pg = (AGENT / "references/part-graph.md").read_text(encoding="utf-8").split("## `blockout.md`", 1)[1]
     items = re.findall(r"^(\d+)\. (.+)$", pg.split("\n## ", 1)[0], re.M)
     assert [int(n) for n, _ in items] == list(range(1, 11))

@@ -125,13 +125,20 @@ def set_aside(rep):
         rep.rename(rep.with_name(f"{rep.stem}-{1 + len(list(rep.parent.glob(f'{rep.stem}-*.md')))}.md"))
 
 
-def offer(st: dict, sid: str, n: int, **kw):
+def log_wait(st: dict, sid: str, n: int | None, note: str, key: str | None = None, verdict: str | None = None):
+    """`P compare` (§16, D25.J) counts waits per reason and the user's answer to each offer, so silence stays visible."""
+    why = "duyệt" if note.startswith("duyệt ") else note.split(";")[0].split(" (")[0].strip()
+    st.setdefault("offer_log", []).append({"key": key, "step": sid, "v": n, "why": why, "verdict": verdict, "at": now()})
+
+
+def offer(st: dict, sid: str, n: int, verdict: str | None = None, **kw):
     """D22.8 per offer: an offered version takes a new decision, also when it was decided in an earlier round.
     `offer_key` names this offer, so a board click answers the offer it saw and no later one. It starts with the asset
     id: pages that list several assets key their decisions by it alone."""
     st.setdefault("decisions", {}).pop(f"{sid} v{n}", None)
     st["offers"] = st.get("offers", 0) + 1
     st |= {"offer": n, "offer_key": f"{st['id']}-{sid}-v{n}-{st['offers']}", **kw}
+    log_wait(st, sid, n, kw.get("note", ""), st["offer_key"], verdict)
 
 
 def valid(rep, parsed: tuple):
@@ -270,12 +277,13 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         approve(cfg, st, step, n, "reviewer" if who == "reviewer" else policy.BY[who])
     elif event == "await_approval":
         move(st, event)
-        offer(st, sid, n, note=f"duyệt {sid} v{n}", label="")
+        offer(st, sid, n, rv["verdict"], note=f"duyệt {sid} v{n}", label="")
     elif event == "ask_human":
         move(st, event)
         q = texture.ask_regen(st, n, True, f"meshy_regen {', '.join(rv['top_fix']['ids'])}") if kind == "meshy_regen" else None
         ids = ", ".join(findings.open_of(findings.load(aid, sid, best)))
-        offer(st, sid, n if q else best, note=q or reason + (f"; còn mở: {ids}" if ids else ""), label=NOT_PASSED)
+        offer(st, sid, n if q else best, rv["verdict"], note=q or reason + (f"; còn mở: {ids}" if ids else ""),
+              label=NOT_PASSED)
     elif event == "fix":
         move(st, event)
         st["fix_round"] = st.get("fix_round", 0) + 1
@@ -300,8 +308,11 @@ def ingest(a):
     n = st["versions"].get(step["id"])
     h = HANDLERS.get(st["state"]) or die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
     event, reason = h(cfg, st, step, vdir(a.id, step["id"], n), n, a)
+    if (tokens := getattr(a, "tokens", None)) is not None and st.get("dispatches"):
+        st["dispatches"][-1]["tokens"] = tokens
     save_st(st)
-    ledger(f"{a.id} · {step['id']} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else ""))
+    ledger(f"{a.id} · {step['id']} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else "")
+           + (f" · tokens {tokens}" if tokens is not None else ""))
     build_outputs(cfg)
     print(f"{a.id}: {event} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
 
@@ -309,6 +320,7 @@ def ingest(a):
 def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     sid = step["id"]
     st["approved"][sid] = n
+    st.setdefault("approved_at", {})[sid] = now()
     st.setdefault("approved_hash", {})[sid] = hashes.tree_hash(vdir(st["id"], sid, n) / "final")
     if step["lock"]:
         p = vdir(st["id"], sid, n) / step["lock"].format(id=st["id"])
@@ -439,6 +451,8 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
 
     def decide():
         done[key] = {"action": action, "at": now(), "offer": st.get("offer_key")}
+        if w := next((w for w in st.get("offer_log", []) if w["key"] == st.get("offer_key") and "decision" not in w), None):
+            w |= {"decision": action, "decided": now()}
 
     def keep():
         nonlocal folder

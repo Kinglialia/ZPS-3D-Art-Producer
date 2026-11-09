@@ -79,7 +79,7 @@ def test_rubric_template_keys_of_each_views_step_are_the_reviewer_keys(rubric, s
 
 def test_worker_points_only_at_references_and_tools_that_exist():
     _, body = front(WORKER)
-    for ref in re.findall(r"`references/([\w.-]+)`", body):
+    for ref in re.findall(r"`R/([\w.-]+)`", body):
         assert (AGENT / "references" / ref).is_file(), ref
     for tool in set(re.findall(r"T/([\w.]+\.(?:py|sh))", body)):
         assert (AGENT / "tools" / tool).is_file(), tool

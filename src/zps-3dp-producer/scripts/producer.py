@@ -168,6 +168,7 @@ def main(argv: list[str] | None = None):
     sub.add_parser("brief", help="sinh brief cho worker/reviewer, in JSON để giao việc").add_argument("id")
     x = sub.add_parser("ingest", help="đọc báo cáo, chuyển state")
     x.add_argument("id"); x.add_argument("--agent-id", help="id subagent worker, để resume vòng sửa")
+    x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này, nếu runtime báo được (P compare)")
     sub.add_parser("retry", help="giao lại asset đang blocked").add_argument("id")
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])

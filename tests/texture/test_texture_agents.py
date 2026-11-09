@@ -79,7 +79,7 @@ def commands():
 
 def test_worker_points_only_at_references_and_tools_that_exist():
     text, calls = commands()
-    refs = re.findall(r"`references/([\w.-]+)`", front(WORKER)[1])
+    refs = re.findall(r"`R/([\w.-]+)`", front(WORKER)[1])
     assert refs and all((AGENT / "references" / r).is_file() for r in refs), refs
     tools = {s for s, _ in calls}
     assert tools == {"check_inputs.py", "texture_complexity.py", "id_map.py", "render_texture.py", "tex_measure.py",

@@ -9,9 +9,9 @@ from pathlib import Path
 from . import findings, hashes, preflight, texture
 from .contract import NONE, parse_worker
 from .hashes import ad_text
-from .loop import move, next_action, review_base, set_aside
-from .state import (ASSETS, DELIVER, ROOT, SKILL_DIR, die, ledger, load_cfg, load_st, outputs_of, rel, save_st, step_of,
-                    vdir)
+from .loop import log_wait, move, next_action, review_base, set_aside
+from .state import (ASSETS, DELIVER, EDITION, ROOT, SKILL_DIR, agent_file, agent_name, die, ledger, load_cfg, load_st,
+                    model_of, now, outputs_of, rel, save_st, step_of, vdir)
 
 
 def image_gen(preset: Path) -> dict:
@@ -29,7 +29,7 @@ def pilot_line(prof: dict) -> str:
 
 
 def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = ()) -> list[str]:
-    t = SKILL_DIR / "agents" / f"zps-3dp-{step.get('agent')}" / "tools"
+    t = SKILL_DIR / "agents" / agent_name(step.get("agent")) / "tools"
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
         [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else []
     ) + list(extra)
@@ -304,6 +304,8 @@ def stop(a, cfg, st, sid, s, event: str, note: str):
         st["blocked_from"] = s
     move(st, event)
     st["note"] = note
+    if st["state"] == "waiting_human":
+        log_wait(st, sid, None, note)
     save_st(st)
     ledger(f"{a.id} · {sid} · {st['state']} trước khi giao: {note}")
     build_outputs(cfg)
@@ -358,7 +360,7 @@ def run(a):
                 resume = st.get("worker_agent_id")
             elif fix and step.get("escalate_model"):
                 model = step["escalate_model"]
-            out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": model, "resume": resume,
+            out = {"role": "worker", "agent": agent_name(step["agent"]), "model": model, "resume": resume,
                    "brief": rel(bp), "report": rel(d / "report-worker.md")}
     elif s in ("evidence", "evidence_running"):
         n = st["versions"][sid]
@@ -366,19 +368,26 @@ def run(a):
         ed.mkdir(parents=True, exist_ok=True)
         bp = ed / "brief-worker.md"
         bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"], pf, preset), encoding="utf-8")
-        out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": step.get("model"), "resume": st.get("worker_agent_id"),
+        out = {"role": "worker", "agent": agent_name(step["agent"]), "model": step.get("model"), "resume": st.get("worker_agent_id"),
                "brief": rel(bp), "report": rel(ed / "report-worker.md")}
     elif s in ("review", "reviewing"):
         n = st["versions"][sid]
         d = vdir(a.id, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
-        out = {"role": "reviewer", "agent": f"zps-3dp-{step['reviewer']}", "model": r["reviewer_model"],
+        out = {"role": "reviewer", "agent": agent_name(step["reviewer"]), "model": r["reviewer_model"],
                "resume": None, "brief": rel(bp), "report": rel(d / "report-review.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")
     set_aside(Path(out["report"]))
     move(st, "dispatch")
+    who = step["script"]
+    if out["role"] != "script":
+        out["model"] = model_of(out["model"])
+        if EDITION.get("agent_file"):
+            out["agent_file"] = rel(agent_file(out["agent"]))
+        st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"], "at": now()})
+        who = f"{out['agent']}, {out['model'] or 'model của phiên'}"
     save_st(st)
-    ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({out.get('agent') or step['script']})")
+    ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({who})")
     print(json.dumps(out, ensure_ascii=False))

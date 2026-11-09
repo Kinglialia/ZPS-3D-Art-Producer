@@ -79,7 +79,7 @@ def test_rubric_template_model_keys_are_the_check_clay_keys(rubric):
 
 def test_worker_points_only_at_references_and_tools_that_exist():
     _, body = front(WORKER)
-    refs = re.findall(r"`references/([\w.-]+)`", body)
+    refs = re.findall(r"`R/([\w.-]+)`", body)
     assert refs and all((AGENT / "references" / r).is_file() for r in refs), refs
     assert (AGENT / "tools" / "../../zps-3dp-step-blockout/references/part-graph.md").resolve().is_file()
     tools = set(re.findall(r"T/([\w/]+\.(?:py|sh))", body))

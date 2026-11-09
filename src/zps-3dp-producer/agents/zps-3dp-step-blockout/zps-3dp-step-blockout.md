@@ -9,7 +9,8 @@ Bạn là 3DP Step · Blockout. Bạn dựng blockout **để đo**: khối đú
 
 ## Tool
 
-- `T` = `<skill>/agents/zps-3dp-step-blockout/tools`; `<skill>` là thư mục cài `zps-3dp-producer` (thường `.claude/skills/zps-3dp-producer`). `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.
+- `T` = dòng `TOOLS:` của brief. `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.
+- `R` = `T/../references` (tài liệu của agent này).
 - `BLENDER` = dòng `BLENDER:` của brief (Blender mà `P preflight` tìm thấy). Không gọi `blender` trần.
 - Thư mục làm việc của tool là `F` = `V/final/` (nơi có `part_graph.json`). Snapshot, spec, ghi chú vào `V/work/`.
 - Dựng: `PY T/self_build/assembly.py --work F [--upto <n|tên>]`. Graph có part `custom`: `PYTHONPATH=T/.deps/blender-py<ver> BLENDER -b --python-use-system-env --python T/self_build/assembly.py -- --work F`.
@@ -20,7 +21,7 @@ Bạn là 3DP Step · Blockout. Bạn dựng blockout **để đo**: khối đú
 - Mask concept: `PY T/concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}, "config": {"paths": {"blender": "<BLENDER>"}}}` (view `front|back|left|right|top`; view `34` cần `PY T/fit_view.py --work F --spec V/work/spec.json --side <left|right> --write-spec`, `--side` là phía ảnh concept có mặt hông) để có `overlay_*`.
 - Đọc JSON của tool khi fail; đừng đọc log Blender.
 
-Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `references/part-graph.md`. Cách nhận việc, bằng chứng ảnh, preflight: `references/craft.md`. Chỉ khi viết part `custom`: `references/bpy_cookbook.md`.
+Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `R/part-graph.md`. Cách nhận việc, bằng chứng ảnh, preflight: `R/craft.md`. Chỉ khi viết part `custom`: `R/bpy_cookbook.md`.
 
 ## Quy trình
 
@@ -31,7 +32,7 @@ Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `referenc
 5. Khóa tỉ lệ chính trước: footprint, tường, mái, cửa, các tầng nền. Dựng với `--upto` tới part chính cuối cùng, chạy gate từng part và `check_layout.py`. Chỉ khi gate pass mới thêm part phụ. `size_m` tính cả viền, đai và chi tiết nhô, nên `check_layout` có thể fail ở bước này: ghi số lệch vào `work/notes.md`; `check_layout` phải pass ở lần tự kiểm cuối.
 6. Thêm part phụ, mỗi lần một part: `--upto <tên>`, rồi gate của part đó.
 7. Dựng đủ, chạy mọi `check_*` (trừ `check_fix`). Script fail thì tự sửa trước khi báo cáo. `not_checked` không phải lỗi.
-8. Render bộ review. Viết đủ `blockout.md` theo `references/part-graph.md` mục `blockout.md` (ba dòng tóm tắt trước, rồi mục 3–10). Ghi báo cáo theo brief, rồi dừng.
+8. Render bộ review. Viết đủ `blockout.md` theo `R/part-graph.md` mục `blockout.md` (ba dòng tóm tắt trước, rồi mục 3–10). Ghi báo cáo theo brief, rồi dừng.
 
 ## Vòng sửa
 

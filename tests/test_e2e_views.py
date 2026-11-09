@@ -106,7 +106,7 @@ def flow(tmp_path_factory):
              prior=["- H1: resolved | evidence: front.png"])
     f.human("approve blockout v2", "đạt", "--action", "approve")
     f.brief("vf4 brief")
-    f.cp["ledger"] = [l.split(" · ", 1)[1] for l in (root / "production/ledger.md").read_text(encoding="utf-8")
+    f.cp["ledger"] = [l.split(" · ", 2)[2] for l in (root / "production/ledger.md").read_text(encoding="utf-8")
                       .splitlines() if l.startswith("- ")]
     f.cp["root"] = root
     return f.cp
@@ -244,9 +244,9 @@ def test_a_blockout_redo_after_the_set_keeps_the_old_views_as_prior_so_the_next_
 def test_the_ledger_records_the_reopen_with_the_carried_id(flow):
     def rnd(step, n, review, aid="pilot-house", by_reviewer=False):
         agent = "blockout" if step == "blockout" else "views"
-        return [f"{aid} · {step} v{n} · giao worker (zps-3dp-step-{agent})",
+        return [f"{aid} · {step} v{n} · giao worker (zps-3dp-step-{agent}, opus)",
                 f"{aid} · {step} v{n} · worker DONE · style=pass",
-                f"{aid} · {step} v{n} · giao reviewer (zps-3dp-check-{agent})",
+                f"{aid} · {step} v{n} · giao reviewer (zps-3dp-check-{agent}, opus)",
                 *([f"{aid} · {step} v{n} · duyệt bởi reviewer"] if by_reviewer else []),
                 f"{aid} · {step} v{n} · review {review}"]
     assert flow["ledger"] == [
@@ -262,7 +262,7 @@ def test_the_ledger_records_the_reopen_with_the_carried_id(flow):
         "pilot-house · người dùng redo blockout · mái cao thêm 20 cm",
         *rnd("blockout", 2, "PASS (0 mở) · style=pass"),
         "pilot-house · blockout v2 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt",
-        "pilot-house · views_front v4 · giao worker (zps-3dp-step-views)"]
+        "pilot-house · views_front v4 · giao worker (zps-3dp-step-views, opus)"]
 
 
 def test_every_views_brief_stays_under_the_token_budget_without_the_install_and_project_paths(flow):

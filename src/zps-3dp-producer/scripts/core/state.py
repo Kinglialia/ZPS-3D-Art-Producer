@@ -21,7 +21,23 @@ TEMPLATES = SKILL_DIR / "templates"
 ROOT = Path(os.environ.get("PRODUCER_ROOT", "production"))
 ASSETS = ROOT / "assets"
 ARCHIVE = ROOT / "archive"
-DELIVER = ROOT.parent / "deliver"
+RUNTIMES = ("claude", "codex")
+
+
+def _edition() -> dict:
+    """`runtime.json` that build.py writes into each edition; the source tree has none."""
+    try:
+        return json.loads((SKILL_DIR / "runtime.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+EDITION = _edition()
+RUNTIME = os.environ.get("PRODUCER_RUNTIME") or EDITION.get("runtime") or "src"
+SUFFIX = EDITION.get("suffix", "")
+MODELS = EDITION.get("models") or {}
+DELIVER = ROOT.parent / ("deliver" + ROOT.name.removeprefix("production") if ROOT.name.startswith("production")
+                         else ROOT.name + "-deliver")
 PORT = 8765
 FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
@@ -56,9 +72,31 @@ def write_atomic(p: Path, text: str):
     os.replace(tmp, p)
 
 
+def runtime_guard():
+    """A/B (§16): `production-<runtime>` belongs to that runtime; another edition must not write its ledger."""
+    m = re.fullmatch(r"production-(\w+)", ROOT.name)
+    if m and m[1] in RUNTIMES and RUNTIME in RUNTIMES and m[1] != RUNTIME:
+        die(f"{ROOT} là thư mục của runtime {m[1]}, phiên này là {RUNTIME}: đặt PRODUCER_ROOT=production-{RUNTIME}")
+
+
+def agent_name(short: str) -> str:
+    return f"zps-3dp-{short}{SUFFIX}"
+
+
+def agent_file(name: str) -> Path:
+    d = SKILL_DIR / "agents"
+    return d / name / f"{name}.md" if (d / name).is_dir() else d / f"{name}.md"
+
+
+def model_of(generic: str | None) -> str | None:
+    """The adapter's real model for `opus|sonnet|haiku` (edition `models`); null = the session's own model."""
+    return MODELS.get(generic, generic) if generic else None
+
+
 @contextlib.contextmanager
 def locked(create: bool = False):
     """One writer at a time across P processes and board threads: flock on production/.lock."""
+    runtime_guard()
     if create:
         ROOT.mkdir(parents=True, exist_ok=True)
     if not ROOT.is_dir():
@@ -184,7 +222,7 @@ def sort_key(st: dict):
 
 def ledger(line: str):
     with open(ROOT / "ledger.md", "a", encoding="utf-8") as f:
-        f.write(f"- {now()} · {line}\n")
+        f.write(f"- {now()} · {RUNTIME} · {line}\n")
 
 
 def vdir(aid: str, step: str, n: int) -> Path:
