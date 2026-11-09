@@ -90,8 +90,8 @@ def assemble(base, tmp_path, edit=None, blender=BLENDER):
     shutil.copytree(base, root, symlinks=True)
     if edit:
         edit(root / "production/assets" / AID)
-    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), AID, "--version", "1", "--profile-hash", "abc123",
-                        "--blender", str(blender)], cwd=root, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", str(blender), "--", AID, "1", "abc123"],
+                       cwd=root, capture_output=True, text=True)
     d = root / "production/assets" / AID / "assemble/v1"
     rep = (d / "report-script.md").read_text(encoding="utf-8") if (d / "report-script.md").is_file() else r.stderr
     cmp_ = d / "final/review/compare.json"

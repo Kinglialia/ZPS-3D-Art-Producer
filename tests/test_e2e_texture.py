@@ -157,8 +157,7 @@ def test_a_texture_pass_moves_straight_on_to_assemble_and_its_brief_is_a_script_
     b = flow["a1 brief"]
     ph = flow["t1 brief"]["text"].split("PROFILE_HASH: ")[1][:12]
     assert b["out"] == {"role": "script", "report": f"{A}/assemble/v1/report-script.md", "command": shlex.join([
-        sys.executable, str(SKILL / "scripts/assemble.py"), AID, "--version", "1", "--profile-hash", ph,
-        "--blender", "blender"])}
+        sys.executable, str(SKILL / "scripts/assemble.py"), "--blender", "blender", "--", AID, "1", ph])}
 
 
 def test_an_assemble_fail_blocks_with_the_fail_points_as_findings_for_the_board(flow):

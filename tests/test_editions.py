@@ -212,6 +212,30 @@ def test_the_codex_rule_lets_blender_run_installed_scripts_and_nothing_else_row_
     assert preview.count("prefix_rule(") == 4 and f'"{codex_project / "bin/Blender"}", "-b", "--python", [' in preview
 
 
+def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_options_so_no_tail_runs_other_code(
+        codex_project, dist):
+    r = rules(codex_project, dist)
+    preview = r.stdout.split("Preview only: ", 1)[1].splitlines()[0]
+    sk = codex_project / ".agents/skills"
+    blender, py = str(codex_project / "bin/Blender"), str(sk / "zps-3dp-producer-codex/scripts/.deps/venv/bin/python")
+    script = str(sk / "zps-3dp-producer-codex/agents/zps-3dp-step-model-codex/tools/unwrap.py")
+    spawner, prod = str(sk / "zps-3dp-producer-codex/scripts/assemble.py"), str(sk / "zps-3dp-producer-codex/scripts/producer.py")
+
+    def decision(*cmd):
+        out = subprocess.run([str(codex_project / "bin/codex"), "execpolicy", "check", "--rules", preview, "--", *cmd],
+                             capture_output=True, text=True).stdout
+        return json.loads(out or "{}").get("decision")
+    assert [decision(*c) for c in (
+        [blender, "-b", "--python", script, "--", "--final", "F"],
+        [blender, "-b", "--python", script, "--python-expr", "print(1)"],
+        [blender, "-b", "--python", script, "--python", "/tmp/evil.py", "--"],
+        [blender, "-b", "--python-exit-code", "1", "--python", script, "--python", "/tmp/evil.py"],
+        [py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"],
+        [py, spawner, "house-a", "--version", "1", "--profile-hash", "h", "--blender", "/tmp/evil.sh"],
+        [py, spawner, "--blender", "/tmp/evil.sh", "--", "house-a", "1", "abc123"],
+        [py, prod, "preflight"])] == ["allow", None, None, None, "allow", None, None, "allow"]
+
+
 def test_the_codex_rule_is_written_only_on_write_and_never_over_a_foreign_file(codex_project, dist):
     assert rules(codex_project, dist, "--write").returncode == 0
     f = codex_project / "rules/zps-3dp-producer.rules"

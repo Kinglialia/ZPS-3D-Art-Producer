@@ -165,8 +165,8 @@ def main(argv: list[str] | None = None):
     x = sub.add_parser("init", help="tạo production/, rubric mẫu, _approved/ và GUIDELINE.md")
     x.add_argument("--project", required=True, help="tên project, vd \"New Last Order\"")
     x.add_argument("--concepts", required=True, help="thư mục concept của project")
-    sub.add_parser("preflight", help="kiểm môi trường một lần mỗi phiên → production/preflight.json").add_argument(
-        "--kit", help="preflight.py của kit (mặc định: skill zps-3d-artist cạnh skill này)")
+    sub.add_parser("preflight", help="kiểm môi trường một lần mỗi phiên → production/preflight.json "
+                                     "(preflight.py của kit: biến PRODUCER_KIT, mặc định skill zps-3d-artist cạnh skill này)")
     x = sub.add_parser("intake", help="quét _approved/: không tham số = chỉ liệt kê")
     x.add_argument("ids", nargs="*", help="building id cần đăng ký (làm trước)")
     x.add_argument("--all", action="store_true", help="đăng ký mọi building mới đủ ảnh")

@@ -109,7 +109,7 @@ class Flow:
         out = self.brief(name + " brief")
         vd = (self.root / out["report"]).parent
         self.outputs(vd, "assemble", name)
-        ph = shlex.split(out["command"])[shlex.split(out["command"]).index("--profile-hash") + 1]
+        ph = shlex.split(out["command"])[-1]
         head = (f"STATUS: BLOCKED\nOUTPUT: {vd}/final/\nISSUES: {fail}\nPROFILE_HASH: {ph}\n" if fail else
                 f"STATUS: DONE\nOUTPUT: {vd}/final/\nISSUES: none\nPROFILE_HASH: {ph}\n")
         body = ("EVIDENCE_OPENED: work/evidence/compare.json\nFINDINGS:\n" + finding(

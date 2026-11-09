@@ -72,7 +72,7 @@ def run_preflight(a):
     ROOT.mkdir(parents=True, exist_ok=True)
     b, ef = blender(), env_file()
     codex = shutil.which("codex")
-    k = kit(Path(a.kit) if a.kit else KIT_SIBLING)
+    k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
     feats = {"blender": b is not None, "codex_image": codex is not None, "meshy": has_meshy_key(ef)}
     write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "env_file": ef, "kit": k},
                                  ensure_ascii=False, indent=2))

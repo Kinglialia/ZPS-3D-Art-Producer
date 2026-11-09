@@ -55,7 +55,8 @@ def test_preflight_records_each_feature_in_one_line_and_never_prints_the_meshy_k
     proj.tool("blender", "Blender 4.2.1 LTS")
     proj.tool("codex", "codex-cli 0.50.0")
     (proj.root / ".env").write_text(f"MESHY_API_KEY={KEY}\n", encoding="utf-8")
-    r = proj.run("preflight", "--kit", str(proj.kit))
+    proj.env["PRODUCER_KIT"] = str(proj.kit)
+    r = proj.run("preflight")
     assert r.stdout == "preflight: bật blender, codex_image, meshy; kit pass → production/preflight.json\n"
     assert proj.result() == {
         "features": {"blender": True, "codex_image": True, "meshy": True},
@@ -80,10 +81,17 @@ def test_feature_off_blocks_dispatch_of_the_step_that_needs_it(proj):
     assert (st["state"], st["versions"]) == ("todo", {})
 
 
+def test_the_kit_path_never_comes_from_the_command_line_so_the_codex_preflight_rule_runs_only_the_installed_kit(proj):
+    r = proj.run("preflight", "--kit", str(proj.kit), ok=False)
+    assert (r.returncode, r.stderr.splitlines()[-1]) == (2, f"producer.py: error: unrecognized arguments: --kit {proj.kit}")
+    assert not (proj.kit.parent / "calls.txt").exists()
+
+
 def test_next_and_brief_read_the_cached_result_and_never_rerun_the_kit(proj):
     assert "Chưa có production/preflight.json → chạy `preflight` một lần mỗi phiên" in proj.run("next").stdout
     proj.tool("blender", "Blender 4.2.1")
-    proj.run("preflight", "--kit", str(proj.kit))
+    proj.env["PRODUCER_KIT"] = str(proj.kit)
+    proj.run("preflight")
     proj.run("next")
     proj.run("brief", "house-a")
     proj.run("next")

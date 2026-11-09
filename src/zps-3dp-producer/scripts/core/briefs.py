@@ -348,8 +348,8 @@ def run(a):
         hashes.record_inputs(cfg, st, i, n, ph)
         if step["script"]:
             blender = ((pf or {}).get("blender") or {}).get("path") or "blender"
-            cmd = [sys.executable, str(SKILL_DIR / "scripts" / step["script"]), a.id, "--version", str(n),
-                   "--profile-hash", ph, "--blender", blender]
+            cmd = [sys.executable, str(SKILL_DIR / "scripts" / step["script"]), "--blender", blender, "--", a.id, str(n),
+                   ph]
             out = {"role": "script", "command": shlex.join(cmd), "report": rel(d / "report-script.md")}
         else:
             bp = d / "brief-worker.md"

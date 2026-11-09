@@ -34,8 +34,8 @@ def project(t: Path) -> Path:
 
 def test_a_blender_that_cannot_start_still_writes_a_blocked_report_whose_finding_the_board_can_parse(tmp_path):
     rep = project(tmp_path)
-    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), AID, "--version", "1", "--profile-hash", "abc123",
-                        "--blender", "/nonexistent/blender"], cwd=tmp_path, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--", AID, "1",
+                        "abc123"], cwd=tmp_path, capture_output=True, text=True)
     assert (r.returncode, r.stdout) == (1, "[assemble] fail 1 điểm -> production/assets/box/assemble/v1/report-script.md\n")
     text = rep.read_text(encoding="utf-8")
     assert text.splitlines()[:3] == [
@@ -45,3 +45,26 @@ def test_a_blender_that_cannot_start_still_writes_a_blocked_report_whose_finding
     errs = []
     fs = parse_findings(c["FINDINGS"], [c["EVIDENCE_OPENED"]], errs)
     assert (errs, [(f["priority"], f["kind"]) for f in fs.values()]) == ([], [("blocker", "script")])
+
+
+def test_the_codex_rule_shape_reads_no_option_after_the_double_dash_so_a_second_blender_never_runs(tmp_path):
+    project(tmp_path)
+    evil = tmp_path / "evil.sh"
+    evil.write_text(f"#!/bin/sh\ntouch {tmp_path / 'ran'}\n", encoding="utf-8")
+    evil.chmod(0o755)
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--", AID, "1",
+                        "abc123", "--blender", str(evil)], cwd=tmp_path, capture_output=True, text=True)
+    assert (r.returncode, r.stderr.splitlines()[-1]) == (2, f"assemble.py: error: unrecognized arguments: --blender {evil}")
+    assert not (tmp_path / "ran").exists() and not (tmp_path / "production/assets" / AID / "assemble/v1/final").exists()
+
+
+def test_an_id_that_leaves_the_assets_folder_is_refused_before_assemble_deletes_anything(tmp_path):
+    project(tmp_path)
+    keep = tmp_path / "outside/assemble/v1/final/keep.txt"
+    keep.parent.mkdir(parents=True)
+    keep.write_text("keep", encoding="utf-8")
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--",
+                        "../../outside", "1", "abc123"], cwd=tmp_path, capture_output=True, text=True)
+    assert (r.returncode, r.stderr.splitlines()[-1]) == (
+        2, "assemble.py: error: id '../../outside' không hợp lệ: chỉ gồm a-z, 0-9 và '-'")
+    assert keep.read_text(encoding="utf-8") == "keep"

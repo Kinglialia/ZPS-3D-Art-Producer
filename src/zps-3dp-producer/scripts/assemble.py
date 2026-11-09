@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Step `assemble`, a script with no agent (docs/producer.md §6.4, D22.11, D24.4). `P brief` prints this command.
 
-Usage: assemble.py <id> --version N --profile-hash H --blender <BLENDER>
+Usage: assemble.py --blender <BLENDER> -- <id> <N> <profile hash>
 Reads the approved `model` and `texture` versions of status.json and writes assemble/vN/ only:
   1 sha256 of model final/<id>-untextured.glb = locked.model; albedo_<texture_res>.png is res x res.
   2 assemble_glb.py: final/model/<id>.glb (1 mesh, 1 node, 1 material, unlit, base colour) and <id>.blend.
@@ -247,10 +247,12 @@ def report(a, d: Path, fails: list[dict]) -> str:
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("id")
-    p.add_argument("--version", type=int, required=True)
-    p.add_argument("--profile-hash", required=True)
+    p.add_argument("version", type=int)
+    p.add_argument("profile_hash")
     p.add_argument("--blender", default="blender")
     a = p.parse_args()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", a.id):
+        p.error(f"id '{a.id}' không hợp lệ: chỉ gồm a-z, 0-9 và '-'")
     d = vdir(a.id, "assemble", a.version)
     for sub in ("final", "work"):
         shutil.rmtree(d / sub, ignore_errors=True)

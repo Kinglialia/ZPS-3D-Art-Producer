@@ -3,11 +3,13 @@
 
 Why: on macOS, Blender crashes inside the Codex sandbox (the sandbox blocks the Metal GPU check). Copied from the kit's
 installer/codex_rules.py (v0.10.4). The rule allows only these literal commands:
-  <Blender> -b --python <installed Producer script>.py ...
-  <Blender> -b --python-exit-code 1 --python <installed Producer script>.py ...
-  <Producer venv python> <scripts/assemble.py> ...          (it starts Blender itself)
-  <Producer venv python> <scripts/producer.py> preflight     (it starts Blender and the kit preflight)
-Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Any other command still runs in the sandbox
+  <Blender> -b --python <installed Producer script>.py -- ...
+  <Blender> -b --python-exit-code 1 --python <installed Producer script>.py -- ...
+  <Producer venv python> <scripts/assemble.py> --blender <Blender> -- ...   (it starts Blender itself)
+  <Producer venv python> <scripts/producer.py> preflight                    (it starts Blender and the kit preflight)
+A Codex rule matches only the start of a command, so each rule ends where the program stops reading options: Blender
+gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and preflight has no
+options. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Any other command still runs in the sandbox
 or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
 
 Usage (run outside Codex, from the project, after install.py):
@@ -15,6 +17,8 @@ Usage (run outside Codex, from the project, after install.py):
   python3 installer/codex_rules.py --write    # write $CODEX_HOME/rules/zps-3dp-producer.rules
 Options: --skills-root (default .agents/skills), --blender, --rules-dir (default $CODEX_HOME/rules or ~/.codex/rules).
 Run it again after each upgrade: the file lists the installed scripts. Restart Codex after writing."""
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -66,9 +70,9 @@ def render(blender: str, allowed: list[str], venv_py: Path | None, prod: Path) -
            "Allow headless Blender to run only the installed Producer scripts.")
     out = [MARK, ""]
     for prefix in (["-b", "--python"], ["-b", "--python-exit-code", "1", "--python"]):
-        out.append(rule([blender, *prefix, allowed], why))
+        out.append(rule([blender, *prefix, allowed, "--"], why))
     if venv_py:
-        out.append(rule([str(venv_py), [str(prod / s) for s in SPAWNERS]],
+        out.append(rule([str(venv_py), [str(prod / s) for s in SPAWNERS], "--blender", blender, "--"],
                         "ZPS-3DP Producer: assemble.py starts Blender itself, so it must run outside the sandbox."))
         out.append(rule([str(venv_py), str(prod / "scripts/producer.py"), "preflight"],
                         "ZPS-3DP Producer: P preflight starts Blender and the kit preflight."))
@@ -81,12 +85,18 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
         return "codex CLI not found: rule not tested"
     cases = [([blender, "-b", "--python", allowed[0], "--", "x"], "allow"),
              ([blender, "-b", "--python-exit-code", "1", "--python", allowed[-1], "--"], "allow"),
+             ([blender, "-b", "--python", allowed[0]], None),
+             ([blender, "-b", "--python", allowed[0], "--python-expr", "print(1)"], None),
+             ([blender, "-b", "--python", allowed[0], "--python", "/tmp/evil.py", "--"], None),
+             ([blender, "-b", "--python-exit-code", "1", "--python", allowed[-1], "--python-expr", "print(1)"], None),
              ([blender, "-b", "--python-expr", "print(1)"], None),
-             ([blender, "-b", "--python", "/tmp/other.py"], None)]
+             ([blender, "-b", "--python", "/tmp/other.py", "--"], None)]
     cases += [([blender, "-b", "--python", n, "--", "generate"], None) for n in scripts(root, network=True)]
     if venv_py:
-        py = str(venv_py)
-        cases += [([py, str(prod / SPAWNERS[0]), "house-a", "--version", "1"], "allow"),
+        py, spawner = str(venv_py), str(prod / SPAWNERS[0])
+        cases += [([py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"], "allow"),
+                  ([py, spawner, "house-a", "--version", "1", "--blender", "/tmp/evil.sh"], None),
+                  ([py, spawner, "--blender", "/tmp/evil.sh", "--", "house-a", "1", "abc123"], None),
                   ([py, str(prod / "scripts/producer.py"), "preflight"], "allow"),
                   ([py, str(prod / "scripts/producer.py"), "brief", "house-a"], None),
                   ([py, str(prod / "scripts/meshy_call.py"), "texture"], None),
@@ -96,7 +106,7 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
         r = subprocess.run([codex, "execpolicy", "check", "--rules", str(path), "--", *cmd], capture_output=True, text=True)
         got = json.loads(r.stdout or "{}").get("decision")
         if got != want:
-            bad.append(f"{cmd[:4]} -> {got}, expected {want}")
+            bad.append(f"{' '.join(cmd)} -> {got}, expected {want}")
     return "rule test passed" if not bad else "RULE TEST FAILED: " + "; ".join(bad)
 
 

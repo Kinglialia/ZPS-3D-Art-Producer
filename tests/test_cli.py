@@ -41,7 +41,8 @@ def test_a_bad_pipeline_toml_is_one_error_line_not_a_traceback(proj):
 def test_preflight_before_init_creates_the_production_folder_instead_of_crashing(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("BLENDER", "")
-    producer.main(["preflight", "--kit", str(tmp_path / "none.py")])
+    monkeypatch.setenv("PRODUCER_KIT", str(tmp_path / "none.py"))
+    producer.main(["preflight"])
     assert capsys.readouterr().out.startswith("preflight: ") and (tmp_path / "production/preflight.json").is_file()
 
 
