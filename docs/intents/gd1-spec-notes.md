@@ -61,3 +61,10 @@ Points the build found in the spec. Each one names the source. Nothing in `docs/
 6. Reviewer reports carry no `PROFILE_HASH` (§6.2), so a profile change between worker and reviewer shows only as a warning.
 7. Kit `preflight.py` reports `fail` unless the kit has its own venv with numpy and trimesh.
 8. `producer.md` §14 1b: preflight "once per session" and "again after a tool or config change". The cache has no automatic expiry. SKILL.md tells the Producer to re-run it after a change.
+
+## From T8 (end-to-end test)
+
+1. Rubric templates ship as `status: draft`, so every new asset waits for `P ready` before the first brief. This is by design (D13), but the user must approve the rubric once per type.
+2. "Mái dốc dùng wedge": a `wedge` slopes one way. A gable roof needs a `wedge` plus a `mirror_of` part. `references/part-graph.md` should show this.
+3. D11.4 says the counter restarts "từ 0"; code shows `fix_round=1` after redo because the redo builds the first fix of the new round. Same behavior, different wording.
+4. `archive` at `done_enabled` is final, so an archived GĐ 1 asset cannot continue when GĐ 2 enables later steps.
