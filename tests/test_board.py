@@ -56,6 +56,20 @@ def view():
     return board.asset_view(cfg, load_st(AID))
 
 
+def test_concept_sits_next_to_the_hero_and_newest_evidence_replaces_the_same_render_so_the_user_compares_at_once(project):
+    v2 = project / "production/assets" / AID / "blockout/v2"
+    for k in (1, 2):
+        (v2 / f"review/evidence-{k}").mkdir(parents=True)
+        (v2 / f"review/evidence-{k}/lineup.png").write_bytes(PNG)
+    drafts = project / "concepts/_approved" / AID / "review"
+    drafts.mkdir()
+    (drafts / "v01.png").write_bytes(PNG)
+    assert [i["u"] for i in view()["images"]] == [
+        "/p/assets/house-a/blockout/v2/final/review/game_cam.png",
+        "/a/house-a/concept_albedo.png",
+        "/p/assets/house-a/blockout/v2/review/evidence-2/lineup.png"]
+
+
 def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_line(project):
     v = view()
     assert v == {
@@ -64,11 +78,11 @@ def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_
         "sheet": "/p/assets/house-a/blockout/v2/final/review/game_cam.png",
         "images": [
             {"u": "/p/assets/house-a/blockout/v2/final/review/game_cam.png", "n": "review/game_cam.png"},
-            {"u": "/p/assets/house-a/blockout/v2/final/review/lineup.png", "n": "review/lineup.png"},
-            {"u": "/a/house-a/concept_albedo.png", "n": "concept/concept_albedo.png"}],
+            {"u": "/a/house-a/concept_albedo.png", "n": "concept/concept_albedo.png"},
+            {"u": "/p/assets/house-a/blockout/v2/final/review/lineup.png", "n": "review/lineup.png"}],
         "glb": "/p/assets/house-a/blockout/v2/final/assembled.glb",
-        "summary": ["# Blockout house-a v2", "4 trụ, 1 cửa, 3 thùng", "Mái chìa 0.25 m"],
-        "more": ["## Đo", "param roof_overhang = 0.25"],
+        "summary": ["Blockout house-a v2", "4 trụ, 1 cửa, 3 thùng", "Mái chìa 0.25 m"],
+        "more": ["Đo", "param roof_overhang = 0.25"],
         "reason": "hết 3 vòng sửa; còn mở: F1, F4",
         "label": "chưa đạt", "stale": None, "decided": None,
         "open": [

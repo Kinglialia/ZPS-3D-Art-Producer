@@ -15,6 +15,7 @@ SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "vi
                 "model": "model.md", "texture": "texture/notes.md", "assemble": "README.md"}
 SHEET = "game_cam.png"
 SUMMARY_LINES = 3
+CONCEPT_IMAGES = ("concept_albedo.png", "concept_shadow.png")
 LINE_FIELDS = ("region", "evidence", "repair")
 HOSTS = ("127.0.0.1", "localhost")
 
@@ -51,11 +52,18 @@ def finding_view(fid: str, f: dict) -> dict:
 
 
 def summary_lines(path: Path) -> list[str]:
-    return [l.rstrip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()] if path.is_file() else []
+    if not path.is_file():
+        return []
+    return [l.strip().lstrip("#").strip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip().lstrip("#").strip()]
 
 
 def images_of(d: Path | None) -> list[Path]:
     return sorted(p for p in d.rglob("*") if p.suffix.lower() in IMAGE_EXT) if d and d.is_dir() else []
+
+
+def latest_evidence(v: Path) -> Path | None:
+    ks = [p for p in (v / "review").glob("evidence-*") if p.is_dir() and p.name.split("-")[-1].isdigit()]
+    return max(ks, key=lambda p: int(p.name.split("-")[-1]), default=None)
 
 
 def asset_view(cfg: dict, st: dict) -> dict:
@@ -63,12 +71,21 @@ def asset_view(cfg: dict, st: dict) -> dict:
     n = shown(st, step)
     approved = cfg["paths"]["approved"]
     final = vdir(aid, step, n) / "final" if n else None
-    pics = sorted(images_of(final), key=lambda p: p.name != SHEET)
-    images = [{"u": _url("p", ROOT, p), "n": p.relative_to(final).as_posix()} for p in pics]
+    pics = images_of(final)
+    ev = latest_evidence(vdir(aid, step, n)) if n else None
+    if ev:
+        newer = {p.name for p in images_of(ev)}
+        pics = [p for p in pics if p.name not in newer] + images_of(ev)
+    pics.sort(key=lambda p: p.name != SHEET)
+    images = [{"u": _url("p", ROOT, p),
+               "n": (p.relative_to(final) if p.is_relative_to(final) else p.relative_to(ev.parent)).as_posix()}
+              for p in pics]
     cd = Path(st["concept_dir"]) if st.get("concept_dir") else None
     if cd and approved and cd.resolve().is_relative_to(approved.resolve()):
-        images += [{"u": _url("a", approved.resolve(), p.resolve()), "n": "concept/" + p.relative_to(cd).as_posix()}
-                   for p in images_of(cd)]
+        concept = [{"u": _url("a", approved.resolve(), (cd / x).resolve()), "n": "concept/" + x}
+                   for x in CONCEPT_IMAGES if (cd / x).is_file()]
+        k = 1 if pics and pics[0].name == SHEET else 0
+        images[k:k] = concept
     glb = next(iter(sorted(final.glob("*.glb"))), None) if final and final.is_dir() else None
     lines = summary_lines(final / SUMMARY_FILE[step]) if final and step in SUMMARY_FILE else []
     op = findings.open_of(findings.load(aid, step, n))

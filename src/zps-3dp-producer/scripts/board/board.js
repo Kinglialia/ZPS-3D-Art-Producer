@@ -17,6 +17,7 @@ h2{font-size:15px;margin:0 0 8px}
 p{margin:4px 0}
 ul{margin:4px 0;padding-left:18px}
 summary{cursor:pointer}
+li details:not([open])>summary{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fields{margin:2px 0 6px;color:var(--muted)}
 textarea{width:100%;box-sizing:border-box;margin-top:8px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px}
 .row{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
