@@ -171,7 +171,8 @@ def review_brief(cfg, st, step, n) -> str:
         "  repair: … | preserve: … | acceptance: …",
         *(["PRIOR:", *(f"- {i}: ? | evidence: ? | acceptance: {f['acceptance']}" for i, f in op.items())] if op else []),
         "```",
-        f"- FINDINGS chỉ ghi finding mới, id từ F{nxt}, đủ mọi trường; evidence dẫn nhãn trong EVIDENCE_OPENED.",
+        f"- FINDINGS chỉ ghi finding mới, id từ F{nxt}, đủ mọi trường; evidence dẫn nhãn trong EVIDENCE_OPENED. "
+        "Không có finding mới: `FINDINGS: none`.",
         *(["- PRIOR: thay `?` bằng open|resolved|regressed|superseded. resolved chỉ khi thấy bằng chứng cho "
            "acceptance, ghi nhãn ảnh đó vào evidence."] if op else []),
         *([f"- COMPARE: so ảnh cùng góc với v{m}: better|same|worse. resolved cần better; worse thì regressed."]
@@ -180,7 +181,7 @@ def review_brief(cfg, st, step, n) -> str:
         "người dùng phải chọn gu hoặc rubric mâu thuẫn brief → ESCALATE. preference không chặn PASS.",
         "- TOP_FIX chỉ khi FIX: loại của finding nặng nhất" + (f" (cùng mức: {', '.join(tie)} trước)" if tie else "")
         + "; structure đúng 1 id; loại khác: mọi finding blocker/major/minor đang mở của loại đó; "
-        "need_evidence: mọi finding unclear đang mở.",
+        "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- COUNTS: số finding đang mở (mới + open/regressed). Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT và COUNTS.",

@@ -66,6 +66,8 @@ def parse_worker(text: str) -> tuple[dict, list[str]]:
 def parse_findings(lines: list[str], labels: list[str], errs: list[str]) -> dict:
     out, cur = {}, None
     for line in lines:
+        if line.strip().lstrip("-").strip().lower() in NONE:
+            continue
         h = HEAD.match(line)
         if h:
             fid, prio, kind = h.groups()

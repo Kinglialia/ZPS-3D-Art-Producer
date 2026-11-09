@@ -51,6 +51,14 @@ def test_field_value_with_a_pipe_stays_in_its_field():
     assert rv["findings"]["F1"]["repair"] == "nâng mái | giữ độ dốc"
 
 
+@pytest.mark.parametrize("empty", ["- none", "none", "-"])
+def test_a_pass_with_no_new_finding_written_as_none_is_accepted_so_the_reviewer_is_not_sent_back(empty):
+    text = report(verdict="PASS", counts="blocker=0; major=0; minor=0; preference=0; unclear=0", top_fix="none",
+                  rubric="massing=pass", findings=[empty])
+    _, errs = parse_review(text)
+    assert errs == []
+
+
 def test_confidence_with_a_reason_in_brackets_keeps_the_level_so_a_reviewer_is_not_sent_back_for_a_rewrite():
     rv, errs = parse_review(report(findings=[finding(confidence="low (chưa có ảnh cùng góc, xem F1)")]))
     assert errs == []
