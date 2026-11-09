@@ -4,7 +4,9 @@ Usage: python3 tools/check_schema.py --work <dir> [--out <json>]
 Checks: header, unique part names, fixed_params (+ _fixed_reason), required fields (a mirror_of part writes its own
 material, role and tag, because the kit copies only shape fields), primitive, rotation_deg,
 segments, enums, connected (every part reaches the root through attach.to / mirror_of.of:
-orphans and cycles), order (parent listed earlier, as graph.py requires).
+orphans and cycles), order (parent listed earlier, as graph.py requires), mirror (a mirror_of part whose
+source uses inset_into or through_axis, or whose source's parent may sit off the mirror plane: the kit
+copies the source's parent, contact and depth, so gates.py crashes or fails on it).
 Each check's value lists the offending parts. Writes <dir>/review/checks/schema.json.
 Exit 0 pass, 1 fail, 2 error.
 """
@@ -20,6 +22,9 @@ TOOL = "blockout/check_schema"
 HEADER = {"schema": "blockout-1", "units": "m", "up": "+Z", "front": "-Y"}
 PRIMITIVES = {"box", "wedge", "cylinder", "custom"}
 ENUMS = {"role": {"mass", "marker"}, "tag": {"base", "roof"}, "axis": {"X", "Y", "Z"}}
+AXIS = {"X": 0, "Y": 1, "Z": 2}
+IN_PLANE = {0: (1, 2), 1: (0, 2), 2: (0, 1)}
+MIRROR_NOTE = "write these parts explicitly (own primitive, dims and attach), not as mirror_of"
 
 
 def parent(p):
@@ -52,6 +57,39 @@ def connected(parts):
             orphans.add(n)
     order = sorted(n for i, n in enumerate(names) if par[n] in names and names.index(par[n]) > i)
     return sorted(orphans), [list(c) for c in sorted(cycles)], order
+
+
+def off_plane(name, ax, by, params, seen=()):
+    """Part `name` may sit off the mirror plane on axis ax: some attach on its chain to the root moves it along ax."""
+    att = (by.get(name) or {}).get("attach")
+    if not att or name in seen:
+        return False
+    t, seen = att.get("type"), seen + (name,)
+    if t == "mirror_of":
+        return off_plane(att.get("of"), ax, by, params, seen)
+    face, edge = (AXIS.get(str(att.get(k))[-1:]) for k in ("face", "edge"))
+    if t == "flush_edge":
+        moved = ax in (face, edge)
+    elif t in ("center_on_face", "inset_into") and face == ax:
+        moved = True
+    else:
+        plane = (0, 1) if t == "on_top" else IN_PLANE.get(AXIS.get(att.get("axis")) if t == "through_axis" else face, ())
+        u = (list(att.get("offset_uv") or []) + [0, 0])[plane.index(ax)] if ax in plane else 0
+        moved = params.get(u, u) != 0 if isinstance(u, (str, int, float)) else True
+    return moved or off_plane(att.get("to"), ax, by, params, seen)
+
+
+def origin(p, by, seen=()):
+    """The first part on a mirror_of chain that is not a mirror: graph.py copies its parent, contact and depth."""
+    if not is_mirror(p) or p.get("name") in seen:
+        return p
+    return origin(by.get(parent(p)) or {}, by, seen + (p.get("name"),))
+
+
+def mirror_unsafe(p, by, params):
+    att = origin(p, by).get("attach") or {}
+    return att.get("type") in ("inset_into", "through_axis") or \
+        off_plane(att.get("to"), AXIS.get(p["attach"].get("plane")), by, params)
 
 
 def fields(p, by):
@@ -103,6 +141,9 @@ def run(graph):
     checks.append(common.check("schema.connected", "fail" if orphans or cycles else "pass",
                                value={"orphans": orphans, "cycles": cycles}))
     checks.append(common.check("schema.order", "fail" if order else "pass", value=order))
+    mirror = [p["name"] for p in parts if is_mirror(p) and mirror_unsafe(p, by, params)]
+    checks.append(common.check("schema.mirror", "fail" if mirror else "pass", value=mirror,
+                               note=MIRROR_NOTE if mirror else None))
     return checks, {"parts": len(parts)}
 
 

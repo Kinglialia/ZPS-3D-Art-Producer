@@ -1,6 +1,8 @@
 """Pure blockout checks (docs/agents/blockout.md §5, §9): plain Python, one JSON, one line, exit 1 on fail."""
 import copy
 
+import pytest
+
 from conftest import HUT_ROWS, HUT_SOURCES, hut, part, write_build
 
 
@@ -79,6 +81,44 @@ def test_schema_needs_mirror_part_to_carry_its_own_material_role_and_tag(tmp_pat
     r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
     assert_fail(r)
     assert r.check("schema.fields") == {"status": "fail", "value": ["crate_l: material", "crate_l: tag"]}
+
+
+MIRROR_CASES = {
+    "inset_into": {"type": "inset_into", "to": "walls", "face": "+X", "depth": "door_t"},
+    "through_axis": {"type": "through_axis", "to": "walls", "axis": "Y", "offset_uv": [0.5, 0.0]},
+    "parent_off_plane": {"type": "on_top", "to": "crate"},
+}
+
+
+@pytest.mark.parametrize("case", MIRROR_CASES)
+def test_schema_rejects_mirror_the_kit_gates_cannot_check(tmp_path, run_check, case):
+    """The kit mirror copies the source's parent, contact and depth: gates.py crashes on a through_axis source
+    (contact None), measures an inset as penetration, and finds no contact when the parent is on the other side."""
+    g = hut()
+    g["parts"] += [{"name": "peg", "primitive": "box", "dims": ["crate_s"] * 3, "attach": MIRROR_CASES[case],
+                    "material": "TIMBER", "role": "mass"},
+                   {"name": "peg_l", "attach": {"type": "mirror_of", "of": "peg", "plane": "X"},
+                    "material": "TIMBER", "role": "mass"}]
+    r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
+    assert_fail(r)
+    assert r.check("schema.mirror") == {"status": "fail", "value": ["peg_l"]}
+    assert next(c for c in r.json["checks"] if c["check"] == "schema.mirror")["note"] == \
+        "write these parts explicitly (own primitive, dims and attach), not as mirror_of"
+
+
+def test_schema_accepts_mirror_of_a_child_of_a_part_centred_on_the_plane_and_a_mirror_of_a_mirror(tmp_path, run_check):
+    """A mirror of a mirror keeps the first source's parent (pilot wooden-chest strap_bpx passed every gate)."""
+    g = hut()
+    g["parts"] += [{"name": "sign", "primitive": "box", "dims": ["crate_s"] * 3,
+                    "attach": {"type": "on_top", "to": "walls", "offset_uv": [0.5, 0.0]}, "material": "TIMBER",
+                    "role": "mass"},
+                   {"name": "sign_l", "attach": {"type": "mirror_of", "of": "sign", "plane": "X"},
+                    "material": "TIMBER", "role": "mass"},
+                   {"name": "crate_bl", "attach": {"type": "mirror_of", "of": "crate_l", "plane": "Y"},
+                    "material": "TIMBER", "role": "mass"}]
+    r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
+    assert_pass(r)
+    assert r.check("schema.mirror") == {"status": "pass", "value": []}
 
 
 def test_schema_needs_fixed_params_with_reason(tmp_path, run_check):

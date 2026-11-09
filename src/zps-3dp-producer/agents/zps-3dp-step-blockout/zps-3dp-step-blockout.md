@@ -56,5 +56,6 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 - Kích thước trong MAP-LAYOUT hoặc `size_m` có vấn đề: chỉ báo trong `ISSUES`, không sửa (D3.2).
 - Nguồn mâu thuẫn: ghi cả hai nguồn và lựa chọn vào `blockout.md` mục 7.
 - Nhân vật, sinh vật, hoặc dáng quá phức tạp so với primitive: `STATUS: BLOCKED`, nêu lý do.
+- `check_schema` báo `schema.mirror`: viết các part đó tường minh, không dùng `mirror_of` (gate của kit lỗi khi part gốc dùng `inset_into`, `through_axis` hoặc part cha lệch khỏi mặt phẳng gương).
 - Mái dốc dùng `wedge` hoặc `custom`. Marker nhô ít nhất 2 cm. Props là part rời. Chép nguyên ghi chú real/texture_only của thẻ vào `blockout.md`.
 - `fit_view.py`, `param_fit.py` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`. Không dùng `fit_camera.py` của kit: nó chỉ dò azimuth 0..90° và chọn theo IoU, nên chọn sai phía.
