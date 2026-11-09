@@ -136,6 +136,21 @@ def test_card_beats_profile_overrides_beat_preset_beat_skill_default_d13(make_sp
         "detail.relief_min_px": "profile overrides"}
 
 
+def test_a_real_note_asking_for_rounded_edges_turns_bevel_on_over_the_profile_so_clay_review_does_not_send_it_back(
+        make_spec):
+    notes = ["real: thân hộp, nắp vòm, cạnh bo toon; chưa yêu cầu nội thất.", "real: tấm khóa vát góc có lỗ khóa."]
+    _, s = make_spec(card={"real_texture_only_notes": notes},
+                     profile={"overrides": {"detail": {"bevel": False}}})
+    assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (True, 'thẻ asset real_texture_only_notes "cạnh bo"')
+
+
+@pytest.mark.parametrize("note", ["texture_only: viền gỗ bo cạnh chỉ vẽ, không dựng.", "real: cạnh sắc, không bo cạnh.",
+                                  "real: tấm khóa vát góc có lỗ khóa.", "real: cạnh bonsai."])
+def test_bevel_stays_off_for_paint_only_negated_or_corner_cut_notes(make_spec, note):
+    _, s = make_spec(card={"real_texture_only_notes": [note]})
+    assert (s["model"]["bevel"], s["sources"]["detail.bevel"]) == (False, "mặc định")
+
+
 def test_a_rerun_keeps_the_sun_and_concept_camera_the_worker_set(make_spec):
     _, s = make_spec(old={"sun": {"azimuth_deg": 300, "elevation_deg": 40}, "budget": {"max_tris_total": 1}})
     assert (s["sun"], s["budget"]["max_tris_total"]) == ({"azimuth_deg": 300, "elevation_deg": 40}, 3000)

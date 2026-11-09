@@ -5,7 +5,8 @@ Geometry comes only from B/sources.json (D22.13): W x D x H, character_h, door_h
 includes_base: false takes W x D x H from B/assembly.json instead, because layout then leaves the base out.
 Other numbers follow D13, later wins: skill default < preset < profile `overrides` < asset card.
   tris cap: card tris_max, else tiers[card tier]; texture_res: card, else 2048; uv padding and texel minimum;
-  detail.relief_min_px 3, detail.alpha_min_px 16, detail.bevel false (profile overrides.detail changes them).
+  detail.relief_min_px 3, detail.alpha_min_px 16, detail.bevel false (profile overrides.detail changes them);
+  detail.bevel true when a `real:` line of card real_texture_only_notes has a BEVEL phrase.
 spec["sources"] names the layer of every number ("mặc định" = skill default).
 Keeps `sun` and `concept_cam` of an existing F/spec.json: the worker sets them at A7.
 Prints one line. Exit 0, 2 on error.
@@ -13,7 +14,9 @@ Prints one line. Exit 0, 2 on error.
 import argparse
 import json
 import os
+import re
 import sys
+import unicodedata
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import common  # noqa: E402
@@ -24,6 +27,8 @@ KEPT = ("sun", "concept_cam")
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
         "detail.bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "dimensions")
 DIM_TOLERANCE = 0.02
+BEVEL = re.compile(r"(?<!không )\b(cạnh bo|bo cạnh|bo tròn cạnh|cạnh bo tròn|vát cạnh|cạnh vát|bevel|bevelled edges?|"
+                   r"rounded edges?|chamfered edges?)\b", re.I)
 
 
 def yaml_load(path):
@@ -48,10 +53,22 @@ def layered(layers):
     return out, src
 
 
+def card_bevel(card):
+    """The first BEVEL phrase in a `real:` line of the card notes, or None."""
+    for n in card.get("real_texture_only_notes") or []:
+        t = unicodedata.normalize("NFC", str(n)).strip()
+        m = BEVEL.search(t) if t.casefold().startswith("real:") else None
+        if m:
+            return m.group(0)
+    return None
+
+
 def build(a):
     s = common.read_json(os.path.join(a.blockout, "sources.json"))
     card, prof = yaml_load(a.card), yaml_load(a.profile)
     p, src = layered([("mặc định", DEFAULTS), ("preset", yaml_load(a.preset)), ("profile overrides", prof.get("overrides"))])
+    if bevel := card_bevel(card):
+        p["detail"]["bevel"], src["detail.bevel"] = True, f'thẻ asset real_texture_only_notes "{bevel}"'
     aid = str(card.get("asset") or os.path.basename(os.path.dirname(os.path.abspath(a.card))))
     tier = card.get("tier") or "standard"
     if card.get("tris_max"):
