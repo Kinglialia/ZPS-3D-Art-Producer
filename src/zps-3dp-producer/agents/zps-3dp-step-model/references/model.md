@@ -23,7 +23,7 @@ Part mới theo hợp đồng part graph của blockout. Hai mặt trùng khít 
 
 ## 2. Gộp mesh và UV
 
-- `join_mesh.py`: một object, một mesh, một material, tên là mã asset. Không weld, không boolean. Xóa mặt không tia nào từ ngoài chạm tới (mặt một part giấu trong hoặc sát part khác). Tách cạnh gắt > 20°. Origin tâm đáy.
+- `join_mesh.py`: một object, một mesh, một material, tên là mã asset. Không weld, không boolean. Xóa mặt không tia nào từ ngoài chạm tới (mặt một part giấu trong hoặc sát part khác); `join.removed_faces_seen` fail khi một mặt đã xóa vẫn thấy được từ 6 trục hoặc từ trên. Tách cạnh gắt > 20°. Origin tâm đáy.
 - `unwrap.py`: `xatlas_unwrap()` của kit ở `uv.resolution`, padding `uv.min_padding_px` giữa các đảo, rồi thu UV vào trong để mép atlas cũng cách đúng padding. Không có xatlas: lỗi, không có đường dự phòng.
 - Làm và giao ở `texture_res` của spec. Không đổi độ phân giải.
 

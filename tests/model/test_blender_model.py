@@ -6,8 +6,10 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,11 +47,11 @@ def checks(path):
     return r["overall"], {c["check"]: (c["status"], c.get("value")) for c in r["checks"]}
 
 
-def build(d: Path, extra=()):
+def build(d: Path, extra=(), **params):
     d.mkdir(parents=True)
     g = copy.deepcopy(HUT)
     g["parts"] += list(extra)
-    g["params"] |= {"step_w": 1.0, "step_d": 0.3, "step_h": 0.15, "inlay_s": 0.3, "inlay_h": 0.05}
+    g["params"] |= {"step_w": 1.0, "step_d": 0.3, "step_h": 0.15, "inlay_s": 0.3, "inlay_h": 0.05} | params
     (d / "part_graph.json").write_text(json.dumps(g), encoding="utf-8")
     (d / "sources.json").write_text(json.dumps(SOURCES), encoding="utf-8")
     rc, out = sh(VPY, TOOLS / "self_build/assembly.py", "--work", d)
@@ -69,12 +71,15 @@ def model(final: Path, blockout: Path):
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
     t = tmp_path_factory.mktemp("model")
-    b, f, g = t / "blockout", t / "final", t / "inlay"
+    b, f, g, wb, w = t / "blockout", t / "final", t / "inlay", t / "wide_blockout", t / "wide"
     build(b)
     build(f, [STEP])
     build(g, [INLAY])
+    build(wb, wall_w=3.8, wall_d=3.8)
+    build(w, wall_w=3.8, wall_d=3.8)
     model(f, b)
     model(g, b)
+    model(w, wb)
     glb = f / "pilot-house-untextured.glb"
     rc = {}
     for name in ("mesh", "uv_edge"):
@@ -87,7 +92,23 @@ def built(tmp_path_factory):
     blender("self_build/render_views.py", "--work", f, "--mode", "critic", "--outdir", f / "review/renders")
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
-    return {"final": f, "inlay": g, "rc": rc}
+    return {"final": f, "inlay": g, "wide": w, "rc": rc}
+
+
+def heights_up(glb: Path, xy) -> list[float]:
+    """Heights of the up-facing triangles a vertical line through xy crosses."""
+    sys.path.insert(0, str(TOOLS / "lib"))
+    import glbread
+    g = glbread.load(glb)
+    t = g["v"][g["f"]]
+    up = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])[:, 2] > 0
+    out = []
+    for a, b, c in t[up]:
+        m = np.array([[a[0] - c[0], b[0] - c[0]], [a[1] - c[1], b[1] - c[1]]])
+        l1, l2 = np.linalg.solve(m, np.asarray(xy) - c[:2])
+        if min(l1, l2, 1 - l1 - l2) >= -1e-9:
+            out.append(round(float(l1 * a[2] + l2 * b[2] + (1 - l1 - l2) * c[2]), 4))
+    return sorted(out)
 
 
 def test_unwrap_runs_the_kit_xatlas_in_blender_without_the_rebake_mode_checklist_6(built):
@@ -100,8 +121,22 @@ def test_join_keeps_parts_apart_drops_the_faces_parts_hide_and_splits_sharp_edge
     overall, c = checks(built["final"] / "review/join.json")
     assert {k: v for k, v in c.items() if k != "join.sharp_edges_split"} == {
         "join.parts": ("info", 7), "join.hidden_faces_removed": ("info", 18),
-        "join.origin_offset_m": ("info", [0.0, 0.0, 0.0])}
+        "join.removed_faces_seen": ("pass", 0), "join.origin_offset_m": ("info", [0.0, 0.0, 0.0])}
     assert read(built["final"] / "review/join.json")["data"]["tris"] == 62
+
+
+def test_join_keeps_the_10_cm_base_top_rim_around_3_8_m_walls_on_a_4_m_base(built):
+    """The rim is the only visible part of the two base-top triangles; sampling them only near their corners, which sit
+    under the walls, deleted the whole top and left a hole the camera sees."""
+    _, c = checks(built["wide"] / "review/join.json")
+    assert c["join.removed_faces_seen"] == ("pass", 0)
+    glb = built["wide"] / "pilot-house-untextured.glb"
+    assert [heights_up(glb, xy) for xy in ((1.95, 0.5), (-1.95, -1.0), (1.0, 1.95), (-0.7, -1.95))] == [[0.3]] * 4
+
+
+def test_join_and_unwrap_leave_no_blend1_backup_in_final(built):
+    """final/ is hashed at approval; a Blender .blend1 backup there changes the hash and ships a stale scene."""
+    assert sorted(p.name for p in built["final"].glob("*.blend*")) == ["pilot-house.blend"]
 
 
 def test_the_joined_mesh_passes_the_model_checks(built):
