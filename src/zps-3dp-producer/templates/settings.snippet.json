@@ -11,7 +11,9 @@
   "permissions": {
     "allow": [
       "Bash(.claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py:*)",
-      "Bash(codex exec:*)"
+      "Bash(codex exec:*)",
+      "Edit(/production/**)",
+      "Edit(/production-*/**)"
     ]
   }
 }

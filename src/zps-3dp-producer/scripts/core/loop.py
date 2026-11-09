@@ -324,9 +324,13 @@ def ingest(a):
     rec = open_dispatch(st, sid, n, role)
     event, reason = h(cfg, st, step, vdir(a.id, sid, n), n, a)
     tokens, ms, at = getattr(a, "tokens", None), getattr(a, "duration_ms", None), stamp()
+    fallback = bool(getattr(a, "fallback", False))
     if rec is not None:
-        rec |= {"ingested": at, "tokens": tokens, "duration_ms": ms, "after": st["state"]}
+        rec |= {"ingested": at, "tokens": tokens, "duration_ms": ms, "after": st["state"]} | (
+            {"fallback": True} if fallback else {})
     save_st(st)
+    if fallback:
+        ledger(f"{a.id} · {sid} v{n} · report_fallback · {role}")
     ledger(f"{a.id} · {sid} v{n} · {event} · {st.get('last_rubric', '')}" + (f" · {reason}" if reason else "")
            + f" · {role} giao {rec['at'] if rec else NO_NUMBER} · ingest {at} · token {number(tokens)}"
            + f" · thời lượng {number(ms, ' ms')}")

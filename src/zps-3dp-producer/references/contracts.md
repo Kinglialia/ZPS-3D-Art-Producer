@@ -96,6 +96,8 @@ FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. `redo` của n
 
 ## Contract báo cáo
 
+Agent tự ghi report vào đường dẫn `report` của brief; tin nhắn trả về chỉ gồm các dòng brief yêu cầu. Lệnh ghi bị chặn thì agent trả cả report giữa dòng `--- report ---` và dòng `--- end ---`; Producer ghi nguyên văn tin nhắn vào file và chạy `ingest --fallback` (`ab judge --fallback`). Script ghi sự kiện `report_fallback` (vai trò, bước) vào ledger và `fallback: true` vào lần giao. `ingest` và `ab judge` chỉ đọc phần giữa hai dòng đó khi có.
+
 Script đọc dòng `KEY: value` đầu tiên của mỗi khóa trong cả file. `FINDINGS` và `PRIOR` là khối: các dòng `- ` và dòng thụt lề ngay sau, tới khóa kế tiếp hoặc dòng không thụt lề. Sai thì `ingest` in một dòng `LỖI: <report> sai contract: <lỗi>; <lỗi>`, không đổi state.
 
 Worker (`report-worker.md`). Tin nhắn trả về chỉ dòng `STATUS`.
@@ -112,7 +114,7 @@ Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`
 
 Script (`report-script.md`, bước có `script` trong `pipeline.toml`, ví dụ `assemble`): `STATUS`, `OUTPUT`, `ISSUES`, `PROFILE_HASH` như worker (`PROFILE_HASH` là tham số cuối của lệnh), rồi `EVIDENCE_OPENED` và `FINDINGS` mỗi điểm fail một finding. `ingest` ghi các finding đó vào `findings.json` của version để trang duyệt hiện. `DONE` → waiting_human; `BLOCKED` → blocked.
 
-Reviewer (`report-review.md`). Reviewer trả report giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi nguyên văn cả tin nhắn vào file; `ingest` chỉ đọc phần giữa hai dòng đó.
+Reviewer (`report-review.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear; ...

@@ -22,7 +22,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 ## Hook mở phiên
 
-- Gộp `templates/settings.snippet.json` vào `.claude/settings.json`: hook SessionStart in `P next --session`; allow rule cho `P` và `codex exec`, để subagent chạy nền không chờ xin quyền. Rule không ăn thì thêm bằng `/permissions`.
+- Gộp `templates/settings.snippet.json` vào `.claude/settings.json`: hook SessionStart in `P next --session`; allow rule cho `P`, `codex exec` và lệnh ghi file dưới `production/`, `production-*/` (report của subagent), để subagent chạy nền không chờ xin quyền. Rule không ăn thì thêm bằng `/permissions`.
 
 ## Gửi file
 

@@ -216,6 +216,21 @@ def test_the_pairwise_reviewer_is_asked_twice_with_x_and_y_swapped_and_sees_no_r
     assert ab.pair_result(AID) == {"concept": "A", "geometry": "tie", "texture": "B", "coherence": "tie", "game_read": "tie"}
 
 
+def test_the_judge_writes_its_report_file_and_a_reply_the_producer_saved_is_logged_as_a_fallback_d27_5(two):
+    done_both(two)
+    d1 = json.loads(judge(two))
+    rows = (two / d1["brief"]).read_text(encoding="utf-8").splitlines()
+    assert [r for r in rows if "report" in r.lower() or "DONE" in r] == [
+        "Ghi vào `ab/judge/house-a/o1/report.md`, đúng hai dòng:", "Chỉ trả về dòng `DONE`.",
+        "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`."]
+    (two / d1["report"]).write_text(f"--- report ---\n{report(concept='X', geometry='X', texture='Y')}--- end ---\n",
+                                    encoding="utf-8")
+    assert cli(two, "claude", "ab", "judge", "--fallback")[0] == 0
+    assert json.loads((two / "ab/judge/house-a/o1/result.json").read_text(encoding="utf-8"))["fallback"] is True
+    ledger = (two / "production-claude/ledger.md").read_text(encoding="utf-8").splitlines()
+    assert [l.split(" · ", 2)[2] for l in ledger if "report_fallback" in l] == ["house-a · ab o1 · report_fallback · reviewer"]
+
+
 def test_a_judge_report_without_every_criterion_is_refused_and_asked_again(two):
     done_both(two)
     d1 = json.loads(judge(two))

@@ -40,13 +40,13 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
 2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (`references/runtime.md`, mục Resume), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent` (`references/runtime.md`, mục Gọi agent), truyền `model` tường minh khi khác null, prompt đúng như sau:
    > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
-
-   `role` là `reviewer`: hai câu cuối của prompt đổi thành "Trả cả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`."
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
 4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash, chờ xong, rồi `P ingest <id>`.
 5. `P brief` in một dòng thay cho JSON khi bước `texture` dừng trước khi giao (thiếu key Meshy, câu hỏi Meshy): làm theo phần "Tiếp" của dòng đó.
 
-**Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): reviewer trả report thì ghi nguyên văn cả tin nhắn vào `<report>` trước. Rồi chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Runtime báo số token và thời lượng của subagent thì thêm `--tokens <N> --duration-ms <M>` (`references/runtime.md`, mục Token); không có số thì bỏ cờ đó, script ghi "không có số". `P stats <id>` in bảng theo bước: thời gian và token của worker, reviewer, khoảng chờ Producer. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format (reviewer trả report mới: ghi đè `<report>`); không tự sửa report.
+**Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Runtime báo số token và thời lượng của subagent thì thêm `--tokens <N> --duration-ms <M>` (`references/runtime.md`, mục Token); không có số thì bỏ cờ đó, script ghi "không có số". `P stats <id>` in bảng theo bước: thời gian và token của worker, reviewer, khoảng chờ Producer. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format; không tự sửa report.
+
+**Report bằng tin nhắn** (hiếm): subagent trả cả report giữa dòng `--- report ---` và dòng `--- end ---` vì lệnh ghi file bị chặn. Ghi nguyên văn cả tin nhắn vào `<report>`, rồi `P ingest <id> --fallback` (so A/B: `P ab judge --fallback`). Script ghi sự kiện `report_fallback` vào ledger. Bị chặn nhiều lần: kiểm rule allow ghi dưới `production/` (`references/runtime.md`).
 
 **blocked:** đọc ghi chú. Nếu thông tin thiếu là thứ bạn có (từ brief, art direction, hoặc lời người dùng trong chat), bổ sung vào mục "Làm rõ" của `assets/<id>/brief.md`, rồi chạy `P retry <id>` và giao lại. Nếu chỉ người dùng trả lời được thì hỏi người dùng.
 
@@ -84,7 +84,7 @@ Người dùng hỏi về ngưỡng chọn chế độ texture: `P texture-stats
 Chỉ khi người dùng bảo so Claude Code với Codex. Mỗi runtime có thư mục riêng: người dùng mở phiên với `PRODUCER_ROOT=production-<runtime>` (`references/runtime.md`, mục Phiên mới); gói cuối vào `deliver-<runtime>/`. Hai bên dùng chung `_approved/`, profile, rubric, art direction. Chạy xong lô pilot (2–3 asset) ở một bên rồi mới chạy bên kia. Script từ chối khi thư mục là của runtime khác.
 
 - `P ab board`: trang so cặp mù (http://127.0.0.1:8766). Người dùng duyệt từng bản như trang thường và bấm "Bản nào tốt hơn". Không nói bản nào thuộc runtime nào, không mở `ab/mapping.json`.
-- `P ab judge`: sau khi cả hai bên đã DUYỆT 2 một asset. Lệnh in một dòng JSON giao việc như `P brief` (reviewer mới, chỉ đọc), hoặc dòng "đủ". Chạy lại `P ab judge` sau mỗi report.
+- `P ab judge`: sau khi cả hai bên đã DUYỆT 2 một asset. Lệnh in một dòng JSON giao việc như `P brief` (reviewer mới, chỉ ghi file report), hoặc dòng "đủ". Chạy lại `P ab judge` sau mỗi report.
 - `P compare`: bảng theo asset với nhãn A/B. `P compare --reveal` mở nhãn, chỉ chạy được khi mọi asset trong lô đã DUYỆT 2 ở cả hai bên và người dùng đã chọn bản tốt hơn.
 
 ## Nhận việc mới

@@ -24,6 +24,7 @@ FID = r"[FH]\d+"
 HEAD = re.compile(rf"^-\s*({FID})\s*\[(\w+)\]\s*(\S*)\s*$")
 PRIOR = re.compile(rf"^-\s*({FID})\s*:\s*([^|\s]*)(.*)$")
 SPLIT = re.compile(rf"\s*\|\s*(?=(?:{'|'.join(FIELDS)})\s*:)")
+FALLBACK = "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`."
 WRAPPED = re.compile(r"^--- report ---[ \t\r]*\n(.*?)^--- end ---[ \t\r]*$", re.M | re.S)
 
 

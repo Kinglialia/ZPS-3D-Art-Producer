@@ -79,6 +79,14 @@ def test_the_claude_edition_ships_flat_agent_files_beside_the_skills(dist):
     assert not (tree(dist, "codex") / "agents").exists()
 
 
+def test_the_claude_settings_snippet_lets_agents_write_reports_under_every_producer_root_d27_5(dist):
+    """A blocked write sends the report through the Producer context; A/B runs write under production-<runtime>/."""
+    snippet = json.loads((tree(dist, "claude") / "skills/zps-3dp-producer/templates/settings.snippet.json")
+                         .read_text(encoding="utf-8"))
+    assert [r for r in snippet["permissions"]["allow"] if r.startswith("Edit(")] == [
+        "Edit(/production/**)", "Edit(/production-*/**)"]
+
+
 @pytest.fixture
 def src_copy(tmp_path, monkeypatch):
     s = tmp_path / "src"

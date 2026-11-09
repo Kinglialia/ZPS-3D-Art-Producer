@@ -190,6 +190,8 @@ def main(argv: list[str] | None = None):
     x.add_argument("id"); x.add_argument("--agent-id", help="id subagent worker, để resume vòng sửa")
     x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này, nếu runtime báo được (P compare, P stats)")
     x.add_argument("--duration-ms", type=int, help="thời lượng runtime báo cho lần giao này, mili giây (P stats)")
+    x.add_argument("--fallback", action="store_true",
+                   help="Producer đã lưu report agent trả bằng tin nhắn vì lệnh ghi bị chặn (ledger: report_fallback)")
     sub.add_parser("retry", help="giao lại asset đang blocked").add_argument("id")
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])
@@ -223,6 +225,7 @@ def main(argv: list[str] | None = None):
     x.add_argument("op", choices=["board", "prefer", "judge", "side"]); x.add_argument("id", nargs="?")
     x.add_argument("choice", nargs="?", choices=["A", "B", "tie"]); x.add_argument("--by", default="")
     x.add_argument("--port", type=int, default=8766)
+    x.add_argument("--fallback", action="store_true", help="judge: Producer đã lưu report agent trả bằng tin nhắn")
     sub.add_parser("compare", help="tổng hợp A/B theo asset; --reveal mở nhãn khi lô đã duyệt hết").add_argument(
         "--reveal", action="store_true")
     sub.add_parser("validate", help="kiểm tra cấu hình và status")

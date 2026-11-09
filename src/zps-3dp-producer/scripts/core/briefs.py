@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from . import findings, hashes, preflight, texture
-from .contract import NONE, parse_worker
+from .contract import FALLBACK, NONE, parse_worker
 from .hashes import ad_text
 from .loop import log_wait, move, next_action, open_dispatch, review_base, set_aside
 from .state import (ASSETS, DELIVER, EDITION, ROOT, SKILL_DIR, agent_file, agent_name, die, ledger, load_cfg, load_st,
@@ -228,8 +228,7 @@ def review_brief(cfg, st, step, n) -> str:
            f"`v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."] if pick else []),
         "",
         "## Báo cáo",
-        "Trả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi tin nhắn đó "
-        f"vào `{rel(d / 'report-review.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
+        f"Ghi report vào `{rel(d / 'report-review.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
         f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear; ...",
@@ -269,7 +268,7 @@ def review_brief(cfg, st, step, n) -> str:
         "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- COUNTS: số finding đang mở (mới + open/regressed). Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
-        "Tin nhắn cuối chỉ gồm report, giữa dòng `--- report ---` và dòng `--- end ---`.",
+        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT và dòng COUNTS. " + FALLBACK,
     ]
     return "\n".join(lines) + "\n"
 

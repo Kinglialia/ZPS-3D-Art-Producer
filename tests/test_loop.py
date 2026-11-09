@@ -567,15 +567,29 @@ def test_a_reviewer_reply_saved_whole_with_its_report_markers_ingests_like_the_b
         "house-a: review FIX (major=1) → blockout/fix.")
 
 
-def test_the_review_brief_asks_for_the_report_as_text_and_states_the_label_rule_that_ingest_enforces(flow):
-    """Run 4: ingest refused a PRIOR whose evidence named `unlit_close_front (lock crop)` for the label
-    `v2 unlit_close_front`."""
+def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_states_the_label_rule(flow):
+    """D27.5: a report saved by the Producer passes through its context, so the reviewer writes the file and replies
+    with two lines (D22.6). Run 4: ingest refused a PRIOR whose evidence named `unlit_close_front (lock crop)` for the
+    label `v2 unlit_close_front`."""
     flow.work()
     text = flow.text(flow.brief())
-    assert [l for l in text.splitlines() if "--- report ---" in l or "nguyên văn" in l] == [
-        "Trả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi tin nhắn đó "
-        f"vào `production/assets/{AID}/blockout/v1/report-review.md`. Report mở đầu đúng format, mỗi khóa một dòng:",
+    assert [l for l in text.splitlines() if "report-review" in l or "--- report" in l or "nguyên văn" in l or "Tin nhắn" in l] == [
+        f"Ghi report vào `production/assets/{AID}/blockout/v1/report-review.md`. Report mở đầu đúng format, mỗi khóa "
+        "một dòng:",
         "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
         "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
-        "Tin nhắn cuối chỉ gồm report, giữa dòng `--- report ---` và dòng `--- end ---`."]
+        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT và dòng COUNTS. Lệnh ghi file bị chặn: trả cả report giữa "
+        "dòng `--- report ---` và dòng `--- end ---`."]
     assert "mức `minor`" not in text
+
+
+def test_a_report_the_producer_saved_from_a_reply_is_ingested_and_logged_as_a_fallback_by_role_d27_5(flow):
+    """The fallback must stay rare, so every one is counted: in the ledger and on the dispatch (`P stats`)."""
+    flow.work()
+    out = flow.brief()
+    body = report(counts=counts(major=1), findings=[finding("F1", "major")])
+    (flow.root / out["report"]).write_text(f"--- report ---\n{body}--- end ---\n", encoding="utf-8")
+    flow.call(loop.ingest, Namespace(id=AID, agent_id=None, fallback=True))
+    assert [x.get("fallback", False) for x in flow.st["dispatches"]] == [False, True]
+    assert [l.split(" · ", 2)[2] for l in flow.ledger().splitlines() if "report_fallback" in l] == [
+        "house-a · blockout v1 · report_fallback · reviewer"]

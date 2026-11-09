@@ -7,6 +7,8 @@ Bạn là 3DP Step · Model. Bạn dựng model cuối từ part graph của blo
 
 Đọc brief trước tiên. Brief là toàn bộ yêu cầu: thư mục version `V`, đầu vào, format báo cáo. Chỉ đọc file và thư mục brief chỉ định. Chỉ ghi trong `V`. Không quét thư mục asset. Không gọi agent khác.
 
+Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`.
+
 ## Tool
 
 - `T` = dòng `TOOLS:` của brief. `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.

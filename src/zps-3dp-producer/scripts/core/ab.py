@@ -18,9 +18,9 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, unquote, urlsplit
 
-from .contract import pairs
-from .state import (EDITION, IMAGE_EXT, ROOT, RUNTIMES, SKILL_DIR, agent_file, agent_name, die, load_cfg, model_of, now,
-                    rel, write_atomic)
+from .contract import FALLBACK, pairs
+from .state import (EDITION, IMAGE_EXT, ROOT, RUNTIMES, SKILL_DIR, agent_file, agent_name, die, ledger, load_cfg,
+                    model_of, now, rel, write_atomic)
 
 AB = ROOT.parent / "ab"
 PORT = 8766
@@ -290,13 +290,12 @@ def judge_brief(aid: str, d: Path, k: int, lab: dict) -> str:
         "- Hai bản có cùng bộ ảnh, cùng tên file. Mở ảnh cùng tên của X và Y cạnh nhau.", "",
         "## Tiêu chí", crit, "",
         "## Báo cáo",
-        "Trả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi tin nhắn đó "
-        f"vào `{rel(d / 'report.md')}`. Report đúng hai dòng:",
+        f"Ghi vào `{rel(d / 'report.md')}`, đúng hai dòng:",
         "```", f"WINNER: {shape}", "EVIDENCE_OPENED: <ảnh đã mở, cách nhau bằng dấu phẩy>", "```",
-        "Tin nhắn cuối chỉ gồm report, giữa dòng `--- report ---` và dòng `--- end ---`.", ""])
+        "Chỉ trả về dòng `DONE`.", FALLBACK, ""])
 
 
-def take(d: Path, k: int) -> dict:
+def take(d: Path, k: int, fallback: bool = False) -> dict:
     from .contract import parse_contract, unwrap
     c = parse_contract(unwrap((d / "report.md").read_text(encoding="utf-8")), {"WINNER", "EVIDENCE_OPENED"})
     w = dict(pairs(c.get("WINNER", "")))
@@ -306,12 +305,14 @@ def take(d: Path, k: int) -> dict:
     if errs:
         die(f"{rel(d / 'report.md')} sai contract: {'; '.join(errs)}")
     o = order(k)
-    res = {"order": k, "winner": {x: o.get(w[x], "tie") for x in CRITERIA}, "at": now()}
+    res = {"order": k, "winner": {x: o.get(w[x], "tie") for x in CRITERIA}, "at": now(), "fallback": fallback}
+    if fallback and ROOT.is_dir():
+        ledger(f"{d.parent.name} · ab o{k} · report_fallback · reviewer")
     write_atomic(d / "result.json", json.dumps(res, ensure_ascii=False, indent=2))
     return res
 
 
-def judge(_a):
+def judge(a):
     """One pairwise ask at a time: ingest a report that is there, else print the next dispatch, else `đủ`."""
     m, waiting = mapping(), []
     for aid, lab in m.items():
@@ -323,7 +324,7 @@ def judge(_a):
             if (d / "result.json").exists():
                 continue
             if (d / "report.md").exists():
-                take(d, k)
+                take(d, k, bool(getattr(a, "fallback", False)))
                 continue
             d.mkdir(parents=True, exist_ok=True)
             (d / "brief.md").write_text(judge_brief(aid, d, k, lab), encoding="utf-8")
