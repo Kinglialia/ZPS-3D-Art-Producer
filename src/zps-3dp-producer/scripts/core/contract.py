@@ -16,7 +16,7 @@ RUBRIC_VALUES = ("pass", "fail", "unclear")
 PICKS = ("a", "b", "c")
 BLOCKS = {"FINDINGS", "PRIOR"}
 REVIEW_KEYS = {"VERDICT", "RUBRIC", "COUNTS", "TOP_FIX", "EVIDENCE_OPENED", "COMPARE", "PICK"} | BLOCKS
-WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED"}
+WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", "UNFIXABLE"}
 NONE = {"", "-", "—", "none"}
 
 KEY = re.compile(r"^\s*([A-Z_]+):\s*(.*)$")
@@ -60,6 +60,8 @@ def parse_worker(text: str) -> tuple[dict, list[str]]:
         errs.append(f"STATUS phải là {'|'.join(sorted(WORKER_STATUS))}")
     if not c.get("PROFILE_HASH"):
         errs.append("thiếu PROFILE_HASH")
+    if c.get("UNFIXABLE", "no").lower() not in ("yes", "no"):
+        errs.append("UNFIXABLE phải là yes|no")
     return c, errs
 
 

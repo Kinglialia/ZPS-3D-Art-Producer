@@ -4,8 +4,8 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · approvals · delegate · rule
-             ledger · dashboard · serve · validate · cleanup · archive
+Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · meshy · approvals
+             delegate · rule · ledger · dashboard · serve · validate · cleanup · archive · texture-stats
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 
-UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve"}
+UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve", "texture-stats"}
 
 
 def cmd_init(a):
@@ -85,6 +85,16 @@ def cmd_approvals(a):
 def cmd_delegate(a):
     from core.policy import delegate
     delegate(a)
+
+
+def cmd_meshy(a):
+    from core.texture import answer
+    answer(a)
+
+
+def cmd_texture_stats(a):
+    from core.texture import stats
+    stats(a)
 
 
 def cmd_rule(a):
@@ -156,6 +166,9 @@ def main(argv: list[str] | None = None):
     x = sub.add_parser("delegate", help="ủy quyền reviewer duyệt bước này cho các asset")
     x.add_argument("step"); x.add_argument("ids", nargs="+"); x.add_argument("--by", default="")
     x.add_argument("--confirm-spend", action="store_true")
+    x = sub.add_parser("meshy", help="trả lời câu hỏi Meshy của bước texture: call = gọi thêm, paint = VẼ MỚI")
+    x.add_argument("id"); x.add_argument("choice", choices=["call", "paint"]); x.add_argument("--by", default="")
+    sub.add_parser("texture-stats", help="đề xuất chế độ texture so với chế độ đã dùng, credit Meshy")
     sub.add_parser("rule", help="ghi quyết định Producer tự đưa ra").add_argument("text")
     x = sub.add_parser("ledger", help="xem cuối ledger")
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
@@ -169,7 +182,7 @@ def main(argv: list[str] | None = None):
     a = p.parse_args(argv)
     try:
         with locked(create=a.cmd in ("init", "preflight")) if a.cmd not in UNLOCKED else contextlib.nullcontext():
-            globals()[f"cmd_{a.cmd}"](a)
+            globals()[f"cmd_{a.cmd.replace('-', '_')}"](a)
     except ProducerError as ex:
         sys.exit(f"LỖI: {ex}")
 

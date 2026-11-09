@@ -1,0 +1,138 @@
+"""Texture step (docs/producer.md §6.3): key check, Meshy budget per mesh hash, the two Meshy questions, texture-stats."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from .state import ASSETS, ROOT, SKILL_DIR, all_status, die, ledger, load_st, rel, save_st, vdir, write_atomic
+
+STEP = "texture"
+MESHY_CALL = SKILL_DIR / "scripts" / "meshy_call.py"
+ASK_MESH = "Mesh đổi, texture Meshy cũ mất hiệu lực. Gọi lại Meshy (tốn credit) hay VẼ MỚI?"
+ANSWER = "duyệt = gọi Meshy, `meshy {id} paint` = VẼ MỚI"
+
+
+def budget_path(aid: str, mesh_sha: str) -> Path:
+    return ASSETS / aid / STEP / f"budget-{mesh_sha[:12]}.json"
+
+
+def read_budget(p: Path) -> dict:
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def write_budget(p: Path, b: dict):
+    write_atomic(p, json.dumps({"max_credits": b["max_credits"], "used_credits": b["used_credits"]}, indent=2) + "\n")
+
+
+def current_budget(st: dict) -> Path | None:
+    sha = (st.get("locked") or {}).get("model")
+    p = budget_path(st["id"], sha) if sha else None
+    return p if p and p.is_file() else None
+
+
+def env_file(prof: dict) -> str | None:
+    return (prof.get("paths") or {}).get("env_file") or None
+
+
+def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] | list[str]:
+    """Before every texture worker brief: brief lines, or (event, note) when the asset must stop first (§6.3)."""
+    import meshy_call
+    aid, sha = st["id"], st["locked"]["model"]
+    if not env_file(prof):
+        return ["MODE: VẼ MỚI (profile không có `paths.env_file`: không gọi Meshy)"]
+    if st.get("paint_for") == sha[:12]:
+        return ["MODE: VẼ MỚI (người dùng chọn cho mesh này: không gọi Meshy)"]
+    if meshy_call.keys() != "key file":
+        return "stuck", "thiếu MESHY_API_KEY trong env_file của profile: người dùng thêm key"
+    p = budget_path(aid, sha)
+    price = st["meshy_price"] = meshy_call.price(model_glb, style)
+    if not p.is_file():
+        spent = [q.name for q in p.parent.glob("budget-*.json") if q != p and read_budget(q)["used_credits"] > 0]
+        write_budget(p, {"max_credits": 0 if spent else price, "used_credits": 0})
+        if spent:
+            ask(st, "mesh_changed", nxt="todo")
+            return "ask_human", f"{ASK_MESH} ({ANSWER.format(id=aid)})"
+        ledger(f"{aid} · {STEP} · {p.name}: 1 lần gọi Meshy ({price} credit)")
+    b = read_budget(p)
+    left = int((b["max_credits"] - b["used_credits"]) // price)
+    pid = rel(ROOT / "pids" / "meshy" / f"{aid}.pid")
+    if left <= 0:
+        return [f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy"]
+    return [f"MESHY: {MESHY_CALL}", f"MESHY_ARGS: --asset {aid} --pid-file {pid}",
+            f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)"]
+
+
+def ask(st: dict, kind: str, nxt: str, base: int | None = None, new_round: bool = False):
+    p = current_budget(st)
+    st["ask"] = {"kind": kind, "budget": p.name if p else None, "next": nxt, "base": base, "new_round": new_round}
+
+
+def ask_regen(st: dict, n: int, from_review: bool, why: str) -> str | None:
+    """`TOP_FIX: meshy_regen` or `UNFIXABLE: yes`: the note for waiting_human, or None when there is no Meshy budget."""
+    if not current_budget(st):
+        return None
+    if from_review:
+        ask(st, "meshy_regen", "fix", base=n, new_round=True)
+    else:
+        ask(st, "meshy_regen", "fix" if st.get("fix_round") else "todo", base=st.get("fix_base"))
+    return f"{why}: gọi Meshy thêm một lần ({st.get('meshy_price', '?')} credit) hay VẼ MỚI? ({ANSWER.format(id=st['id'])})"
+
+
+def resolve(st: dict, choice: str, by: str) -> str:
+    """The user's answer to st['ask']: `call` adds one call to the budget of the current mesh, `paint` marks VẼ MỚI."""
+    from .loop import move
+    q = st.pop("ask")
+    p = ASSETS / st["id"] / STEP / q["budget"]
+    if choice == "call":
+        b = read_budget(p)
+        price = st.get("meshy_price") or 10
+        b["max_credits"] += price
+        write_budget(p, b)
+        what = f"{q['kind']}: thêm 1 lần gọi Meshy ({price} credit), {p.name} max_credits={b['max_credits']}"
+    else:
+        st["paint_for"] = p.stem.removeprefix("budget-")
+        what = f"{q['kind']}: VẼ MỚI, không gọi Meshy cho mesh {st['paint_for']}"
+    move(st, f"answer_{q['next']}")
+    if q["new_round"]:
+        st["fix_round"] = st.get("fix_round", 0) + 1
+    if q["base"] is not None:
+        st["fix_base"] = q["base"]
+    st["note"] = what
+    ledger(f"{st['id']} · {STEP} · {what} · bởi {by}")
+    return what
+
+
+def answer(a):
+    from .board import build_outputs
+    from .loop import next_action
+    from .state import load_cfg
+    st = load_st(a.id)
+    if not st.get("ask") or st["state"] != "waiting_human":
+        die(f"{a.id}: không có câu hỏi Meshy đang chờ (state={st['state']})")
+    what = resolve(st, a.choice, f"người dùng: {a.by}" if a.by else "người dùng")
+    save_st(st)
+    build_outputs(load_cfg())
+    print(f"{a.id}: {what} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
+
+
+def stats(_a):
+    """D22.17: proposal against the mode used, from texture_spec.json of each asset's texture version, and Meshy spend
+    from the budget files; the ledger gives the extra calls the user approved."""
+    rows, calls, credits = [], 0, 0
+    for st in all_status():
+        n = (st.get("approved") or {}).get(STEP) or (st.get("versions") or {}).get(STEP)
+        spec = vdir(st["id"], STEP, n) / "final" / "texture_spec.json" if n else None
+        price = st.get("meshy_price") or 10
+        for p in (ASSETS / st["id"] / STEP).glob("budget-*.json"):
+            used = read_budget(p)["used_credits"]
+            credits += used
+            calls += int(used // price)
+        if spec and spec.is_file():
+            s = json.loads(spec.read_text(encoding="utf-8"))
+            rows.append((st["id"], s.get("proposed"), s.get("used")))
+    p = ROOT / "ledger.md"
+    extra = sum("thêm 1 lần gọi Meshy" in l for l in p.read_text(encoding="utf-8").splitlines()) if p.exists() else 0
+    off = [f"{i} ({a}→{b})" for i, a, b in rows if a != b]
+    print(f"texture-stats: {len(rows)} asset có texture_spec.json; đề xuất khớp chế độ dùng {len(rows) - len(off)}/"
+          f"{len(rows)}" + (f" (lệch: {', '.join(off)})" if off else "") + f"; Meshy {calls} lần, {credits:g} credit; "
+          f"người dùng duyệt gọi thêm {extra} lần")

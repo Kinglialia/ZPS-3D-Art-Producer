@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import P, finding, pilot_project, report, run
+from shared import P, finding, model_only, pilot_project, report, run
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -21,7 +21,8 @@ OUTPUTS = {
                    "report/VIEWS_sheet.png"),
     "model": (f"{AID}-untextured.glb", f"{AID}.blend", "part_graph.json", "parts_lib.py", "spec.json", "model.md",
               "review/model_sheet.png", "review/renders/renders.json"),
-    "texture": (),
+    "texture": ("albedo_2048.png", "texture_spec.json", "notes.md", "final_lit_vs_concept.png", "review/renders.json",
+                "review/checks/tex_measure.json"),
 }
 ISSUES = "mái chìa 0.35 m đo trên concept_shadow, thẻ không ghi"
 SEEN = "clay_front.png, clay_lit_34.png, detail.json"
@@ -99,6 +100,8 @@ def flow(tmp_path_factory):
     root = tmp_path_factory.mktemp("model")
     f = Flow(root)
     pilot_project(root)
+    model_only(root)
+    (root / ".env").write_text("MESHY_API_KEY=msy-test-only\n", encoding="utf-8")
     f.p("intake", AID)
     f.p("ready", AID)
     f.work("b1")

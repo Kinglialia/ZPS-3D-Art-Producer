@@ -50,6 +50,13 @@ def views_only(root):
                  encoding="utf-8")
 
 
+def model_only(root):
+    """GĐ 3 tests end at DUYỆT 1; turning texture off keeps `done_enabled` right after model."""
+    p = Path(root) / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "texture"\n', 'id = "texture"\nenabled = false\n', 1),
+                 encoding="utf-8")
+
+
 def brief_hash(text: str) -> str:
     return re.search(r"^PROFILE_HASH: ([0-9a-f]{12})$", text, re.M).group(1)
 

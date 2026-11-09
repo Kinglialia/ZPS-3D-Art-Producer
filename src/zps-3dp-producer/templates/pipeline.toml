@@ -1,14 +1,15 @@
 # Pipeline của Producer — nơi DUY NHẤT định nghĩa thứ tự bước, agent, model, gate, output bắt buộc, giới hạn chạy song song.
-# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 3 bật `blockout`, `views_front`, `views_rest`, `model`.
+# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 4 bật cả 6 bước.
 # gate: review (reviewer PASS → bước sau) | review_human (reviewer PASS → người duyệt) | checks_human (script pass → người duyệt)
 # top_fix: loại TOP_FIX reviewer được dùng ở bước này; `need_evidence` dùng được ở mọi bước có reviewer.
 # inputs: bước đã duyệt mà brief trỏ tới `final/` (mặc định: bước liền trước).
 # review_inputs: bước trong inputs mà brief reviewer trỏ tới `final/` (mặc định: inputs).
-# concept: file trong _approved/<id>/ bước cần đọc; {id} = mã asset (mặc định: mọi file bắt buộc).
+# concept: file trong _approved/<id>/ bước cần đọc; {id} = mã asset (mặc định: mọi file bắt buộc). review_concept: của reviewer (mặc định: concept).
 # regions: `region` của finding mới mở đầu bằng một trong các tên này, vd `back: mép mái`.
-# outputs, lock: {id} = mã asset. lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
+# outputs, lock: {id} = mã asset, {res} = texture_res của thẻ (mặc định 2048). lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
 # issues: bước trong inputs mà brief chép dòng ISSUES của report worker bản đã duyệt (D20.3).
 # pilot: brief ghi PILOT: deliver/<pilot_asset>/ để tool so với pilot (D21.7, D22.10).
+# script: bước không có agent; `P brief` in lệnh chạy script (scripts/<script>), script ghi report-script.md.
 
 [project]
 name = "{{PROJECT}}"
@@ -82,7 +83,6 @@ outputs = ["final/{id}-untextured.glb", "final/{id}.blend", "final/part_graph.js
 
 [[steps]]
 id = "texture"
-enabled = false
 agent = "step-texture"
 reviewer = "check-texture"
 model = "opus"
@@ -90,10 +90,19 @@ gate = "review"
 uses = ["blender", "codex_image", "meshy"]
 top_fix = ["repaint", "fix_uv_mesh", "meshy_regen", "note"]
 inputs = ["blockout", "views_front", "views_rest", "model"]
+review_inputs = ["views_rest"]
+concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
+review_concept = ["concept_albedo.png", "concept_shadow.png"]
 issues = ["model"]
+pilot = true
+outputs = ["final/albedo_{res}.png", "final/texture_spec.json", "final/notes.md", "final/final_lit_vs_concept.png",
+           "final/review/renders.json", "final/review/checks/tex_measure.json"]
 
 [[steps]]
 id = "assemble"
-enabled = false
 gate = "checks_human"
+script = "assemble.py"
 uses = ["blender"]
+inputs = ["model", "texture"]
+outputs = ["final/README.md", "final/model/{id}.glb", "final/model/{id}.blend", "final/texture/albedo_{res}.png",
+           "final/texture/notes.md", "final/review/compare.json"]

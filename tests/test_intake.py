@@ -412,6 +412,8 @@ def test_intake_listing_groups_valid_assets_and_each_kind_of_error(proj):
         "Thẻ sai (1): 03-tier (thẻ: tier sai: 'epic' (hero | standard | background))",
         "Tên thư mục sai quy ước (1): Bad_Name",
         "File rời (1): loose.txt",
+        "Ước lượng lô 1 asset: 60–170 phút mỗi asset (mặc định kit); Meshy 10 credit cho lô (1 lần retexture × 10): "
+        "người dùng duyệt tổng này một lần.",
         "Chưa có pilot (pilot_asset: null): đăng ký từng asset, `intake <id>`.",
     ]
     assert proj.registered() == []

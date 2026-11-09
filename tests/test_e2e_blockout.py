@@ -167,8 +167,12 @@ def reviewer_json(n):
 
 def test_intake_finds_the_pilot_complete_and_registers_it_alone_because_pilot_asset_is_null(flow):
     assert flow["intake list"]["out"] == ("Mới, đủ file (1): pilot-house\n"
+                                          "Ước lượng lô 1 asset: 60–170 phút mỗi asset (mặc định kit); Meshy 10 credit "
+                                          "cho lô (1 lần retexture × 10): người dùng duyệt tổng này một lần.\n"
                                           "Chưa có pilot (pilot_asset: null): đăng ký từng asset, `intake <id>`.\n")
-    assert flow["intake"]["out"] == ("Đã đăng ký 1: pilot-house.\nRubric chưa duyệt: pilot-house nằm ở draft. "
+    assert flow["intake"]["out"] == ("Đã đăng ký 1: pilot-house.\nƯớc lượng lô 1 asset: 60–170 phút mỗi asset (mặc định "
+                                     "kit); Meshy 10 credit cho lô (1 lần retexture × 10): người dùng duyệt tổng này một "
+                                     "lần.\nRubric chưa duyệt: pilot-house nằm ở draft. "
                                      "Người dùng duyệt xong thì `ready pilot-house`.\n")
     st = flow["intake"]["st"]
     assert (st["state"], st["type"], st["title"]) == ("draft", "building", "Pilot House")

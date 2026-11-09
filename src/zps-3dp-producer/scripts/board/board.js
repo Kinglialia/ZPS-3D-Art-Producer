@@ -121,9 +121,11 @@ function card(a, view) {
   const items = [...a.images, ...(a.glb ? [{ u: a.glb, n: "model 3D", model: true }] : [])];
   const form = $("textarea", { rows: 2, placeholder: "Ghi chú chung" });
   const out = $("div", { className: "msg", textContent: msgs[a.id] || "" });
+  const where = a.redo_steps.length ? $("select", {}, a.redo_steps.map(s => $("option", { value: s, textContent: `Cần sửa ở ${s}` }))) : null;
   const send = async action => {
+    const step = action === "redo" && where ? where.value : a.step;
     const r = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: a.id, action, text: form.value, step: a.step }) });
+      body: JSON.stringify({ id: a.id, action, text: form.value, step }) });
     msgs[a.id] = (await r.json()).message;
     load();
   };
@@ -141,7 +143,7 @@ function card(a, view) {
     a.open.length ? findingList(a.open) : null,
     a.preference.length ? $("details", {}, $("summary", { textContent: `Khẩu vị (${a.preference.length})`, className: "muted" }), findingList(a.preference)) : null,
     form,
-    $("div", { className: "row" }, ACTIONS.map(([t, act]) => $("button", { textContent: t, className: act === "approve" ? "ok" : "", onclick: () => send(act) }))),
+    $("div", { className: "row" }, where, ACTIONS.map(([t, act]) => $("button", { textContent: t, className: act === "approve" ? "ok" : "", onclick: () => send(act) }))),
     out);
 }
 

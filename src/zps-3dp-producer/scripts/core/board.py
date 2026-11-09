@@ -13,8 +13,9 @@ from .state import (FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, load_cfg, 
 
 BOARD_DIR = SKILL_DIR / "scripts" / "board"
 SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "views_rest": "report/VIEWS.md",
-                "model": "model.md", "texture": "texture/notes.md", "assemble": "README.md"}
-HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "VIEWS_sheet.png", "model": "model_sheet.png"}
+                "model": "model.md", "texture": "notes.md", "assemble": "README.md"}
+HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "VIEWS_sheet.png", "model": "model_sheet.png",
+        "texture": "final_lit_vs_concept.png", "assemble": "final_lit_vs_concept.png"}
 SUMMARY_LINES = 3
 CONCEPT_IMAGES = ("concept_albedo.png", "concept_shadow.png")
 LINE_FIELDS = ("region", "evidence", "repair")
@@ -93,7 +94,8 @@ def asset_view(cfg: dict, st: dict) -> dict:
                    for x in CONCEPT_IMAGES if (cd / x).is_file()]
         k = 1 if pics and pics[0].name == hero else 0
         images[k:k] = concept
-    glb = main_glb(final, outputs_of(step_of(cfg, step)[1], aid)) if final and final.is_dir() else None
+    sd = step_of(cfg, step)[1]
+    glb = main_glb(final, outputs_of(sd, st)) if final and final.is_dir() else None
     lines = summary_lines(final / SUMMARY_FILE[step]) if final and step in SUMMARY_FILE else []
     op = findings.open_of(findings.load(aid, step, n))
     waiting = st["state"] == "waiting_human"
@@ -111,6 +113,7 @@ def asset_view(cfg: dict, st: dict) -> dict:
         "decided": (st.get("decisions") or {}).get(f"{step} v{n}", {}).get("at"),
         "open": [finding_view(i, f) for i, f in op.items() if f["priority"] != "preference"],
         "preference": [finding_view(i, f) for i, f in op.items() if f["priority"] == "preference"],
+        "redo_steps": list(reversed(sd["inputs"])) if sd["script"] else [],
     }
 
 

@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import shlex
+import sys
 from pathlib import Path
 
-from . import findings, hashes, preflight
+from . import findings, hashes, preflight, texture
 from .contract import NONE, parse_worker
 from .hashes import ad_text
 from .loop import move, next_action, review_base, set_aside
@@ -52,10 +54,11 @@ def failed_checks(vd) -> list[str]:
     return out
 
 
-def concept_files(st, step) -> list[str]:
+def concept_files(st, step, review: bool = False) -> list[str]:
     from check_card import required_files
     d = Path(st["concept_dir"])
-    names = [x.format(id=st["id"]) for x in step["concept"]] if step["concept"] else required_files(st["id"], True)
+    want = step["review_concept"] if review and step["review_concept"] is not None else step["concept"]
+    names = [x.format(id=st["id"]) for x in want] if want else required_files(st["id"], True)
     return [x for x in names if not x.endswith(".layout.md") or (d / x).is_file()]
 
 
@@ -77,7 +80,8 @@ def pid_line(st, step) -> list[str]:
     return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}`."]
 
 
-def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path, prof: dict) -> str:
+def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path, prof: dict,
+                 extra: list[str] = ()) -> str:
     aid = st["id"]
     d = vdir(aid, step["id"], n)
     a = ASSETS / aid
@@ -88,7 +92,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
-        *tools_line(st, step, pf, preset, extra=[pilot_line(prof)] if step["pilot"] else []),
+        *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra)),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
@@ -109,6 +113,12 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     for prev in step["issues"]:
         if (v := st["approved"].get(prev)) and (issues := handoff_issues(st, prev, v)):
             lines.append(f"{k}. ISSUES của report worker `{prev}` v{v}: {issues}")
+            k += 1
+    for prev in step["inputs"]:
+        v = st["approved"].get(prev)
+        if v and (ids := [i for i, f in findings.open_of(findings.load(aid, prev, v)).items() if f["kind"] in findings.NOTE]):
+            lines.append(f"{k}. Ghi chú còn mở của reviewer `{prev}` v{v}: {', '.join(ids)} trong "
+                         f"`{rel(findings.path(aid, prev, v))}` (`note_texture`: TEXTURE NOTE, `note_exception`: NGOẠI LỆ).")
             k += 1
     if not fix and (pv := (st.get("prior") or {}).get(step["id"])):
         lines.append(f"{k}. Bản đã duyệt trước của bước này (dựng từ đầu vào cũ): `{rel(vdir(aid, step['id'], pv) / 'final')}/`. "
@@ -150,7 +160,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     if cfg["preview"]["spec"]:
         lines.append(f"- Preview: {cfg['preview']['spec']}")
     if step["outputs"]:
-        req = ", ".join(f"`{o}`" for o in outputs_of(step, aid))
+        req = ", ".join(f"`{o}`" for o in outputs_of(step, st))
         lines.append(f"- Bắt buộc có (tính từ `{rel(d)}/`): {req}.")
     if step.get("external_command"):
         cmd = step["external_command"].format(
@@ -190,7 +200,7 @@ def review_brief(cfg, st, step, n) -> str:
     cmp_ids = findings.compare_ids(base)
     pick = bool(tf and tf["kind"] == "param")
     nxt = (base or {}).get("next_id", 1)
-    tie = [k for k in step["top_fix"] if k in findings.TIE_FIRST]
+    tie = sorted((k for k in step["top_fix"] if k in findings.TIE_RANK), key=lambda k: -findings.TIE_RANK[k])
     single = [k for k in step["top_fix"] if k in findings.SINGLE]
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
@@ -202,7 +212,7 @@ def review_brief(cfg, st, step, n) -> str:
         f"- Báo cáo tự check của worker: `{rel(d / 'report-worker.md')}` — tham khảo, không tin thay bằng chứng.",
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
         *([f"- Concept đã duyệt để đối chiếu, trong `{st['concept_dir']}`: chỉ "
-           + ", ".join(f"`{x}`" for x in concept_files(st, step)) + "."] if st.get("concept_dir") else []),
+           + ", ".join(f"`{x}`" for x in concept_files(st, step, review=True)) + "."] if st.get("concept_dir") else []),
         *(f"- Đầu ra đã duyệt của bước `{p}` (đầu vào, không chấm lại): `{rel(fd)}/`."
           for p, fd in input_finals(st, step["review_inputs"])),
         f"- Profile dự án (`hidden_side_rules`, `scale_refs`): `{rel(ROOT / 'PROJECT-PROFILE.yaml')}`.",
@@ -281,6 +291,23 @@ def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> s
     return "\n".join(lines) + "\n"
 
 
+def model_glb(st) -> Path:
+    return vdir(st["id"], "model", st["approved"]["model"]) / "final" / f"{st['id']}-untextured.glb"
+
+
+def stop(a, cfg, st, sid, s, event: str, note: str):
+    """The texture gate stopped the asset before a version exists (§6.3): one line instead of a dispatch."""
+    from .board import build_outputs
+    if event == "stuck" and s in ("todo", "fix"):
+        st["blocked_from"] = s
+    move(st, event)
+    st["note"] = note
+    save_st(st)
+    ledger(f"{a.id} · {sid} · {st['state']} trước khi giao: {note}")
+    build_outputs(cfg)
+    print(f"{a.id}: {sid} → {st['state']} trước khi giao. Tiếp: {next_action(st)}")
+
+
 def run(a):
     cfg = load_cfg()
     st = load_st(a.id)
@@ -297,6 +324,12 @@ def run(a):
     for res in step["uses"]:
         if res in cfg["limits"]:
             (ROOT / "pids" / res).mkdir(parents=True, exist_ok=True)
+    extra = []
+    if sid == texture.STEP and s in ("todo", "fix", "running"):
+        g = texture.gate(st, prof, model_glb(st), Path(st["concept_dir"]) / "concept_albedo.png")
+        if isinstance(g, tuple):
+            return stop(a, cfg, st, sid, s, *g)
+        extra = g
     if s in ("todo", "fix", "running"):
         if s == "running":
             n = st["versions"][sid]
@@ -308,16 +341,22 @@ def run(a):
         (d / "work").mkdir(parents=True, exist_ok=True)
         fix = s == "fix" or (s == "running" and st.get("fix_round", 0) > 0)
         hashes.record_inputs(cfg, st, i, n, ph)
-        bp = d / "brief-worker.md"
-        bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset, prof), encoding="utf-8")
-        model = step.get("model")
-        resume = None
-        if fix and st.get("fix_round", 0) <= r["resume_rounds"]:
-            resume = st.get("worker_agent_id")
-        elif fix and step.get("escalate_model"):
-            model = step["escalate_model"]
-        out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": model, "resume": resume,
-               "brief": rel(bp), "report": rel(d / "report-worker.md")}
+        if step["script"]:
+            blender = ((pf or {}).get("blender") or {}).get("path") or "blender"
+            cmd = [sys.executable, str(SKILL_DIR / "scripts" / step["script"]), a.id, "--version", str(n),
+                   "--profile-hash", ph, "--blender", blender]
+            out = {"role": "script", "command": shlex.join(cmd), "report": rel(d / "report-script.md")}
+        else:
+            bp = d / "brief-worker.md"
+            bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset, prof, extra), encoding="utf-8")
+            model = step.get("model")
+            resume = None
+            if fix and st.get("fix_round", 0) <= r["resume_rounds"]:
+                resume = st.get("worker_agent_id")
+            elif fix and step.get("escalate_model"):
+                model = step["escalate_model"]
+            out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": model, "resume": resume,
+                   "brief": rel(bp), "report": rel(d / "report-worker.md")}
     elif s in ("evidence", "evidence_running"):
         n = st["versions"][sid]
         ed = vdir(a.id, sid, n) / "review" / f"evidence-{st['evidence']['k']}"
@@ -338,5 +377,5 @@ def run(a):
     set_aside(Path(out["report"]))
     move(st, "dispatch")
     save_st(st)
-    ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({out['agent']})")
+    ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({out.get('agent') or step['script']})")
     print(json.dumps(out, ensure_ascii=False))

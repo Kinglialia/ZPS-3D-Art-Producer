@@ -10,6 +10,7 @@ from pathlib import Path
 import check_card
 import check_profile
 
+from .estimate import batch_line
 from .hashes import warnings_for
 from .state import (ARCHIVE, ASSETS, FINISHED, ROOT, TEMPLATES, all_status, die, ledger, load_st, now, rel,
                     rubric_approved, save_st)
@@ -161,6 +162,8 @@ def run(a, cfg: dict):
         lines = [f"Mới, đủ file ({len(g['new'])}): {', '.join(g['new'])}"] if g["new"] else []
         lines += group_errors(g["errors"])
         lines += [f"{lab} ({len(g[k])}): {', '.join(g[k])}" for k, lab in labels.items() if g[k]]
+        if est := batch_line(len(g["new"]), bool((prof.get("paths") or {}).get("env_file"))):
+            lines.append(est)
         if lines:
             print("\n".join(lines))
         print("Chưa có pilot (pilot_asset: null): đăng ký từng asset, `intake <id>`." if no_pilot else
@@ -191,6 +194,7 @@ def run(a, cfg: dict):
                             check_profile.load_yaml(root / aid / check_card.CARD)["type"], a.priority, a.deadline,
                             root / aid) for aid in ids]
     print(f"Đã đăng ký {len(ids)}: {', '.join(ids)}.")
+    print(batch_line(len(ids), bool((prof.get("paths") or {}).get("env_file"))))
     drafts = [st["id"] for st in created if st["state"] == "draft"]
     if drafts:
         print(f"Rubric chưa duyệt: {', '.join(drafts)} nằm ở draft. Người dùng duyệt xong thì `ready {' '.join(drafts)}`.")

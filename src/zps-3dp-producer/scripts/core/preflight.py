@@ -89,7 +89,11 @@ def load() -> dict | None:
         return None
 
 
+OPTIONAL = {"meshy"}
+
+
 def off(step: dict, pf: dict | None) -> list[str]:
-    """Resources of the step that the cached preflight marked off; unknown counts as on."""
+    """Resources of the step that the cached preflight marked off; unknown counts as on. Meshy is optional: without a
+    key the texture brief itself paints (no env_file) or blocks (env_file without key), docs/producer.md §6.3."""
     feats = (pf or {}).get("features") or {}
-    return [r for r in step["uses"] if feats.get(r) is False]
+    return [r for r in step["uses"] if r not in OPTIONAL and feats.get(r) is False]

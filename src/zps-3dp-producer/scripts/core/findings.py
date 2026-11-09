@@ -10,7 +10,7 @@ OPEN = {"open", "regressed"}
 BM = ("blocker", "major")
 SINGLE = {"structure", "regen_front"}
 NOTE = {"note", "note_exception", "note_texture"}
-TIE_FIRST = {"structure", "fix_uv_mesh", "regen_front"}
+TIE_RANK = {"structure": 2, "fix_uv_mesh": 2, "regen_front": 2, "meshy_regen": 1}
 BATCH_PRIO = ("blocker", "major", "minor")
 REOPEN = {"regen_front": "views_front", "fix_uv_mesh": "model"}
 REOPENED_PART = {"regen_front": "front", "fix_uv_mesh": "mesh và UV"}
@@ -157,7 +157,7 @@ def check_top_fix(rv: dict, op: dict, step: dict) -> list[str]:
         return [f"TOP_FIX '{k}' không dùng ở bước {step['id']} ({'|'.join(kinds)})"]
     errs = []
     if bm:
-        rank = {i: (BM[::-1].index(f["priority"]), f["kind"] in TIE_FIRST) for i, f in bm.items()}
+        rank = {i: (BM[::-1].index(f["priority"]), TIE_RANK.get(f["kind"], 0)) for i, f in bm.items()}
         top = max(rank.values())
         exp = sorted({bm[i]["kind"] for i, r in rank.items() if r == top})
         if k == "need_evidence":

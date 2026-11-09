@@ -30,6 +30,7 @@ GATES = {"review", "review_human", "checks_human"}
 STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", "evidence_running", "waiting_human",
           "blocked", "done", "done_enabled"}
 FINISHED = ("done", "done_enabled")
+DEFAULT_TEXTURE_RES = 2048
 
 
 class ProducerError(Exception):
@@ -94,6 +95,8 @@ def load_cfg() -> dict:
         s.setdefault("review_inputs", s["inputs"])
         s.setdefault("lock", None)
         s.setdefault("pilot", False)
+        s.setdefault("script", None)
+        s.setdefault("review_concept", None)
         if bad := [x for x in s["inputs"] if x not in ids[:i]]:
             die(f"step {s['id']}: inputs {', '.join(bad)} không phải bước trước nó")
         if bad := [x for x in s["issues"] if x not in s["inputs"]]:
@@ -105,6 +108,8 @@ def load_cfg() -> dict:
         if s["gate"] != "checks_human":
             s.get("agent") or die(f"step {s['id']}: thiếu agent")
             s.get("reviewer") or die(f"step {s['id']}: thiếu reviewer")
+        elif not s.get("agent") and not s["script"]:
+            die(f"step {s['id']}: gate checks_human cần agent hoặc script")
     pa = cfg.setdefault("paths", {})
     pa["approved"] = Path(os.path.expanduser(pa.get("approved", ""))) if pa.get("approved") else None
     pa["art_direction"] = Path(os.path.expanduser(pa.get("art_direction", ""))) if pa.get("art_direction") else None
@@ -117,8 +122,21 @@ def load_cfg() -> dict:
     return cfg
 
 
-def outputs_of(step: dict, aid: str) -> list[str]:
-    return [o.format(id=aid) for o in step["outputs"]]
+def texture_res(st: dict) -> int:
+    """`texture_res` of the asset card; null or no card: 2048 (texture-artist.md §2)."""
+    card = Path(st["concept_dir"]) / "asset-card.yaml" if st.get("concept_dir") else None
+    if card and card.is_file():
+        import yaml
+        r = (yaml.safe_load(card.read_text(encoding="utf-8")) or {}).get("texture_res")
+        if isinstance(r, int) and not isinstance(r, bool) and r > 0:
+            return r
+    return DEFAULT_TEXTURE_RES
+
+
+def outputs_of(step: dict, st: dict) -> list[str]:
+    """`{id}` = asset id, `{res}` = texture_res."""
+    res = texture_res(st) if any("{res}" in o for o in step["outputs"]) else None
+    return [o.format(id=st["id"], res=res) for o in step["outputs"]]
 
 
 def step_of(cfg: dict, sid: str) -> tuple[int, dict]:

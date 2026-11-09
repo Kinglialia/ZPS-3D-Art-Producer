@@ -96,6 +96,7 @@ def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_
             {"line": "F2 [preference] cửa — cửa hơi hẹp — rộng thêm — acceptance: cửa ≥ 1 m",
              "fields": {"viewing_condition": "front ortho", "consequence": "sai silhouette", "confidence": "high",
                         "preserve": "chiều cao tường"}}],
+        "redo_steps": [],
     }
 
 
@@ -297,3 +298,37 @@ def test_dashboard_lists_done_enabled_as_finished_like_every_other_command():
 def test_a_cross_site_form_post_cannot_decide(server):
     code, _ = post_raw(server, {"id": AID, "action": "approve", "text": ""}, ctype="text/plain")
     assert code == 403 and load_st(AID)["state"] == "waiting_human"
+
+
+def test_texture_sent_to_the_user_shows_the_lit_render_beside_the_concept_first_and_the_notes_summary_d20_16(project):
+    final = vdir(AID, "texture", 2) / "final"
+    for name in ("final_lit_vs_concept.png", "albedo_2048.png", "review/lit_34_front.png"):
+        (final / name).parent.mkdir(parents=True, exist_ok=True)
+        (final / name).write_bytes(PNG)
+    (final / "notes.md").write_text("# Texture house-a v2\nMeshy 1 lần, 10 credit\nSửa 2 vùng mái\nchưa kiểm: engine\n",
+                                    encoding="utf-8")
+    st = load_st(AID)
+    st |= {"stage": "texture", "versions": {"blockout": 2, "texture": 2}, "offer": 2, "label": loop.NOT_PASSED,
+           "note": "UNFIXABLE: lớp Meshy sai style: gọi Meshy thêm một lần (10 credit) hay VẼ MỚI?"}
+    save_st(st)
+    v = view()
+    assert (v["sheet"], v["images"][0]["n"], v["summary"], v["reason"], v["redo_steps"]) == (
+        "/p/assets/house-a/texture/v2/final/final_lit_vs_concept.png", "final_lit_vs_concept.png",
+        ["Texture house-a v2", "Meshy 1 lần, 10 credit", "Sửa 2 vùng mái"],
+        "UNFIXABLE: lớp Meshy sai style: gọi Meshy thêm một lần (10 credit) hay VẼ MỚI?", [])
+
+
+def test_duyet_2_offers_needs_fix_at_texture_or_model_and_shows_the_final_glb_d21_6(project):
+    final = vdir(AID, "assemble", 1) / "final"
+    for name in ("model/house-a.glb", "review/final_lit_vs_concept.png", "review/compare_34_front.png"):
+        (final / name).parent.mkdir(parents=True, exist_ok=True)
+        (final / name).write_bytes(PNG)
+    (final / "README.md").write_text("Trạng thái: chờ DUYỆT 2 · 2026-11-09\n", encoding="utf-8")
+    st = load_st(AID)
+    st |= {"stage": "assemble", "versions": {"blockout": 2, "assemble": 1}, "offer": 1, "label": "", "note": "duyệt"}
+    save_st(st)
+    v = view()
+    assert (v["sheet"], v["glb"], v["redo_steps"], v["summary"]) == (
+        "/p/assets/house-a/assemble/v1/final/review/final_lit_vs_concept.png",
+        "/p/assets/house-a/assemble/v1/final/model/house-a.glb", ["texture", "model"],
+        ["Trạng thái: chờ DUYỆT 2 · 2026-11-09"])

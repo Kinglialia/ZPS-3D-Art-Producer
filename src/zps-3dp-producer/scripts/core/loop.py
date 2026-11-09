@@ -4,11 +4,12 @@ from __future__ import annotations
 import hashlib
 import shutil
 
-from . import findings, hashes, policy
-from .contract import parse_review, parse_worker
+from . import findings, hashes, policy, texture
+from .contract import parse_contract, parse_findings, parse_review, parse_worker
 from .state import ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, step_of, vdir
 
 NOT_PASSED = "chưa đạt"
+STATUS_LINE = "Trạng thái:"
 REDOING = "**đang làm lại**\n\n"
 REDO_FROM = ("todo", "fix", "review", "evidence", "waiting_human", "blocked", "done", "done_enabled")
 NEXT = "next"
@@ -23,6 +24,9 @@ MOVES = {
     ("reviewing", "await_approval"): "waiting_human", ("reviewing", "ask_human"): "waiting_human",
     ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT, ("done_enabled", "resume"): NEXT,
     ("blocked", "retry"): "running", ("blocked", "retry_evidence"): "evidence", ("blocked", "retry_todo"): "todo",
+    ("blocked", "retry_fix"): "fix", ("todo", "stuck"): "blocked", ("fix", "stuck"): "blocked",
+    ("todo", "ask_human"): "waiting_human", ("fix", "ask_human"): "waiting_human", ("running", "ask_human"): "waiting_human",
+    ("waiting_human", "answer_fix"): "fix", ("waiting_human", "answer_todo"): "todo",
     **{(s, "redo"): "fix" for s in REDO_FROM},
 }
 
@@ -59,6 +63,8 @@ def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int,
         return ("approve", None) if auto else ("await_approval", None)
     if top_kind == "need_evidence":
         return ("ask_human", "xin bằng chứng lần 2") if evidence_used else ("need_evidence", None)
+    if top_kind == "meshy_regen":
+        return "ask_human", "meshy_regen"
     if top_kind in findings.REOPEN:
         return ("ask_human", f"{top_kind} lần 2") if reopened else ("reopen", None)
     if fix_round >= max_rounds:
@@ -91,10 +97,10 @@ def next_action(st: dict) -> str:
     if s in ("running", "reviewing", "evidence_running"):
         n = st.get("versions", {}).get(st["stage"])
         d = vdir(aid, st["stage"], n) if n else None
-        rep = {"running": "report-worker.md", "reviewing": "report-review.md"}.get(s)
+        rep = {"running": ("report-worker.md", "report-script.md"), "reviewing": ("report-review.md",)}.get(s, ())
         if s == "evidence_running" and st.get("evidence"):
-            rep = f"review/evidence-{st['evidence']['k']}/report-worker.md"
-        if d and rep and (d / rep).exists():
+            rep = (f"review/evidence-{st['evidence']['k']}/report-worker.md",)
+        if d and any((d / r).exists() for r in rep):
             return f"có báo cáo → `ingest {aid}`"
         return f"đang chờ subagent (mất kết nối thì `brief {aid}` để giao lại)"
     if s == "waiting_human":
@@ -146,20 +152,48 @@ def stuck(c: dict) -> str | None:
     return f"{c['STATUS']}: {c.get('ISSUES', '')}" if c["STATUS"] in ("NEEDS_CONTEXT", "BLOCKED") else None
 
 
+def script_findings(st, sid: str, n: int, rep):
+    """§6.4: the fail points a script step writes as findings in its report go to findings.json, for the board."""
+    c = parse_contract(read_report(rep), {"FINDINGS", "EVIDENCE_OPENED"})
+    errs = []
+    fs = parse_findings(c.get("FINDINGS", []), [x.strip() for x in c.get("EVIDENCE_OPENED", "").split(",") if x.strip()],
+                        errs)
+    if errs:
+        die(f"{rel(rep)} sai contract: {'; '.join(errs)}")
+    doc = {"version": n, "base": None, "top_fix": None, "pick": None, "next_id": len(fs) + 1,
+           "findings": {i: {"priority": f["priority"], "kind": f["kind"], "status": "open", "first_v": n, "last_v": n,
+                            **{k: v for k, v in f.items() if k not in ("priority", "kind")}} for i, f in fs.items()}}
+    findings.save(st["id"], sid, doc)
+
+
 def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
-    c = worker_report(st, d / "report-worker.md", a.agent_id, step["id"], n)
+    script = not step.get("agent")
+    rep = d / ("report-script.md" if script else "report-worker.md")
+    c = worker_report(st, rep, a.agent_id, step["id"], n)
     st["last_rubric"] = c.get("RUBRIC", "")
-    missing = [o for o in outputs_of(step, st["id"]) if not (d / o).exists()]
-    if why := stuck(c) or (missing and "thiếu output bắt buộc: " + ", ".join(missing)):
+    if script:
+        script_findings(st, step["id"], n, rep)
+    missing = [o for o in outputs_of(step, st) if not (d / o).exists()]
+    if why := stuck(c):
         move(st, "stuck")
         st["note"] = why
+    elif c.get("UNFIXABLE", "").lower() == "yes":
+        q = texture.ask_regen(st, n, False, f"UNFIXABLE: {c.get('ISSUES', '')}")
+        move(st, "ask_human" if q else "stuck")
+        if q:
+            offer(st, step["id"], n, note=q, label=NOT_PASSED)
+        else:
+            st["note"] = f"UNFIXABLE ở chế độ VẼ MỚI: {c.get('ISSUES', '')}"
+    elif missing:
+        move(st, "stuck")
+        st["note"] = "thiếu output bắt buộc: " + ", ".join(missing)
     elif step["gate"] == "checks_human":
         move(st, "checks_done")
         offer(st, step["id"], n, note=f"duyệt {step['id']} v{n}")
     else:
         move(st, "worker_done")
         st["note"] = ""
-    return f"worker {c['STATUS']}", ""
+    return f"{'script' if script else 'worker'} {c['STATUS']}", ""
 
 
 def on_evidence(cfg, st, step, d, n, a) -> tuple[str, str]:
@@ -202,7 +236,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         who = "reviewer"
     elif rv["verdict"] == "PASS" and step["gate"] == "review_human":
         who = policy.approver(policy.load(), sid, aid)
-    if rv["pick"] and rv["pick"] != "a" and (why := take_variant(d, rv["pick"], outputs_of(step, aid))):
+    if rv["pick"] and rv["pick"] != "a" and (why := take_variant(d, rv["pick"], outputs_of(step, st))):
         move(st, "stuck")
         st["note"] = why
         return f"review {rv['verdict']} PICK {rv['pick']}", why
@@ -235,8 +269,9 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         offer(st, sid, n, note=f"duyệt {sid} v{n}", label="")
     elif event == "ask_human":
         move(st, event)
+        q = texture.ask_regen(st, n, True, f"meshy_regen {', '.join(rv['top_fix']['ids'])}") if kind == "meshy_regen" else None
         ids = ", ".join(findings.open_of(findings.load(aid, sid, best)))
-        offer(st, sid, best, note=reason + (f"; còn mở: {ids}" if ids else ""), label=NOT_PASSED)
+        offer(st, sid, n if q else best, note=q or reason + (f"; còn mở: {ids}" if ids else ""), label=NOT_PASSED)
     elif event == "fix":
         move(st, event)
         st["fix_round"] = st.get("fix_round", 0) + 1
@@ -278,10 +313,16 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     st.setdefault("rejected", {})[sid] = [v for v in range(1, st["versions"][sid] + 1) if v != n]
     st.setdefault("prior", {}).pop(sid, None)
     if sid == "assemble":
+        from .estimate import log_asset
         out = DELIVER / st["id"]
         if out.exists():
             shutil.rmtree(out)
         shutil.copytree(vdir(st["id"], sid, n) / "final", out)
+        readme = out / "README.md"
+        text = readme.read_text(encoding="utf-8") if readme.is_file() else ""
+        body = text.split("\n", 1)[1] if text.startswith(STATUS_LINE) else text
+        readme.write_text(f"{STATUS_LINE} đã duyệt DUYỆT 2 bởi {by} · {now()}\n" + body, encoding="utf-8")
+        log_asset(st)
     ledger(f"{st['id']} · {sid} v{n} · duyệt bởi {by}")
     move(st, "approve", cfg)
     hashes.refresh_stale(cfg, st)
@@ -317,6 +358,12 @@ def retry(a):
     st = load_st(a.id)
     if st["state"] == "done_enabled":
         move(st, "resume", load_cfg())
+    elif st["state"] == "blocked" and st.get("blocked_from"):
+        move(st, f"retry_{st.pop('blocked_from')}")
+        st["note"] = ""
+    elif st["state"] == "blocked" and step_of(load_cfg(), st["stage"])[1]["script"]:
+        move(st, "retry_todo")
+        st["note"] = ""
     else:
         move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
         st["note"] = ""
@@ -359,17 +406,25 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
     append_feedback(aid, target, n, action, text)
     msg = "đã ghi feedback"
     if action == "approve":
-        if st["state"] != "waiting_human" or target != st["stage"]:
+        if st.get("ask") and st["state"] == "waiting_human" and target == st["stage"]:
+            done[key] = {"action": action, "at": now()}
+            msg = texture.resolve(st, "call", policy.BY["human"])
+        elif st["state"] != "waiting_human" or target != st["stage"]:
             msg = f"đã ghi feedback; {aid} không chờ duyệt {target} (state={st['state']})"
         else:
             done[key] = {"action": action, "at": now()}
             approve(cfg, st, step, n, policy.BY["human"])
             msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
     elif action == "redo":
+        if step["gate"] == "checks_human" and not step.get("agent"):
+            die(f"{aid}: {target} không có vòng sửa: chọn bước sửa, `--step texture` (vẽ lại) hoặc `--step model` (mesh, UV)")
+        if (st.get("ask") or {}).get("kind") == "mesh_changed" and target == "texture":
+            die(f"{aid}: đang chờ chọn Meshy hay VẼ MỚI cho mesh mới: duyệt = gọi Meshy, `meshy {aid} paint` = VẼ MỚI")
         if st["state"] not in REDO_FROM:
             msg = f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau"
         else:
             done[key] = {"action": action, "at": now()}
+            st.pop("ask", None)
             redo(cfg, st, i, step, n, text)
             msg = f"làm lại {target}" + (f" từ v{n}" if n else "")
     save_st(st)

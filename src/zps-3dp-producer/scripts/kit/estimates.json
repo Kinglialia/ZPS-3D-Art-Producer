@@ -1,0 +1,15 @@
+{
+  "_note": "Default estimates for a medium prop, before any project record exists. Minutes are rough guesses (not measured), except the ZPS 3D Gen generation time from the service guide. Credits: Meshy credits or Tripo credits (1 Tripo credit = 0.01 USD). tools/estimate.py replaces a method's numbers by the project median when the project has 3 or more records for that method.",
+  "methods": {
+    "self": {"label": "Self-model (Blender)", "minutes": [60, 170], "credits": 0, "texture": "Texture Artist",
+             "steps": {"build": [30, 90], "optimize_qa": [10, 20], "texture": [20, 60]}},
+    "meshy": {"label": "Meshy", "minutes": [15, 30], "credits": 40, "texture": "Meshy retexture",
+              "steps": {"generate": [2, 5], "optimize_qa": [10, 20], "texture": [2, 5]},
+              "credit_steps": {"generate": 25, "remesh": 5, "retexture": 10}},
+    "tripo": {"label": "Tripo", "minutes": [15, 30], "credits": 50, "texture": "Tripo texture",
+              "steps": {"generate": [1.5, 3], "optimize_qa": [10, 20], "texture": [2, 5]},
+              "credit_steps": {"generate": 40, "texture": 10}},
+    "zps3d": {"label": "ZPS 3D Gen", "minutes": [15, 30], "credits": 0, "texture": "UltraTex, baked",
+              "steps": {"generate": [1, 3], "queue": [0, 10], "optimize_qa": [10, 20], "bake": [2, 5]}}
+  }
+}
