@@ -162,6 +162,26 @@ def lab(rgb255):
     return np.stack([116 * e[..., 1] - 16, 500 * (e[..., 0] - e[..., 1]), 200 * (e[..., 1] - e[..., 2])], -1)
 
 
+def lab_to_rgb(lab_):
+    """Inverse of lab(): sRGB 0..255 (clipped)."""
+    L, a, b = (np.asarray(lab_, float)[..., i] for i in range(3))
+    fy = (L + 16) / 116
+    f = np.stack([fy + a / 500, fy, fy - b / 200], -1)
+    xyz = np.where(f ** 3 > 216 / 24389, f ** 3, (116 * f - 16) / (24389 / 27)) * np.array([0.95047, 1.0, 1.08883])
+    m = np.array([[3.2406, -1.5372, -0.4986], [-0.9689, 1.8758, 0.0415], [0.0557, -0.2040, 1.0570]])
+    return linear_to_srgb(xyz @ m.T) * 255
+
+
+def blur(x, mask, r):
+    """Mean of x over the (2r+1)^2 window, counting only texels where mask is true (an island never bleeds into the
+    empty atlas)."""
+    def box(a):
+        c = np.cumsum(np.cumsum(np.pad(a, ((r + 1, r), (r + 1, r))), 0), 1)
+        return c[2 * r + 1:, 2 * r + 1:] - c[:-2 * r - 1, 2 * r + 1:] - c[2 * r + 1:, :-2 * r - 1] + c[:-2 * r - 1, :-2 * r - 1]
+    m = mask.astype(float)
+    return box(x * m) / np.maximum(box(m), 1e-9)
+
+
 def hex_rgb(h):
     h = h.lstrip("#")
     return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], float)
@@ -222,3 +242,48 @@ def gutter(img, inside, px):
         out[grow] = acc[grow] / cnt[grow, None]
         done |= grow
     return out
+
+
+def border(inside):
+    """Island texels with a 4-neighbour outside every island."""
+    out = np.zeros_like(inside)
+    for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+        out |= inside & ~np.roll(inside, (dy, dx), (0, 1))
+    return out
+
+
+def seam_groups(tm, area):
+    """Border texels that meet texels of another face at the same 3D point (cell = 1.5 texel edges): returns the flat
+    texel indices and a group id per index. area: 3D surface area of the mesh, for the texel size in metres."""
+    b = border(tm.inside) & tm.inside
+    idx = np.flatnonzero(b)
+    if not len(idx):
+        return idx, idx
+    cell = 1.5 * np.sqrt(area / max(tm.inside.sum(), 1))
+    key = np.floor(tm.pos.reshape(-1, 3)[idx] / cell).astype(np.int64)
+    _, gid = np.unique(key, axis=0, return_inverse=True)
+    gid = gid.reshape(-1)
+    face = tm.face.reshape(-1)[idx]
+    fmin = np.full(gid.max() + 1, np.iinfo(np.int64).max)
+    fmax = np.full(gid.max() + 1, -1)
+    np.minimum.at(fmin, gid, face)
+    np.maximum.at(fmax, gid, face)
+    keep = fmin[gid] != fmax[gid]
+    return idx[keep], gid[keep]
+
+
+def seam_spread(img, idx, gid):
+    """Per seam group the largest dE76 of a member to the group mean; returns the 90th percentile (0 without seams)."""
+    if not len(idx):
+        return 0.0
+    labs = lab(img.reshape(-1, 3)[idx])
+    n = np.bincount(gid)
+    mean = np.stack([np.bincount(gid, labs[:, k]) for k in range(3)], 1) / np.maximum(n, 1)[:, None]
+    d = np.linalg.norm(labs - mean[gid], axis=1)
+    worst = np.zeros(len(n))
+    np.maximum.at(worst, gid, d)
+    return float(np.percentile(worst[n > 1], 90)) if (n > 1).any() else 0.0
+
+
+def mesh_area(v, f):
+    return float(np.linalg.norm(np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]]), axis=1).sum() / 2)

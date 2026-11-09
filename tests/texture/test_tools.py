@@ -1,0 +1,252 @@
+"""Texture worker tools on the synthetic box, no Blender (docs/agents/texture-artist.md §2.1, §3–§6; checklist 16, 18,
+19, 31, 58, 75). The box has two codes from two parts: four walls TIMBER, top and bottom STONE."""
+import json
+import shutil
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+import yaml
+from PIL import Image
+
+import glbkit
+from texkit import AID, CAPS, COLORS, TOOLS, WALLS, face_name, model_final, tool
+
+sys.path.insert(0, str(TOOLS / "lib"))
+import tex  # noqa: E402
+
+RES = 128
+PILOT = Path(__file__).resolve().parents[1] / "fixtures/pilot"
+
+
+@pytest.fixture
+def m(tmp_path):
+    return model_final(tmp_path / "model", RES)
+
+
+def profile(tmp, light="unlit_flat", top=0, **over):
+    p = tmp / "profile.yaml"
+    p.write_text(yaml.safe_dump({"style": {"light_convention": light, "top_vs_side_L": top},
+                                 "texture_simple": {"max_materials": 2, "max_color_clusters": 6}} | over), encoding="utf-8")
+    return p
+
+
+def colors(tmp):
+    p = tmp / "concept_colors.json"
+    p.write_text(json.dumps(COLORS), encoding="utf-8")
+    return p
+
+
+def texels(m):
+    g, tm = tex.load_map(m / f"{AID}-untextured.glb", RES)
+    return tm
+
+
+def by_face(img, tm, names):
+    sel = tm.inside & np.isin(np.vectorize(face_name)(np.where(tm.inside, tm.face, 0)), names)
+    return img[sel]
+
+
+def test_the_id_map_names_each_face_by_the_material_of_its_part_in_the_part_graph(m, tmp_path):
+    rc, out = tool("id_map.py", "--final", tmp_path / "F", "--model", m)
+    r = json.loads((tmp_path / "F/review/id_map.json").read_text())
+    assert (rc, r["overall"], r["data"]["faces"], r["data"]["unmatched"]) == (0, "pass", {"STONE": 4, "TIMBER": 8}, 0)
+    assert (tmp_path / "F/review/id_map.png").is_file()
+
+
+def test_a_face_no_part_explains_is_reported_instead_of_guessed(tmp_path):
+    m = model_final(tmp_path / "model", RES, parts=("walls",))
+    rc, out = tool("id_map.py", "--final", tmp_path / "F", "--model", m)
+    assert (rc, out) == (1, f"[id_map] 1 mã, 8 mặt, 4 mặt không khớp part -> {tmp_path}/F/review/id_map.json\n")
+
+
+def concept(path, cols, size=96):
+    im = Image.new("RGB", (size, size), (255, 255, 255))
+    w = size // (len(cols) + 1)
+    for i, c in enumerate(cols):
+        im.paste(c, (w // 2 + i * w, size // 4, w // 2 + (i + 1) * w, 3 * size // 4))
+    im.save(path)
+
+
+def complexity(tmp, mats, cols=None, card=None, note=None, concept_img=None):
+    b, c, vr, f = tmp / "B", tmp / "C", tmp / "VR", tmp / "F"
+    for d in (b, c, vr):
+        d.mkdir(parents=True, exist_ok=True)
+    (b / "sources.json").write_text(json.dumps({"materials": mats}), encoding="utf-8")
+    (c / "asset-card.yaml").write_text(yaml.safe_dump(card or {"tier": "standard"}), encoding="utf-8")
+    if concept_img:
+        shutil.copy(concept_img, c / "concept_albedo.png")
+    else:
+        concept(c / "concept_albedo.png", cols)
+    (vr / "README.md").write_text("# README\n## TEXTURE NOTE\n" + (note or "- không có\n"), encoding="utf-8")
+    rc, out = tool("texture_complexity.py", "--final", f, "--blockout", b, "--concept", c, "--views-rest", vr,
+                   "--profile", profile(tmp))
+    assert rc == 0, out
+    return json.loads((f / "texture_spec.json").read_text())
+
+
+def test_a_wooden_crate_and_a_rock_are_simple_and_get_paint_d10(tmp_path):
+    crate = complexity(tmp_path / "crate", ["WOOD", "IRON"], [(120, 80, 40), (60, 60, 64)])
+    rock = complexity(tmp_path / "rock", ["ROCK"], [(110, 110, 105), (90, 95, 80), (130, 125, 118)])
+    assert [(r["simple"], r["proposed"], r["scores"]["materials"], r["scores"]["color_clusters"]) for r in (crate, rock)] \
+        == [(True, "paint", 2, 2), (True, "paint", 1, 3)]
+    assert (crate["used"], crate["reason"]) == (None, None)
+
+
+def test_the_pilot_building_is_complex_and_gets_meshy(tmp_path):
+    r = complexity(tmp_path, ["STONE", "TIMBER", "TEAL"],
+                   concept_img=PILOT / "_approved/pilot-house/concept_albedo.png")
+    assert (r["simple"], r["proposed"], r["scores"]["materials"]) == (False, "meshy", 3)
+
+
+def test_a_hero_crate_or_a_painted_sign_is_never_simple(tmp_path):
+    hero = complexity(tmp_path / "hero", ["WOOD"], [(120, 80, 40)], card={"tier": "hero"})
+    sign = complexity(tmp_path / "sign", ["WOOD"], [(120, 80, 40)], note="- biển chữ \"TAVERN\" trên cửa\n")
+    assert [(r["simple"], r["scores"]["motif"]) for r in (hero, sign)] == [
+        (False, []), (False, ['biển chữ "TAVERN" trên cửa'])]
+
+
+def meshy_glb(path, shift_px=0.0, drop=0):
+    v, uv, f = glbkit.box()
+    uv = uv + np.array([shift_px / RES, 0])
+    buf = __import__("io").BytesIO()
+    Image.new("RGB", (64, 64), (200, 100, 50)).save(buf, "PNG")
+    return glbkit.write(path, v, uv, f[:len(f) - drop], png=buf.getvalue())
+
+
+@pytest.mark.parametrize("shift,drop,rc,fails", [(0.0, 0, 0, []), (2.0, 0, 1, ["meshy.uv_shift_px"]),
+                                                 (0.0, 2, 1, ["meshy.tris", "meshy.unmatched_tris"])])
+def test_check_meshy_keeps_a_glb_only_with_the_same_triangles_and_uvs_checklist_75(m, tmp_path, shift, drop, rc, fails):
+    g = meshy_glb(tmp_path / "glb.glb", shift, drop)
+    code, out = tool("check_meshy.py", "--final", tmp_path / "F", "--locked", m / f"{AID}-untextured.glb", "--meshy", g,
+                     "--res", RES, "--albedo-out", tmp_path / "meshy_albedo.png")
+    r = json.loads((tmp_path / "F/review/checks/meshy.json").read_text())
+    assert (code, [c["check"] for c in r["checks"] if c["status"] == "fail"]) == (rc, fails)
+    assert (tmp_path / "meshy_albedo.png").is_file() is (rc == 0)
+    if rc == 0:
+        assert Image.open(tmp_path / "meshy_albedo.png").size == (RES, RES)
+
+
+def test_a_crop_edit_changes_pixels_inside_the_region_only_checklist_18(tmp_path):
+    rng = np.random.default_rng(1)
+    src = rng.integers(0, 255, (128, 128, 3), dtype=np.uint8)
+    Image.fromarray(src).save(tmp_path / "a.png")
+    rc, out = tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "20,30,60,50", "--margin", "8",
+                   "--out", tmp_path / "c")
+    assert (rc, out) == (0, f"[crop_edit] crop 56x36 -> {tmp_path}/c/crop.png\n")
+    Image.new("RGB", (56, 36), (255, 0, 0)).save(tmp_path / "edited.png")
+    rc, out = tool("crop_edit.py", "paste", "--albedo", tmp_path / "a.png", "--crop", tmp_path / "c", "--edited",
+                   tmp_path / "edited.png", "--out", tmp_path / "b.png", "--feather", "4")
+    got = np.asarray(Image.open(tmp_path / "b.png"))
+    outside = np.ones((128, 128), bool)
+    outside[30:50, 20:60] = False
+    assert rc == 0 and np.array_equal(got[outside], src[outside])
+    assert tuple(got[40, 40]) == (255, 0, 0) and json.loads((tmp_path / "b.json").read_text())["changed_outside"] == 0
+
+
+def test_a_codex_crop_of_another_size_is_refused_and_writes_nothing(tmp_path):
+    Image.new("RGB", (128, 128), (9, 9, 9)).save(tmp_path / "a.png")
+    tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "20,30,60,50", "--margin", "8", "--out",
+         tmp_path / "c")
+    Image.new("RGB", (64, 64), (255, 0, 0)).save(tmp_path / "edited.png")
+    rc, out = tool("crop_edit.py", "paste", "--albedo", tmp_path / "a.png", "--crop", tmp_path / "c", "--edited",
+                   tmp_path / "edited.png", "--out", tmp_path / "b.png")
+    assert (rc, out, (tmp_path / "b.png").exists()) == (
+        1, "[crop_edit] ảnh sửa 64x64 khác crop 56x36: bỏ kết quả\n", False)
+
+
+def test_a_region_over_1024_px_must_be_split(tmp_path):
+    Image.new("RGB", (2048, 2048), (9, 9, 9)).save(tmp_path / "a.png")
+    rc, out = tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "0,0,1100,200", "--out", tmp_path / "c")
+    assert (rc, out) == (1, "[crop_edit] vùng 1132x232 px > 1024: chia nhỏ vùng\n")
+
+
+def base_fill(m, tmp, light="unlit_flat", top=0):
+    out = tmp / f"base_{light}.png"
+    rc, msg = tool("base_fill.py", "--final", tmp / "F", "--model", m, "--concept-colors", colors(tmp), "--profile",
+                   profile(tmp, light, top), "--res", RES, "--out", out, "--padding", "4")
+    assert rc == 0, msg
+    return tex.load_rgb(out)
+
+
+def test_base_fill_paints_each_code_its_concept_colour_and_the_top_light_rule_lifts_top_faces(m, tmp_path):
+    tm = texels(m)
+    flat = base_fill(m, tmp_path)
+    walls, caps = by_face(flat, tm, WALLS), by_face(flat, tm, CAPS)
+    assert (np.ptp(walls, 0).max(), np.ptp(caps, 0).max()) == (0.0, 0.0)
+    assert (walls[0].tolist(), caps[0].tolist()) == (tex.hex_rgb(COLORS["TIMBER"]).tolist(),
+                                                    tex.hex_rgb(COLORS["STONE"]).tolist())
+    lit = base_fill(m, tmp_path, "painted_top_light", 8)
+    top, bottom = (float(tex.lab(by_face(lit, tm, [n]))[:, 0].mean()) for n in ("+Z", "-Z"))
+    assert round(top - bottom) == 14
+
+
+def measure(m, tmp, img, light="unlit_flat", top=0):
+    final = tmp / "F"
+    (final / "review").mkdir(parents=True, exist_ok=True)
+    tex.save_rgb(img, final / f"albedo_{RES}.png")
+    rc, out = tool("tex_measure.py", "--final", final, "--glb", m / f"{AID}-untextured.glb", "--model", m, "--albedo",
+                   final / f"albedo_{RES}.png", "--concept-colors", colors(tmp), "--profile", profile(tmp, light, top),
+                   "--pilot", "none")
+    r = json.loads((final / "review/checks/tex_measure.json").read_text())
+    return rc, {c["check"]: (c["status"], c["value"]) for c in r["checks"]}, r
+
+
+def test_tex_measure_passes_the_base_fill_and_reads_regions_from_the_id_map_checklist_19_58(m, tmp_path):
+    rc, c, r = measure(m, tmp_path, base_fill(m, tmp_path))
+    assert rc == 0, c
+    assert {k: v for k, v in c.items() if k.startswith(("light.", "material."))} == {
+        "light.side_spread_L.TIMBER": ("pass", 0.0), "light.shaded_share.TIMBER": ("pass", 0.0),
+        "material.dE_concept.STONE": ("pass", 0.0), "material.dE_concept.TIMBER": ("pass", 0.0),
+        "material.dE_pilot": ("not_checked", None)}
+    assert [x["note"] for x in r["checks"] if x["check"] == "material.dE_pilot"] == ["chưa có pilot"]
+    assert (c["seam.padding_empty_share"], c["seam.unpainted_share"]) == (("pass", 0.0), ("pass", 0.0))
+    assert c["seam.p90_dE"][0] == "pass"
+
+
+def shaded(m, tmp):
+    """TIMBER walls: +X 10 L* darker, a dark band (baked AO) along the top of -Y, grain everywhere."""
+    tm = texels(m)
+    img = base_fill(m, tmp)
+    lab = tex.lab(img)
+    rng = np.random.default_rng(7)
+    lab[..., 0] += np.where(tm.inside, rng.normal(0, 2.5, tm.face.shape), 0)
+    names = np.vectorize(face_name)(np.where(tm.inside, tm.face, 0))
+    lab[..., 0] -= np.where(tm.inside & (names == "+X"), 10, 0)
+    band = tm.inside & (names == "-Y") & (tm.pos[..., 2] > 0.8)
+    lab[..., 0] -= np.where(band, 18, 0)
+    return np.where(tm.inside[..., None], tex.lab_to_rgb(lab), img), tm, names
+
+
+def test_tex_measure_fails_a_darker_side_and_a_baked_shadow(m, tmp_path):
+    img, _, _ = shaded(m, tmp_path)
+    rc, c, _ = measure(m, tmp_path, img)
+    assert (rc, c["light.side_spread_L.TIMBER"][0], c["light.shaded_share.TIMBER"][0]) == (1, "fail", "fail")
+
+
+def test_tone_fix_brings_sides_and_the_shadow_within_tex_measure_and_keeps_the_grain_checklist_31(m, tmp_path):
+    img, tm, names = shaded(m, tmp_path)
+    src = tmp_path / "shaded.png"
+    tex.save_rgb(img, src)
+    rc, out = tool("tone_fix.py", "--glb", m / f"{AID}-untextured.glb", "--model", m, "--albedo", src, "--profile",
+                   profile(tmp_path), "--res", RES, "--out", tmp_path / "fixed.png", "--padding", "4")
+    assert rc == 0, out
+    fixed = tex.load_rgb(tmp_path / "fixed.png")
+    rc, c, _ = measure(m, tmp_path, fixed)
+    assert (c["light.side_spread_L.TIMBER"][0], c["light.shaded_share.TIMBER"][0]) == ("pass", "pass"), c
+    grain = tm.inside & (names == "-X")
+    before, after = (float(tex.lab(x[grain])[:, 0].std()) for x in (img, fixed))
+    assert after >= 0.9 * before
+
+
+def test_seam_fix_makes_both_sides_of_every_uv_seam_match(m, tmp_path):
+    tm = texels(m)
+    rng = np.random.default_rng(3)
+    face_rgb = rng.integers(40, 220, (12, 3)).astype(float)
+    img = np.where(tm.inside[..., None], face_rgb[np.where(tm.inside, tm.face, 0)], 0)
+    tex.save_rgb(img, tmp_path / "a.png")
+    rc, out = tool("seam_fix.py", "--glb", m / f"{AID}-untextured.glb", "--albedo", tmp_path / "a.png", "--res", RES,
+                   "--out", tmp_path / "b.png", "--padding", "4")
+    rec = json.loads((tmp_path / "b.json").read_text())
+    assert rc == 0 and rec["seam_p90_before"] > 20 and rec["seam_p90_after"] < 1.0, rec

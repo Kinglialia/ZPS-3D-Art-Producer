@@ -1,0 +1,138 @@
+"""Texture self-check, four groups (docs/agents/texture-artist.md §6; checklist 19, 58). Regions come from the ID map
+(id_map.face_codes), never from fixed labels.
+
+Usage: python3 T/tex_measure.py --final F --glb <locked GLB> --model M --albedo F/albedo_<res>.png
+       --concept-colors VF/concept_colors.json --profile <profile> --pilot <PILOT line of the brief, or none>
+Per material code (CIE L*, dE76):
+  1 light     light.side_spread_L.<c>: max - min of the four side means <= side_spread_L
+              light.top_vs_side_L.<c>: |top - side - style.top_vs_side_L| <= top_tol_L
+              light.shaded_share.<c>: share of texels whose low-pass L* is shade_L below the side mean <= shaded_share
+  2 material  material.dE_concept.<c>: median colour of the code against concept_colors.json <= dE_concept
+              material.dE_pilot: not_checked without a pilot (D21.7); with one too, since the pilot package has no ID map
+  3 read      read.adjacent_dL (info): smallest L* gap between codes that share a mesh edge
+              read.hf_noise (info): std of the Laplacian of F/review/thumb.png, when it exists
+  4 seams     seam.p90_dE <= seam_p90 (tex.seam_groups); seam.unpainted_share (texels darker than RGB 8) <= unpainted;
+              seam.padding_empty_share: texels in the 2 px ring around islands that are pure black <= padding_empty
+Thresholds below; profile `overrides.texture` replaces any of them.
+Writes F/review/checks/tex_measure.json. Prints one line. Exit 0, 1 fail, 2 error.
+"""
+import argparse
+import json
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "lib"))
+sys.path.insert(0, HERE)
+import numpy as np  # noqa: E402
+
+import id_map  # noqa: E402
+import tex  # noqa: E402
+
+LIMITS = {"side_spread_L": 3.0, "top_tol_L": 3.0, "shade_L": 8.0, "shaded_share": 0.02, "dE_concept": 3.0,
+          "seam_p90": 4.0, "unpainted": 0.001, "padding_empty": 0.01}
+SIDES = ("+X", "-X", "+Y", "-Y")
+
+
+def adjacency(f, codes):
+    edges = {}
+    for k, tri in enumerate(f):
+        for i in range(3):
+            e = tuple(sorted((int(tri[i]), int(tri[(i + 1) % 3]))))
+            edges.setdefault(e, set()).add(codes[k])
+    return {tuple(sorted(s)) for s in edges.values() if len(s) == 2}
+
+
+def welded_faces(g):
+    key = np.round(g["v"] / 1e-5).astype(np.int64)
+    _, inv = np.unique(key, axis=0, return_inverse=True)
+    return inv.reshape(-1)[g["f"]]
+
+
+def measure(a, lim, top_l):
+    codes, g = id_map.face_codes(a.model, a.glb)
+    img = tex.load_rgb(a.albedo)
+    res = img.shape[0]
+    tm = tex.TexelMap(g["v"], g["f"], g["uv"], res)
+    lab = tex.lab(img)
+    code = np.asarray(codes, object)[np.where(tm.inside, tm.face, 0)]
+    side = tex.side_of(tm.nrm.reshape(-1, 3)).reshape(tm.face.shape)
+    concept = json.load(open(a.concept_colors, encoding="utf-8"))
+    checks, data = [], {"codes": {}}
+    r = max(1, res // 64)
+    for c in sorted(set(codes) - {id_map.UNKNOWN}):
+        mc = tm.inside & (code == c)
+        sides = {s: float(lab[mc & (side == s), 0].mean()) for s in SIDES if (mc & (side == s)).any()}
+        row = data["codes"][c] = {"side_L": {s: round(v, 2) for s, v in sides.items()}}
+        if sides:
+            spread = max(sides.values()) - min(sides.values())
+            checks.append(tex.check(f"light.side_spread_L.{c}", "pass" if spread <= lim["side_spread_L"] else "fail",
+                                    round(spread, 2), lim["side_spread_L"]))
+            mean_side = float(np.mean(list(sides.values())))
+            top = mc & (side == "top")
+            if top.any():
+                d = float(lab[top, 0].mean()) - mean_side
+                checks.append(tex.check(f"light.top_vs_side_L.{c}", "pass" if abs(d - top_l) <= lim["top_tol_L"] else
+                                        "fail", round(d, 2), top_l))
+            m = mc & np.isin(side, SIDES)
+            low = tex.blur(lab[..., 0], m, r)
+            share = float((low[m] < mean_side - lim["shade_L"]).mean())
+            checks.append(tex.check(f"light.shaded_share.{c}", "pass" if share <= lim["shaded_share"] else "fail",
+                                    round(share, 4), lim["shaded_share"]))
+        if c in concept:
+            de = float(np.linalg.norm(np.median(lab[mc], 0) - tex.lab(tex.hex_rgb(concept[c]))))
+            row["median"] = "#%02X%02X%02X" % tuple(int(x) for x in np.median(img[mc], 0))
+            checks.append(tex.check(f"material.dE_concept.{c}", "pass" if de <= lim["dE_concept"] else "fail",
+                                    round(de, 2), lim["dE_concept"]))
+        else:
+            checks.append(tex.check(f"material.dE_concept.{c}", "not_checked", note="mã không có trong concept_colors"))
+    checks.append(tex.check("material.dE_pilot", "not_checked",
+                            note="chưa có pilot" if a.pilot in ("", "none") else "gói pilot không có ID map theo mã"))
+    means = {c: float(lab[tm.inside & (code == c), 0].mean()) for c in set(codes) if (tm.inside & (code == c)).any()}
+    pairs = [abs(means[x] - means[y]) for x, y in adjacency(welded_faces(g), codes) if x in means and y in means]
+    checks.append(tex.check("read.adjacent_dL", "info", round(min(pairs), 2) if pairs else None))
+    thumb = os.path.join(a.final, "review", "thumb.png")
+    if os.path.isfile(thumb):
+        gray = tex.load_rgb(thumb).mean(-1)
+        lap = 4 * gray[1:-1, 1:-1] - gray[:-2, 1:-1] - gray[2:, 1:-1] - gray[1:-1, :-2] - gray[1:-1, 2:]
+        checks.append(tex.check("read.hf_noise", "info", round(float(lap.std()), 2)))
+    else:
+        checks.append(tex.check("read.hf_noise", "not_checked", note="chưa có review/thumb.png"))
+    idx, gid = tex.seam_groups(tm, tex.mesh_area(g["v"], g["f"]))
+    p90 = tex.seam_spread(img, idx, gid)
+    checks.append(tex.check("seam.p90_dE", "pass" if p90 <= lim["seam_p90"] else "fail", round(p90, 2), lim["seam_p90"]))
+    dark = float((img[tm.inside].max(-1) < 8).mean())
+    checks.append(tex.check("seam.unpainted_share", "pass" if dark <= lim["unpainted"] else "fail", round(dark, 4),
+                            lim["unpainted"]))
+    ring = tex.border(~tm.inside) & ~tm.inside
+    ring |= tex.border(~(tm.inside | ring)) & ~(tm.inside | ring)
+    empty = float((img[ring].max(-1) == 0).mean()) if ring.any() else 0.0
+    checks.append(tex.check("seam.padding_empty_share", "pass" if empty <= lim["padding_empty"] else "fail",
+                            round(empty, 4), lim["padding_empty"]))
+    return checks, data
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    for k in ("--final", "--glb", "--model", "--albedo", "--concept-colors", "--profile"):
+        p.add_argument(k, required=True)
+    p.add_argument("--pilot", default="none")
+    a = p.parse_args()
+    out = os.path.join(a.final, "review", "checks", "tex_measure.json")
+    try:
+        import yaml
+        prof = yaml.safe_load(open(a.profile, encoding="utf-8")) or {}
+        lim = LIMITS | ((prof.get("overrides") or {}).get("texture") or {})
+        checks, data = measure(a, lim, float((prof.get("style") or {}).get("top_vs_side_L") or 0))
+    except Exception as e:  # noqa: BLE001
+        tex.write_error(out, "tex_measure", e)
+        print(f"[tex_measure] error: {e!r}")
+        sys.exit(2)
+    r = tex.write_result(out, "tex_measure", checks, data=data | {"limits": lim})
+    bad = [c["check"] for c in checks if c["status"] == "fail"]
+    print(f"[tex_measure] {r['overall']}" + (f": {', '.join(bad)}" if bad else "") + f" -> {out}")
+    sys.exit(1 if bad else 0)
+
+
+if __name__ == "__main__":
+    main()
