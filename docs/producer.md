@@ -1,7 +1,7 @@
 # Spec — Producer (v2)
 
 Tên kỹ thuật: `zps-3dp-producer`. Tên hiển thị: ZPS-3DP · Producer.
-v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D25). Quyết định nền: `docs/decisions.md` (D14, D21–D25 và các quyết định trước còn hiệu lực).
+v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D26). Quyết định nền: `docs/decisions.md` (D14, D21–D26 và các quyết định trước còn hiệu lực).
 
 **Nền:** skill `producer` anh đã làm (`producer-skill.zip`: `SKILL.md`, `scripts/producer.py`, `references/`, `templates/`). Spec này giữ cơ chế của skill đó và ghi những chỗ thay đổi.
 
@@ -115,6 +115,8 @@ RUBRIC: <key>=pass|fail|unclear; ...
 COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N
 TOP_FIX: <loại>: F<n>[, F<m> ...]
 EVIDENCE_OPENED: <nhãn các ảnh và file đã mở>
+COMPARE: F<n>=better|same|worse; ...   (vòng sửa: so với bản gốc, cho các finding trong TOP_FIX vòng trước)
+PICK: <a|b|c>                          (chỉ khi worker nộp phương án cho lỗi param, mục 7)
 FINDINGS:
 - F<n> [blocker|major|minor|preference|unclear] <loại>
   region: <ở đâu> | viewing_condition: <góc, kích thước xem> | evidence: <ảnh, số đo>
@@ -135,6 +137,7 @@ PRIOR:
 - Ghi `EVIDENCE_OPENED`. Finding phải dẫn nhãn ảnh trong danh sách đó.
 - Câu cố định trong file agent: "Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí."
 - Không tự đo; số đọc từ JSON của script. Chỉ chấm trong phạm vi bước (ví dụ không chấm màu ở bước clay).
+- **So theo cặp** (D26.1, theo GPTEval3D): ở vòng sửa, với mỗi finding trong `TOP_FIX` vòng trước, reviewer so ảnh cùng góc của bản mới với bản gốc và ghi `COMPARE`: tốt hơn / như cũ / xấu hơn. `PRIOR` phải nhất quán với `COMPARE`: `resolved` cần `better` và bằng chứng cho `acceptance`; `worse` thì là `regressed`. Lệch nhau → `ingest` báo lỗi contract. Lý do: so hai ảnh đặt cạnh nhau ổn định hơn chấm điểm tuyệt đối từng ảnh.
 
 **Finding có id cố định qua các vòng.** Script lưu finding **theo từng version**: `<bước>/vN/findings.json` (id, mức, loại, trạng thái, vòng xuất hiện đầu, vòng gần nhất) (D22.1). Brief vòng sửa lấy danh sách finding của bản được chọn làm gốc (bản tốt nhất), không phải của bản mới nhất. Brief của reviewer có danh sách đó và số id bắt đầu cho finding mới. Reviewer phải ghi `PRIOR` cho **mọi** finding đang mở. Thiếu một dòng → `ingest` báo lỗi contract.
 
@@ -191,7 +194,7 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 - `P init` thêm `.env` vào `.gitignore` của project.
 - Trước khi giao bước `texture`, script chạy `gen_api.py keys` (chỉ báo có hay không, không in key). Profile có `env_file` mà thiếu key → asset `blocked`, Producer hỏi anh. Profile không có `env_file` → VẼ MỚI, như quy tắc cũ "không có key Meshy".
 
-**Budget theo hash mesh, đúng định dạng của kit:** mỗi hash mesh một file `production/assets/<id>/texture/budget-<mesh_hash>.json` dạng `{"max_credits": N, "used_credits": 0}`, với `N = số lần được phép × giá một lần gọi` (giá lấy từ `--dry-run`). Số lần đã gọi = `used_credits / giá`. Script đọc file này; worker không tự khai.
+**Budget theo hash mesh, đúng định dạng của kit:** mỗi hash mesh một file `production/assets/<id>/texture/budget-<mesh_hash>.json` dạng `{"max_credits": N, "used_credits": 0}`, với `N = số lần được phép × giá một lần gọi`. Giá lấy từ `--dry-run`; mặc định 10 credit cho retexture theo bảng giá trong skill chính thức `meshy-dev/meshy-3d-agent` (D26.5). Số lần đã gọi = `used_credits / giá`. Script đọc file này; worker không tự khai.
 
 **Kit trừ budget trước khi gọi** (vì lời gọi có trả phí mà thất bại vẫn có thể đã tốn credit). Wrapper xử lý lỗi theo hai trường hợp:
 
@@ -226,6 +229,8 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 
 1. **Trần:** tối đa `max_fix_rounds` = 3 vòng mỗi bước, tính trong một đợt feedback. Feedback `redo` của anh mở đợt mới, đặt lại bộ đếm (D11.4).
 2. **Mỗi vòng:** worker sửa đúng các finding liệt kê trong `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất).
+2b. **Brief vòng sửa kèm kết quả script** (D26.4, theo 3DCodeBench): ngoài finding của reviewer, brief liệt kê đường dẫn tới mọi file JSON gate và check **fail** của bản gốc (`gates.py`, `check_*.py`, QA của kit). Worker đọc nguyên văn lỗi của script trước, rồi mới tới nhận xét của reviewer. Lý do: phản hồi xác định từ Blender là thứ giúp vòng sửa hội tụ nhiều nhất.
+2c. **Phương án cho lỗi `param`** (D26.2, theo BlenderAlchemy): khi `TOP_FIX` loại `param`, worker dựng 2–3 phương án giá trị (ví dụ độ chìa mái 0.25 / 0.30 / 0.35 m), render cùng bộ góc review, đặt ở `vN/variants/<a|b|c>/`; phương án a nằm ở `final/`. Reviewer chọn bằng dòng `PICK`. Nếu chọn khác a, script chép phương án đó vào `final/` rồi mới ingest. Vẫn tính một vòng. Không áp cho `structure` (giữ sửa đơn) và không áp cho bước có gen ảnh (tốn lượt gen).
 3. **Tiến bộ** đo trên finding có id, không đo trên tổng số đếm. Một vòng có tiến bộ khi: có ít nhất một finding `blocker` hoặc `major` cũ chuyển `resolved`, và số finding chuyển `regressed` ít hơn số `resolved`. Finding mới phát hiện không tính là thụt lùi, vì reviewer có context mới mỗi lần nên có thể thấy thêm lỗi cũ chưa ai nêu.
 4. **Dừng sớm:** từ vòng 2, nếu vòng không có tiến bộ → `waiting_human`, ghi "không tiến bộ ở vòng N" kèm danh sách finding còn mở.
 4b. **Đổi nhánh không đặt lại bộ đếm** (D25.H): ví dụ Texture Artist chuyển từ Meshy sang VẼ MỚI trong cùng đợt feedback vẫn đếm tiếp vòng cũ. Chỉ feedback `redo` của anh mới mở đợt mới.
@@ -389,6 +394,8 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - Bên nào anh chọn ở nút "Bản nào tốt hơn" (D23.1).
 - Tỉ lệ pass lần đầu của script kiểm mỗi bước.
 
+**So cặp theo GPTEval3D** (D26.1): ngoài các chỉ số trên, `P compare` cho reviewer (chỉ đọc, context mới) so từng cặp A/B của cùng asset theo từng tiêu chí, **mỗi cặp hỏi hai lần với thứ tự A/B đổi chỗ**; kết quả lệch nhau giữa hai lần thì tính hòa. Tổng hợp thành Elo trên lô pilot, đặt cạnh lựa chọn của anh ở nút "Bản nào tốt hơn". Lựa chọn của anh là quyết định; Elo chỉ để xem reviewer có chấm giống anh không.
+
 Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet, Codex dùng model của nó). Kết luận là "bộ nào tốt hơn cho việc này", không tách riêng runtime hay model.
 
 ## 17. Thay đổi script cần làm (tóm tắt)
@@ -397,6 +404,8 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 |---|---|---|
 | Gate `review_human`, `checks_human`; bỏ `final_human_gate` | `cmd_ingest`, `advance` | ~25 dòng |
 | `assemble.py` (mục 6.4), dùng `finalize.py` và `export_check` của kit | mới | ~80 dòng |
+| `COMPARE` và kiểm nhất quán với `PRIOR`; `PICK` và chép phương án `param`; brief kèm file JSON check fail (D26) | `cmd_ingest`, `worker_brief` | ~50 dòng |
+| So cặp đổi thứ tự và Elo trong `P compare` (D26.1) | `P compare` | ~60 dòng |
 | `meshy_call.py`: key từ `.env` của project, budget theo hash mesh, hoàn budget hoặc chờ tiếp `task_id` khi lỗi | mới | ~70 dòng |
 | `policy.yaml`, `P approvals set` (+ `--confirm-spend`), `P delegate` | mới + `cmd_ingest` | ~50 dòng |
 | Contract reviewer: `COUNTS`, `TOP_FIX` theo bước và kiểu sửa, `PRIOR`; `findings.json` theo version; chép finding khi `redo` | `cmd_ingest`, `parse_contract`, `review_brief` | ~90 dòng |

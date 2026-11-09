@@ -303,6 +303,16 @@ Nguồn: `art-operation.md`, `art-quality.md`, `issue-fields.json`, `review.md`,
 - **I. Ước lượng thời gian, credit và báo giá Meshy cả lô** lúc `intake`, dùng `estimate.py` của kit; ghi log mỗi asset.
 - **J. Nguyên tắc Art Learning cho `P compare` và D16.3:** đếm theo asset; ghi cả lần thử bị loại; im lặng không phải duyệt.
 
+## D26 — Mang ý từ paper và repo ngoài vào (2026-11-09)
+
+Nguồn: GPTEval3D (CVPR 2024, 3DTopia/GPTEval3D), BlenderAlchemy (ECCV 2024), Procedura (arXiv 2608.26238, SpatiaOS/Procedura), 3DCodeBench (arXiv 2606.01057), skill chính thức meshy-dev/meshy-3d-agent. Đã xem và không lấy: Blender MCP/ViSculpt (điều khiển Blender đang mở, không hợp chạy nền), LL3M (reviewer khác họ model, không làm được trong một runtime), Planner–Actor–Critic (trùng thiết kế hiện tại).
+
+1. **So theo cặp** (GPTEval3D). Reviewer vòng sửa ghi `COMPARE` (tốt hơn / như cũ / xấu hơn) so với bản gốc cho từng finding trong `TOP_FIX` vòng trước; `PRIOR` phải nhất quán với `COMPARE`. `P compare` so cặp A/B hỏi hai lần đổi thứ tự, tính Elo trên lô pilot, đặt cạnh lựa chọn của anh. check-texture thêm tiêu chí texture khớp hình học.
+2. **Phương án cho lỗi `param`** (BlenderAlchemy). Worker dựng 2–3 giá trị, render cùng góc; reviewer chọn bằng `PICK`; vẫn tính một vòng. Không áp cho `structure` và bước gen ảnh.
+3. **Kiểm liên thông part graph** (Procedura): mọi part nối về gốc qua chuỗi `attach`; `check_schema.py` kiểm.
+4. **Brief vòng sửa kèm file JSON gate/check fail** (3DCodeBench: phản hồi thực thi xác định là yếu tố chính giúp vòng sửa hội tụ).
+5. **Meshy:** giá mặc định retexture 10 credit; so payload của `gen_api.py` với `reference.md` của skill Meshy chính thức trước lần gọi thật đầu tiên. Skill chính thức cũng chỉ đọc key từ `.env` ở thư mục làm việc, khớp D24.3.
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
 - Gom rubric của 4 reviewer thành file agent khi viết code (rubric đã nằm trong spec từng agent).

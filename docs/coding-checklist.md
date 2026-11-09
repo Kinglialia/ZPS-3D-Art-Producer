@@ -100,4 +100,10 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 94 | Producer | Đổi nhánh (Meshy → VẼ MỚI) không đặt lại bộ đếm; bản gửi anh khi hết vòng mang nhãn "chưa đạt" trên trang duyệt | producer.md §7, review-board.md §2, D25.H | |
 | 95 | Producer | `P intake` in ước lượng thời gian và credit cho lô; dưới 3 bản ghi thì dùng mặc định của kit; mỗi asset xong ghi `estimate.py log` | producer.md §9, D25.I | |
 | 96 | Producer | `P compare` đếm theo asset, không theo số lần gọi; quyết định không có người bấm không được tính là anh duyệt | producer.md §16, D25.J | |
-
+| 97 | Mọi reviewer | `COMPARE` có cho mọi finding trong `TOP_FIX` vòng trước; `PRIOR` nhất quán (`resolved` cần `better`, `worse` là `regressed`); lệch → `ingest` báo lỗi | producer.md §6.1, D26.1 | |
+| 98 | Producer | `P compare` so cặp A/B hỏi hai lần với thứ tự đổi chỗ; hai lần lệch nhau tính hòa; Elo trên lô pilot; đo tỉ lệ trùng với nút "Bản nào tốt hơn" của anh | producer.md §16, D26.1 | |
+| 99 | Blockout, 3D Artist | Lỗi `param`: worker nộp 2–3 phương án ở `vN/variants/`; reviewer ghi `PICK`; script chép phương án được chọn vào `final/` trước khi ingest; tính một vòng | producer.md §7, D26.2 | |
+| 100 | Blockout | `check_schema.py` báo part mồ côi (không nối về gốc qua `attach`) và vòng lặp `attach` | blockout.md §5, D26.3 | |
+| 101 | Producer | Brief vòng sửa liệt kê đúng các file JSON gate/check fail của bản gốc, không liệt kê file pass | producer.md §7, D26.4 | |
+| 102 | Texture Artist | So payload retexture của `gen_api.py` với `reference.md` của `meshy-dev/meshy-3d-agent` (endpoint, `enable_original_uv`, ảnh style) trước lần gọi thật đầu tiên; xác nhận giá 10 credit bằng `--dry-run` | producer.md §6.3, D26.5 | |
+| 103 | Texture Artist | Tiêu chí texture khớp hình học: thử với một texture cố ý lệch ranh giới vật liệu 10 cm, reviewer phải bắt được | texture-artist.md §7, D26.1 | |

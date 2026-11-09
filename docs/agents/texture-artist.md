@@ -142,6 +142,7 @@ Opus, chỉ đọc, context mới mỗi lần, không có tool gọi agent (D1).
 5. Từng mục `texture` của rubric theo loại.
 6. TEXTURE NOTE đã xử lý hết.
 7. Chế độ SỬA: chi tiết Meshy đúng vẫn còn; không sửa quá tay.
+7b. **Texture khớp hình học** (D26.1, tiêu chí texture–geometry coherence của GPTEval3D): ranh giới vật liệu trên texture trùng với cạnh và khối của mesh (đá dừng ở mép tường, viền khung nằm đúng trên khung); không có chi tiết vẽ giả khối mà mesh không có ở chỗ đó, trừ khi là `texture_only` đã ghi.
 8. **Kiểm kê phần tử và lỗi ảnh AI** (D25.F, theo `art-quality.md` và `gen-craft.md` của kit), trên lớp Meshy và trên paint view: mọi motif, chữ, biển, vết bẩn, nguồn sáng vẽ trên texture phải truy được về concept hoặc TEXTURE NOTE; soát bảng lỗi ảnh AI (thừa chi tiết, chữ giả, ánh sáng vẽ sai hướng, nhiễu giả chi tiết, lệch style, scale vân khác nhau trên cùng vật liệu). Không truy được → finding `repaint`.
 
 Theo quy tắc chung của 4 reviewer (`docs/producer.md` §6.1, D25.B): ảnh cùng góc của bản trước ở vòng sửa, `EVIDENCE_OPENED`, finding đủ trường của kit (`preserve`, `acceptance`…), cảnh báo xu hướng duyệt dễ, chỉ chấm trong phạm vi bước.

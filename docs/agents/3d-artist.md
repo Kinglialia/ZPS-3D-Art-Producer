@@ -49,7 +49,7 @@ Số hình học (W×D×H, `door_h`, `character_h`, camera) lấy từ `sources.
 | A5 | **UV** theo profile (mục 6) | `uv_check` của kit, `check_uv_edge.py` |
 | A6 | QA của kit: `mesh_check`, `uv_check`, `export_check`, `screen_tris_check` | Script |
 | A7 | Render bộ review (mục 7) | — |
-| A8 | Ghi báo cáo contract. Producer giao check-clay. Nếu FIX, Producer giao lại với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Ghi `FIXED:` | Reviewer |
+| A8 | Ghi báo cáo contract. Producer giao check-clay. Nếu FIX, Producer giao lại với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở, kèm 2–3 phương án giá trị cho reviewer chọn (D26.2). Đọc file JSON gate và check fail mà brief liệt kê trước khi sửa (D26.4). Ghi `FIXED:` | Reviewer |
 | A9 | Duyệt theo `approvals.model` (D14.4). Khi duyệt, script **khóa mesh**: ghi hash của `<tên>-untextured.glb` vào `status.json`, giống khóa Blockout. Từ đây không ai sửa mesh hay UV. Nếu buộc phải sửa, tạo version mới và đi lại từ A6. Mesh đổi thì budget Meshy của mesh cũ không dùng cho mesh mới; script hỏi anh trước bước `texture` (D21.2) | Anh hoặc chính sách |
 
 **Đầu ra bước `model`:** `production/assets/<id>/model/vN/final/`

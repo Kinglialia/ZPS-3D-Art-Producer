@@ -73,7 +73,7 @@ Số trong ví dụ chỉ để minh họa định dạng. Khi `has_map: false`,
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
 | 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
 | 8 | Render bộ review (mục 6). Ghi báo cáo contract (`STATUS / OUTPUT / RUBRIC / ISSUES`), rồi dừng | — |
-| 9 | Producer giao check-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở. Mỗi finding một lần `apply_edit.py`, chạy `check_fix.py` sau mỗi lần. Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
+| 9 | Producer giao check-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở, kèm 2–3 phương án giá trị cho reviewer chọn (D26.2, `docs/producer.md` §7). Mỗi finding một lần `apply_edit.py`, chạy `check_fix.py` sau mỗi lần. Đọc file JSON gate và check fail mà brief liệt kê trước khi sửa (D26.4). Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
 | 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash | Anh hoặc chính sách |
 
 Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc file và thư mục brief chỉ định.
@@ -113,7 +113,7 @@ final/
 | Kiểm | Tool | Nguồn |
 |---|---|---|
 | Đủ file đầu vào; `sources.json` đủ khóa; hash file nguồn còn khớp | `check_inputs.py` | Mới |
-| `part_graph.json` đúng schema `blockout-1` | `check_schema.py` | Mới |
+| `part_graph.json` đúng schema `blockout-1`; mọi part nối về part gốc qua chuỗi `attach` (không part mồ côi, không vòng lặp) (D26.3, theo kiểm liên thông của Procedura) | `check_schema.py` | Mới |
 | Tiếp xúc, xuyên khối, part lơ lửng, health, bbox từng part | `gates.py` | Chép từ kit |
 | Mọi part đứng trên mặt một part `tag: base` nằm trong mép part đó, cách mép ≥ 0,1 m | `check_base.py` | Mới |
 | Dưới mỗi part `tag: roof` có ít nhất một part khác chạm đáy của nó, trong khoảng 1 cm | `check_support.py` | Mới |
