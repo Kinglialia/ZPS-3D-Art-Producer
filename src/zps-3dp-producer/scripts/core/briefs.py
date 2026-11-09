@@ -147,6 +147,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
             f"{k}. Bản gốc: `{rel(pd)}/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
             *([f"{k + 1}. Đọc trước nguyên văn lỗi script của bản gốc: {', '.join(f'`{b}`' for b in bad)}."] if bad else []),
             f"{k + 1 + bool(bad)}. {why}",
+            *(f"   - Vùng người dùng khoanh: {x}" for x in findings.mark_lines(doc)),
             "",
             f"Đây là vòng sửa {st['fix_round']}. Chỉ sửa đúng các điểm trên; giữ nguyên những gì đã đạt.",
         ]
@@ -217,6 +218,7 @@ def review_brief(cfg, st, step, n) -> str:
           for p, fd in input_finals(st, step["review_inputs"])),
         f"- Profile dự án (`hidden_side_rules`, `scale_refs`): `{rel(ROOT / 'PROJECT-PROFILE.yaml')}`.",
         f"- {ad_text(cfg, {sid, 'review'})}",
+        *(f"- Vùng người dùng khoanh, kiểm từng vùng: {x}" for x in findings.mark_lines(base)),
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "
            f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n else
           [f"- Bản gốc v{m}: ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`; finding đủ trường "

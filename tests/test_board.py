@@ -45,8 +45,8 @@ def project(tmp_path, monkeypatch, capsys):
     concept.mkdir(parents=True)
     (concept / "concept_albedo.png").write_bytes(PNG)
     st = load_st(AID)
-    st |= {"state": "waiting_human", "versions": {"blockout": 2}, "offer": 2, "label": loop.NOT_PASSED,
-           "note": "hết 3 vòng sửa; còn mở: F1, F4", "concept_dir": str(concept)}
+    st |= {"state": "waiting_human", "versions": {"blockout": 2}, "offer": 2, "offer_key": "blockout-v2-1",
+           "label": loop.NOT_PASSED, "note": "hết 3 vòng sửa; còn mở: F1, F4", "concept_dir": str(concept)}
     save_st(st)
     return tmp_path
 
@@ -96,7 +96,7 @@ def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_
             {"line": "F2 [preference] cửa — cửa hơi hẹp — rộng thêm — acceptance: cửa ≥ 1 m",
              "fields": {"viewing_condition": "front ortho", "consequence": "sai silhouette", "confidence": "high",
                         "preserve": "chiều cao tường"}}],
-        "redo_steps": [],
+        "redo_steps": [], "key": "blockout-v2-1", "ask": None,
     }
 
 

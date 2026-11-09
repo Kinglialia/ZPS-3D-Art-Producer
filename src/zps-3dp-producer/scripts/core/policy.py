@@ -5,6 +5,7 @@ from .state import ROOT, TEMPLATES, die, ledger, now, rel, write_atomic
 
 KEYS = ("blockout", "views_rest", "model")
 WHO = ("human", "reviewer")
+BOARDS = ("local", "local+remote")
 BY = {"human": "người dùng", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
 HEAD = "# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
 
@@ -19,6 +20,8 @@ def check(pol: dict) -> list[str]:
     errs += [f"approvals.{k}: phải là {'|'.join(WHO)}" for k, v in ap.items() if k in KEYS and v not in WHO]
     errs += [f"delegations: mục sai dạng {d}" for d in pol.get("delegations") or []
              if not isinstance(d, dict) or d.get("step") not in KEYS or not isinstance(d.get("ids"), list)]
+    if pol.get("review_board", "local") not in BOARDS:
+        errs.append(f"review_board: phải là {'|'.join(BOARDS)}")
     return errs
 
 

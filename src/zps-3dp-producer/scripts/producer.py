@@ -5,7 +5,7 @@ Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi
 Cần Python 3.11+ (dùng tomllib).
 
 Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · meshy · approvals
-             delegate · rule · ledger · dashboard · serve · validate · cleanup · archive · texture-stats
+             delegate · rule · ledger · dashboard · serve · show · board · validate · cleanup · archive · texture-stats
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 
-UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve", "texture-stats"}
+UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve", "show", "texture-stats"}
 
 
 def cmd_init(a):
@@ -73,8 +73,10 @@ def cmd_retry(a):
 
 
 def cmd_feedback(a):
+    import json
     from core.loop import human_action
-    print(human_action(a.id, a.action, a.text, a.step))
+    regions = json.loads(Path(a.regions).read_text(encoding="utf-8")) if a.regions else None
+    print(human_action(a.id, a.action, a.text, a.step, regions, a.offer))
 
 
 def cmd_approvals(a):
@@ -110,6 +112,16 @@ def cmd_ledger(a):
 def cmd_dashboard(_a):
     from core.board import dashboard
     dashboard()
+
+
+def cmd_show(a):
+    from core.board import show
+    show(a)
+
+
+def cmd_board(a):
+    from core import remote
+    getattr(remote, a.op)(a)
 
 
 def cmd_serve(a):
@@ -160,6 +172,8 @@ def main(argv: list[str] | None = None):
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
+    x.add_argument("--regions", help="JSON vùng khoanh [{n, image, shape, coords, note}] trên ảnh của thẻ đang chờ")
+    x.add_argument("--offer", help="khóa lần đưa duyệt mà người dùng đã thấy; khóa cũ thì bỏ qua")
     x = sub.add_parser("approvals", help="đổi người duyệt một bước trong policy.yaml")
     x.add_argument("op", choices=["set"]); x.add_argument("step"); x.add_argument("who")
     x.add_argument("--by", required=True, help="nguyên văn lời người dùng"); x.add_argument("--confirm-spend", action="store_true")
@@ -174,6 +188,13 @@ def main(argv: list[str] | None = None):
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
     sub.add_parser("dashboard", help="sinh lại dashboard.md")
     sub.add_parser("serve", help="mở review page có nút feedback").add_argument("--port", type=int, default=PORT)
+    x = sub.add_parser("show", help="xuất trang board của một asset thành file HTML tĩnh")
+    x.add_argument("id"); x.add_argument("--step"); x.add_argument("--version", type=int)
+    x.add_argument("--bundle", action="store_true", help="nhúng ảnh (≤ 1024 px, crop giữ nguyên) và GLB ≤ 15 MB: xem trên điện thoại")
+    x = sub.add_parser("board", help="trang claude.ai: prepare = gói file và dòng dữ liệu để đẩy; pull = áp dòng đã kéo về")
+    x.add_argument("op", choices=["prepare", "pull"]); x.add_argument("--url", help="prepare: URL artifact của trang (lưu lại)")
+    x.add_argument("--redo", action="store_true", help="prepare: đẩy lại mọi asset đang chờ (lần đẩy trước hỏng)")
+    x.add_argument("--dir", help="pull: out_dir đã đưa cho ArtifactData list (mặc định production/board/inbox)")
     sub.add_parser("validate", help="kiểm tra cấu hình và status")
     x = sub.add_parser("cleanup", help="xoá work/ của phiên bản không được duyệt (mặc định dry-run)")
     x.add_argument("id"); x.add_argument("--yes", action="store_true"); x.add_argument("--all", action="store_true")

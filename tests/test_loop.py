@@ -178,6 +178,18 @@ def test_escalate_goes_to_the_human_at_once_without_another_round(flow):
                              "label": "chưa đạt", "note": "reviewer ESCALATE; còn mở: F1"}
 
 
+def test_each_offer_has_its_own_key_so_a_board_click_names_the_offer_it_answers(flow):
+    flow.work()
+    flow.review(verdict="ESCALATE", top_fix=None, findings=[finding("F1", "major", "param")])
+    assert flow.st["offer_key"] == "blockout-v1-1"
+    flow.human("redo", "mái cao hơn")
+    assert flow.st["offer_key"] is None
+    flow.work()
+    flow.review(verdict="ESCALATE", top_fix=None, findings=[], counts=counts(major=2), prior=["- F1: open", "- H1: open"],
+                compare="H1=same")
+    assert (flow.st["offer"], flow.st["offer_key"]) == (1, "blockout-v1-2")
+
+
 def need_evidence_v1(f):
     f.work()
     return f.review(counts=counts(unclear=1), rubric="props=unclear", top_fix="need_evidence: F1",

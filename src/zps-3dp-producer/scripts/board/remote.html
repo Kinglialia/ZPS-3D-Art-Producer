@@ -1,0 +1,57 @@
+<title>Review board</title>
+<div id="app"><p>Đang tải…</p></div>
+<script>window.BOARD = { mode: "remote" };</script>
+<script src="board.js"></script>
+<script>
+(async () => {
+  const app = document.getElementById("app");
+  const say = t => app.replaceChildren(Object.assign(document.createElement("p"), { className: "msg", textContent: t }));
+  const db = await window.claude?.use?.("db");
+  if (!db) return say("Trang cần quyền dữ liệu (db). Mở trang trong claude.ai.");
+  const S = { push: null, rows: {}, files: {}, fb: {} };
+  const DECIDE = ["approve", "redo", "paint"];
+  const when = at => { const d = new Date(at); return isNaN(d) ? at : d.toLocaleString("vi-VN", { hour12: false }); };
+  const blob = f => (f && S.files[f] ? "/_blob/" + S.files[f] : "");
+  const payload = () => ({
+    project: S.push?.project || "Review",
+    empty: "Không có asset nào chờ duyệt trên trang này.",
+    assets: Object.values(S.push?.open || {}).map(id => S.rows[id]).filter(Boolean).map(r => ({
+      ...r,
+      sheet: r.sheet ? blob(r.sheet) : null,
+      images: r.images.map(im => ({ ...im, u: blob(im.u) })),
+      glb: r.glb ? blob(r.glb) || null : null,
+      decided: S.fb[r.key] ? when(S.fb[r.key]) : r.decided,
+    })),
+  });
+  const send = async body => {
+    if (DECIDE.includes(body.action) && S.fb[body.offer])
+      return { ok: false, message: `Đã có quyết định lúc ${when(S.fb[body.offer])}` };
+    await db.collection("feedback").add({ aid: body.id, key: body.offer || null, action: body.action, text: body.text || "",
+                                           step: body.step || null, regions: body.regions || null, at: new Date().toISOString() });
+    return { ok: true, message: "Đã gửi. Producer kéo về khi anh báo, và ở đầu phiên sau." };
+  };
+  let started = false;
+  const timer = setTimeout(() => started || say("Chưa đọc được dữ liệu của trang. Thử mở lại sau."), 10000);
+  const draw = () => {
+    clearTimeout(timer);
+    if (started) return window.Board.render(payload());
+    started = true;
+    window.Board.start({ load: async () => payload(), send });
+  };
+  const fail = e => say(`Lỗi dữ liệu: ${e.code || e.message || e}`);
+  db.collection("pushes").orderBy("at", "desc").limit(1).onSnapshot(async q => {
+    S.push = q.docs[0]?.data() || null;
+    const want = Object.values(S.push?.open || {}).filter(id => !S.rows[id]);
+    for (const snap of await Promise.all(want.map(id => db.doc("offers/" + id).get())))
+      if (snap.exists) S.rows[snap.id] = snap.data();
+    draw();
+  }, fail);
+  db.collection("files").onSnapshot(q => { S.files = Object.assign({}, ...q.docs.map(d => d.data())); if (started) draw(); }, fail);
+  db.collection("feedback").onSnapshot(q => {
+    S.fb = {};
+    for (const v of q.docs.map(d => d.data()).sort((a, b) => String(a.at).localeCompare(String(b.at))))
+      if (DECIDE.includes(v.action) && v.key && !S.fb[v.key]) S.fb[v.key] = v.at;
+    if (started) draw();
+  }, fail);
+})();
+</script>

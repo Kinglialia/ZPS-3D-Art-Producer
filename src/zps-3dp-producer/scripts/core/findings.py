@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import PurePosixPath
 
 from .contract import PRIORITIES
 from .state import vdir, write_atomic
@@ -29,17 +30,45 @@ def save(aid: str, step: str, doc: dict):
     write_atomic(path(aid, step, doc["version"]), json.dumps(doc, ensure_ascii=False, indent=1))
 
 
-def add_human(aid: str, step: dict, n: int, text: str):
-    """D23.1: the user's redo text becomes finding H<k>, major, on the version sent back; the reviewer PRIORs it."""
+def add_human(aid: str, step: dict, n: int, text: str | None, marks: list[dict] = ()) -> list[str]:
+    """D23.1: the user's redo text and each marked region become findings H<k>, major, on version n; the reviewer
+    PRIORs them. Returns the new ids."""
     doc = load(aid, step["id"], n) or {"version": n, "base": None, "top_fix": None, "pick": None, "next_id": 1,
                                        "findings": {}}
-    k = 1 + sum(i.startswith("H") for i in doc["findings"])
-    doc["findings"][f"H{k}"] = {
-        "priority": "major", "kind": next((t for t in step["top_fix"] if t not in NOTE), "human"), "status": "open",
-        "first_v": n, "last_v": n, "region": "theo feedback người dùng", "viewing_condition": "review page",
-        "evidence": f"feedback.md: {step['id']} v{n}", "consequence": "người dùng chưa duyệt", "confidence": "high",
-        "repair": text, "preserve": "những gì feedback không nhắc", "acceptance": f"đạt yêu cầu của người dùng: {text}"}
+    rows = [("theo feedback người dùng", "review page", f"feedback.md: {step['id']} v{n}", text,
+             f"đạt yêu cầu của người dùng: {text}", {})] if text is not None else []
+    for m in marks:
+        repair = m["note"] or "xem vùng khoanh"
+        rows.append((f"vùng {m['n']} trên {m['image']}", "ảnh người dùng khoanh",
+                     f"{'/'.join(PurePosixPath(m['png']).parts[-3:])} vùng {m['n']}", repair,
+                     f"vùng {m['n']} đạt yêu cầu của người dùng: {repair}", {"mark": {"png": m["png"], "n": m["n"]}}))
+    kind, ids = next((t for t in step["top_fix"] if t not in NOTE), "human"), []
+    for region, vc, ev, repair, acc, extra in rows:
+        ids.append(fid := f"H{1 + sum(i.startswith('H') for i in doc['findings'])}")
+        doc["findings"][fid] = {
+            "priority": "major", "kind": kind, "status": "open", "first_v": n, "last_v": n, "region": region,
+            "viewing_condition": vc, "evidence": ev, "consequence": "người dùng chưa duyệt", "confidence": "high",
+            "repair": repair, "preserve": "những gì feedback không nhắc", "acceptance": acc, **extra}
     save(aid, step["id"], doc)
+    return ids
+
+
+def close_human(aid: str, sid: str, n: int):
+    """review-board.md §4: a step without reviewer has nobody to PRIOR the user's H findings; approval closes them."""
+    doc = load(aid, sid, n)
+    if doc and (hs := [i for i in open_of(doc) if i.startswith("H")]):
+        for i in hs:
+            doc["findings"][i] |= {"status": "resolved", "last_v": n}
+        save(aid, sid, doc)
+
+
+def mark_lines(doc: dict | None) -> list[str]:
+    """Open H findings of marked regions, one line per annotated image, for the fix and review briefs."""
+    by = {}
+    for i, f in open_of(doc).items():
+        if m := f.get("mark"):
+            by.setdefault(m["png"], []).append(f"{m['n']} ({i}) {f['repair']}")
+    return [f"`{png}`: " + "; ".join(items) for png, items in by.items()]
 
 
 def carry(aid: str, found: dict, src: str, dst: dict, m: int) -> list[str]:

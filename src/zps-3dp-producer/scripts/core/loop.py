@@ -4,11 +4,12 @@ from __future__ import annotations
 import hashlib
 import shutil
 
-from . import findings, hashes, policy, texture
+from . import annotate, findings, hashes, policy, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker
 from .state import ASSETS, DELIVER, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st, step_of, vdir
 
 NOT_PASSED = "chưa đạt"
+ACTIONS = ("approve", "redo", "note", "paint")
 STATUS_LINE = "Trạng thái:"
 REDOING = "**đang làm lại**\n\n"
 REDO_FROM = ("todo", "fix", "review", "evidence", "waiting_human", "blocked", "done", "done_enabled")
@@ -33,7 +34,7 @@ MOVES = {
 
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0,
-            "offer": None, "label": "", "note": ""}
+            "offer": None, "offer_key": None, "label": "", "note": ""}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -125,9 +126,11 @@ def set_aside(rep):
 
 
 def offer(st: dict, sid: str, n: int, **kw):
-    """D22.8 per offer: an offered version takes a new decision, also when it was decided in an earlier round."""
+    """D22.8 per offer: an offered version takes a new decision, also when it was decided in an earlier round.
+    `offer_key` names this offer, so a board click answers the offer it saw and no later one."""
     st.setdefault("decisions", {}).pop(f"{sid} v{n}", None)
-    st |= {"offer": n, **kw}
+    st["offers"] = st.get("offers", 0) + 1
+    st |= {"offer": n, "offer_key": f"{sid}-v{n}-{st['offers']}", **kw}
 
 
 def valid(rep, parsed: tuple):
@@ -343,15 +346,15 @@ def reopen(cfg: dict, st: dict, i: int, step: dict, n: int | None, note: str):
     hashes.refresh_stale(cfg, st)
 
 
-def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str):
+def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str | None, marks: list[dict] = ()) -> list[str]:
     move(st, "redo")
-    if n:
-        findings.add_human(st["id"], step, n, text)
+    ids = findings.add_human(st["id"], step, n, text, marks) if n else []
     reopen(cfg, st, i, step, n, "làm lại theo feedback người dùng")
     st["reopened"] = {}
     readme = DELIVER / st["id"] / "README.md"
     if readme.exists() and not (t := readme.read_text(encoding="utf-8")).startswith(REDOING):
         readme.write_text(REDOING + t, encoding="utf-8")
+    return ids
 
 
 def retry(a):
@@ -386,12 +389,15 @@ def shown(st: dict, step: str) -> int | None:
     return st["approved"].get(step) or st["versions"].get(step)
 
 
-def human_action(aid: str, action: str, text: str, step_id: str | None = None) -> str:
-    from .board import build_outputs
+def human_action(aid: str, action: str, text: str, step_id: str | None = None, regions=None,
+                 offer: str | None = None) -> str:
+    """One decision per offer (D22.8), from the CLI, the local board or a remote row. `offer` is the offer the page
+    showed; `regions` are marks on images of the current card (review-board.md §4)."""
+    from .board import build_outputs, view_images
     cfg = load_cfg()
     st = load_st(aid)
-    if action not in ("approve", "redo", "note"):
-        die("action phải là approve | redo | note")
+    if action not in ACTIONS:
+        die("action phải là " + " | ".join(ACTIONS))
     target = step_id or st["stage"]
     i, step = step_of(cfg, target)
     if action == "redo" and i > step_of(cfg, st["stage"])[0]:
@@ -400,35 +406,63 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
     key = f"{target} v{n}"
     done = st.setdefault("decisions", {})
     send_back = action == "redo" and n is not None and st["approved"].get(target) == n
-    answer = action == "approve" and st.get("ask") and st["state"] == "waiting_human" and target == st["stage"]
-    if action != "note" and key in done and not (send_back or answer):
-        return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {done[key]['at']}"
-    text = text.strip() or "(không ghi chú)"
-    append_feedback(aid, target, n, action, text)
-    msg = "đã ghi feedback"
-    if action == "approve":
-        if answer:
-            done[key] = {"action": action, "at": now()}
-            msg = texture.resolve(st, "call", policy.BY["human"])
-        elif st["state"] != "waiting_human" or target != st["stage"]:
+    answer = action in ("approve", "paint") and st.get("ask") and st["state"] == "waiting_human" and target == st["stage"]
+    old = done.get(key) if action != "note" else None
+    if old and (offer and old.get("offer") == offer or not (send_back or answer)):
+        return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {old['at']}"
+    if offer is not None and offer != st.get("offer_key") and (action != "note" or regions is not None):
+        return f"{aid}: bỏ qua {action}: lần đưa duyệt {offer} đã qua (hiện tại: {st.get('offer_key') or 'không chờ duyệt'})"
+    if action == "paint" and not answer:
+        die(f"{aid}: không có câu hỏi Meshy đang chờ")
+    if action == "redo" and step["gate"] == "checks_human" and not step.get("agent"):
+        die(f"{aid}: {target} không có vòng sửa: chọn bước sửa, `--step texture` (vẽ lại) hoặc `--step model` (mesh, UV)")
+    if action == "redo" and (st.get("ask") or {}).get("kind") == "mesh_changed" and target == "texture":
+        die(f"{aid}: đang chờ chọn Meshy hay VẼ MỚI cho mesh mới: duyệt = gọi Meshy, `meshy {aid} paint` = VẼ MỚI")
+    marks, folder = None, None
+    if regions is not None:
+        card = shown(st, st["stage"])
+        files = dict((name, p) for p, name in view_images(cfg, st, st["stage"], card))
+        marks = annotate.check(regions, files, f"{aid} {st['stage']} v{card}")
+        n or die(f"{aid}: {target} chưa có version để gắn vùng khoanh")
+        folder = annotate.save(aid, f"{st['stage']}-v{card}", marks, files)
+    raw = text.strip()
+    text = raw or "(không ghi chú)"
+    append_feedback(aid, target, n, action, text + (f" · khoanh: {rel(folder)}" if folder else ""))
+    waiting = st["state"] == "waiting_human" and target == st["stage"]
+
+    def decide() -> list[str]:
+        done[key] = {"action": action, "at": now(), "offer": st.get("offer_key")}
+        return findings.add_human(aid, step, n, None, marks) if marks and waiting and action != "redo" else []
+
+    ids, msg = [], "đã ghi feedback"
+    if answer:
+        ids = decide()
+        msg = texture.resolve(st, "call" if action == "approve" else "paint", policy.BY["human"])
+    elif action == "approve":
+        if not waiting:
             msg = f"đã ghi feedback; {aid} không chờ duyệt {target} (state={st['state']})"
         else:
-            done[key] = {"action": action, "at": now()}
+            ids = decide()
+            if not step.get("reviewer"):
+                findings.close_human(aid, target, n)
             approve(cfg, st, step, n, policy.BY["human"])
             msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
     elif action == "redo":
-        if step["gate"] == "checks_human" and not step.get("agent"):
-            die(f"{aid}: {target} không có vòng sửa: chọn bước sửa, `--step texture` (vẽ lại) hoặc `--step model` (mesh, UV)")
-        if (st.get("ask") or {}).get("kind") == "mesh_changed" and target == "texture":
-            die(f"{aid}: đang chờ chọn Meshy hay VẼ MỚI cho mesh mới: duyệt = gọi Meshy, `meshy {aid} paint` = VẼ MỚI")
         if st["state"] not in REDO_FROM:
             msg = f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau"
         else:
-            done[key] = {"action": action, "at": now()}
+            decide()
             st.pop("ask", None)
-            redo(cfg, st, i, step, n, text)
+            got = redo(cfg, st, i, step, n, raw or (None if marks else text), marks or ())
+            ids = got[len(got) - len(marks):] if marks else []
             msg = f"làm lại {target}" + (f" từ v{n}" if n else "")
+    elif marks and waiting:
+        ids = findings.add_human(aid, step, n, None, marks)
+    if marks:
+        annotate.record(folder, marks, ids)
+        msg += (f"; khoanh {len(marks)} vùng → {', '.join(ids)}" if ids else
+                f"; khoanh {len(marks)} vùng lưu ở {rel(folder)}, chưa thành finding (state={st['state']})")
     save_st(st)
-    ledger(f"{aid} · người dùng {action} {target} · {text.strip()[:80]}")
+    ledger(f"{aid} · người dùng {action} {target} · {text[:80]}")
     build_outputs(cfg)
     return f"{aid}: {msg}. Tiếp: {next_action(st)}"
