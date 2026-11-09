@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core import findings  # noqa: E402
+from core.contract import pairs, parse_contract, unwrap  # noqa: E402
 from core.state import ROOT, SKILL_DIR, load_st, now, texture_res, vdir  # noqa: E402
 
 SCRIPTS = SKILL_DIR / "scripts"
@@ -107,12 +108,17 @@ def section(path: Path, key: str) -> list[str]:
 
 
 def open_work(st: dict) -> list[str]:
-    """§6.4.6 and D25.H: findings still open in the approved version of every step, the user's H<n> first."""
+    """§6.4.6 and D25.H: findings still open in the approved version of every step, the user's H<n> first.
+    A `note_texture` asks the model and texture steps for work; `texture_note=pass` in the approved texture review
+    says that work is done, and no later step records it on the note itself."""
     rows = []
+    rep = vdir(st["id"], "texture", st["approved"].get("texture", 0)) / "report-review.md"
+    noted = rep.is_file() and dict(pairs(parse_contract(unwrap(rep.read_text(encoding="utf-8")), {"RUBRIC"}).get(
+        "RUBRIC", ""))).get("texture_note") == "pass"
     for sid in STEPS:
         n = st["approved"].get(sid)
         for i, f in findings.open_of(findings.load(st["id"], sid, n)).items():
-            if f["priority"] in OPEN_KINDS:
+            if f["priority"] in OPEN_KINDS and not (noted and f["kind"] == "note_texture"):
                 rows.append((not i.startswith("H"), f"- {sid} v{n} {i} [{f['priority']}] {f['region']}: {f['repair']}"))
     return [r for _, r in sorted(rows, key=lambda r: r[0])]
 

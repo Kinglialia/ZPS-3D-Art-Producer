@@ -80,3 +80,28 @@ def test_run_from_outside_the_project_it_refuses_before_it_writes_anything(tmp_p
     assert (r.returncode, r.stderr.splitlines()[-1]) == (
         2, f"assemble.py: error: không thấy production/assets/{AID}/status.json: chạy lệnh từ gốc project")
     assert list(other.iterdir()) == []
+
+
+def finding_doc(t: Path, step: str, n: int, **fs):
+    d = t / "production/assets" / AID / step / f"v{n}"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "findings.json").write_text(json.dumps({"version": n, "findings": {
+        i: {"priority": "minor", "kind": kind, "status": "open", "region": region, "repair": "sửa"}
+        for i, (kind, region) in fs.items()}}), encoding="utf-8")
+    return d
+
+
+def test_the_readme_leaves_out_a_texture_note_once_the_approved_texture_review_passed_texture_note(tmp_path,
+                                                                                                    monkeypatch):
+    """Run 4: "Việc còn mở" listed views_rest F2 (back has 3 board rows), which model built and texture checked."""
+    import assemble
+    monkeypatch.chdir(tmp_path)
+    st = {"id": AID, "approved": {"views_front": 3, "views_rest": 2, "texture": 4}}
+    finding_doc(tmp_path, "views_front", 3, F4=("regen", "front: đinh"))
+    finding_doc(tmp_path, "views_rest", 2, F2=("note_texture", "back: hàng ván"))
+    tex = finding_doc(tmp_path, "texture", 4)
+    assert assemble.open_work(st) == ["- views_front v3 F4 [minor] front: đinh: sửa",
+                                      "- views_rest v2 F2 [minor] back: hàng ván: sửa"]
+    (tex / "report-review.md").write_text("--- report ---\nVERDICT: PASS\nRUBRIC: light=pass; texture_note=pass\n"
+                                          "--- end ---\n", encoding="utf-8")
+    assert assemble.open_work(st) == ["- views_front v3 F4 [minor] front: đinh: sửa"]
