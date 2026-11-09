@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from .contract import PRIORITIES
-from .state import vdir
+from .state import vdir, write_atomic
 
 OPEN = {"open", "regressed"}
 BM = ("blocker", "major")
@@ -24,7 +24,20 @@ def load(aid: str, step: str, n: int | None) -> dict | None:
 
 
 def save(aid: str, step: str, doc: dict):
-    path(aid, step, doc["version"]).write_text(json.dumps(doc, ensure_ascii=False, indent=1), encoding="utf-8")
+    write_atomic(path(aid, step, doc["version"]), json.dumps(doc, ensure_ascii=False, indent=1))
+
+
+def add_human(aid: str, step: dict, n: int, text: str):
+    """D23.1: the user's redo text becomes finding H<k>, major, on the version sent back; the reviewer PRIORs it."""
+    doc = load(aid, step["id"], n) or {"version": n, "base": None, "top_fix": None, "pick": None, "next_id": 1,
+                                       "findings": {}}
+    k = 1 + sum(i.startswith("H") for i in doc["findings"])
+    doc["findings"][f"H{k}"] = {
+        "priority": "major", "kind": next((t for t in step["top_fix"] if t not in NOTE), "human"), "status": "open",
+        "first_v": n, "last_v": n, "region": "theo feedback người dùng", "viewing_condition": "review page",
+        "evidence": f"feedback.md: {step['id']} v{n}", "consequence": "người dùng chưa duyệt", "confidence": "high",
+        "repair": text, "preserve": "những gì feedback không nhắc", "acceptance": f"đạt yêu cầu của người dùng: {text}"}
+    save(aid, step["id"], doc)
 
 
 def open_of(doc: dict | None) -> dict:
@@ -137,8 +150,9 @@ def progress(base: dict, doc: dict) -> bool:
     return any(old[i]["priority"] in BM for i in res) and reg < len(res)
 
 
-def best_version(docs: list[dict]) -> int | None:
+def best_version(docs: list[dict | None]) -> int | None:
     """§7.5: fewest open blocker+major; a tie goes to the older version."""
+    docs = [d for d in docs if d]
     if not docs:
         return None
     return min(docs, key=lambda d: (sum(f["priority"] in BM for f in open_of(d).values()), d["version"]))["version"]

@@ -24,9 +24,9 @@ def key_colour(rgb):
 
 def mask(path, key=None, tol=40.0, border=4):
     im = Image.open(path)
-    rgba = np.asarray(im.convert("RGBA"), np.int16)
+    rgba = np.asarray(im.convert("RGBA"), np.int32)
     rgb = rgba[:, :, :3]
-    k = np.array(key, np.int16) if key is not None else key_colour(rgb)
+    k = np.array(key, np.int32) if key is not None else key_colour(rgb)
     bg = np.sqrt(((rgb - k) ** 2).sum(axis=2)) <= tol
     bg |= rgba[:, :, 3] < 128
     m = np.where(bg, 0, 255).astype(np.uint8)

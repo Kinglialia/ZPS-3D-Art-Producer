@@ -55,7 +55,7 @@ def run(work, approved, profile):
     want = layout_md if has_map else card_path
     value = os.path.basename(want)
     src_ok = isinstance(layout, str) and os.path.abspath(layout) == os.path.abspath(want)
-    if src_ok and not has_map:
+    if src_ok and not has_map and os.path.isfile(card_path):
         size = yaml_load(card_path).get("size_m") or {}
         diff = [k for k in ("w", "d", "h") if get(s, f"layout.{k}") != size.get(k)]
         if diff:

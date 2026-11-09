@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from . import findings, hashes, preflight
 from .hashes import ad_text
-from .loop import move, next_action, review_base
+from .loop import move, next_action, review_base, set_aside
 from .state import ASSETS, ROOT, SKILL_DIR, die, ledger, load_cfg, load_st, rel, save_st, step_of, vdir
 
 
-def tools_line(step) -> list[str]:
+def tools_line(step, pf: dict | None) -> list[str]:
     t = SKILL_DIR / "agents" / f"zps-3dp-{step.get('agent')}" / "tools"
-    return [f"TOOLS: {t}", ""] if t.is_dir() else []
+    out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
+        [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else [])
+    return out + [""] if out else []
 
 
 def failed_checks(vd) -> list[str]:
@@ -31,10 +34,10 @@ def pid_line(st, step) -> list[str]:
     if "blender" not in step["uses"]:
         return []
     f = rel(ROOT / "pids" / "blender" / f"{st['id']}.pid")
-    return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}` (`P next` đếm slot theo file này)."]
+    return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}`."]
 
 
-def worker_brief(cfg, st, i, step, n, fix: bool, ph: str) -> str:
+def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, preset) -> str:
     aid = st["id"]
     d = vdir(aid, step["id"], n)
     a = ASSETS / aid
@@ -45,13 +48,14 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str) -> str:
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
-        *tools_line(step),
+        *tools_line(step, pf),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
-        f"2. `{rel(a / 'rubric.md')}` — tiêu chí chấm; tự check trước khi báo cáo.",
+        f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
         f"3. `{rel(a / 'feedback.md')}` — đọc mục \"Hiện hành\" và các dòng log gần nhất.",
+        f"4. `{rel(ROOT / 'PROJECT-PROFILE.yaml')}` — profile dự án; `{preset}` — preset của profile.",
     ]
-    k = 4
+    k = 5
     if st.get("concept_dir"):
         lines.append(f"{k}. Concept đã duyệt: `{st['concept_dir']}` — xem mọi ảnh trong thư mục, kể cả thư mục con.")
         k += 1
@@ -103,7 +107,7 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str) -> str:
         "```",
         "STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED",
         f"OUTPUT: {rel(d / 'final')}/",
-        "RUBRIC: <key>=pass|fail; <key>=pass|fail; ...",
+        f"RUBRIC: <key trong mục ## {step['id']}>=pass|fail; ...",
         "ISSUES: <tối đa 2 vấn đề còn lại, hoặc none>",
         "PROFILE_HASH: <chép dòng PROFILE_HASH ở đầu brief này>",
         *(["FIXED: F<n>, ...   (id bạn cho là đã sửa; reviewer quyết)"] if fix else []),
@@ -138,7 +142,7 @@ def review_brief(cfg, st, step, n) -> str:
         "## Chấm cái gì",
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
         f"- Báo cáo tự check của worker: `{rel(d / 'report-worker.md')}` — tham khảo, không tin thay bằng chứng.",
-        f"- Theo: `{rel(a / 'rubric.md')}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
+        f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
         *([f"- Concept đã duyệt để đối chiếu: `{st['concept_dir']}`."] if st.get("concept_dir") else []),
         f"- {ad_text(cfg, {sid, 'review'})}",
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "
@@ -151,7 +155,7 @@ def review_brief(cfg, st, step, n) -> str:
         f"Ghi vào `{rel(d / 'report-review.md')}`, mở đầu đúng format, mỗi khóa một dòng:",
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
-        "RUBRIC: <key>=pass|fail|unclear; ...",
+        f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear; ...",
         "COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N",
         f"TOP_FIX: <{'|'.join(findings.top_fix_kinds(step))}>: F<n>[, F<m>]",
         "EVIDENCE_OPENED: <nhãn ảnh và file đã mở>",
@@ -181,7 +185,7 @@ def review_brief(cfg, st, step, n) -> str:
     return "\n".join(lines) + "\n"
 
 
-def evidence_brief(st, step, n, ed, ph: str) -> str:
+def evidence_brief(st, step, n, ed, ph: str, pf: dict | None) -> str:
     aid, sid = st["id"], step["id"]
     tf = findings.load(aid, sid, n)["top_fix"]
     lines = [
@@ -189,7 +193,7 @@ def evidence_brief(st, step, n, ed, ph: str) -> str:
         "",
         f"PROFILE_HASH: {ph}",
         "",
-        *tools_line(step),
+        *tools_line(step, pf),
         f"Reviewer cần thêm ảnh để chấm {', '.join(tf['ids'])}: đọc region, viewing_condition, evidence, acceptance "
         f"của các id này trong `{rel(findings.path(aid, sid, n))}`.",
         f"- Chỉ render các ảnh đó, ghi vào `{rel(ed)}/`. Không tạo version mới.",
@@ -216,9 +220,11 @@ def run(a):
     sid, s, r = step["id"], st["state"], cfg["review"]
     if not step["enabled"]:
         die(f"{a.id}: bước {sid} chưa bật (enabled = false), không giao")
+    from check_profile import PRESETS
     from .intake import load_profile
-    ph = hashes.digest(load_profile())
-    if s in ("todo", "fix", "running", "evidence", "evidence_running") and (off := preflight.off(step, preflight.load())):
+    prof = load_profile()
+    ph, pf = hashes.digest(prof), preflight.load()
+    if s in ("todo", "fix", "running", "evidence", "evidence_running") and (off := preflight.off(step, pf)):
         die(f"{a.id}: bước {sid} cần {', '.join(off)} đang tắt (preflight) → sửa môi trường rồi chạy lại `preflight`")
     if "blender" in step["uses"]:
         (ROOT / "pids" / "blender").mkdir(parents=True, exist_ok=True)
@@ -234,7 +240,7 @@ def run(a):
         fix = s == "fix" or (s == "running" and st.get("fix_round", 0) > 0)
         hashes.record_inputs(cfg, st, i, n, ph)
         bp = d / "brief-worker.md"
-        bp.write_text(worker_brief(cfg, st, i, step, n, fix, ph), encoding="utf-8")
+        bp.write_text(worker_brief(cfg, st, i, step, n, fix, ph, pf, PRESETS / f"{prof['preset']}.yaml"), encoding="utf-8")
         model = step.get("model")
         resume = None
         if fix and st.get("fix_round", 0) <= r["resume_rounds"]:
@@ -248,7 +254,7 @@ def run(a):
         ed = vdir(a.id, sid, n) / "review" / f"evidence-{st['evidence']['k']}"
         ed.mkdir(parents=True, exist_ok=True)
         bp = ed / "brief-worker.md"
-        bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"]), encoding="utf-8")
+        bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"], pf), encoding="utf-8")
         out = {"role": "worker", "agent": f"zps-3dp-{step['agent']}", "model": step.get("model"), "resume": st.get("worker_agent_id"),
                "brief": rel(bp), "report": rel(ed / "report-worker.md")}
     elif s in ("review", "reviewing"):
@@ -256,10 +262,11 @@ def run(a):
         d = vdir(a.id, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
-        out = {"role": "reviewer", "agent": f"zps-3dp-{step.get('reviewer') or r['reviewer_agent']}", "model": r["reviewer_model"],
+        out = {"role": "reviewer", "agent": f"zps-3dp-{step['reviewer']}", "model": r["reviewer_model"],
                "resume": None, "brief": rel(bp), "report": rel(d / "report-review.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")
+    set_aside(Path(out["report"]))
     move(st, "dispatch")
     save_st(st)
     ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({out['agent']})")

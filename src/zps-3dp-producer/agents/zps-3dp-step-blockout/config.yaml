@@ -2,7 +2,7 @@
 # Values as kit v0.10.4 config.yaml, except paths.blender. A task spec "config" block overrides any key.
 
 paths:
-  blender: blender   # PATH lookup; P preflight records the real binary
+  blender: blender   # fallback only: the agent puts the brief's BLENDER path in V/work/spec.json "config"
 
 optimize:
   raster_size: 512

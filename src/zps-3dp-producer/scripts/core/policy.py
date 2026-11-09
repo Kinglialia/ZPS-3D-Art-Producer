@@ -1,7 +1,7 @@
 """`production/policy.yaml`: who approves a `review_human` step; `P approvals set`, `P delegate` (docs/producer.md §4)."""
 from __future__ import annotations
 
-from .state import ROOT, TEMPLATES, die, ledger, now, rel
+from .state import ROOT, TEMPLATES, die, ledger, now, rel, write_atomic
 
 KEYS = ("blockout", "views_rest", "model")
 WHO = ("human", "reviewer")
@@ -25,7 +25,12 @@ def check(pol: dict) -> list[str]:
 def load() -> dict:
     import yaml
     p = path() if path().exists() else TEMPLATES / "policy.yaml"
-    pol = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    try:
+        pol = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as ex:
+        die(f"{rel(p)} sai cú pháp YAML: {' '.join(str(ex).split())}")
+    if not isinstance(pol, dict):
+        die(f"{rel(p)}: phải là bảng `khóa: giá trị`, không phải {type(pol).__name__}")
     if errs := check(pol):
         die(f"{rel(p)}: " + "; ".join(errs))
     return pol
@@ -33,7 +38,7 @@ def load() -> dict:
 
 def save(pol: dict):
     import yaml
-    path().write_text(HEAD + yaml.safe_dump(pol, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    write_atomic(path(), HEAD + yaml.safe_dump(pol, allow_unicode=True, sort_keys=False))
 
 
 def approver(pol: dict, step: str, aid: str) -> str:

@@ -6,7 +6,7 @@ from argparse import Namespace
 import pytest
 
 from core import board, findings, intake, loop
-from core.state import ROOT, load_cfg, load_st, save_st, vdir
+from core.state import ROOT, load_cfg, load_st, locked, save_st, vdir
 
 AID = "house-a"
 PNG = b"\x89PNG"
@@ -146,7 +146,7 @@ def test_path_guard_serves_files_under_production_and_approved_only(project):
 @pytest.fixture
 def server(project):
     srv = board.make_server(0)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
     yield srv
     srv.shutdown()
     srv.server_close()
@@ -192,6 +192,46 @@ def test_second_decision_on_the_same_version_shows_the_dedupe_message(server):
     again = post(server, {"id": AID, "action": "approve", "text": "", "step": "blockout"})
     assert again[0] == 200
     assert again[1] == f"house-a: bỏ qua approve blockout v2: đã có quyết định lúc {st['decisions']['blockout v2']['at']}"
+
+
+def test_a_corrupt_status_file_drops_out_of_the_board_instead_of_breaking_it(server):
+    (ROOT / "assets/bad").mkdir()
+    (ROOT / "assets/bad/status.json").write_text("{x", encoding="utf-8")
+    status, body = get(server, "/api/board")
+    assert (status, [a["id"] for a in json.loads(body)["assets"]]) == (200, [AID])
+
+
+@pytest.mark.parametrize("body, headers", [
+    (json.dumps([1]), {}),
+    ("{}", {"Content-Length": "abc"}),
+])
+def test_a_malformed_post_gets_400_and_the_connection_stays_answered(server, body, headers):
+    c = http.client.HTTPConnection(*server.server_address)
+    c.putrequest("POST", "/api/feedback")
+    for k, v in ({"Content-Type": "application/json", "Content-Length": str(len(body))} | headers).items():
+        c.putheader(k, v)
+    c.endheaders(body.encode())
+    r = c.getresponse()
+    assert (r.status, json.loads(r.read())["message"].startswith("Lỗi: ")) == (400, True)
+
+
+def test_a_board_click_waits_for_the_lock_so_it_never_interleaves_with_a_running_p_command(server):
+    got = []
+    t = threading.Thread(target=lambda: got.append(post(server, {"id": AID, "action": "note", "text": "n1"})[0]))
+    with locked():
+        t.start()
+        t.join(0.3)
+        assert t.is_alive(), "the board wrote while a P command held production/.lock"
+    t.join(5)
+    assert got == [200]
+
+
+def test_dashboard_lists_done_enabled_as_finished_like_every_other_command():
+    sts = [{"id": "a", "state": "done_enabled", "stage": "blockout"}, {"id": "b", "state": "done", "stage": "assemble"}]
+    out = board.render_dashboard(sts).splitlines()
+    assert (out[2:4], out[-1]) == (["| Asset | Bước | State | Phiên bản | Rubric gần nhất | Deadline | Việc tiếp |",
+                                    "|---|---|---|---|---|---|---|"], "Done (2): a, b")
+    assert len(out) == 6
 
 
 def test_a_cross_site_form_post_cannot_decide(server):

@@ -35,6 +35,17 @@ def test_unknown_approvals_key_in_policy_file_is_refused_because_only_review_hum
     assert str(e.value) == f"production/policy.yaml: approvals.{key}: khóa không hợp lệ (blockout|views_rest|model)"
 
 
+@pytest.mark.parametrize("text, error", [
+    ("- a\n", "production/policy.yaml: phải là bảng `khóa: giá trị`, không phải list"),
+    ("approvals: [a: b\n", "production/policy.yaml sai cú pháp YAML: "),
+])
+def test_a_policy_file_that_is_not_a_yaml_map_is_one_error_line_not_a_traceback(prod, text, error):
+    (prod / "policy.yaml").write_text(text, encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        policy.load()
+    assert str(e.value).startswith(error)
+
+
 def test_approvals_set_refuses_an_unknown_step_and_an_unknown_value(prod):
     with pytest.raises(ProducerError) as e:
         setp("assemble", "reviewer")

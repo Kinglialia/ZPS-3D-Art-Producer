@@ -35,7 +35,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 **Giao việc** (khi `P next` báo `brief <id>`):
 1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
 2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (SendMessage tới agent id), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent`, truyền `model` tường minh, prompt đúng như sau:
-   > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng contract.
+   > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
 
 **Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script. Script báo report sai contract thì yêu cầu chính subagent đó viết lại đúng format; không tự sửa report.

@@ -1,7 +1,7 @@
 """part_graph.json follows schema blockout-1 (references/part-graph.md), before graph.py reads it. Plain Python.
 
 Usage: python3 tools/check_schema.py --work <dir> [--out <json>]
-Checks: header, fixed_params (+ _fixed_reason), required fields (a mirror_of part writes its own
+Checks: header, unique part names, fixed_params (+ _fixed_reason), required fields (a mirror_of part writes its own
 material, role and tag, because the kit copies only shape fields), primitive, rotation_deg,
 segments, enums, connected (every part reaches the root through attach.to / mirror_of.of:
 orphans and cycles), order (parent listed earlier, as graph.py requires).
@@ -87,8 +87,10 @@ def run(graph):
     if not graph.get("_fixed_reason"):
         fx.append("_fixed_reason")
     real = [p for p in parts if not is_mirror(p)]
+    names = [p.get("name") for p in parts]
     found = {
         "schema.header": header,
+        "schema.names": sorted({str(n) for n in names if names.count(n) > 1}),
         "schema.fixed_params": fx,
         "schema.fields": [m for p in parts for m in fields(p, by)],
         "schema.primitive": [p["name"] for p in real if p.get("primitive") not in PRIMITIVES],

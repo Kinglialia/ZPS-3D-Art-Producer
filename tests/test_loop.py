@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from shared import SCRIPTS, brief_hash, finding, report, write_profile
-from core import briefs, intake, loop, policy
+from core import briefs, findings, intake, loop, policy
 from core.state import ProducerError, load_cfg, load_st, save_st
 
 AID = "house-a"
@@ -370,3 +370,99 @@ def test_assemble_approval_copies_final_to_deliver_and_a_later_redo_marks_the_de
     flow.human("redo", "mái thấp", "blockout")
     assert readme.read_text(encoding="utf-8") == "**đang làm lại**\n\n# House A\n"
     assert (flow.st["stage"], flow.st["state"], flow.st["approved"]) == ("blockout", "fix", {})
+
+
+H1 = {"priority": "major", "kind": "structure", "status": "open", "first_v": 1, "last_v": 1,
+      "region": "theo feedback người dùng", "viewing_condition": "review page", "evidence": "feedback.md: blockout v1",
+      "consequence": "người dùng chưa duyệt", "confidence": "high", "repair": "mái cao hơn",
+      "preserve": "những gì feedback không nhắc", "acceptance": "đạt yêu cầu của người dùng: mái cao hơn"}
+
+
+def test_redo_of_an_unreviewed_version_files_the_user_text_as_H1_so_the_next_review_has_a_base(flow):
+    flow.work()
+    assert flow.st["state"] == "review"
+    assert flow.human("redo", "mái cao hơn") == "house-a: làm lại blockout từ v1. Tiếp: giao worker → `brief house-a`"
+    assert findings.load(AID, "blockout", 1)["findings"] == {"H1": H1}
+    assert (flow.st["fix_base"], flow.st["round_versions"]) == (1, [1])
+    flow.work()
+    rb = flow.text(flow.brief())
+    assert "- H1: ? | evidence: ? | acceptance: đạt yêu cầu của người dùng: mái cao hơn" in rb
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass",
+                prior=["- H1: resolved | evidence: clay_front"])
+    assert pick(flow.st) == {"state": "waiting_human", "fix_round": 1, "fix_base": 1, "offer": 2, "label": "",
+                             "note": "duyệt blockout v2"}
+
+
+def test_best_version_skips_a_version_without_findings_so_a_round_never_crashes():
+    assert findings.best_version([None, {"version": 2, "findings": {}}]) == 2
+
+
+def test_send_back_is_a_major_finding_and_a_reoffer_of_the_same_version_takes_a_new_decision(flow):
+    pass_v2(flow)
+    flow.human("approve")
+    flow.human("redo", "mái thấp quá")
+    assert findings.open_of(findings.load(AID, "blockout", 2)) == {
+        "H1": H1 | {"first_v": 2, "last_v": 2, "evidence": "feedback.md: blockout v2", "repair": "mái thấp quá",
+                    "acceptance": "đạt yêu cầu của người dùng: mái thấp quá"}}
+    for _ in range(2):
+        flow.work()
+        flow.review(counts=counts(major=1), top_fix="structure: H1", rubric="mass=fail", prior=["- H1: open"])
+    assert pick(flow.st) == {"state": "waiting_human", "fix_round": 2, "fix_base": 2, "offer": 2, "label": "chưa đạt",
+                             "note": "không tiến bộ ở vòng 2; còn mở: H1"}
+    assert flow.human("approve", "giữ v2") == (
+        "house-a: đã duyệt blockout v2 → blockout/done_enabled. Tiếp: xong các bước đang bật")
+
+
+def test_redo_of_a_later_step_is_refused_so_the_asset_never_skips_a_step(flow):
+    with pytest.raises(ProducerError) as e:
+        flow.human("redo", "x", "views_rest")
+    assert str(e.value) == "house-a: không làm lại views_rest được: asset đang ở bước blockout"
+    assert (flow.st["stage"], flow.st["state"]) == ("blockout", "todo")
+    assert "· redo ·" not in (flow.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
+
+
+def test_feedback_is_tagged_with_the_version_the_user_sees_not_the_newest(flow):
+    fix_v1(flow, 2)
+    for _ in range(2):
+        flow.work()
+        flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: open"])
+    assert (flow.st["offer"], flow.st["versions"]) == (1, {"blockout": 3})
+    flow.human("note", "mái chìa thêm")
+    log = (flow.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
+    assert log.splitlines()[-1].endswith(" · blockout v1 · note · mái chìa thêm")
+
+
+def test_retry_sets_the_old_report_aside_so_ingest_waits_for_the_new_one(flow):
+    flow.work(status="NEEDS_CONTEXT")
+    assert flow.call(loop.retry, Namespace(id=AID)) == (
+        "house-a: → running. Tiếp: đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)\n")
+    assert (flow.v(1) / "report-worker-1.md").read_text(encoding="utf-8").startswith("STATUS: NEEDS_CONTEXT")
+    with pytest.raises(ProducerError) as e:
+        loop.ingest(Namespace(id=AID, agent_id=None))
+    assert str(e.value) == f"chưa có báo cáo production/assets/{AID}/blockout/v1/report-worker.md"
+
+
+def test_a_redispatch_sets_the_old_review_aside_so_the_evidence_rereview_is_not_read_from_the_first(flow):
+    need_evidence_v1(flow)
+    flow.work()
+    flow.brief()
+    assert loop.next_action(flow.st) == "đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)"
+    assert (flow.v(1) / "report-review-1.md").read_text(encoding="utf-8").startswith("VERDICT: FIX")
+
+
+def test_worker_brief_names_the_rubric_section_profile_preset_and_blender_path(flow):
+    (flow.root / "production/preflight.json").write_text(json.dumps(
+        {"features": {"blender": True}, "blender": {"path": "/opt/blender/blender", "version": "4.2"}}), encoding="utf-8")
+    text = flow.text(flow.brief())
+    assert "BLENDER: /opt/blender/blender" in text.splitlines()
+    assert f"2. `production/assets/{AID}/rubric.md` mục `## blockout` — tiêu chí chấm; tự check trước khi báo cáo." in text
+    assert (f"4. `production/PROJECT-PROFILE.yaml` — profile dự án; "
+            f"`{SCRIPTS.parent / 'presets/topdown-mobile-lowpoly.yaml'}` — preset của profile.") in text
+    pid = [l for l in text.splitlines() if l.startswith("- Mỗi lệnh Blender")]
+    assert pid == ["- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/house-a.pid; wait $!; "
+                   "rm -f production/pids/blender/house-a.pid`."]
+
+
+def test_review_brief_names_the_rubric_section_of_the_step(flow):
+    flow.work()
+    assert f"- Theo: `production/assets/{AID}/rubric.md` mục `## blockout`, " in flow.text(flow.brief())

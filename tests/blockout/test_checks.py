@@ -17,6 +17,14 @@ def test_schema_accepts_the_hut(tmp_path, run_check):
     assert_pass(run_check("check_schema", "--work", write_build(tmp_path / "w")))
 
 
+def test_schema_rejects_two_parts_with_one_name_because_attach_and_gates_address_parts_by_name(tmp_path, run_check):
+    g = hut()
+    g["parts"].append(copy.deepcopy(part(g, "crate")))
+    r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
+    assert_fail(r)
+    assert r.check("schema.names") == {"status": "fail", "value": ["crate"]}
+
+
 def test_schema_reports_orphan_part_that_never_reaches_the_root(tmp_path, run_check):
     g = hut()
     part(g, "crate")["attach"]["to"] = "shed"
@@ -179,6 +187,17 @@ def test_support_fails_when_the_roof_floats_2_cm_above(tmp_path, run_check):
     assert r.check("support.roof") == {"status": "fail", "value": ["roof"]}
 
 
+def test_support_fails_when_a_roof_rests_only_on_another_roof_beside_it_at_the_same_height(tmp_path, run_check):
+    g = hut()
+    g["parts"].append(copy.deepcopy(part(g, "roof")) | {"name": "roof_b"})
+    rows = copy.deepcopy(HUT_ROWS)
+    rows[1]["bbox_max"][2] = 2.6
+    rows.append(copy.deepcopy(rows[2]) | {"name": "roof_b", "bbox_min": [-1.0, -1.5, 2.7], "bbox_max": [2.0, 1.5, 3.4]})
+    r = run_check("check_support", "--work", write_build(tmp_path / "w", g, rows=rows))
+    assert_fail(r)
+    assert r.check("support.roof") == {"status": "fail", "value": ["roof", "roof_b"]}
+
+
 def test_support_is_not_checked_without_a_roof_tag(tmp_path, run_check):
     g = hut()
     del part(g, "roof")["tag"]
@@ -314,6 +333,15 @@ def test_inputs_map_needs_layout_md(tmp_path, run_check):
     r = run_check("check_inputs", "--work", w, "--approved", a, "--profile", prof)
     assert_fail(r)
     assert r.check("inputs.files") == {"status": "fail", "value": ["05-hut.layout.md", "files.layout"]}
+
+
+def test_inputs_fail_instead_of_erroring_when_the_asset_card_is_missing(tmp_path, run_check):
+    a, prof = approved(tmp_path, has_map=False)
+    (a / "asset-card.yaml").unlink()
+    w = write_build(tmp_path / "w", sources=sources_for(a, "asset-card.yaml"))
+    r = run_check("check_inputs", "--work", w, "--approved", a, "--profile", prof)
+    assert_fail(r)
+    assert r.check("inputs.files") == {"status": "fail", "value": ["asset-card.yaml", "files.layout"]}
 
 
 def test_inputs_report_missing_sources_keys(tmp_path, run_check):

@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .state import ROOT, SKILL_DIR, now, rel
+from .state import ROOT, SKILL_DIR, now, rel, write_atomic
 
 OUT = ROOT / "preflight.json"
 KIT_SIBLING = SKILL_DIR.parent / "zps-3d-artist" / "tools" / "preflight.py"
@@ -69,12 +69,13 @@ def kit(path: Path) -> dict:
 
 
 def run_preflight(a):
+    ROOT.mkdir(parents=True, exist_ok=True)
     b, ef = blender(), env_file()
     codex = shutil.which("codex")
     k = kit(Path(a.kit) if a.kit else KIT_SIBLING)
     feats = {"blender": b is not None, "codex_image": codex is not None, "meshy": has_meshy_key(ef)}
-    OUT.write_text(json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "env_file": ef, "kit": k},
-                              ensure_ascii=False, indent=2), encoding="utf-8")
+    write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "env_file": ef, "kit": k},
+                                 ensure_ascii=False, indent=2))
     on, down = [f for f, v in feats.items() if v], [f for f, v in feats.items() if not v]
     parts = ([f"bật {', '.join(on)}"] if on else []) + ([f"tắt {', '.join(down)}"] if down else [])
     parts.append(f"kit {k['overall']}" if "overall" in k else "không có kit preflight.py")

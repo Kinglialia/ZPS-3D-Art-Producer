@@ -1,12 +1,14 @@
 """Paths, pipeline.toml, status.json, ledger, version dirs, and the admin commands no other module owns."""
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
 import os
 import re
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 try:
@@ -45,11 +47,35 @@ def rel(p: Path) -> str:
     return os.path.relpath(p)
 
 
+def write_atomic(p: Path, text: str):
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f".{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, p)
+
+
+@contextlib.contextmanager
+def locked(create: bool = False):
+    """One writer at a time across P processes and board threads: flock on production/.lock."""
+    if create:
+        ROOT.mkdir(parents=True, exist_ok=True)
+    if not ROOT.is_dir():
+        yield
+        return
+    import fcntl
+    with open(ROOT / ".lock", "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+
+
 def load_cfg() -> dict:
     p = ROOT / "pipeline.toml"
     if not p.exists():
         die(f"không thấy {p}. Chạy: producer.py init")
-    cfg = tomllib.loads(p.read_text(encoding="utf-8"))
+    try:
+        cfg = tomllib.loads(p.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as ex:
+        die(f"{p} sai cú pháp TOML: {ex}")
     steps = cfg.get("steps") or die("pipeline.toml chưa có [[steps]]")
     ids = [s.get("id") or die("mỗi [[steps]] cần id") for s in steps]
     if len(set(ids)) != len(ids):
@@ -92,15 +118,16 @@ def adir(aid: str) -> Path:
 
 
 def load_st(aid: str) -> dict:
-    return json.loads((adir(aid) / "status.json").read_text(encoding="utf-8"))
+    p = adir(aid) / "status.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as ex:
+        die(f"{p} hỏng: {ex}")
 
 
 def save_st(st: dict):
     st["updated"] = now()
-    p = ASSETS / st["id"] / "status.json"
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(st, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(p)
+    write_atomic(ASSETS / st["id"] / "status.json", json.dumps(st, ensure_ascii=False, indent=2))
 
 
 def all_status() -> list[dict]:
@@ -111,7 +138,7 @@ def all_status() -> list[dict]:
         try:
             out.append(json.loads(p.read_text(encoding="utf-8")))
         except json.JSONDecodeError:
-            out.append({"id": p.parent.name, "state": "blocked", "note": "status.json hỏng", "stage": "?"})
+            out.append({"id": p.parent.name, "state": "blocked", "note": "status.json hỏng", "stage": "?", "broken": True})
     return out
 
 
@@ -146,7 +173,7 @@ def ledger_tail(a):
     lines = [l for l in p.read_text(encoding="utf-8").splitlines() if l.startswith("- ")] if p.exists() else []
     if a.rulings:
         lines = [l for l in lines if "RULING:" in l]
-    print("\n".join(lines[-a.tail:]) or "(trống)")
+    print("\n".join(lines[-a.tail:] if a.tail > 0 else []) or "(trống)")
 
 
 def cleanup(a):
@@ -227,3 +254,5 @@ def validate(_a):
         if not rubric_approved(r):
             problems.append(f"{rel(r)}: chưa duyệt (status: draft)")
     print("\n".join(problems) or "OK: không có lỗi")
+    if problems:
+        sys.exit(1)

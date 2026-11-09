@@ -129,7 +129,7 @@ def flow(tmp_path_factory):
     f.brief("v4 brief")
     f.work("v4", fixed=(3, 4))
     f.review("v4", verdict="PASS", counts=counts(0), top_fix=None, compare="F3=better; F4=better",
-             rubric="concept_match=pass; scale=pass", prior=resolved(3, 4))
+             rubric="concept_match=pass; scale=pass", prior=resolved(3, 4) + ["- H1: resolved | evidence: clay_front"])
     f.save("approve", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("approve again", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("cleanup dry-run", f.p("cleanup", AID))
@@ -217,9 +217,9 @@ def test_four_major_param_findings_open_fix_round_1_from_v1_as_one_batch(flow):
 
 def test_the_fix_brief_starts_from_the_best_version_reads_its_failed_check_json_first_and_fixes_the_whole_batch(flow):
     text = flow["v2 brief"]["text"]
-    for line in (f"6. Bản gốc: `{V}1/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
-                 f"7. Đọc trước nguyên văn lỗi script của bản gốc: `{V}1/final/review/checks/layout.json`.",
-                 f"8. Sửa đúng `TOP_FIX: param: F1, F2, F3, F4`; repair, preserve, acceptance của từng id trong "
+    for line in (f"7. Bản gốc: `{V}1/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
+                 f"8. Đọc trước nguyên văn lỗi script của bản gốc: `{V}1/final/review/checks/layout.json`.",
+                 f"9. Sửa đúng `TOP_FIX: param: F1, F2, F3, F4`; repair, preserve, acceptance của từng id trong "
                  f"`{V}1/findings.json`.", "Đây là vòng sửa 1.", "FIXED: F<n>, ..."):
         assert line in text, line
 
@@ -236,7 +236,8 @@ def test_prior_is_recorded_per_finding_and_pick_b_moves_variant_b_into_final_kee
     v2 = flow["findings"][2]
     assert head(v2) == {"version": 2, "base": 1, "top_fix": {"kind": "param", "ids": ["F3", "F4"]}, "pick": "b",
                         "next_id": 5}
-    assert rows(v2) == {"F1": ("resolved", 1, 2), "F2": ("resolved", 1, 2), "F3": ("open", 1, 2), "F4": ("open", 1, 2)}
+    assert rows(v2) == {"F1": ("resolved", 1, 2), "F2": ("resolved", 1, 2), "F3": ("open", 1, 2), "F4": ("open", 1, 2),
+                        "H1": ("open", 2, 2)}
     assert flow["variant files"] == {"final": "blockout.md v2 phương án b\n", "variants/a": "blockout.md v2 phương án a\n"}
 
 
@@ -247,7 +248,7 @@ def test_two_old_majors_resolved_is_progress_so_round_2_starts_from_v2(flow):
 
 def test_the_fix_brief_lists_no_script_errors_when_the_best_version_has_no_failed_check(flow):
     text = flow["v3 brief"]["text"]
-    assert f"6. Bản gốc: `{V}2/`" in text and "7. Sửa đúng `TOP_FIX: param: F3, F4`" in text
+    assert f"7. Bản gốc: `{V}2/`" in text and "8. Sửa đúng `TOP_FIX: param: F3, F4`" in text
     assert "Đọc trước nguyên văn lỗi script" not in text and "Đây là vòng sửa 2." in text
 
 
@@ -269,12 +270,13 @@ def test_redo_opens_a_new_feedback_round_from_the_offered_version_with_counters_
 
 def test_redo_carries_the_open_findings_of_the_offered_version_into_the_new_round(flow):
     text, review = flow["v4 brief"]["text"], flow["v4 review brief"]["text"]
-    assert f"6. Bản gốc: `{V}2/`" in text and "Sửa đúng `TOP_FIX: param: F3, F4`" in text and "Đây là vòng sửa 1." in text
+    assert f"7. Bản gốc: `{V}2/`" in text and "Sửa đúng `TOP_FIX: param: F3, F4`" in text and "Đây là vòng sửa 1." in text
     assert "\nCOMPARE: F3=?; F4=?\n" in review and f"- Bản gốc v2: ảnh cùng góc `{V}2/final/`" in review
     assert "\nPRIOR:\n- F3: ? | evidence: ? | acceptance: đỉnh mái 3.2 m trên clay_front\n- F4: ? |" in review
+    assert "\n- H1: ? | evidence: ? | acceptance: đạt yêu cầu của người dùng: mái chìa thêm 10 cm\n" in review
     assert head(flow["findings"][4]) == {"version": 4, "base": 2, "top_fix": None, "pick": None, "next_id": 5}
     assert rows(flow["findings"][4]) == {"F1": ("resolved", 1, 2), "F2": ("resolved", 1, 2), "F3": ("resolved", 1, 4),
-                                         "F4": ("resolved", 1, 4)}
+                                         "F4": ("resolved", 1, 4), "H1": ("resolved", 2, 4)}
 
 
 def test_pass_on_a_review_human_step_waits_for_the_human_without_a_not_passed_label(flow):
@@ -403,4 +405,4 @@ def test_real_tools_write_gates_and_checks_under_final_review_where_the_fix_brie
 @pytest.mark.blender
 @needs_tools
 def test_a_failing_real_check_is_the_only_script_error_named_in_the_next_fix_brief(real_build):
-    assert f"\n7. Đọc trước nguyên văn lỗi script của bản gốc: `{V}1/final/review/checks/layout.json`.\n" in real_build["fix"]
+    assert f"\n8. Đọc trước nguyên văn lỗi script của bản gốc: `{V}1/final/review/checks/layout.json`.\n" in real_build["fix"]

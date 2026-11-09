@@ -100,6 +100,18 @@ def read_report(rep) -> str:
     return rep.read_text(encoding="utf-8")
 
 
+def set_aside(rep):
+    """A new dispatch waits for a new report: the old one becomes `<name>-<k>.md`."""
+    if rep.exists():
+        rep.rename(rep.with_name(f"{rep.stem}-{1 + len(list(rep.parent.glob(f'{rep.stem}-*.md')))}.md"))
+
+
+def offer(st: dict, sid: str, n: int, **kw):
+    """D22.8 per offer: an offered version takes a new decision, also when it was decided in an earlier round."""
+    st.setdefault("decisions", {}).pop(f"{sid} v{n}", None)
+    st |= {"offer": n, **kw}
+
+
 def valid(rep, parsed: tuple):
     out, errs = parsed
     if errs:
@@ -131,7 +143,7 @@ def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
         st["note"] = why
     elif step["gate"] == "checks_human":
         move(st, "checks_done")
-        st["note"], st["offer"] = f"duyệt {step['id']} v{n}", n
+        offer(st, step["id"], n, note=f"duyệt {step['id']} v{n}")
     else:
         move(st, "worker_done")
         st["note"] = ""
@@ -192,11 +204,11 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         approve(cfg, st, step, n, "reviewer" if who == "reviewer" else policy.BY[who])
     elif event == "await_approval":
         move(st, event)
-        st |= {"note": f"duyệt {sid} v{n}", "offer": n, "label": ""}
+        offer(st, sid, n, note=f"duyệt {sid} v{n}", label="")
     elif event == "ask_human":
         move(st, event)
         ids = ", ".join(findings.open_of(findings.load(aid, sid, best)))
-        st |= {"note": reason + (f"; còn mở: {ids}" if ids else ""), "offer": best, "label": NOT_PASSED}
+        offer(st, sid, best, note=reason + (f"; còn mở: {ids}" if ids else ""), label=NOT_PASSED)
     elif event == "fix":
         move(st, event)
         st["fix_round"] = st.get("fix_round", 0) + 1
@@ -242,9 +254,11 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     hashes.refresh_stale(cfg, st)
 
 
-def redo(cfg: dict, st: dict, i: int, target: str, n: int | None):
+def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str):
     move(st, "redo")
-    st |= fresh() | {"stage": target, "fix_round": 1, "fix_base": n, "round_versions": [n] if n else [],
+    if n:
+        findings.add_human(st["id"], step, n, text)
+    st |= fresh() | {"stage": step["id"], "fix_round": 1, "fix_base": n, "round_versions": [n] if n else [],
                      "note": "làm lại theo feedback người dùng"}
     for s in cfg["steps"][i:]:
         for k in ("approved", "approved_hash", "rejected"):
@@ -258,14 +272,15 @@ def redo(cfg: dict, st: dict, i: int, target: str, n: int | None):
 def retry(a):
     st = load_st(a.id)
     move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
+    if st["state"] == "running":
+        set_aside(vdir(a.id, st["stage"], st["versions"][st["stage"]]) / "report-worker.md")
     st["note"] = ""
     save_st(st)
     ledger(f"{a.id} · retry")
     print(f"{a.id}: → {st['state']}. Tiếp: {next_action(st)}")
 
 
-def append_feedback(aid: str, st: dict, action: str, text: str, step: str):
-    n = st.get("versions", {}).get(step)
+def append_feedback(aid: str, step: str, n: int | None, action: str, text: str):
     tag = f"{step} v{n}" if n else step
     with open(ASSETS / aid / "feedback.md", "a", encoding="utf-8") as f:
         f.write(f"- {now()} · {tag} · {action} · {text.strip()}\n")
@@ -285,13 +300,16 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
         die("action phải là approve | redo | note")
     target = step_id or st["stage"]
     i, step = step_of(cfg, target)
+    if action == "redo" and i > step_of(cfg, st["stage"])[0]:
+        die(f"{aid}: không làm lại {target} được: asset đang ở bước {st['stage']}")
     n = shown(st, target)
     key = f"{target} v{n}"
     done = st.setdefault("decisions", {})
     send_back = action == "redo" and n is not None and st["approved"].get(target) == n
     if action != "note" and key in done and not send_back:
         return f"{aid}: bỏ qua {action} {key}: đã có quyết định lúc {done[key]['at']}"
-    append_feedback(aid, st, action, text or "(không ghi chú)", target)
+    text = text.strip() or "(không ghi chú)"
+    append_feedback(aid, target, n, action, text)
     msg = "đã ghi feedback"
     if action == "approve":
         if st["state"] != "waiting_human" or target != st["stage"]:
@@ -305,7 +323,7 @@ def human_action(aid: str, action: str, text: str, step_id: str | None = None) -
             msg = f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau"
         else:
             done[key] = {"action": action, "at": now()}
-            redo(cfg, st, i, target, n)
+            redo(cfg, st, i, step, n, text)
             msg = f"làm lại {target}" + (f" từ v{n}" if n else "")
     save_st(st)
     ledger(f"{aid} · người dùng {action} {target} · {text.strip()[:80]}")

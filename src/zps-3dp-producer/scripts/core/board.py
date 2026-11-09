@@ -8,7 +8,7 @@ from urllib.parse import quote, unquote, urlsplit
 from . import findings
 from .contract import FIELDS
 from .loop import next_action, shown
-from .state import IMAGE_EXT, ROOT, SKILL_DIR, ProducerError, all_status, load_cfg, now, sort_key, vdir
+from .state import FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, load_cfg, locked, now, sort_key, vdir, write_atomic
 
 BOARD_DIR = SKILL_DIR / "scripts" / "board"
 SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "views_rest": "report/VIEWS.md",
@@ -21,11 +21,11 @@ HOSTS = ("127.0.0.1", "localhost")
 
 def build_outputs(_cfg: dict):
     sts = sorted(all_status(), key=sort_key)
-    (ROOT / "dashboard.md").write_text(render_dashboard(sts), encoding="utf-8")
+    write_atomic(ROOT / "dashboard.md", render_dashboard(sts))
 
 
 def render_dashboard(sts: list[dict]) -> str:
-    active = [s for s in sts if s.get("state") != "done"]
+    active = [s for s in sts if s.get("state") not in FINISHED]
     out = [f"# Dashboard — tự sinh {now()}, đừng sửa tay", "",
            "| Asset | Bước | State | Phiên bản | Rubric gần nhất | Deadline | Việc tiếp |",
            "|---|---|---|---|---|---|---|"]
@@ -33,7 +33,7 @@ def render_dashboard(sts: list[dict]) -> str:
         vers = " ".join(f"{k}:v{v}" for k, v in s.get("versions", {}).items()) or "-"
         out.append(f"| {s['id']} | {s.get('stage')} | {s.get('state')} | {vers} | {s.get('last_rubric') or '-'} "
                    f"| {s.get('deadline') or '-'} | {next_action(s)} |")
-    done = [s["id"] for s in sts if s.get("state") == "done"]
+    done = [s["id"] for s in sts if s.get("state") in FINISHED]
     if done:
         out += ["", f"Done ({len(done)}): " + ", ".join(done)]
     return "\n".join(out) + "\n"
@@ -92,7 +92,8 @@ def asset_view(cfg: dict, st: dict) -> dict:
 
 def board_payload(cfg: dict) -> dict:
     sts = sorted(all_status(), key=lambda s: (s.get("state") != "waiting_human", *sort_key(s)))
-    return {"project": cfg.get("project", {}).get("name", "Producer"), "assets": [asset_view(cfg, s) for s in sts]}
+    return {"project": cfg.get("project", {}).get("name", "Producer"),
+            "assets": [asset_view(cfg, s) for s in sts if not s.get("broken")]}
 
 
 def safe_file(cfg: dict, url_path: str) -> Path | None:
@@ -154,8 +155,9 @@ def make_server(port: int):
                 return self.send_error(403)
             try:
                 data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-                msg, code = human_action(data["id"], data["action"], data.get("text", ""), data.get("step")), 200
-            except (ProducerError, KeyError, json.JSONDecodeError) as ex:
+                with locked():
+                    msg, code = human_action(data["id"], data["action"], data.get("text", ""), data.get("step")), 200
+            except Exception as ex:  # noqa: BLE001
                 msg, code = f"Lỗi: {ex}", 400
             self.send(code, json.dumps({"message": msg}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
 
@@ -166,7 +168,8 @@ def make_server(port: int):
 
 
 def serve(port: int):
-    build_outputs(load_cfg())
+    with locked():
+        build_outputs(load_cfg())
     srv = make_server(port)
     print(f"Review page: http://127.0.0.1:{port}  (Ctrl+C để dừng)")
     srv.serve_forever()

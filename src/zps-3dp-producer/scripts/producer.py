@@ -11,12 +11,15 @@ Xem `producer.py <lệnh> -h` để biết tham số.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core.state import PORT, ProducerError, load_cfg  # noqa: E402
+from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
+
+UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve"}
 
 
 def cmd_init(a):
@@ -119,7 +122,7 @@ def cmd_archive(a):
     archive(a)
 
 
-def main():
+def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     x = sub.add_parser("init", help="tạo production/, rubric mẫu, _approved/ và GUIDELINE.md")
@@ -163,9 +166,10 @@ def main():
     x.add_argument("id"); x.add_argument("--yes", action="store_true"); x.add_argument("--all", action="store_true")
     x = sub.add_parser("archive", help="chuyển asset đã xong vào archive/")
     x.add_argument("id"); x.add_argument("--force", action="store_true")
-    a = p.parse_args()
+    a = p.parse_args(argv)
     try:
-        globals()[f"cmd_{a.cmd}"](a)
+        with locked(create=a.cmd in ("init", "preflight")) if a.cmd not in UNLOCKED else contextlib.nullcontext():
+            globals()[f"cmd_{a.cmd}"](a)
     except ProducerError as ex:
         sys.exit(f"LỖI: {ex}")
 

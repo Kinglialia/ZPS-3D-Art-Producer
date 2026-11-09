@@ -11,7 +11,7 @@ import check_card
 import check_profile
 
 from .hashes import warnings_for
-from .state import (ARCHIVE, ASSETS, ROOT, TEMPLATES, all_status, die, ledger, load_st, now, rel,
+from .state import (ARCHIVE, ASSETS, FINISHED, ROOT, TEMPLATES, all_status, die, ledger, load_st, now, rel,
                     rubric_approved, save_st)
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -73,8 +73,10 @@ def create_asset(cfg: dict, aid: str, title: str, typ: str, priority: int, deadl
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", aid):
         die(f"id '{aid}' không hợp lệ: chỉ gồm a-z, 0-9 và '-'")
     d = ASSETS / aid
-    if d.exists() or (ARCHIVE / aid).exists():
+    if (d / "status.json").exists() or (ARCHIVE / aid).exists():
         die(f"asset {aid} đã tồn tại")
+    if d.exists():
+        shutil.rmtree(d)
     rub_src = ROOT / "rubrics" / f"{typ}.md"
     if not rub_src.exists():
         rub_src = ROOT / "rubrics" / "default.md"
@@ -167,7 +169,7 @@ def run(a, cfg: dict):
     if no_pilot:
         if a.all or len(a.ids) > 1:
             die("pilot_asset: null, chưa có pilot: chỉ đăng ký từng asset gọi đích danh (`intake <id>`), không dùng --all hay nhiều id")
-        busy = [s["id"] for s in all_status() if not s["state"].startswith("done")]
+        busy = [s["id"] for s in all_status() if s["state"] not in FINISHED]
         if busy:
             die(f"pilot_asset: null, chưa có pilot: chưa đăng ký asset mới khi còn asset đang chạy: {', '.join(busy)}")
     if a.all:

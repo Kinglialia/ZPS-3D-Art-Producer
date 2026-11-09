@@ -16,6 +16,7 @@ production/                     # trong project Claude Code; chỉ script và su
   pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: sự kiện + RULING
+  .lock                         # mỗi lệnh ghi và mỗi nút trên review page giữ flock file này
   schedule.md                   # `- YYYY-MM-DD · milestone`
   dashboard.md                  # tự sinh
   assets/<id>/
@@ -38,7 +39,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `fix_round`, `fix_base`, `round_versions`: vòng sửa của đợt feedback, bản gốc (bản tốt nhất), các version đã chấm trong đợt.
 - `evidence`, `evidence_used`: vòng bằng chứng đang chạy (`version`, `k`, `hash` của `final/`) và số lần đã xin trong đợt.
 - `offer`, `label`: version đưa người dùng duyệt và nhãn ("chưa đạt" khi chưa qua).
-- `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt.
+- `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt. Script xóa khóa này mỗi lần đưa vN cho người dùng duyệt, nên một lần đưa nhận một quyết định.
 - `worker_agent_id`: subagent worker để resume vòng sửa.
 
 ## Art direction trong brief
@@ -115,6 +116,8 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
  "findings": {"F1": {"priority", "kind", "status", "first_v", "last_v", "region", …, "acceptance"}}}
 ```
 Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
+
+`redo` ghi lời người dùng thành finding `H<k>` (`major`, loại đầu tiên trong `top_fix` của bước) vào `findings.json` của version bị trả về, tạo file nếu chưa có. Reviewer vòng sau ghi `PRIOR` cho `H<k>` như mọi finding.
 
 ## Nguồn tham khảo của thiết kế
 

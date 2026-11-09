@@ -65,7 +65,7 @@ def test_worker_brief_tells_the_worker_where_to_write_the_blender_pid(proj, caps
     briefs.run(Namespace(id="a-hut"))
     text = (proj / "production/assets/a-hut/blockout/v1/brief-worker.md").read_text(encoding="utf-8")
     assert ("- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/a-hut.pid; wait $!; "
-            "rm -f production/pids/blender/a-hut.pid` (`P next` đếm slot theo file này).") in text.splitlines()
+            "rm -f production/pids/blender/a-hut.pid`.") in text.splitlines()
     assert (proj / "production/pids/blender").is_dir()
 
 

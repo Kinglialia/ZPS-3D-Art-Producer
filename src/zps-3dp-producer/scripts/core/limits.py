@@ -8,9 +8,8 @@ from . import preflight
 from .board import build_outputs
 from .hashes import schedule_soon, warnings_for
 from .loop import next_action
-from .state import PORT, ROOT, all_status, load_cfg, rel, sort_key
+from .state import FINISHED, PORT, ROOT, all_status, load_cfg, rel, sort_key
 
-FINISHED = ("done", "done_enabled")
 DISPATCH = ("todo", "fix", "evidence")
 
 

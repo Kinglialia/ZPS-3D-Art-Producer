@@ -71,7 +71,8 @@ def tree_hash(d: Path, skip: str = "") -> str | None:
     if not d.is_dir():
         return None
     h = hashlib.sha256()
-    for p in sorted(x for x in d.rglob("*") if x.is_file() and x.name != skip):
+    for p in sorted(x for x in d.rglob("*") if x.is_file() and x.name != skip
+                    and not any(s.startswith(".") for s in x.relative_to(d).parts)):
         h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes())
     return h.hexdigest()
 
@@ -85,7 +86,8 @@ def _strip(x):
 def digest(profile: dict) -> str:
     """D21.3: hash of the normalized profile without `paths` and `_` keys, so notes and paths never warn."""
     body = _strip({k: v for k, v in profile.items() if k != "paths"})
-    return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()[:12]
+    return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                                     default=str).encode()).hexdigest()[:12]
 
 
 @functools.lru_cache(maxsize=4)

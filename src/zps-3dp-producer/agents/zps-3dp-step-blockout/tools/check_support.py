@@ -1,8 +1,10 @@
 """Every `tag: roof` part has another part touching its bottom, within 1 cm. Plain Python, bbox only.
 
 Usage: python3 tools/check_support.py --work <dir> [--out <json>]
-A part touches the roof bottom when its z span reaches the roof's bottom plane (±1 cm) and its
-footprint overlaps the roof's. Bbox only: can miss a small gap, never reports a false one.
+A part touches the roof bottom when it rises from below to the roof's bottom plane (top within 1 cm
+of it or above, bottom more than 1 cm below it) and its footprint overlaps the roof's. A part level
+with the roof, such as a second roof beside it, does not hold it up. Bbox only: can miss a small gap,
+never reports a false one.
 No roof tag: overall not_checked.
 Writes <dir>/review/checks/support.json. Exit 0 pass/not_checked, 1 fail, 2 error.
 """
@@ -19,7 +21,7 @@ TOUCH = 0.01
 
 def touches(o, roof):
     z = roof["bbox_min"][2]
-    span = o["bbox_min"][2] <= z + TOUCH and o["bbox_max"][2] >= z - TOUCH
+    span = o["bbox_min"][2] < z - TOUCH <= o["bbox_max"][2]
     overlap = all(min(o["bbox_max"][a], roof["bbox_max"][a]) > max(o["bbox_min"][a], roof["bbox_min"][a]) for a in (0, 1))
     return span and overlap
 

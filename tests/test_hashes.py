@@ -44,6 +44,20 @@ def test_profile_hash_ignores_paths_and_underscore_keys_so_editing_notes_or_path
     assert hashes.digest(PROFILE | {"has_map": True}) != PROFILE_HASH
 
 
+def test_an_unquoted_yaml_date_in_the_profile_hashes_like_its_text_instead_of_crashing_the_brief():
+    import datetime as dt
+    assert hashes.digest(PROFILE | {"start": dt.date(2026, 11, 9)}) == hashes.digest(PROFILE | {"start": "2026-11-09"})
+
+
+def test_tree_hash_skips_dot_files_so_finder_metadata_never_flags_an_edit(tmp_path):
+    (tmp_path / "part_graph.json").write_text("{}", encoding="utf-8")
+    before = hashes.tree_hash(tmp_path)
+    (tmp_path / ".DS_Store").write_bytes(b"\0finder")
+    (tmp_path / "review").mkdir()
+    (tmp_path / "review/.DS_Store").write_bytes(b"\0finder")
+    assert hashes.tree_hash(tmp_path) == before
+
+
 @pytest.mark.parametrize("profile, error", [
     (None, "chưa có production/PROJECT-PROFILE.yaml: nạp skill zps-3dp-project-setup"),
     (PROFILE | {"approvals": {"blockout": "human"}},
@@ -109,7 +123,7 @@ def test_a_version_built_from_an_older_blockout_is_labelled_stale_without_the_pr
     assert flow.st["stale"] == {"views_front v1": "blockout v2"}
     flow.work()
     (flow.v(3) / "final/part_graph.json").write_text("v3", encoding="utf-8")
-    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", prior=["- H1: resolved | evidence: clay_front"])
     flow.human("approve")
     assert (flow.st["approved"], flow.st["stale"]) == ({"blockout": 3}, {"views_front v1": "blockout v2"})
 
@@ -119,7 +133,7 @@ def test_reapproving_identical_content_is_not_stale_because_inputs_compare_conte
     flow.work()
     flow.human("redo", "thử lại", "blockout")
     flow.work()
-    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", prior=["- H1: resolved | evidence: clay_front"])
     flow.human("approve")
     assert (flow.st["approved"], flow.st["stale"]) == ({"blockout": 3}, {})
 
