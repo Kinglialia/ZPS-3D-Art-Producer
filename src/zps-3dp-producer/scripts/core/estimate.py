@@ -35,7 +35,8 @@ def batch_line(n: int, meshy: bool) -> str | None:
 
 
 def log_asset(st: dict):
-    """On DUYỆT 2: minutes since the asset was created, Meshy credits from its budget files, tris of the final GLB."""
+    """On DUYỆT 2: minutes since the asset was created, Meshy credits from its budget files, tris of the final GLB.
+    A later DUYỆT 2 of the same asset replaces its record; the kit log only appends."""
     start = dt.datetime.strptime(st["created"], "%Y-%m-%d %H:%M")
     minutes = max(1, round((dt.datetime.now() - start).total_seconds() / 60))
     credits = sum(json.loads(p.read_text(encoding="utf-8"))["used_credits"]
@@ -48,6 +49,18 @@ def log_asset(st: dict):
         tris = None
     args = ["log", "--project", project(), "--method", METHOD, "--minutes", str(minutes), "--credits", f"{credits:g}",
             "--asset", st["id"], *(["--tris", str(tris)] if tris else [])]
+    recs = ROOT.resolve().parent / ".zps-art" / "estimates.jsonl"
+    if recs.is_file():
+        keep = [l for l in recs.read_text(encoding="utf-8").splitlines() if not mine(l, st["id"])]
+        recs.write_text("".join(l + "\n" for l in keep), encoding="utf-8")
     r = subprocess.run([sys.executable, str(ESTIMATE), *args], capture_output=True, text=True)
     ledger(f"{st['id']} · estimate.py log {minutes} phút, {credits:g} credit, {tris} tris"
            + ("" if r.returncode == 0 else f" · lỗi: {(r.stderr.strip().splitlines() or ['?'])[-1][:120]}"))
+
+
+def mine(line: str, aid: str) -> bool:
+    try:
+        r = json.loads(line)
+    except ValueError:
+        return False
+    return isinstance(r, dict) and r.get("asset") == aid and r.get("method") == METHOD

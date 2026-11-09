@@ -258,3 +258,18 @@ def test_every_texture_brief_stays_under_the_token_budget_without_the_install_an
     sizes = {k: len(v["text"].replace(strip[0], "").replace(strip[1], "").encode()) for k, v in flow.items()
              if isinstance(v, dict) and v.get("text") and k.startswith("t")}
     assert len(sizes) == 7 and max(sizes.values()) < BRIEF_MAX, sizes
+
+
+def test_a_second_duyet_2_of_one_asset_replaces_its_estimate_record_so_the_project_median_counts_it_once(tmp_path):
+    f = to_texture(tmp_path)
+    for k in (1, 2):
+        f.work(f"t{k}")
+        f.review(f"t{k}", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better" if k == 2 else None,
+                 prior=["- H1: resolved | evidence: lit_34_front.png"] if k == 2 else ())
+        f.assemble(f"a{k}")
+        f.human(f"approve a{k}", "đạt", "--action", "approve")
+        if k == 1:
+            f.human("redo texture", "mái tối", "--action", "redo", "--step", "texture")
+    assert f.st()["state"] == "done"
+    rec = [json.loads(l) for l in (tmp_path / ".zps-art/estimates.jsonl").read_text().splitlines()]
+    assert [r["asset"] for r in rec] == [AID]
