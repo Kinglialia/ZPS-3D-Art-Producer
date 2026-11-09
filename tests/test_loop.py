@@ -387,7 +387,7 @@ def test_redo_of_an_unreviewed_version_files_the_user_text_as_H1_so_the_next_rev
     flow.work()
     rb = flow.text(flow.brief())
     assert "- H1: ? | evidence: ? | acceptance: đạt yêu cầu của người dùng: mái cao hơn" in rb
-    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass",
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass", compare="H1=better",
                 prior=["- H1: resolved | evidence: clay_front"])
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 1, "fix_base": 1, "offer": 2, "label": "",
                              "note": "duyệt blockout v2"}
@@ -406,7 +406,8 @@ def test_send_back_is_a_major_finding_and_a_reoffer_of_the_same_version_takes_a_
                     "acceptance": "đạt yêu cầu của người dùng: mái thấp quá"}}
     for _ in range(2):
         flow.work()
-        flow.review(counts=counts(major=1), top_fix="structure: H1", rubric="mass=fail", prior=["- H1: open"])
+        flow.review(counts=counts(major=1), top_fix="structure: H1", rubric="mass=fail", compare="H1=same",
+                    prior=["- H1: open"])
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 2, "fix_base": 2, "offer": 2, "label": "chưa đạt",
                              "note": "không tiến bộ ở vòng 2; còn mở: H1"}
     assert flow.human("approve", "giữ v2") == (

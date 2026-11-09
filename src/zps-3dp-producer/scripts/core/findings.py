@@ -57,6 +57,14 @@ def top_fix_kinds(step: dict) -> list[str]:
     return [k for k in step["top_fix"] if k not in NOTE] + ["need_evidence"]
 
 
+def compare_ids(base: dict | None) -> list[str]:
+    tf = (base or {}).get("top_fix")
+    if tf and tf["kind"] == "need_evidence":
+        return []
+    ids = list(tf["ids"]) if tf else []
+    return ids + [i for i in open_of(base) if i.startswith("H") and i not in ids]
+
+
 def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[str]]:
     errs = []
     fs = {i: dict(f) for i, f in (base or {}).get("findings", {}).items()}
@@ -70,12 +78,12 @@ def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[s
         if i in prior:
             fs[i] |= {"status": prior[i], "last_v": n}
     tf = (base or {}).get("top_fix")
-    need = tf["ids"] if tf and tf["kind"] != "need_evidence" else []
+    need = compare_ids(base)
     if miss := [i for i in need if i not in rv["compare"]]:
         errs.append("COMPARE thiếu " + ", ".join(miss))
     for i, c in rv["compare"].items():
         if i not in need:
-            errs.append(f"COMPARE {i}: không có trong TOP_FIX vòng trước")
+            errs.append(f"COMPARE {i}: không có trong TOP_FIX vòng trước hay feedback của người dùng")
         elif prior.get(i) == "resolved" and c != "better":
             errs.append(f"{i}: resolved cần COMPARE better")
         elif c == "worse" and prior.get(i) != "regressed":

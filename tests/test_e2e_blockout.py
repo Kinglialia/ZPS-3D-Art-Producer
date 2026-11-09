@@ -128,7 +128,7 @@ def flow(tmp_path_factory):
     f.save("redo", f.p("feedback", AID, "mái chìa thêm 10 cm", "--action", "redo"))
     f.brief("v4 brief")
     f.work("v4", fixed=(3, 4))
-    f.review("v4", verdict="PASS", counts=counts(0), top_fix=None, compare="F3=better; F4=better",
+    f.review("v4", verdict="PASS", counts=counts(0), top_fix=None, compare="F3=better; F4=better; H1=better",
              rubric="concept_match=pass; scale=pass", prior=resolved(3, 4) + ["- H1: resolved | evidence: clay_front"])
     f.save("approve", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("approve again", f.p("feedback", AID, "đạt", "--action", "approve"))
@@ -281,7 +281,7 @@ def test_redo_carries_the_open_findings_of_the_offered_version_into_the_new_roun
     assert f"7. Bản gốc: `{V}2/`" in text and "Đây là vòng sửa 1." in text
     assert "8. Ưu tiên 1, feedback của người dùng: sửa `H1`" in text
     assert text.index("`H1`") < text.index("Sau đó: `TOP_FIX: param: F3, F4` của reviewer.")
-    assert "\nCOMPARE: F3=?; F4=?\n" in review and f"- Bản gốc v2: ảnh cùng góc `{V}2/final/`" in review
+    assert "\nCOMPARE: F3=?; F4=?; H1=?\n" in review and f"- Bản gốc v2: ảnh cùng góc `{V}2/final/`" in review
     assert "\nPRIOR:\n- F3: ? | evidence: ? | acceptance: đỉnh mái 3.2 m trên clay_front\n- F4: ? |" in review
     assert "\n- H1: ? | evidence: ? | acceptance: đạt yêu cầu của người dùng: mái chìa thêm 10 cm\n" in review
     assert head(flow["findings"][4]) == {"version": 4, "base": 2, "top_fix": None, "pick": None, "next_id": 5}

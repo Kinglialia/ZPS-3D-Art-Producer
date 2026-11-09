@@ -123,7 +123,7 @@ def test_a_version_built_from_an_older_blockout_is_labelled_stale_without_the_pr
     assert flow.st["stale"] == {"views_front v1": "blockout v2"}
     flow.work()
     (flow.v(3) / "final/part_graph.json").write_text("v3", encoding="utf-8")
-    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", prior=["- H1: resolved | evidence: clay_front"])
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="H1=better", prior=["- H1: resolved | evidence: clay_front"])
     flow.human("approve")
     assert (flow.st["approved"], flow.st["stale"]) == ({"blockout": 3}, {"views_front v1": "blockout v2"})
 
@@ -133,7 +133,7 @@ def test_reapproving_identical_content_is_not_stale_because_inputs_compare_conte
     flow.work()
     flow.human("redo", "thử lại", "blockout")
     flow.work()
-    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", prior=["- H1: resolved | evidence: clay_front"])
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="H1=better", prior=["- H1: resolved | evidence: clay_front"])
     flow.human("approve")
     assert (flow.st["approved"], flow.st["stale"]) == ({"blockout": 3}, {})
 

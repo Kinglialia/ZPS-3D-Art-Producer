@@ -145,7 +145,7 @@ def review_brief(cfg, st, step, n) -> str:
     base = findings.load(aid, sid, m)
     op = findings.open_of(base)
     tf = (base or {}).get("top_fix")
-    cmp_ids = tf["ids"] if tf and tf["kind"] != "need_evidence" else []
+    cmp_ids = findings.compare_ids(base)
     pick = bool(tf and tf["kind"] == "param")
     nxt = (base or {}).get("next_id", 1)
     tie = [k for k in step["top_fix"] if k in findings.TIE_FIRST]
