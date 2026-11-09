@@ -1,6 +1,7 @@
 asset: pilot-house
 type: building
 tier: standard
+view: front
 texture_res: null
 tris_max: null
 scale_overrides:
@@ -8,6 +9,9 @@ scale_overrides:
 symmetric: {left_right: true, front_back: false}
 size_m: {w: 4, d: 4, h: 3.7}
 hidden_sides:
-  - "mặt sau: tường trơn"
+  back: "tường trơn"
+  left: "tường trơn"
+  right: "tường trơn"
+  top: "mái như mặt trước"
 real_texture_only_notes:
   - "real: cửa nhô 5 cm"

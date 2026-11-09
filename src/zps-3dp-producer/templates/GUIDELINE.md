@@ -20,8 +20,8 @@ Tên file là quy ước bắt buộc. Thiếu một file hoặc sai tên thì `
 
 | File | Nội dung |
 |---|---|
-| `concept_albedo.png` | Concept màu đã duyệt |
-| `concept_shadow.png` | Concept có bóng, chỉ để đọc khối |
+| `concept_albedo.png` | Concept màu đã duyệt. Nền phẳng một màu, cạnh dài ≥ 1024 px |
+| `concept_shadow.png` | Concept có bóng, chỉ để đọc khối. Trùng khung với `concept_albedo.png` |
 | `asset-card.yaml` | Thẻ asset, là concept brief. Mẫu ở dưới |
 | `<id>.material.md` | Material handoff: mỗi vật liệu một mã cố định. Hai vùng khác màu hoặc chất liệu thì hai mã |
 | `<id>.layout.md` | Chỉ khi profile có `has_map: true`. MapLayout xuất, một file cho mỗi asset |
@@ -31,14 +31,19 @@ Mẫu `asset-card.yaml` (ví dụ `05-warehouse`). `null` nghĩa là để trố
 asset: 05-warehouse            # bắt buộc. Đúng tên thư mục
 type: building                 # bắt buộc. building | prop | tree | rock. character, creature: v1 chưa hỗ trợ
 tier: standard                 # bắt buộc. hero | standard | background. Hạng chỉ quyết định trần tris
+view: front                    # bắt buộc. Góc vẽ concept: front | '34' | game_camera
 texture_res: null              # null = 2048. Hoặc số nguyên
 tris_max: null                 # null = theo hạng. Hoặc số nguyên
+bevel: null                    # null = theo profile. none | toon: bo cạnh riêng asset này
 scale_overrides:               # [] = dùng thước của profile. Ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
 symmetric: {left_right: true, front_back: true}   # bắt buộc
 size_m: {w: 12, d: 8, h: 6}    # mét. Bắt buộc khi profile có has_map: false. Khi has_map: true thì null
-hidden_sides:                  # bắt buộc: danh sách dòng, hoặc theo mặt {back, left, right, top, bottom, front}. Chưa rõ thì ghi "chưa biết"
-  - "mặt sau: tường trơn, chưa biết cửa"
+hidden_sides:                  # bắt buộc, đủ 4 mặt. Chưa rõ thì ghi đúng chữ "chưa biết"
+  back: "tường trơn, chưa biết cửa"
+  left: "chưa biết"
+  right: "chưa biết"
+  top: "mái ngói như mặt trước"
 real_texture_only_notes: []    # bắt buộc, có thể rỗng. Chi tiết bắt buộc dựng khối (real) hoặc chỉ vẽ texture (texture_only)
 ```
 

@@ -13,6 +13,7 @@ import yaml
 PRESETS = Path(os.environ.get("PRODUCER_PRESETS") or Path(__file__).resolve().parent.parent / "presets")
 FORBIDDEN = ("approvals", "review_board")
 LIGHT = ("unlit_flat", "painted_top_light")
+BEVELS = ("none", "toon")
 REQUIRED = ("project", "preset", "paths", "has_map", "pilot_asset", "scale_refs", "hidden_side_rules", "style",
             "texture_simple")
 
@@ -94,6 +95,8 @@ def check(path: Path, presets: Path = PRESETS) -> list[str]:
             bad("style.top_vs_side_L", "số")
         if style.get("view_bg") is not None and not is_str(style["view_bg"]):
             bad("style.view_bg", "chuỗi hoặc null")
+        if "bevel" in style and style["bevel"] not in BEVELS:
+            bad("style.bevel", " | ".join(BEVELS))
     if (ts := sub("texture_simple", ("max_materials", "max_color_clusters"))) is not None:
         for f in ("max_materials", "max_color_clusters"):
             if f in ts and not is_pos_int(ts[f]):

@@ -16,6 +16,7 @@ style:
   light_convention: unlit_flat               # unlit_flat | painted_top_light
   top_vs_side_L: 0
   view_bg: null                              # null = pick_bg.py tự chọn
+  bevel: none                                # none | toon: bo cạnh mặc định của dự án. Thẻ asset có bevel thì thẻ thắng
 texture_simple:
   max_materials: 2
   max_color_clusters: 6

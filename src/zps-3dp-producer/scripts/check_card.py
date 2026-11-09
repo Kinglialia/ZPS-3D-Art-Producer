@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """Kiểm thư mục `_approved/<id>/`: `check_card.py <dir> [--profile PROJECT-PROFILE.yaml]`.
-Mỗi lỗi một dòng, thoát 1 nếu có lỗi. Không có --profile thì không biết has_map: bỏ qua size_m bắt buộc và layout.md."""
+Mỗi lỗi một dòng, thoát 1 nếu có lỗi. Không có --profile thì không biết has_map: bỏ qua size_m bắt buộc và layout.md.
+Cảnh báo in sau lỗi, mỗi dòng bắt đầu bằng "cảnh báo:", không đổi mã thoát."""
 from __future__ import annotations
 
 import argparse
 import sys
+import unicodedata
 from pathlib import Path
+
+import numpy as np
+from PIL import Image
 
 from check_profile import is_num, is_pos_int, is_str, load_yaml
 
 TYPES = ("building", "prop", "tree", "rock")
 UNSUPPORTED = ("character", "creature")
 TIERS = ("hero", "standard", "background")
-REQUIRED = ("asset", "type", "tier", "symmetric", "hidden_sides", "real_texture_only_notes")
+REQUIRED = ("asset", "type", "tier", "view", "symmetric", "hidden_sides", "real_texture_only_notes")
 CARD = "asset-card.yaml"
-SIDES = {"back", "left", "right", "top", "bottom", "front"}
+SIDES = ("back", "left", "right", "top")
+VIEWS = ("front", "34", "game_camera")
+BEVELS = ("none", "toon")
+IMAGES = ("concept_albedo.png", "concept_shadow.png")
+MIN_EDGE = 1024
+BORDER_PX, BORDER_TOL, BORDER_OFF_MAX = 4, 12, 0.02
 
 
 def required_files(aid: str, has_map: bool | None) -> list[str]:
@@ -22,12 +32,35 @@ def required_files(aid: str, has_map: bool | None) -> list[str]:
         [f"{aid}.layout.md"] if has_map else [])
 
 
+def present(f: Path) -> bool:
+    return f.is_file() and f.stat().st_size > 0
+
+
+def image_errors(d: Path) -> list[tuple[str, str]]:
+    sizes = {}
+    for name in IMAGES:
+        if present(d / name):
+            try:
+                with Image.open(d / name) as im:
+                    sizes[name] = im.size
+            except OSError:
+                return [("files", f"ảnh {name}: không đọc được")]
+    if len(sizes) < 2:
+        return []
+    (a, sa), (b, sb) = sizes.items()
+    if sa != sb:
+        return [("files", f"ảnh concept: {a} {sa[0]}x{sa[1]} khác {b} {sb[0]}x{sb[1]}, cần trùng khung")]
+    if max(sa) < MIN_EDGE:
+        return [("files", f"ảnh concept: cạnh dài {max(sa)} px, cần ≥ {MIN_EDGE} px")]
+    return []
+
+
 def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     errs: list[tuple[str, str]] = []
     for name in required_files(d.name, has_map):
-        f = d / name
-        if not (f.is_file() and f.stat().st_size > 0):
+        if not present(d / name):
             errs.append(("files", f"thiếu file {name}"))
+    errs += image_errors(d)
     if any(m == f"thiếu file {CARD}" for _, m in errs):
         return errs
     try:
@@ -50,6 +83,11 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
             bad("type", f"'{c['type']}' ({' | '.join(TYPES)})")
     if "tier" in c and c["tier"] not in TIERS:
         bad("tier", f"'{c['tier']}' ({' | '.join(TIERS)})")
+    if "view" in c and not (isinstance(c["view"], (str, int)) and not isinstance(c["view"], bool)
+                            and str(c["view"]) in VIEWS):
+        bad("view", f"'{c['view']}' ({' | '.join(VIEWS)})")
+    if c.get("bevel") is not None and c["bevel"] not in BEVELS:
+        bad("bevel", f"'{c['bevel']}' (null | {' | '.join(BEVELS)})")
     for k in ("texture_res", "tris_max"):
         if c.get(k) is not None and not is_pos_int(c[k]):
             bad(k, "cần số nguyên > 0 hoặc null")
@@ -65,11 +103,10 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
             bad("symmetric", "cần {left_right, front_back} là true | false")
     if "hidden_sides" in c:
         h = c["hidden_sides"]
-        ok_list = isinstance(h, list) and h and all(is_str(x) for x in h)
-        ok_map = isinstance(h, dict) and h and set(h) <= SIDES and all(is_str(x) for x in h.values())
-        if not (ok_list or ok_map):
-            bad("hidden_sides", "cần danh sách chuỗi, hoặc {back|left|right|top|bottom|front: chuỗi}, "
-                "ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)")
+        if not (isinstance(h, dict) and set(h) == set(SIDES) and all(is_str(x) for x in h.values())):
+            missing = [s for s in SIDES if s not in h] if isinstance(h, dict) else []
+            bad("hidden_sides", "cần đủ 4 mặt {back, left, right, top}, mỗi mặt một chuỗi (chưa biết thì ghi "
+                "'chưa biết')" + (f"; thiếu: {', '.join(missing)}" if missing else ""))
     if "real_texture_only_notes" in c:
         n = c["real_texture_only_notes"]
         if not (isinstance(n, list) and all(is_str(x) for x in n)):
@@ -81,6 +118,33 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     elif not (isinstance(sm, dict) and set(sm) == {"w", "d", "h"} and all(is_num(v) and v > 0 for v in sm.values())):
         bad("size_m", "cần {w, d, h} là số mét > 0")
     return errs
+
+
+def flat_background(f: Path) -> bool:
+    with Image.open(f) as im:
+        a = np.asarray(im.convert("RGBA"), float)
+    k = BORDER_PX
+    ring = np.concatenate([a[:k].reshape(-1, 4), a[-k:].reshape(-1, 4), a[:, :k].reshape(-1, 4), a[:, -k:].reshape(-1, 4)])
+    return (np.abs(ring - np.median(ring, 0)).max(1) > BORDER_TOL).mean() <= BORDER_OFF_MAX
+
+
+def warnings(d: Path) -> list[str]:
+    out = []
+    for name in IMAGES:
+        try:
+            if present(d / name) and not flat_background(d / name):
+                out.append(f"cảnh báo: ảnh {name}: nền viền ảnh không phẳng một màu")
+        except OSError:
+            pass
+    try:
+        c = load_yaml(d / CARD)
+    except (ValueError, FileNotFoundError):
+        return out
+    notes = c.get("real_texture_only_notes") if isinstance(c, dict) else None
+    if isinstance(notes, list) and c.get("bevel") is None and any("bo cạnh" in unicodedata.normalize("NFC", str(n)).lower() for n in notes):
+        out.append("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nhưng bevel trống; "
+                   "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
+    return out
 
 
 def has_map_of(profile: Path) -> bool:
@@ -104,8 +168,10 @@ def main():
             sys.exit(1)
     d = a.dir.resolve()
     errs = check(d, has_map)
+    lines = [m for _, m in errs] + warnings(d)
+    if lines:
+        print("\n".join(lines))
     if errs:
-        print("\n".join(m for _, m in errs))
         sys.exit(1)
 
 

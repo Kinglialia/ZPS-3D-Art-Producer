@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from PIL import Image
 
 S = Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer"
 SCRIPTS = S / "scripts"
@@ -27,13 +28,20 @@ PROFILE = {
     "texture_simple": {"max_materials": 2, "max_color_clusters": 6},
 }
 CARD = {
-    "asset": "05-warehouse", "type": "building", "tier": "standard", "texture_res": None, "tris_max": None,
+    "asset": "05-warehouse", "type": "building", "tier": "standard", "view": "front", "texture_res": None,
+    "tris_max": None,
     "scale_overrides": [{"name": "cửa", "height_m": 1.6}],
     "symmetric": {"left_right": True, "front_back": True},
     "size_m": {"w": 12, "d": 8, "h": 6},
-    "hidden_sides": ["cửa sau: chưa biết"], "real_texture_only_notes": [],
+    "hidden_sides": {"back": "tường trơn, chưa biết cửa", "left": "chưa biết", "right": "chưa biết",
+                     "top": "mái ngói"},
+    "real_texture_only_notes": [],
 }
 FILES = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml", "{id}.material.md"]
+
+
+def png(path: Path, size=(1024, 1024), color=(238, 238, 238)):
+    Image.new("RGB", size, color).save(path)
 
 
 def dump(d: dict) -> str:
@@ -53,6 +61,8 @@ def make_asset(root: Path, aid: str = "05-warehouse", card: dict | None = None, 
             continue
         if n == "asset-card.yaml":
             (d / n).write_text(dump(c), encoding="utf-8")
+        elif n.endswith(".png"):
+            png(d / n)
         else:
             (d / n).write_bytes(b"x")
     return d
@@ -151,7 +161,7 @@ def test_asset_id_must_match_the_folder_name_because_the_id_follows_the_asset_to
     assert messages(d) == ["thẻ: asset sai: '06-smithy' khác tên thư mục '05-warehouse'"]
 
 
-@pytest.mark.parametrize("key", ["asset", "type", "tier", "symmetric", "hidden_sides", "real_texture_only_notes"])
+@pytest.mark.parametrize("key", ["asset", "type", "tier", "view", "symmetric", "hidden_sides", "real_texture_only_notes"])
 def test_required_card_field_missing_is_reported_by_key(tmp_path, key):
     c = copy.deepcopy(CARD)
     del c[key]
@@ -167,13 +177,70 @@ def test_optional_card_field_may_be_absent_and_means_default(tmp_path, key):
     assert messages(d, has_map=None) == []
 
 
-HIDDEN_ERR = ("thẻ: hidden_sides sai: cần danh sách chuỗi, hoặc {back|left|right|top|bottom|front: chuỗi}, "
-              "ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)")
+HIDDEN_ERR = "thẻ: hidden_sides sai: cần đủ 4 mặt {back, left, right, top}, mỗi mặt một chuỗi (chưa biết thì ghi 'chưa biết')"
+SIDES4 = {"back": "gỗ ghép, hai bản lề", "left": "chưa biết", "right": "chưa biết", "top": "nắp vòm, hai đai da"}
 
 
-def test_card_with_hidden_sides_per_side_is_accepted_because_concept_artists_describe_each_unseen_face(tmp_path):
-    card = mutated(hidden_sides={"back": "gỗ ghép, hai bản lề", "top": "nắp vòm, hai đai da"})
-    assert messages(make_asset(tmp_path, card=card)) == []
+def test_hidden_sides_names_the_unseen_faces_it_lacks_so_blockout_never_guesses_a_side_d27_6(tmp_path):
+    card = mutated(hidden_sides={"back": "gỗ ghép", "top": "nắp vòm"})
+    assert messages(make_asset(tmp_path, card=card)) == [HIDDEN_ERR + "; thiếu: left, right"]
+
+
+@pytest.mark.parametrize("view", ["front", "34", 34, "game_camera"])
+def test_card_view_takes_the_three_concept_angles_and_an_unquoted_34_d27_6(tmp_path, view):
+    assert messages(make_asset(tmp_path, card=mutated(view=view))) == []
+
+
+@pytest.mark.parametrize("bevel", [None, "none", "toon"])
+def test_card_bevel_may_be_empty_none_or_toon_d27_10(tmp_path, bevel):
+    assert messages(make_asset(tmp_path, card=mutated(bevel=bevel))) == []
+
+
+def concept_pair(tmp_path, albedo, shadow):
+    d = make_asset(tmp_path)
+    png(d / "concept_albedo.png", albedo)
+    png(d / "concept_shadow.png", shadow)
+    return d
+
+
+def test_concept_images_of_different_frames_are_refused_because_shadow_is_read_over_albedo_d27_6(tmp_path):
+    d = concept_pair(tmp_path, (1254, 1254), (1254, 1000))
+    assert check_card.check(d, False) == [
+        ("files", "ảnh concept: concept_albedo.png 1254x1254 khác concept_shadow.png 1254x1000, cần trùng khung")]
+
+
+def test_concept_images_with_a_long_edge_under_1024_px_are_refused_d27_6(tmp_path):
+    assert messages(concept_pair(tmp_path, (1023, 600), (1023, 600))) == ["ảnh concept: cạnh dài 1023 px, cần ≥ 1024 px"]
+    assert messages(concept_pair(tmp_path / "ok", (1024, 600), (1024, 600))) == []
+
+
+def test_a_concept_file_that_is_not_an_image_is_refused(tmp_path):
+    d = make_asset(tmp_path)
+    (d / "concept_shadow.png").write_bytes(b"x")
+    assert messages(d) == ["ảnh concept_shadow.png: không đọc được"]
+
+
+def card_cli(d):
+    r = subprocess.run([sys.executable, str(SCRIPTS / "check_card.py"), str(d)], capture_output=True, text=True)
+    return r.returncode, r.stdout.splitlines()
+
+
+def test_card_cli_warns_without_failing_when_the_concept_background_is_not_one_flat_colour_d27_6(tmp_path):
+    d = make_asset(tmp_path)
+    im = Image.new("RGB", (1024, 1024), (238, 238, 238))
+    im.paste((40, 90, 160), (0, 0, 1024, 300))
+    im.save(d / "concept_albedo.png")
+    assert card_cli(d) == (0, ["cảnh báo: ảnh concept_albedo.png: nền viền ảnh không phẳng một màu"])
+
+
+BEVEL_WARN = ("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nhưng bevel trống; "
+              "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
+
+
+@pytest.mark.parametrize("bevel, out", [(None, [BEVEL_WARN]), ("toon", []), ("none", [])])
+def test_card_cli_warns_when_a_note_asks_to_round_edges_but_the_bevel_field_is_empty_d27_10(tmp_path, bevel, out):
+    card = mutated(bevel=bevel, real_texture_only_notes=["real: thân hộp, bo cạnh toon."])
+    assert card_cli(make_asset(tmp_path, card=card)) == (0, out)
 
 
 @pytest.mark.parametrize("patch,expected", [
@@ -183,11 +250,13 @@ def test_card_with_hidden_sides_per_side_is_accepted_because_concept_artists_des
     ({"tris_max": 1.5}, "thẻ: tris_max sai: cần số nguyên > 0 hoặc null"),
     ({"symmetric": {"left_right": True}}, "thẻ: symmetric sai: cần {left_right, front_back} là true | false"),
     ({"symmetric": {"left_right": "yes", "front_back": True}}, "thẻ: symmetric sai: cần {left_right, front_back} là true | false"),
-    ({"hidden_sides": []}, HIDDEN_ERR),
+    ({"hidden_sides": ["mặt sau: tường trơn"]}, HIDDEN_ERR),
     ({"hidden_sides": "tường trơn"}, HIDDEN_ERR),
-    ({"hidden_sides": {}}, HIDDEN_ERR),
-    ({"hidden_sides": {"back": ""}}, HIDDEN_ERR),
-    ({"hidden_sides": {"inside": "trống"}}, HIDDEN_ERR),
+    ({"hidden_sides": {**SIDES4, "left": ""}}, HIDDEN_ERR),
+    ({"hidden_sides": {**SIDES4, "bottom": "trống"}}, HIDDEN_ERR),
+    ({"view": "side"}, "thẻ: view sai: 'side' (front | 34 | game_camera)"),
+    ({"view": True}, "thẻ: view sai: 'True' (front | 34 | game_camera)"),
+    ({"bevel": "soft"}, "thẻ: bevel sai: 'soft' (null | none | toon)"),
     ({"real_texture_only_notes": "x"}, "thẻ: real_texture_only_notes sai: cần danh sách chuỗi"),
     ({"scale_overrides": [{"name": "cửa", "height_m": 0}]}, "thẻ: scale_overrides sai: cần danh sách {name, height_m > 0}"),
 ])
@@ -311,11 +380,19 @@ def test_preset_name_with_a_path_is_refused_so_it_cannot_point_outside_the_prese
     ({"style": {"light_convention": "flat", "top_vs_side_L": 0}}, "style.light_convention sai: cần unlit_flat | painted_top_light"),
     ({"style": {"light_convention": "unlit_flat", "top_vs_side_L": "0"}}, "style.top_vs_side_L sai: cần số"),
     ({"style": {"light_convention": "unlit_flat", "top_vs_side_L": 0, "view_bg": 3}}, "style.view_bg sai: cần chuỗi hoặc null"),
+    ({"style": {"light_convention": "unlit_flat", "top_vs_side_L": 0, "bevel": "soft"}}, "style.bevel sai: cần none | toon"),
     ({"texture_simple": {"max_materials": 0, "max_color_clusters": 6}}, "texture_simple.max_materials sai: cần số nguyên > 0"),
     ({"overrides": []}, "overrides sai: cần map"),
 ])
 def test_profile_field_with_a_wrong_type_or_value_is_reported(tmp_path, presets, patch, expected):
     assert prof_errors(tmp_path, presets, copy.deepcopy(PROFILE) | patch) == [expected]
+
+
+@pytest.mark.parametrize("bevel", ["none", "toon"])
+def test_profile_style_bevel_takes_none_or_toon_so_the_project_default_reaches_3d_artist_d27_10(tmp_path, presets, bevel):
+    p = copy.deepcopy(PROFILE)
+    p["style"]["bevel"] = bevel
+    assert prof_errors(tmp_path, presets, p) == []
 
 
 def test_profile_that_is_not_a_map_or_not_yaml_gives_one_error(tmp_path, presets):
@@ -356,7 +433,9 @@ def test_templates_pass_their_own_checks_so_a_copy_of_the_template_is_a_valid_st
     d = tmp_path / "05-warehouse"
     d.mkdir()
     (d / "asset-card.yaml").write_text((S / "templates/asset-card.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-    for n in ("concept_albedo.png", "concept_shadow.png", "05-warehouse.material.md", "05-warehouse.layout.md"):
+    for n in ("concept_albedo.png", "concept_shadow.png"):
+        png(d / n)
+    for n in ("05-warehouse.material.md", "05-warehouse.layout.md"):
         (d / n).write_bytes(b"x")
     assert messages(d, has_map=True) == []
     assert messages(d, has_map=False) == []
