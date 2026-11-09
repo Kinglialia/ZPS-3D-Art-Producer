@@ -14,6 +14,7 @@ UNSUPPORTED = ("character", "creature")
 TIERS = ("hero", "standard", "background")
 REQUIRED = ("asset", "type", "tier", "symmetric", "hidden_sides", "real_texture_only_notes")
 CARD = "asset-card.yaml"
+SIDES = {"back", "left", "right", "top", "bottom", "front"}
 
 
 def required_files(aid: str, has_map: bool | None) -> list[str]:
@@ -64,8 +65,11 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
             bad("symmetric", "cần {left_right, front_back} là true | false")
     if "hidden_sides" in c:
         h = c["hidden_sides"]
-        if not (isinstance(h, list) and h and all(is_str(x) for x in h)):
-            bad("hidden_sides", "cần danh sách chuỗi, ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)")
+        ok_list = isinstance(h, list) and h and all(is_str(x) for x in h)
+        ok_map = isinstance(h, dict) and h and set(h) <= SIDES and all(is_str(x) for x in h.values())
+        if not (ok_list or ok_map):
+            bad("hidden_sides", "cần danh sách chuỗi, hoặc {back|left|right|top|bottom|front: chuỗi}, "
+                "ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)")
     if "real_texture_only_notes" in c:
         n = c["real_texture_only_notes"]
         if not (isinstance(n, list) and all(is_str(x) for x in n)):

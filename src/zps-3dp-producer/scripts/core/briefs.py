@@ -57,7 +57,10 @@ def worker_brief(cfg, st, i, step, n, fix: bool, ph: str, pf: dict | None, prese
     ]
     k = 5
     if st.get("concept_dir"):
-        lines.append(f"{k}. Concept đã duyệt: `{st['concept_dir']}` — xem mọi ảnh trong thư mục, kể cả thư mục con.")
+        from check_card import required_files
+        names = ", ".join(f"`{x}`" for x in required_files(aid, bool((pf or {}).get("has_map"))))
+        lines.append(f"{k}. Concept đã duyệt trong `{st['concept_dir']}`: chỉ đọc {names}. "
+                     "Bỏ qua file và thư mục khác (bản nháp cũ).")
         k += 1
     lines.append(f"{k}. {ad_text(cfg, {step['id']})}")
     k += 1

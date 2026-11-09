@@ -196,6 +196,14 @@ def test_the_brief_records_the_profile_hash_that_ingest_compares_with_the_worker
                                         "Tiếp: giao reviewer → `brief pilot-house`\n")
 
 
+def test_the_worker_brief_names_only_the_handoff_files_so_old_drafts_beside_them_are_never_read(flow):
+    line = [l for l in flow["v1 brief"]["text"].splitlines() if "Concept đã duyệt" in l]
+    assert len(line) == 1
+    assert line[0].endswith(": chỉ đọc `concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`, "
+                            "`pilot-house.material.md`. Bỏ qua file và thư mục khác (bản nháp cũ).")
+    assert "kể cả thư mục con" not in flow["v1 brief"]["text"]
+
+
 def test_the_worker_brief_gives_the_pid_line_the_agent_file_tells_the_worker_to_use(flow):
     agent = (AGENT / "zps-3dp-step-blockout.md").read_text(encoding="utf-8")
     assert "Mọi lệnh `blender` chạy qua dòng PID của brief: `<lệnh> & echo $! > <file .pid>; wait $!; rm -f <file .pid>`" in agent

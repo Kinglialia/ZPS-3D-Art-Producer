@@ -37,7 +37,7 @@ scale_overrides:               # [] = dùng thước của profile. Ví dụ c�
   - {name: cửa, height_m: 1.6}
 symmetric: {left_right: true, front_back: true}   # bắt buộc
 size_m: {w: 12, d: 8, h: 6}    # mét. Bắt buộc khi profile có has_map: false. Khi has_map: true thì null
-hidden_sides:                  # bắt buộc, ít nhất một dòng. Chưa rõ thì ghi "chưa biết"
+hidden_sides:                  # bắt buộc: danh sách dòng, hoặc theo mặt {back, left, right, top, bottom, front}. Chưa rõ thì ghi "chưa biết"
   - "mặt sau: tường trơn, chưa biết cửa"
 real_texture_only_notes: []    # bắt buộc, có thể rỗng. Chi tiết bắt buộc dựng khối (real) hoặc chỉ vẽ texture (texture_only)
 ```

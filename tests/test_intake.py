@@ -167,6 +167,15 @@ def test_optional_card_field_may_be_absent_and_means_default(tmp_path, key):
     assert messages(d, has_map=None) == []
 
 
+HIDDEN_ERR = ("thẻ: hidden_sides sai: cần danh sách chuỗi, hoặc {back|left|right|top|bottom|front: chuỗi}, "
+              "ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)")
+
+
+def test_card_with_hidden_sides_per_side_is_accepted_because_concept_artists_describe_each_unseen_face(tmp_path):
+    card = mutated(hidden_sides={"back": "gỗ ghép, hai bản lề", "top": "nắp vòm, hai đai da"})
+    assert messages(make_asset(tmp_path, card=card)) == []
+
+
 @pytest.mark.parametrize("patch,expected", [
     ({"tier": "epic"}, "thẻ: tier sai: 'epic' (hero | standard | background)"),
     ({"texture_res": "2048"}, "thẻ: texture_res sai: cần số nguyên > 0 hoặc null"),
@@ -174,8 +183,11 @@ def test_optional_card_field_may_be_absent_and_means_default(tmp_path, key):
     ({"tris_max": 1.5}, "thẻ: tris_max sai: cần số nguyên > 0 hoặc null"),
     ({"symmetric": {"left_right": True}}, "thẻ: symmetric sai: cần {left_right, front_back} là true | false"),
     ({"symmetric": {"left_right": "yes", "front_back": True}}, "thẻ: symmetric sai: cần {left_right, front_back} là true | false"),
-    ({"hidden_sides": []}, "thẻ: hidden_sides sai: cần danh sách chuỗi, ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)"),
-    ({"hidden_sides": "tường trơn"}, "thẻ: hidden_sides sai: cần danh sách chuỗi, ít nhất một dòng (ghi 'chưa biết' nếu chưa rõ)"),
+    ({"hidden_sides": []}, HIDDEN_ERR),
+    ({"hidden_sides": "tường trơn"}, HIDDEN_ERR),
+    ({"hidden_sides": {}}, HIDDEN_ERR),
+    ({"hidden_sides": {"back": ""}}, HIDDEN_ERR),
+    ({"hidden_sides": {"inside": "trống"}}, HIDDEN_ERR),
     ({"real_texture_only_notes": "x"}, "thẻ: real_texture_only_notes sai: cần danh sách chuỗi"),
     ({"scale_overrides": [{"name": "cửa", "height_m": 0}]}, "thẻ: scale_overrides sai: cần danh sách {name, height_m > 0}"),
 ])
