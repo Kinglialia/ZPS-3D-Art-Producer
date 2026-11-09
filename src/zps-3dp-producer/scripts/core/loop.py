@@ -394,11 +394,11 @@ def retry(a):
 
 def append_feedback(aid: str, step: str, n: int | None, action: str, text: str):
     tag = f"{step} v{n}" if n else step
-    line = f"- {now()} · {tag} · {action} · {text.strip()}"
+    head = f"- {now()} · {tag} · {action} · "
     with open(ASSETS / aid / "feedback.md", "a", encoding="utf-8") as f:
-        f.write(line + "\n")
+        f.write(head + text.strip() + "\n")
     if action == "redo":
-        current(aid, step, line)
+        current(aid, step, head + " ".join(text.split()))
 
 
 def current(aid: str, step: str, line: str | None = None):

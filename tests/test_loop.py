@@ -537,7 +537,7 @@ def test_review_brief_names_the_rubric_section_of_the_step(flow):
 def current(f) -> list[str]:
     text = (f.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
     rows = text.split("## Hiện hành", 1)[1].split("## Log", 1)[0].splitlines()
-    return [re.sub(r"^- \d{4}-\d\d-\d\d \d\d:\d\d · ", "- ", r) for r in rows if r.startswith("- ")]
+    return [re.sub(r"^- \d{4}-\d\d-\d\d \d\d:\d\d · ", "- ", r) for r in rows if r.strip() and not r.startswith("<!--")]
 
 
 def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_approved_by_its_reviewer(flow):
@@ -548,9 +548,9 @@ def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_
     fb.write_text(fb.read_text(encoding="utf-8").replace("## Log", "- giữ mái ngói đỏ (Producer gộp)\n\n## Log"),
                   encoding="utf-8")
     fix_v1(flow, 1)
-    flow.human("redo", "mái cao hơn")
+    flow.human("redo", "mái cao hơn\nmái đỏ")
     flow.human("note", "chỉ là ghi chú")
-    assert current(flow) == ["- giữ mái ngói đỏ (Producer gộp)", "- blockout v1 · redo · mái cao hơn"]
+    assert current(flow) == ["- giữ mái ngói đỏ (Producer gộp)", "- blockout v1 · redo · mái cao hơn mái đỏ"]
     flow.work()
     flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better; H1=better",
                 prior=["- F1: resolved | evidence: clay_front", "- H1: resolved | evidence: clay_front"])
