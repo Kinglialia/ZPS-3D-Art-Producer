@@ -237,9 +237,11 @@ BEVEL_WARN = ("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nh�
               "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
 
 
+@pytest.mark.parametrize("note", ["real: thân hộp, bo cạnh toon.", "real: cạnh bo toon"])
 @pytest.mark.parametrize("bevel, out", [(None, [BEVEL_WARN]), ("toon", []), ("none", [])])
-def test_card_cli_warns_when_a_note_asks_to_round_edges_but_the_bevel_field_is_empty_d27_10(tmp_path, bevel, out):
-    card = mutated(bevel=bevel, real_texture_only_notes=["real: thân hộp, bo cạnh toon."])
+def test_card_cli_warns_when_a_note_asks_to_round_edges_but_the_bevel_field_is_empty_d27_10(tmp_path, bevel, out, note):
+    # Run 4's card wrote "cạnh bo toon"; both word orders must warn.
+    card = mutated(bevel=bevel, real_texture_only_notes=[note])
     assert card_cli(make_asset(tmp_path, card=card)) == (0, out)
 
 

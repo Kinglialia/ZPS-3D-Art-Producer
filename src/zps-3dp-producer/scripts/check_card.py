@@ -141,7 +141,7 @@ def warnings(d: Path) -> list[str]:
     except (ValueError, FileNotFoundError):
         return out
     notes = c.get("real_texture_only_notes") if isinstance(c, dict) else None
-    if isinstance(notes, list) and c.get("bevel") is None and any("bo cạnh" in unicodedata.normalize("NFC", str(n)).lower() for n in notes):
+    if isinstance(notes, list) and c.get("bevel") is None and any(k in unicodedata.normalize("NFC", str(n)).lower() for n in notes for k in ("bo cạnh", "cạnh bo")):
         out.append("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nhưng bevel trống; "
                    "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
     return out
