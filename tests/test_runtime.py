@@ -94,3 +94,18 @@ def test_a_note_does_not_count_as_an_answer_to_the_offer(flow):  # noqa: F811
     assert "decision" not in flow.st["offer_log"][0]
     assert json.loads((flow.root / f"production/assets/{AID}/status.json").read_text(encoding="utf-8"))["state"] == \
         "waiting_human"
+
+
+def test_redoing_an_approved_step_does_not_answer_the_offer_of_a_later_step(flow):  # noqa: F811
+    from core.state import load_st, save_st
+    flow.work()
+    flow.review(verdict="PASS", counts="blocker=0; major=0; minor=0; preference=0; unclear=0", top_fix=None,
+                rubric="massing=pass")
+    flow.human("approve", "đạt")
+    st = load_st(AID)
+    st |= {"stage": "views_front", "state": "waiting_human", "offer_key": "house-a-views_front-v1-2"}
+    st["offer_log"].append({"key": "house-a-views_front-v1-2", "step": "views_front", "v": 1, "why": "duyệt",
+                            "verdict": "PASS", "at": "2026-11-09 10:00"})
+    save_st(st)
+    flow.human("redo", "mái thấp", "blockout")
+    assert [w.get("decision") for w in flow.st["offer_log"]] == ["approve", None]

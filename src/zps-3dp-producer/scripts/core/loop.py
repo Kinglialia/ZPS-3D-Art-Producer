@@ -451,7 +451,8 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
 
     def decide():
         done[key] = {"action": action, "at": now(), "offer": st.get("offer_key")}
-        if w := next((w for w in st.get("offer_log", []) if w["key"] == st.get("offer_key") and "decision" not in w), None):
+        if w := next((w for w in st.get("offer_log", []) if w["key"] == st.get("offer_key") and w["step"] == target
+                      and "decision" not in w), None):
             w |= {"decision": action, "decided": now()}
 
     def keep():
