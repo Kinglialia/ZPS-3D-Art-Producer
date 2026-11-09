@@ -42,10 +42,13 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
         return ["MODE: VẼ MỚI (profile không có `paths.env_file`: không gọi Meshy)"]
     if st.get("paint_for") == sha[:12]:
         return ["MODE: VẼ MỚI (người dùng chọn cho mesh này: không gọi Meshy)"]
-    if meshy_call.keys() != "key file":
-        return "stuck", "thiếu MESHY_API_KEY trong env_file của profile: người dùng thêm key"
+    try:
+        if meshy_call.keys() != "key file":
+            return "stuck", "thiếu MESHY_API_KEY trong env_file của profile: người dùng thêm key"
+        price = st["meshy_price"] = meshy_call.price(model_glb, style)
+    except meshy_call.Refused as ex:
+        return "stuck", str(ex)
     p = budget_path(aid, sha)
-    price = st["meshy_price"] = meshy_call.price(model_glb, style)
     if not p.is_file():
         spent = [q.name for q in p.parent.glob("budget-*.json") if q != p and read_budget(q)["used_credits"] > 0]
         write_budget(p, {"max_credits": 0 if spent else price, "used_credits": 0})
@@ -55,11 +58,28 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
         ledger(f"{aid} · {STEP} · {p.name}: 1 lần gọi Meshy ({price} credit)")
     b = read_budget(p)
     left = int((b["max_credits"] - b["used_credits"]) // price)
-    pid = rel(ROOT / "pids" / "meshy" / f"{aid}.pid")
+    run = [f"MESHY: {MESHY_CALL}", f"MESHY_ARGS: --asset {aid} --pid-file {rel(ROOT / 'pids' / 'meshy' / f'{aid}.pid')}"]
+    done, resume = paid_calls(st)
     if left <= 0:
-        return [f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy"]
-    return [f"MESHY: {MESHY_CALL}", f"MESHY_ARGS: --asset {aid} --pid-file {pid}",
-            f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)"]
+        return [f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy", *done,
+                *(run if resume else [])]
+    return [*run, f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)", *done]
+
+
+def paid_calls(st: dict) -> tuple[list[str], bool]:
+    """A worker briefed again on the same version: the Meshy calls it already paid, to reuse instead of losing them."""
+    import meshy_call
+    if st["state"] != "running":
+        return [], False
+    out, resume = [], False
+    for c in sorted((vdir(st["id"], STEP, st["versions"][STEP]) / "work" / "meshy").glob("call-*")):
+        if meshy_call.glb_ok(c / "glb.glb"):
+            out.append(f"MESHY_DONE: `{rel(c / 'glb.glb')}` đã trả credit: dùng lại, không gọi lại Meshy")
+        elif tid := meshy_call.task(c).get("task_id"):
+            resume = True
+            out.append(f"MESHY_DONE: `{rel(c)}` task {tid} đã trả credit, chưa có GLB: chạy lại lệnh Meshy với "
+                       f"`--out {rel(c)}`, không tốn thêm credit")
+    return out, resume
 
 
 def ask(st: dict, kind: str, nxt: str, base: int | None = None, new_round: bool = False):
@@ -69,7 +89,7 @@ def ask(st: dict, kind: str, nxt: str, base: int | None = None, new_round: bool 
 
 def ask_regen(st: dict, n: int, from_review: bool, why: str) -> str | None:
     """`TOP_FIX: meshy_regen` or `UNFIXABLE: yes`: the note for waiting_human, or None when there is no Meshy budget."""
-    if not current_budget(st):
+    if not current_budget(st) or st.get("paint_for") == st["locked"]["model"][:12]:
         return None
     if from_review:
         ask(st, "meshy_regen", "fix", base=n, new_round=True)

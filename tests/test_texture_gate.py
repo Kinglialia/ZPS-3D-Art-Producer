@@ -116,3 +116,72 @@ def test_approve_answers_the_mesh_question_although_the_old_texture_version_had_
     assert ("texture v1" in f.st()["decisions"], f.st()["state"]) == (True, "waiting_human")
     out = f.p("feedback", AID, "gọi lại Meshy", "--action", "approve")
     assert out.startswith("pilot-house: mesh_changed: thêm 1 lần gọi Meshy (10 credit)") and f.st()["state"] == "todo"
+
+
+def test_a_meshy_price_check_that_fails_blocks_with_one_line_instead_of_a_traceback(tmp_path):
+    f = to_texture(tmp_path)
+    (tmp_path / "concepts/_approved" / AID / "concept_albedo.png").unlink()
+    f.brief("t1")
+    assert f.cp["t1"]["out"] == (f"pilot-house: texture → blocked trước khi giao. Tiếp: xử lý: gen_api --dry-run: missing "
+                                 f"file {f.st()['concept_dir']}/concept_albedo.png → bổ sung rồi `retry pilot-house`\n")
+
+
+def test_a_key_line_with_export_blocks_texture_with_the_fix_instead_of_saying_the_key_is_missing(tmp_path):
+    f = to_texture(tmp_path, env_line=f"export MESHY_API_KEY={PROJECT_KEY}\n")
+    f.brief("t1")
+    assert f.cp["t1"]["out"] == ("pilot-house: texture → blocked trước khi giao. Tiếp: xử lý: .env có `export "
+                                 "MESHY_API_KEY=`, kit không đọc dòng đó: bỏ chữ `export ` ở đầu dòng → bổ sung rồi "
+                                 "`retry pilot-house`\n")
+    assert budgets(tmp_path) == {}
+
+
+def to_paint(tmp_path):
+    f = to_texture(tmp_path)
+    f.work("t1", meshy="")
+    f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
+    f.work("m2", mesh_size=(1.3, 1, 1))
+    f.review("m2", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",
+             prior=["- H1: resolved | evidence: lit_34_front.png"])
+    f.human("approve m2", "đạt", "--action", "approve")
+    f.brief("gate")
+    f.p("meshy", AID, "paint")
+    return f
+
+
+def test_unfixable_after_the_user_chose_paint_stops_with_the_reason_instead_of_asking_the_meshy_question_again(tmp_path):
+    f = to_paint(tmp_path)
+    before = budgets(tmp_path)
+    f.work("t2", unfixable=True, issues="hỏng")
+    assert f.cp["t2 worker"]["out"] == ("pilot-house: worker DONE → texture/blocked. Tiếp: xử lý: UNFIXABLE ở chế độ VẼ "
+                                        "MỚI: hỏng → bổ sung rồi `retry pilot-house`\n")
+    assert ("ask" in f.st(), budgets(tmp_path)) == (False, before)
+
+
+def test_a_worker_dispatched_again_after_a_paid_call_is_told_to_reuse_its_glb_instead_of_painting_anew(tmp_path):
+    f = to_texture(tmp_path)
+    out = f.brief("t1 brief")
+    f.meshy("t1", (tmp_path / out["report"]).parent, "")
+    f.brief("t1 again brief")
+    t = f.cp["t1 again brief"]["text"].splitlines()
+    assert [l for l in t if l.startswith("MESHY")] == [
+        "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
+        f"MESHY_DONE: `{A}/texture/v1/work/meshy/call-1/glb.glb` đã trả credit: dùng lại, không gọi lại Meshy"]
+
+
+def test_a_paid_task_without_its_glb_is_named_in_the_next_brief_and_resumed_on_its_folder_at_no_extra_credit(tmp_path):
+    f = to_texture(tmp_path)
+    out = f.brief("t1 brief")
+    vd = (tmp_path / out["report"]).parent
+    f.meshy("t1", vd, "poll_fail:3")
+    f.brief("t1 again brief")
+    t = f.cp["t1 again brief"]["text"].splitlines()
+    call = f"{A}/texture/v1/work/meshy/call-1"
+    assert [l for l in t if l.startswith("MESHY")] == [
+        "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
+        f"MESHY_DONE: `{call}` task task-1 đã trả credit, chưa có GLB: chạy lại lệnh Meshy với `--out {call}`, "
+        "không tốn thêm credit",
+        next(l for l in f.cp["t1 brief"]["text"].splitlines() if l.startswith("MESHY: ")),
+        f"MESHY_ARGS: --asset {AID} --pid-file production/pids/meshy/{AID}.pid"]
+    f.meshy("t1 again", vd, "")
+    assert (f.cp["t1 again meshy"]["rc"], list(budgets(tmp_path).values())) == (
+        0, [{"max_credits": 10, "used_credits": 10}])
