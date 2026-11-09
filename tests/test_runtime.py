@@ -49,6 +49,17 @@ def test_one_edition_cannot_write_into_the_other_runtime_folder_during_an_ab_run
     assert not (tmp_path / "production-codex/assets" / AID).exists()
 
 
+@pytest.mark.parametrize("args, out", [(["dashboard"], "dashboard.md"), (["show", AID], "show")])
+def test_dashboard_and_show_write_files_so_they_refuse_the_other_runtime_folder_too(tmp_path, args, out):
+    cli(tmp_path, "init", "--project", "Pilot", "--concepts", "concepts", runtime="codex", prod="production-codex")
+    cli(tmp_path, "new", AID, "--title", "House A", runtime="codex", prod="production-codex")
+    (tmp_path / "production-codex/dashboard.md").unlink(missing_ok=True)
+    err = cli(tmp_path, *args, runtime="claude", prod="production-codex", ok=False)
+    assert err.strip() == ("LỖI: production-codex là thư mục của runtime codex, phiên này là claude: "
+                           "đặt PRODUCER_ROOT=production-claude")
+    assert not (tmp_path / "production-codex" / out).exists()
+
+
 @pytest.mark.parametrize("prod, deliver", [(None, "deliver"), ("production-claude", "deliver-claude"),
                                            ("production-codex", "deliver-codex")])
 def test_each_runtime_compares_with_the_pilot_in_its_own_deliver_folder_d22_10(tmp_path, prod, deliver):

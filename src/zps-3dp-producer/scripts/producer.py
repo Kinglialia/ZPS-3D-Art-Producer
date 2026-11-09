@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 
-UNLOCKED = {"next", "dashboard", "ledger", "validate", "serve", "show", "texture-stats", "ab", "compare"}
+UNLOCKED = {"next", "ledger", "validate", "serve", "texture-stats", "ab", "compare"}
 
 
 def cmd_init(a):
