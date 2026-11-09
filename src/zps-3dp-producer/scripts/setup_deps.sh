@@ -11,5 +11,5 @@ command -v "$PY" >/dev/null 2>&1 || { echo "không thấy $PY"; exit 1; }
 "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 11))' || { echo "cần Python 3.11+ ($PY là $("$PY" -V 2>&1))"; exit 1; }
 
 [ -x "$VENV/bin/python" ] || "$PY" -m venv "$VENV"
-"$VENV/bin/python" -m pip install --quiet --disable-pip-version-check pyyaml pytest Pillow
+"$VENV/bin/python" -m pip install --quiet --disable-pip-version-check pyyaml pytest Pillow numpy
 echo "venv: $VENV ($("$VENV/bin/python" -V 2>&1))"
