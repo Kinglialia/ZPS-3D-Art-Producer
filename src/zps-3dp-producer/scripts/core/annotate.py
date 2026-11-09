@@ -86,5 +86,7 @@ def save(aid: str, tag: str, marks: list[dict], files: dict) -> Path:
 
 
 def record(d: Path, marks: list[dict], ids: list[str]):
+    """`regions.json` of the send; `id` is null when the regions did not become findings."""
+    ids = ids or [None] * len(marks)
     write_atomic(d / "regions.json", json.dumps([{k: v for k, v in m.items() if k != "png"} | {"id": i}
                                                  for m, i in zip(marks, ids)], ensure_ascii=False, indent=1))

@@ -57,6 +57,16 @@ def test_the_next_annotation_of_the_same_version_gets_the_next_folder(real):
     assert load_st(AID)["state"] == "waiting_human"
 
 
+def test_regions_sent_while_a_version_is_under_work_are_kept_but_never_break_the_reviewer_prior(real):
+    st = load_st(AID)
+    st["state"] = "running"
+    save_st(st)
+    msg = loop.human_action(AID, "note", "", None, regions=[RECT])
+    assert msg.split(". Tiếp")[0] == f"house-a: đã ghi feedback; khoanh 1 vùng lưu ở {FOLDER}, chưa thành finding (state=running)"
+    assert ([i for i in findings.load(AID, "blockout", 2)["findings"] if i.startswith("H")],
+            json.loads((real / FOLDER / "regions.json").read_text(encoding="utf-8"))) == ([], [RECT | {"id": None}])
+
+
 def test_redo_text_and_regions_both_reach_the_findings(real):
     loop.human_action(AID, "redo", "mái phẳng quá", "blockout", regions=[RECT], offer=KEY)
     fs = findings.load(AID, "blockout", 2)["findings"]
