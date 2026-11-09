@@ -48,7 +48,9 @@ def run(work, approved, profile):
     need = [card_path] + ([layout_md] if has_map else [])
     missing += [os.path.basename(p) for p in need if not os.path.isfile(p)]
     missing += [k for k in ("files.layout", "files.material") if not os.path.isfile(str(get(s, k)))]
-    keys = [k for k, t in KEYS.items() if not isinstance(get(s, k), t) or get(s, k) in ("", [])]
+    no_door = get(s, "door_h") is None and isinstance(get(s, "door_h_source"), str) and get(s, "door_h_source")
+    keys = [k for k, t in KEYS.items()
+            if not (k == "door_h" and no_door) and (not isinstance(get(s, k), t) or get(s, k) in ("", []))]
     if "camera" not in s:
         keys.append("camera")
     layout = get(s, "files.layout")

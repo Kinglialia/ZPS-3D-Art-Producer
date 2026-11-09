@@ -396,6 +396,17 @@ def test_inputs_report_missing_sources_keys(tmp_path, run_check):
                                               "value": ["door_h_source", "layout.includes_base", "materials"]}
 
 
+def test_inputs_accept_no_door_height_for_a_prop_without_a_door_when_the_source_says_why(tmp_path, run_check):
+    a, prof = approved(tmp_path, has_map=True)
+    s = sources_for(a, "05-hut.layout.md")
+    s["door_h"], s["door_h_source"] = None, "không có cửa (rương)"
+    r = run_check("check_inputs", "--work", write_build(tmp_path / "w", sources=s), "--approved", a, "--profile", prof)
+    assert r.check("inputs.sources_keys") == {"status": "pass", "value": []}
+    s["door_h_source"] = ""
+    r = run_check("check_inputs", "--work", write_build(tmp_path / "w2", sources=s), "--approved", a, "--profile", prof)
+    assert r.check("inputs.sources_keys") == {"status": "fail", "value": ["door_h", "door_h_source"]}
+
+
 def test_inputs_tell_the_worker_when_sources_can_be_reused(tmp_path, run_check):
     import hashlib
     a, prof = approved(tmp_path, has_map=True)

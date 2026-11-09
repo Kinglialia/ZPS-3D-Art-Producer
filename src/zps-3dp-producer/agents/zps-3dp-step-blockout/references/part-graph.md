@@ -56,7 +56,9 @@ Quy tắc dựng (từ `self_build.md` của kit): bevel 1–2 segment; tránh h
 Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material_sha256}`, `layout.{w, d, h, includes_base, source}`, `door_h`, `door_h_source`, `character_h`, `materials` (danh sách mã), `camera` (`null` hoặc `{azimuth_deg, elevation_deg, fov_v_deg}`). Ví dụ ở `docs/agents/blockout.md` §2.
 
 - `has_map: true`: `files.layout` là `_approved/<id>/<id>.layout.md`.
-- `has_map: false`: `files.layout` là `_approved/<id>/asset-card.yaml`; `layout.w/d/h` bằng `size_m`; `character_h` từ `scale_refs` của profile; `door_h` từ `scale_overrides` của thẻ, hoặc đo trên concept với `character_h` làm thước, cách đo ghi vào `door_h_source`.
+- `has_map: false`: `files.layout` là `_approved/<id>/asset-card.yaml`; `layout.w/d/h` bằng `size_m`; `character_h` từ `scale_refs` của profile; `door_h` từ `scale_overrides` của thẻ, hoặc đo trên concept với `character_h` làm thước, cách đo ghi vào `door_h_source`. Asset không có cửa (prop): `door_h: null`, `door_h_source` ghi lý do, ví dụ "không có cửa".
+- Hàm `custom` nhận mọi param dạng số thực: ép `int(...)` cho số đoạn, số cạnh.
+- Hai mặt trùng khít tuyệt đối làm gate union lỗi: để lệch 1 mm khi acceptance cho phép.
 - `includes_base: false`: `check_layout.py` bỏ các part `tag: base` khi đo bbox.
 
 ## Kết quả script
