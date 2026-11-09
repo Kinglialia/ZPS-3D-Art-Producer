@@ -5,7 +5,7 @@ Usage: python3 T/texture_complexity.py --final F --blockout B --concept C --view
   2 colour clusters palette_report (kit) clusters with share >= CLUSTER_SHARE on the concept albedo object pixels
                     (alpha when the image has one, else pixels away from the border colour by > BG_DIST)
   3 detail density  mean gradient of the object pixels, 0..1 (shown only, never decides)
-  4 motif           card real_texture_only_notes and the TEXTURE NOTE section of VR/README.md name a motif, text, sign
+  4 motif           card real_texture_only_notes and the TEXTURE NOTE section of VR/README.md name a motif, text, sign (whole words)
   5 tier            card tier
 Simple when materials <= texture_simple.max_materials, clusters <= texture_simple.max_color_clusters, no motif, tier not
 hero. Proposed mode: paint (VẼ MỚI) when simple, else meshy.
@@ -26,7 +26,7 @@ import numpy as np  # noqa: E402
 
 CLUSTER_SHARE = 0.03
 BG_DIST = 40.0
-MOTIF = re.compile(r"hoa văn|chữ|biển|motif|logo|họa tiết|pattern|text|sign", re.I)
+MOTIF = re.compile(r"\b(hoa văn|chữ|biển|motif|logo|họa tiết|pattern|text|sign)\b", re.I)
 
 
 def object_pixels(path):

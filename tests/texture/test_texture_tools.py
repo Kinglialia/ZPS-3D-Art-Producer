@@ -107,6 +107,14 @@ def test_a_hero_crate_or_a_painted_sign_is_never_simple(tmp_path):
         (False, []), (False, ['biển chữ "TAVERN" trên cửa'])]
 
 
+def test_a_motif_word_inside_another_word_is_no_motif_so_a_plain_crate_still_gets_paint(tmp_path):
+    a = complexity(tmp_path / "a", ["WOOD"], [(120, 80, 40)],
+                   card={"tier": "standard", "real_texture_only_notes": ["texture_only: vân gỗ sẫm, không cần thêm"]})
+    b = complexity(tmp_path / "b", ["WOOD"], [(120, 80, 40)], note="- mặt bàn trơn, đúng design\n")
+    assert [(r["simple"], r["proposed"], r["scores"]["motif"]) for r in (a, b)] == [(True, "paint", []),
+                                                                                    (True, "paint", [])]
+
+
 def meshy_glb(path, shift_px=0.0, drop=0):
     v, uv, f = glbkit.box()
     uv = uv + np.array([shift_px / RES, 0])
