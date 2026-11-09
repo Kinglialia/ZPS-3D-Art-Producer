@@ -1,20 +1,20 @@
 ---
 name: zps-3dp-project-setup
-description: Tạo PROJECT-PROFILE.yaml và production/policy.yaml cùng người dùng cho zps-3dp-producer. Chỉ gọi tường minh: Producer nạp khi profile thiếu hoặc sai, hoặc người dùng gọi /zps-3dp-project-setup.
+description: Tạo PROJECT-PROFILE.yaml và policy.yaml cùng người dùng cho zps-3dp-producer. Chỉ gọi tường minh: Producer nạp khi profile thiếu hoặc sai, hoặc người dùng gọi /zps-3dp-project-setup.
 disable-model-invocation: true
 ---
 
 # ZPS-3DP · Project Setup
 
-Bạn làm cùng người dùng trong phiên chính. Bạn hỏi và đề xuất; người dùng quyết. Bạn chỉ ghi `production/PROJECT-PROFILE.yaml`. `production/policy.yaml` chỉ đổi qua `P approvals set`.
+Bạn làm cùng người dùng trong phiên chính. Bạn hỏi và đề xuất; người dùng quyết. Bạn chỉ ghi `D/PROJECT-PROFILE.yaml`. `D/policy.yaml` chỉ đổi qua `P approvals set`.
 
-`S` = `.claude/skills/zps-3dp-producer` (thư mục skill Producer). `PY` = `S/scripts/.deps/venv/bin/python`. `P` = `PY S/scripts/producer.py`, chạy từ gốc project. Thiếu `PY`: bảo người dùng chạy `bash S/scripts/setup_deps.sh` một lần.
+`S` = `.claude/skills/zps-3dp-producer` (thư mục skill Producer). `PY` = `S/scripts/.deps/venv/bin/python`. `P` = `PY S/scripts/producer.py`, chạy từ gốc project. Thiếu `PY`: bảo người dùng chạy `bash S/scripts/setup_deps.sh` một lần. `D` = thư mục làm việc của Producer: `$PRODUCER_ROOT` của phiên, mặc định `production`; `P init` in ra thư mục này.
 
 ## Tạo profile
 
-1. Chưa có `production/`: hỏi tên dự án và thư mục concept, rồi chạy `P init --project "<tên>" --concepts "<thư mục>"`.
+1. Chưa có `D/`: hỏi tên dự án và thư mục concept, rồi chạy `P init --project "<tên>" --concepts "<thư mục>"`.
 2. Chọn preset: đọc `S/presets/*.yaml` (camera, trần tris theo hạng). Đề xuất một preset kèm lý do một dòng. Người dùng chọn.
-3. Chưa có `production/PROJECT-PROFILE.yaml`: chép `S/templates/PROJECT-PROFILE.yaml` vào đó. Hỏi từng nhóm, mỗi lần một nhóm, kèm giá trị gợi ý:
+3. Chưa có `D/PROJECT-PROFILE.yaml`: chép `S/templates/PROJECT-PROFILE.yaml` vào đó. Hỏi từng nhóm, mỗi lần một nhóm, kèm giá trị gợi ý:
    - `has_map`: dự án có map không. `false` thì mọi thẻ asset phải có `size_m`.
    - `scale_refs`: thước tỉ lệ (nhân vật, cửa, …), đơn vị mét.
    - `style`: `light_convention` (`unlit_flat` | `painted_top_light`), `top_vs_side_L`, `view_bg` (`null` = script tự chọn).
@@ -31,7 +31,7 @@ Bạn làm cùng người dùng trong phiên chính. Bạn hỏi và đề xuấ
 
 ## Kiểm và kết thúc
 
-8. Chạy `PY S/scripts/check_profile.py production/PROJECT-PROFILE.yaml`. Có lỗi thì sửa cùng người dùng. Không in gì là xong.
+8. Chạy `PY S/scripts/check_profile.py D/PROJECT-PROFILE.yaml`. Có lỗi thì sửa cùng người dùng. Không in gì là xong.
 9. Nhắc người dùng mở phiên mới bằng lệnh của runtime (`S/references/runtime.md`, mục Phiên mới), rồi gọi lại Producer. Phiên mới không dựa vào cuộc trao đổi này.
 
 ## Cập nhật sau pilot

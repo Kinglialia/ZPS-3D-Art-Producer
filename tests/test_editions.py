@@ -4,6 +4,7 @@ Blender rule allows only installed Producer scripts (row 91)."""
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,15 @@ def test_the_explicit_only_skill_stays_explicit_on_codex_through_openai_yaml_row
         'interface:\n  display_name: "ZPS-3DP · Producer - Codex"\n')
     claude = (tree(dist, "claude") / "skills/zps-3dp-project-setup/SKILL.md").read_text(encoding="utf-8")
     assert build.frontmatter(claude)["disable-model-invocation"] == "true"
+
+
+@pytest.mark.parametrize("edition, name", [("claude", "zps-3dp-project-setup"), ("codex", "zps-3dp-project-setup-codex")])
+def test_setup_writes_the_profile_in_the_producer_root_so_an_ab_session_reads_the_profile_it_wrote(dist, edition, name):
+    text = (tree(dist, edition) / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+    body = text.split("\n---\n", 1)[1]
+    assert re.findall(r"production/", text) == []
+    assert "`D` = thư mục làm việc của Producer: `$PRODUCER_ROOT` của phiên, mặc định `production`" in body
+    assert ["D/PROJECT-PROFILE.yaml" in line for line in body.splitlines() if "PROJECT-PROFILE.yaml" in line] == [True] * 3
 
 
 def test_the_codex_tree_names_codex_paths_and_the_claude_tree_names_no_codex_agent(dist):
