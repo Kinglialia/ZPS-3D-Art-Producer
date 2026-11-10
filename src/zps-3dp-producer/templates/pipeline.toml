@@ -15,8 +15,9 @@
 #   counts.
 # views_set: bước làm bộ view (D32). Thẻ `views: none` bỏ bước này; `final/<mặt>.png` và regions ngoài `views` của thẻ
 #   không bắt buộc (back: back; full: back, left, right; full_top: thêm top; không ghi = full).
-# counts_gate: `P ingest` so `counts` của thẻ với `final/part_graph.json` (scripts/check_counts.py, bảng templates/counts.yaml,
-#   D30.6) và ghi final/review/checks/counts.json trước khi đọc JSON fail; counts.json là gate cứng.
+# counts_gate: `P ingest` so `counts` của thẻ với `final/part_graph.json` (scripts/check_counts.py, D30.6): mỗi khóa cần
+#   một param cùng tên trong `fixed_params`, cùng giá trị. Ghi final/review/checks/counts.json trước khi đọc JSON fail;
+#   counts.json là gate cứng.
 # sheet: ảnh PNG của bước, theo thứ tự (glob tính từ vN/). `P brief` ghép thành vN/review/sheet.png (scripts/review_sheet.py,
 #   D31.1); brief reviewer chỉ đưa sheet. Reviewer xin ảnh gốc hoặc crop có trên đĩa qua need_evidence: script tự lấy, không
 #   giao worker, tối đa [review] served_evidence lần mỗi đợt feedback.

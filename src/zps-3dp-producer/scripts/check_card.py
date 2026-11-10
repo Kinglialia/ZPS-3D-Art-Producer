@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from check_counts import KEYS as COUNT_KEYS
 from check_profile import is_num, is_pos_int, is_str, load_yaml
 
 TYPES = ("building", "prop", "tree", "rock")
@@ -104,8 +105,8 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     if c.get("views") is not None and not (isinstance(c["views"], str) and c["views"] in VIEW_SETS):
         bad("views", f"'{c['views']}' ({' | '.join(VIEW_SETS)}; không ghi = {DEFAULT_VIEWS})")
     if c.get("counts") is not None and not (isinstance(c["counts"], dict) and all(
-            isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in c["counts"].values())):
-        bad("counts", "cần map {khóa: số nguyên ≥ 0}")
+            k in COUNT_KEYS and isinstance(v, int) and not isinstance(v, bool) and v >= 0 for k, v in c["counts"].items())):
+        bad("counts", f"cần map {{khóa: số nguyên ≥ 0}}, khóa là {' | '.join(COUNT_KEYS)}")
     if c.get("bevel") is not None and c["bevel"] not in BEVELS:
         bad("bevel", f"'{c['bevel']}' (null | {' | '.join(BEVELS)})")
     for k in ("texture_res", "tris_max"):
@@ -164,19 +165,7 @@ def warnings(d: Path) -> list[str]:
     if isinstance(notes, list) and c.get("bevel") is None and any(k in unicodedata.normalize("NFC", str(n)).lower() for n in notes for k in ("bo cạnh", "cạnh bo")):
         out.append("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nhưng bevel trống; "
                    "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
-    return out + counts_warnings(c)
-
-
-def counts_warnings(c) -> list[str]:
-    """D30.6: a `counts` key the gate cannot compare: not one of the 6 keys, or no map entry for the card's type."""
-    from check_counts import KEYS, MAP, load_map
-    counts = c.get("counts") if isinstance(c, dict) else None
-    if not isinstance(counts, dict):
-        return []
-    table = load_map().get(c.get("type")) or {}
-    return [f"cảnh báo: thẻ: counts.{k} lạ ({' | '.join(KEYS)}); gate không so khóa này" if k not in KEYS else
-            f"cảnh báo: thẻ: counts.{k} chưa có ánh xạ cho type {c.get('type')} trong {MAP.parent.name}/{MAP.name}; "
-            "gate không so khóa này" for k in counts if k not in table]
+    return out
 
 
 def has_map_of(profile: Path) -> bool:
