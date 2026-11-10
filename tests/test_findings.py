@@ -187,7 +187,7 @@ def test_superseded_closes_a_finding_but_is_not_progress():
     assert progress(base, doc_of(2, F1=("superseded", "major"))) is False
 
 
-def test_best_version_has_fewest_open_blocker_major_and_ties_go_to_the_older_version():
+def test_best_version_has_fewest_open_blocker_major_and_a_tie_with_a_regressed_finding_goes_to_the_clean_version():
     docs = [doc_of(1, F1=("open", "major"), F2=("open", "major")),
             doc_of(2, F1=("resolved", "major"), F2=("open", "major"), F3=("open", "minor"), F4=("open", "preference")),
             doc_of(3, F1=("resolved", "major"), F2=("regressed", "major"))]
@@ -202,7 +202,23 @@ def test_best_version_prefers_the_version_that_resolved_a_major_when_open_counts
     v2 = doc_of(2, F1=("resolved", "major"), F2=("open", "major"))
     v3 = doc_of(3, F1=("resolved", "major"), F2=("open", "major"))
     assert best_version([v1, v2]) == 2
-    assert best_version([v1, v2, v3]) == 2
+    # D30.2: a full tie goes to the newer version, which carries every fix of the older one.
+    assert best_version([v1, v2, v3]) == 3
+
+
+def test_best_version_run5_picks_v2_that_also_fixed_the_minor_f3_when_both_keep_two_majors_open_d30_2():
+    # Run 5 model: the v3 brief started from v1 although v2 = v1 + F3 fixed; the next round redid F3.
+    v1 = doc_of(1, F1=("open", "major"), F2=("open", "major"), F3=("open", "minor"))
+    v2 = doc_of(2, F1=("open", "major"), F2=("open", "major"), F3=("resolved", "minor"))
+    assert best_version([v1, v2]) == 2
+    assert best_version([v2, v1]) == 2
+
+
+def test_best_version_does_not_prefer_a_version_that_resolved_more_but_regressed_one_d30_2():
+    # A regressed finding means the fix broke something that worked; resolving another minor does not pay for it.
+    v1 = doc_of(1, F1=("open", "major"), F2=("open", "minor"), F3=("open", "minor"))
+    v2 = doc_of(2, F1=("open", "major"), F2=("resolved", "minor"), F3=("regressed", "minor"))
+    assert best_version([v1, v2]) == 1
 
 def run(cwd, *args, ok=True):
     r = subprocess.run([sys.executable, str(P), *args], cwd=cwd, capture_output=True, text=True)

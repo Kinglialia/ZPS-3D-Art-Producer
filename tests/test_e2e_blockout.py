@@ -118,7 +118,7 @@ def flow(tmp_path_factory):
     f.brief("v3 brief")
     f.work("v3", fixed=(3, 4), variants=("b", "c"))
     f.review("v3", counts=counts(2), top_fix="param: " + ids(3, 4), rubric="concept_match=fail; scale=pass",
-             compare="F3=same; F4=same", prior=still_open(3, 4))
+             compare="F3=same; F4=worse", prior=still_open(3) + ["- F4: regressed"])
     f.save("redo", f.p("feedback", AID, "mái chìa thêm 10 cm", "--action", "redo"))
     f.brief("v4 brief")
     f.work("v4", fixed=(3, 4))
@@ -264,13 +264,14 @@ def test_the_fix_brief_lists_no_script_errors_when_the_best_version_has_no_faile
     assert "Đọc trước nguyên văn lỗi script" not in text and "Đây là vòng sửa 2." in text
 
 
-def test_no_progress_at_the_review_of_v3_stops_early_and_offers_the_older_tied_version_as_not_passed(flow):
+def test_no_progress_at_the_review_of_v3_stops_early_and_offers_v2_because_v3_regressed_f4_d30_2(flow):
+    """D30.2: v2 and v3 tie on open and resolved majors; v3 regressed F4, so the newer version does not win the tie."""
     assert flow["v3 review"]["out"] == ("pilot-house: review FIX (major=2) → blockout/waiting_human. Tiếp: chờ người dùng: "
                                         "không tiến bộ ở vòng 2; còn mở: F3, F4 (review page)\n")
     assert pick(flow["v3 review"]["st"]) == state(state="waiting_human", fix_round=2, fix_base=2, round_versions=[1, 2, 3],
                                                   offer=2, label="chưa đạt", note="không tiến bộ ở vòng 2; còn mở: F3, F4")
     assert rows(flow["findings"][3]) == {"F1": ("resolved", 1, 2), "F2": ("resolved", 1, 2), "F3": ("open", 1, 3),
-                                         "F4": ("open", 1, 3)}
+                                         "F4": ("regressed", 1, 3)}
 
 
 def test_redo_opens_a_new_feedback_round_from_the_offered_version_with_counters_reset(flow):

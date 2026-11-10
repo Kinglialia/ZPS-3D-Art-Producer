@@ -142,17 +142,18 @@ def test_round_1_without_progress_continues_but_round_2_without_progress_stops_a
     flow.work()
     flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: open"])
     assert pick(flow.st)["state"] == "running"
-    assert flow.st["fix_base"] == 1
+    # D30.2: v2 ties v1 on every count, so the newer v2 is the best and the base of round 2.
+    assert flow.st["fix_base"] == 2
     out = flow.brief()
-    assert f"Bản gốc: `production/assets/{AID}/blockout/v1/`" in flow.text(out)
+    assert f"Bản gốc: `production/assets/{AID}/blockout/v2/`" in flow.text(out)
     flow.work(out=out)
     rb = flow.text(flow.brief())
-    assert ("COMPARE: F1=?\n" in rb, f"Bản gốc v1: ảnh cùng góc `production/assets/{AID}/blockout/v1/final/`" in rb) == (
+    assert ("COMPARE: F1=?\n" in rb, f"Bản gốc v2: ảnh cùng góc `production/assets/{AID}/blockout/v2/final/`" in rb) == (
         True, True)
     assert flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same",
                        prior=["- F1: open", "- F2: open"]).endswith(
         "chờ người dùng: không tiến bộ ở vòng 2; còn mở: F1, F2 (review page)\n")
-    assert pick(flow.st) == {"state": "waiting_human", "fix_round": 2, "fix_base": 1, "offer": 1, "label": "chưa đạt",
+    assert pick(flow.st) == {"state": "waiting_human", "fix_round": 2, "fix_base": 2, "offer": 3, "label": "chưa đạt",
                              "note": "không tiến bộ ở vòng 2; còn mở: F1, F2"}
 
 
@@ -196,7 +197,8 @@ def test_each_offer_has_its_own_key_so_a_board_click_names_the_offer_it_answers(
     flow.work()
     flow.review(verdict="ESCALATE", top_fix=None, findings=[], counts=counts(major=2), prior=["- F1: open", "- H1: open"],
                 compare="H1=same")
-    assert (flow.st["offer"], flow.st["offer_key"]) == (1, "house-a-blockout-v1-2")
+    # D30.2: v2 ties v1 (F1 and H1 open on both), so the newer v2 is offered.
+    assert (flow.st["offer"], flow.st["offer_key"]) == (2, "house-a-blockout-v2-2")
 
 
 def test_two_assets_offered_the_same_step_and_version_never_share_an_offer_key_so_one_approval_cannot_block_the_other(flow):
@@ -260,10 +262,7 @@ def test_second_need_evidence_in_one_feedback_round_goes_to_the_human_and_redo_r
 
 
 def test_redo_opens_a_new_feedback_round_from_the_best_version_and_carries_its_open_findings(flow):
-    fix_v1(flow, 2)
-    for _ in range(2):
-        flow.work()
-        flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: open"])
+    stall(flow)
     assert flow.st["state"] == "waiting_human"
     flow.human("redo", "mái cao hơn")
     st = flow.st
@@ -277,6 +276,14 @@ def test_redo_opens_a_new_feedback_round_from_the_best_version_and_carries_its_o
     assert [l for l in rb.splitlines() if l.startswith("- F") and ": ? |" in l] == [
         "- F1: ? | evidence: ? | acceptance: đỉnh mái 3.2 m trên clay_front",
         "- F2: ? | evidence: ? | acceptance: đỉnh mái 3.2 m trên clay_front"]
+
+
+def stall(f):
+    """Two rounds without progress whose versions regress F2, so v1 stays the best version (D30.2) and is offered."""
+    fix_v1(f, 2)
+    for _ in range(2):
+        f.work()
+        f.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: regressed"])
 
 
 def pass_v2(f):
@@ -317,10 +324,7 @@ def test_a_gd1_asset_parked_at_done_enabled_moves_on_with_retry_once_its_next_st
 
 
 def test_approving_the_offered_best_version_rejects_the_newer_versions(flow):
-    fix_v1(flow, 2)
-    for _ in range(2):
-        flow.work()
-        flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: open"])
+    stall(flow)
     flow.human("approve")
     assert (flow.st["approved"], flow.st["rejected"]) == ({"blockout": 1}, {"blockout": [2, 3]})
 
@@ -482,8 +486,8 @@ def test_send_back_is_a_major_finding_and_a_reoffer_of_the_same_version_takes_a_
                     "acceptance": "đạt yêu cầu của người dùng: mái thấp quá"}}
     for _ in range(2):
         flow.work()
-        flow.review(counts=counts(major=1), top_fix="structure: H1", rubric="mass=fail", compare="H1=same",
-                    prior=["- H1: open"])
+        flow.review(counts=counts(major=1), top_fix="structure: H1", rubric="mass=fail", compare="H1=worse",
+                    prior=["- H1: regressed"])
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 2, "fix_base": 2, "offer": 2, "label": "chưa đạt",
                              "note": "không tiến bộ ở vòng 2; còn mở: H1"}
     assert flow.human("approve", "giữ v2") == (
@@ -499,10 +503,7 @@ def test_redo_of_a_later_step_is_refused_so_the_asset_never_skips_a_step(flow):
 
 
 def test_feedback_is_tagged_with_the_version_the_user_sees_not_the_newest(flow):
-    fix_v1(flow, 2)
-    for _ in range(2):
-        flow.work()
-        flow.review(counts=counts(major=2), top_fix="structure: F1", compare="F1=same", prior=["- F1: open", "- F2: open"])
+    stall(flow)
     assert (flow.st["offer"], flow.st["versions"]) == (1, {"blockout": 3})
     flow.human("note", "mái chìa thêm")
     log = (flow.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")

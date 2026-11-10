@@ -217,12 +217,14 @@ def progress(base: dict, doc: dict) -> bool:
 
 
 def best_version(docs: list[dict | None]) -> int | None:
-    """§7.5: fewest open blocker+major; then most blocker+major resolved; then the older version.
-    A newer version that resolved an old finding and shows only a newly seen one beats its base."""
+    """§7.5, D30.2: fewest open blocker+major; then most blocker+major resolved; then, among versions without a
+    regressed finding, most findings resolved at any level; then the newer version.
+    Run 5: v2 = v1 + F3 fixed, with the same 2 majors open; the fix round must start from v2."""
     docs = [d for d in docs if d]
     if not docs:
         return None
 
-    def bm(d, states):
-        return sum(f["priority"] in BM and f["status"] in states for f in d["findings"].values())
-    return min(docs, key=lambda d: (bm(d, OPEN), -bm(d, ("resolved",)), d["version"]))["version"]
+    def count(d, states, prios=PRIORITIES):
+        return sum(f["priority"] in prios and f["status"] in states for f in d["findings"].values())
+    return min(docs, key=lambda d: (count(d, OPEN, BM), -count(d, ("resolved",), BM), count(d, ("regressed",)) > 0,
+                                    -count(d, ("resolved",)), -d["version"]))["version"]
