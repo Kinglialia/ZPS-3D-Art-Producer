@@ -438,6 +438,7 @@ def ingest(a):
 
 INGEST_DISPATCH = ("review", "fix")
 CHANGE_DISPATCH = ("todo", "fix", "review", "evidence", "running")
+WAIVE_DISPATCH = ("todo", "fix", "review", "evidence")  # running: the worker already has its brief
 
 
 def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
@@ -487,13 +488,13 @@ def waive(a):
         doc = findings.load(a.id, sid, target) if here and target and step.get("reviewer") and not st.get("ask") else None
         if doc and hit[-1]["priority"] in findings.BLOCKING and not findings.blocking(doc):
             move(st, "full_again")
-            st |= {"rereview": target, "evidence": None, "offer": None, "label": "",
+            st |= {"rereview": target, "evidence": None, "direct": None, "offer": None, "label": "",
                    "note": f"chấm lại v{target} sau waive {a.fid}"}
             msg += f"; v{target} hết lỗi chặn → reviewer chấm lại v{target}, không gọi worker"
     save_st(st)
     ledger(f"{a.id} · {sid} {a.fid} · waive bởi {WAIVE_BY[a.by]} · {why}")
     print(f"{a.id}: waive {sid} {a.fid} ({WAIVE_BY[a.by]}): {msg} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
-    dispatch_next(cfg, st, CHANGE_DISPATCH)
+    dispatch_next(cfg, st, WAIVE_DISPATCH)
     build_outputs(cfg)
 
 
@@ -573,9 +574,10 @@ def retry(a):
 
 
 def after_feedback(aid: str, before: tuple):
-    """D30.5: `feedback --action approve|redo` that moved the asset prints the next dispatch, as `ingest` does."""
+    """D30.5: `feedback --action approve|redo` that moved the asset or took a decision prints the next dispatch, as
+    `ingest` does. A redo of a held fix round stays in `fix` but opens a new round."""
     st = load_st(aid)
-    if (st["stage"], st["state"]) != before:
+    if (st["stage"], st["state"], len(st.get("decisions", {}))) != before:
         dispatch_next(load_cfg(), st, CHANGE_DISPATCH)
 
 

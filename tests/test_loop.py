@@ -944,3 +944,41 @@ def test_a_pass_in_a_fix_round_sends_the_same_version_to_a_full_review_without_a
     assert flow.review(out=out, verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass; props=pass") == (
         "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
     assert findings.load(AID, "blockout", 2)["base"] == 1
+
+
+def test_a_waive_while_the_worker_runs_prints_no_second_dispatch_and_the_next_review_skips_the_id_d30_1(flow):
+    """The Producer sends an agent for every dispatch line; a second line for a running worker would double the work."""
+    fix_v1(flow, 2, "param")
+    assert flow.st["state"] == "running"
+    brief = (flow.v(2) / "brief-worker.md").read_bytes()
+    sent = len(flow.st["dispatches"])
+    assert waive(flow, "F1").splitlines() == [
+        "house-a: waive blockout F1 (người dùng): đã đóng → blockout/running. Tiếp: đang chờ subagent (mất kết nối thì "
+        "`brief house-a` để giao lại)"]
+    assert (len(flow.st["dispatches"]), (flow.v(2) / "brief-worker.md").read_bytes()) == (sent, brief)
+    rb = flow.text(json.loads(flow.work(out={"report": f"production/assets/{AID}/blockout/v2/worker-out.md",
+                                             "brief": f"production/assets/{AID}/blockout/v2/brief-worker.md"}
+                                        ).splitlines()[-1]))
+    assert ("- F1: ?" in rb, "- F2: ? | evidence: ? |" in rb, "COMPARE: F2=?" in rb.splitlines()) == (False, True, True)
+
+
+def test_waiving_the_last_findings_of_an_offered_older_version_rereviews_that_version_and_approval_keeps_it_d30_1(flow):
+    stall(flow)
+    assert (flow.st["offer"], flow.st["versions"]) == (1, {"blockout": 3})
+    waive(flow, "F1")
+    head, line = waive(flow, "F2").splitlines()
+    assert head.endswith("v1 hết lỗi chặn → reviewer chấm lại v1, không gọi worker → blockout/review. Tiếp: giao reviewer "
+                         "→ `brief house-a`")
+    out = json.loads(line)
+    assert (out["brief"], out["report"]) == (f"production/assets/{AID}/blockout/v1/brief-review.md",
+                                             f"production/assets/{AID}/blockout/v1/review-out.md")
+    assert flow.review(out=out, verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass") == (
+        "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v1 (review page)\n")
+    flow.human("approve", "giữ v1")
+    assert (flow.st["approved"], flow.st["rejected"]) == ({"blockout": 1}, {"blockout": [2, 3]})
+
+
+def test_a_redo_of_a_held_fix_round_prints_the_dispatch_of_the_new_round_d30_5(flow, monkeypatch):
+    held_fix(flow, monkeypatch)
+    out = cli(flow, "feedback", AID, "mái cao hơn", "--action", "redo").splitlines()
+    assert (len(out), json.loads(out[-1])["brief"]) == (2, f"production/assets/{AID}/blockout/v2/brief-worker.md")
