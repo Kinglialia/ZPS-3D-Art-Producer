@@ -8,7 +8,7 @@ from argparse import Namespace
 
 from . import annotate, findings, hashes, policy, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
-from .state import (ASSETS, DELIVER, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
+from .state import (ASSETS, DELIVER, FINISHED, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
                     stamp, step_of, vdir)
 
 NOT_PASSED = "chưa đạt"
@@ -361,15 +361,19 @@ def ingest(a):
     build_outputs(cfg)
 
 
-def dispatch_next(cfg: dict, st: dict):
-    """D27.2: a reviewer after a worker, or a worker after FIX, goes out in the same turn: the dispatch line of `P brief`.
-    A fix waits while a resource of its step has no free slot, as in `P next`."""
-    if st["state"] not in ("review", "fix"):
+INGEST_DISPATCH = ("review", "fix")
+CHANGE_DISPATCH = ("todo", "fix", "review", "evidence", "running")
+
+
+def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
+    """D27.2, D30.5: the next dispatch goes out in the same turn as the state change: the dispatch line of `P brief`.
+    A worker waits while a resource of its step has no free slot, as in `P next`."""
+    if st["state"] not in states or st["state"] in FINISHED:
         return
     from .briefs import run
     from .limits import used
     _, step = step_of(cfg, st["stage"])
-    if st["state"] == "fix" and any(cfg["limits"][r] - used(r) <= 0 for r in step["uses"] if r in cfg["limits"]):
+    if st["state"] != "review" and any(cfg["limits"][r] - used(r) <= 0 for r in step["uses"] if r in cfg["limits"]):
         return
     try:
         run(Namespace(id=st["id"]))
@@ -414,7 +418,7 @@ def waive(a):
     save_st(st)
     ledger(f"{a.id} · {sid} {a.fid} · waive bởi {WAIVE_BY[a.by]} · {why}")
     print(f"{a.id}: waive {sid} {a.fid} ({WAIVE_BY[a.by]}): {msg} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
-    dispatch_next(cfg, st)
+    dispatch_next(cfg, st, CHANGE_DISPATCH)
     build_outputs(cfg)
 
 
@@ -490,6 +494,14 @@ def retry(a):
     save_st(st)
     ledger(f"{a.id} · retry")
     print(f"{a.id}: → {st['state']}. Tiếp: {next_action(st)}")
+    dispatch_next(load_cfg(), st, CHANGE_DISPATCH)
+
+
+def after_feedback(aid: str, before: tuple):
+    """D30.5: `feedback --action approve|redo` that moved the asset prints the next dispatch, as `ingest` does."""
+    st = load_st(aid)
+    if (st["stage"], st["state"]) != before:
+        dispatch_next(load_cfg(), st, CHANGE_DISPATCH)
 
 
 def append_feedback(aid: str, step: str, n: int | None, action: str, text: str):

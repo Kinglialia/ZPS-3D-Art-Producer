@@ -1,6 +1,7 @@
 """The checks before a texture brief (docs/producer.md §6.3, D24.3, D21.2; checklist 41, 52, 85) and the worker's
 UNFIXABLE, on the real CLI. Each test drives a fresh pilot to texture/todo with fake agents; no paid call."""
 import json
+import os
 
 import yaml
 
@@ -19,17 +20,21 @@ def test_an_env_file_without_the_key_blocks_texture_before_any_version_and_retry
     st = f.st()
     assert ("texture" in st["versions"], st["blocked_from"], budgets(tmp_path)) == (False, "todo", {})
     (tmp_path / ".env").write_text(f"MESHY_API_KEY={PROJECT_KEY}\n", encoding="utf-8")
-    assert f.p("retry", AID) == "pilot-house: → todo. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = f.p("retry", AID).splitlines()
+    assert head == "pilot-house: → todo. Tiếp: giao worker → `brief pilot-house`"
+    f.sent = line
     out = f.brief("t1 again")
     assert out["brief"] == f"{A}/texture/v1/brief-worker.md"
     assert list(budgets(tmp_path).values()) == [{"max_credits": 10, "used_credits": 0}]
 
 
 def test_a_profile_without_env_file_paints_and_opens_no_budget(tmp_path):
-    f = to_texture(tmp_path, env_line=None)
-    prof = yaml.safe_load((tmp_path / "production/PROJECT-PROFILE.yaml").read_text(encoding="utf-8"))
-    del prof["paths"]["env_file"]
-    (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof, allow_unicode=True), encoding="utf-8")
+    def no_env_file():
+        prof = yaml.safe_load((tmp_path / "production/PROJECT-PROFILE.yaml").read_text(encoding="utf-8"))
+        del prof["paths"]["env_file"]
+        (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof, allow_unicode=True),
+                                                                   encoding="utf-8")
+    f = to_texture(tmp_path, env_line=None, prepare=no_env_file)
     f.brief("t1")
     t = f.cp["t1"]["text"].splitlines()
     assert "MODE: VẼ MỚI (profile không có `paths.env_file`: không gọi Meshy)" in t
@@ -56,8 +61,9 @@ def test_a_worker_unfixable_on_the_first_build_asks_the_user_and_approval_rebuil
     assert (b, f.st()["ask"]) == ({"max_credits": 10, "used_credits": 10},
                                   {"kind": "meshy_regen", "budget": name, "next": "todo", "base": None, "new_round": False})
     f.human("approve", "gọi lại", "--action", "approve")
+    # D30.5: the approval that answers the question dispatches the rebuild at once.
     assert (f.st()["state"], f.st()["fix_round"], budgets(tmp_path)[name]) == (
-        "todo", 0, {"max_credits": 20, "used_credits": 10})
+        "running", 0, {"max_credits": 20, "used_credits": 10})
     out = f.brief("t2")
     assert out["brief"] == f"{A}/texture/v2/brief-worker.md"
     assert any(l.startswith("MESHY_CALLS: 1 ") for l in f.cp["t2"]["text"].splitlines())
@@ -109,8 +115,12 @@ def test_approve_answers_the_mesh_question_although_the_old_texture_version_had_
     f = to_texture(tmp_path)
     f.work("t1", meshy="")
     f.review("t1", verdict="ESCALATE", counts=counts(), top_fix=None)
+    busy = tmp_path / "production/pids/meshy/other.pid"
+    busy.parent.mkdir(parents=True, exist_ok=True)
+    busy.write_text(str(os.getpid()), encoding="utf-8")  # the Meshy slot is busy, so the texture redo waits in fix
     f.human("redo texture", "mái tối", "--action", "redo")
     f.human("redo model", "cửa to hơn", "--action", "redo", "--step", "model")
+    busy.unlink()
     f.work("m2", mesh_size=(1.3, 1, 1))
     f.review("m2", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better",
              prior=["- H1: resolved | evidence: lit_34_front.png"])
@@ -118,12 +128,12 @@ def test_approve_answers_the_mesh_question_although_the_old_texture_version_had_
     f.brief("gate")
     assert ("texture v1" in f.st()["decisions"], f.st()["state"]) == (True, "waiting_human")
     out = f.p("feedback", AID, "gọi lại Meshy", "--action", "approve")
-    assert out.startswith("pilot-house: mesh_changed: thêm 1 lần gọi Meshy (10 credit)") and f.st()["state"] == "todo"
+    assert out.startswith("pilot-house: mesh_changed: thêm 1 lần gọi Meshy (10 credit)") and f.st()["state"] == "running"
+    assert json.loads(out.splitlines()[-1])["brief"] == f"{A}/texture/v2/brief-worker.md"
 
 
 def test_a_meshy_price_check_that_fails_blocks_with_one_line_instead_of_a_traceback(tmp_path):
-    f = to_texture(tmp_path)
-    (tmp_path / "concepts/_approved" / AID / "concept_albedo.png").unlink()
+    f = to_texture(tmp_path, prepare=(tmp_path / "concepts/_approved" / AID / "concept_albedo.png").unlink)
     f.brief("t1")
     assert f.cp["t1"]["out"] == (f"pilot-house: texture → blocked trước khi giao. Tiếp: xử lý: gen_api --dry-run: missing "
                                  f"file {f.st()['concept_dir']}/concept_albedo.png → bổ sung rồi `retry pilot-house`\n")

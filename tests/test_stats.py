@@ -31,5 +31,7 @@ def test_p_stats_reads_the_dispatches_of_a_real_run_one_row_per_step_d27_3(tmp_p
     f = to_model(tmp_path)
     rows = f.p("stats", AID).splitlines()
     assert rows[0] == "| Bước | Worker | Reviewer | Chờ Producer | Token worker | Token reviewer | report_fallback |"
-    assert [r.split(" | ")[0] for r in rows[2:]] == ["| blockout", "| views_front", "| views_rest"]
-    assert all(r.endswith(" | không có số | không có số | 0 |") for r in rows[2:])
+    # D30.5: approving views_rest dispatched the model worker, so the model row is open with no reviewer yet.
+    assert [r.split(" | ")[0] for r in rows[2:]] == ["| blockout", "| views_front", "| views_rest", "| model"]
+    assert all(r.endswith(" | không có số | không có số | 0 |") for r in rows[2:5])
+    assert rows[5] == "| model | không có số | — | — | không có số | — | 0 |"

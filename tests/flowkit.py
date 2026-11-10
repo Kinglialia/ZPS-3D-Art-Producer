@@ -41,7 +41,7 @@ def brief_lines(text: str, key: str) -> str | None:
 
 class Flow:
     def __init__(self, root: Path):
-        self.root, self.cp = root, {}
+        self.root, self.cp, self.sent = root, {}, None
 
     def p(self, *args, ok=True):
         return run(self.root, *args, ok=ok)
@@ -53,7 +53,8 @@ class Flow:
         self.cp[name] = {"out": out, "st": self.st(), **kw}
 
     def brief(self, name):
-        raw = self.p("brief", AID)
+        """D30.5: a feedback that moved the asset already printed the next dispatch (or the texture gate's stop line)."""
+        raw, self.sent = self.sent or self.p("brief", AID), None
         try:
             out = json.loads(raw)
         except ValueError:
@@ -121,11 +122,14 @@ class Flow:
         self.keep(name + " ingest", self.p("ingest", AID))
 
     def human(self, name, *args, ok=True):
-        self.keep(name, self.p("feedback", AID, *args, ok=ok))
+        out = self.p("feedback", AID, *args, ok=ok)
+        self.keep(name, out)
+        self.sent = out.split("\n", 1)[1] if ok and out.count("\n") > 1 else None
 
 
-def to_texture(root: Path, env_line=f"MESHY_API_KEY={PROJECT_KEY}\n") -> Flow:
-    """Blockout, views and model approved with one round each: the asset waits at texture/todo."""
+def to_texture(root: Path, env_line=f"MESHY_API_KEY={PROJECT_KEY}\n", prepare=None) -> Flow:
+    """Blockout, views and model approved with one round each. D30.5: the model approval dispatches the texture step
+    at once (the texture gate runs there), so `prepare` changes the project before that approval."""
     f = Flow(root)
     pilot_project(root)
     if env_line is not None:
@@ -135,6 +139,8 @@ def to_texture(root: Path, env_line=f"MESHY_API_KEY={PROJECT_KEY}\n") -> Flow:
     for name, human in (("b1", True), ("vf1", False), ("vr1", True), ("m1", True)):
         f.work(name)
         f.review(name, verdict="PASS", counts=counts(), top_fix=None)
+        if name == "m1" and prepare:
+            prepare()
         if human:
             f.human(f"approve {name}", "đạt", "--action", "approve")
     return f

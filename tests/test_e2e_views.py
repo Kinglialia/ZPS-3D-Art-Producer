@@ -122,8 +122,10 @@ def lines(text, *wanted):
 
 
 def test_approved_blockout_moves_on_to_views_front_instead_of_parking(flow):
-    assert flow["approve blockout"]["out"] == ("pilot-house: đã duyệt blockout v1 → views_front/todo. "
-                                               "Tiếp: giao worker → `brief pilot-house`\n")
+    head, line = flow["approve blockout"]["out"].splitlines()
+    assert head == "pilot-house: đã duyệt blockout v1 → views_front/todo. Tiếp: giao worker → `brief pilot-house`"
+    # D30.5: the approval dispatches the next step's worker in the same turn.
+    assert json.loads(line)["brief"] == "production/assets/pilot-house/views_front/v1/brief-worker.md"
 
 
 def test_the_front_brief_names_the_approved_blockout_only_the_concept_files_views_need_and_the_codex_call(flow):
@@ -237,7 +239,7 @@ def test_approving_the_set_parks_at_done_enabled_before_the_disabled_model_step(
 def test_a_blockout_redo_after_the_set_keeps_the_old_views_as_prior_so_the_next_build_reuses_unchanged_ones(flow):
     st = flow["redo blockout"]["st"]
     assert {k: st[k] for k in ("stage", "state", "approved", "prior", "reopened", "worker_agent_id")} == {
-        "stage": "blockout", "state": "fix", "approved": {}, "prior": {"views_front": 3, "views_rest": 2},
+        "stage": "blockout", "state": "running", "approved": {}, "prior": {"views_front": 3, "views_rest": 2},
         "reopened": {}, "worker_agent_id": None}
     assert flow["b2 brief"]["out"]["resume"] is None
     b = flow["vf4 brief"]

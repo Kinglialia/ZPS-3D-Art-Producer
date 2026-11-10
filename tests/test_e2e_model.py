@@ -160,13 +160,20 @@ def missing(text, *wanted):
     return [w for w in wanted if w not in text.splitlines()]
 
 
+def moved(out: str) -> tuple[str, str]:
+    """D30.5: a feedback or retry that moves the asset prints its line, then the next dispatch: (line, brief path)."""
+    head, line = out.splitlines()
+    return head, json.loads(line)["brief"]
+
+
 def sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
 def test_approving_the_view_set_moves_on_to_the_model_step(flow):
-    assert flow["approve set"]["out"] == ("pilot-house: đã duyệt views_rest v2 → model/todo. "
-                                          "Tiếp: giao worker → `brief pilot-house`\n")
+    assert moved(flow["approve set"]["out"]) == (
+        "pilot-house: đã duyệt views_rest v2 → model/todo. Tiếp: giao worker → `brief pilot-house`",
+        f"{A}/model/v1/brief-worker.md")
 
 
 def test_the_model_brief_names_the_three_approved_finals_and_only_the_concept_files_the_model_reads(flow):
@@ -244,8 +251,9 @@ def test_approving_the_model_locks_the_sha256_of_the_picked_untextured_glb(flow)
 
 
 def test_once_texture_is_enabled_the_parked_asset_moves_on(flow):
-    assert flow["retry"]["out"] == "pilot-house: → todo. Tiếp: giao worker → `brief pilot-house`\n"
-    assert pick(flow["retry"]["st"], "stage", "state") == {"stage": "texture", "state": "todo"}
+    assert moved(flow["retry"]["out"]) == ("pilot-house: → todo. Tiếp: giao worker → `brief pilot-house`",
+                                           f"{A}/texture/v1/brief-worker.md")
+    assert pick(flow["retry"]["st"], "stage", "state") == {"stage": "texture", "state": "running"}
 
 
 def test_the_texture_brief_copies_the_approved_model_issues_and_names_every_approved_final_d20_3_d20_10(flow):
@@ -278,7 +286,8 @@ def test_the_reopened_model_starts_a_fresh_worker_and_a_new_approval_locks_the_n
     assert (flow["m4 brief"]["out"]["resume"], flow["m4 brief"]["out"]["brief"]) == (None, f"{A}/model/v4/brief-worker.md")
     assert "`TOP_FIX: structure: F3`" in flow["m4 brief"]["text"]
     s = flow["approve model v4"]
-    assert s["out"] == "pilot-house: đã duyệt model v4 → texture/todo. Tiếp: giao worker → `brief pilot-house`\n"
+    assert moved(s["out"]) == ("pilot-house: đã duyệt model v4 → texture/todo. Tiếp: giao worker → `brief pilot-house`",
+                               f"{A}/texture/v2/brief-worker.md")
     assert pick(s["st"], "locked", "stale") == {
         "locked": {"model": sha(glb("m4"))}, "stale": {"views_rest v1": "views_front v1", "texture v1": "model v3"}}
 
@@ -300,7 +309,7 @@ def test_a_second_fix_uv_mesh_in_the_same_feedback_round_goes_to_the_human(flow)
 def test_a_human_redo_of_a_texture_whose_top_fix_is_fix_uv_mesh_tells_the_worker_the_mesh_is_fixed_elsewhere(flow):
     t = flow["t3 brief"]["text"]
     assert pick(flow["redo texture"]["st"], "stage", "state", "reopened") == {
-        "stage": "texture", "state": "fix", "reopened": {}}
+        "stage": "texture", "state": "running", "reopened": {}}
     assert "TOP_FIX" not in t
     assert ("Ưu tiên 1, feedback của người dùng: sửa `H1` (nguyên văn trong `acceptance` của "
             f"`{A}/texture/v2/findings.json` và feedback.md). Đối chiếu từng ý với concept; không bỏ ý nào. "

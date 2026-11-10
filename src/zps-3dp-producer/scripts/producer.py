@@ -80,9 +80,13 @@ def cmd_waive(a):
 
 def cmd_feedback(a):
     import json
-    from core.loop import human_action
+    from core.loop import after_feedback, human_action
+    from core.state import load_st
     regions = json.loads(Path(a.regions).read_text(encoding="utf-8")) if a.regions else None
+    st = load_st(a.id)
+    before = (st["stage"], st["state"])
     print(human_action(a.id, a.action, a.text, a.step, regions, a.offer))
+    after_feedback(a.id, before)
 
 
 def cmd_approvals(a):

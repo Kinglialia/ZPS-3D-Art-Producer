@@ -318,8 +318,10 @@ def test_a_gd1_asset_parked_at_done_enabled_moves_on_with_retry_once_its_next_st
     from core import limits
     assert "[house-a] blockout/done_enabled → bước views_front đã bật → `retry house-a`\n" in flow.call(
         limits.show_next, Namespace(session=False))
-    assert flow.call(loop.retry, Namespace(id=AID)) == "house-a: → todo. Tiếp: giao worker → `brief house-a`\n"
-    assert {k: flow.st[k] for k in ("stage", "state", "approved")} == {"stage": "views_front", "state": "todo",
+    head, line = flow.call(loop.retry, Namespace(id=AID)).splitlines()
+    assert head == "house-a: → todo. Tiếp: giao worker → `brief house-a`"
+    assert json.loads(line)["brief"] == f"production/assets/{AID}/views_front/v1/brief-worker.md"
+    assert {k: flow.st[k] for k in ("stage", "state", "approved")} == {"stage": "views_front", "state": "running",
                                                                      "approved": {"blockout": 2}}
 
 
@@ -512,8 +514,9 @@ def test_feedback_is_tagged_with_the_version_the_user_sees_not_the_newest(flow):
 
 def test_retry_sets_the_old_report_aside_so_ingest_waits_for_the_new_one(flow):
     flow.work(status="NEEDS_CONTEXT")
-    assert flow.call(loop.retry, Namespace(id=AID)) == (
-        "house-a: → running. Tiếp: đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)\n")
+    head, line = flow.call(loop.retry, Namespace(id=AID)).splitlines()
+    assert head == "house-a: → running. Tiếp: đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)"
+    assert json.loads(line)["report"] == f"production/assets/{AID}/blockout/v1/worker-out.md"
     assert (flow.v(1) / "worker-out-1.md").read_text(encoding="utf-8").startswith("STATUS: NEEDS_CONTEXT")
     with pytest.raises(ProducerError) as e:
         loop.ingest(Namespace(id=AID, agent_id=None))
@@ -730,3 +733,29 @@ def test_the_duyet_2_readme_lists_producer_waives_apart_and_user_waives_as_excep
     assert (assemble.waived(st, "user", "người dùng waive: "), assemble.waived(st, "producer")) == (
         ["- blockout v1 F1 [major] mái: người dùng waive: mái thấp là chủ ý"],
         ["- blockout v1 F2 [major] mái: chạy thử 0.1 m"])
+
+
+def cli(f, *argv):
+    import producer
+    producer.main(list(argv))
+    return f.cap.readouterr().out
+
+
+def test_each_state_change_command_ends_with_the_one_dispatch_line_that_brief_prints_d30_5(flow):
+    """Run 5: after a redo or a retry the Producer ran `P brief` in a separate turn; the dispatch now comes with it."""
+    pass_v2(flow)
+    out = cli(flow, "feedback", AID, "mái thấp quá", "--action", "redo").splitlines()
+    assert (len(out), out[0]) == (2, "house-a: làm lại blockout từ v2. Tiếp: giao worker → `brief house-a`")
+    assert json.loads(out[-1]) == flow.brief()
+    flow.work(status="NEEDS_CONTEXT", out=json.loads(out[-1]))
+    out = cli(flow, "retry", AID).splitlines()
+    assert len(out) == 2 and json.loads(out[-1]) == flow.brief()
+    note = cli(flow, "feedback", AID, "ghi chú thôi").splitlines()
+    assert len(note) == 1 and not note[0].startswith("{")
+
+
+def test_a_feedback_that_changes_no_state_prints_no_dispatch_d30_5(flow):
+    flow.work()
+    out = cli(flow, "feedback", AID, "mái đẹp", "--action", "approve").splitlines()
+    assert out == ["house-a: đã ghi feedback; house-a không chờ duyệt blockout (state=reviewing). Tiếp: đang chờ subagent "
+                   "(mất kết nối thì `brief house-a` để giao lại)"]

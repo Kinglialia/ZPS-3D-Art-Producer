@@ -129,9 +129,12 @@ def test_meshy_regen_waits_for_the_user_and_does_not_raise_the_budget_by_itself(
 
 def test_the_users_approval_adds_one_call_and_the_next_brief_says_one_call_is_left(flow):
     s, h = flow["approve meshy"], flow["h1"]
-    assert s["out"] == (f"pilot-house: meshy_regen: thêm 1 lần gọi Meshy (10 credit), budget-{h}.json max_credits=20. "
-                        "Tiếp: giao worker → `brief pilot-house`\n")
-    assert pick(s["st"], "state", "fix_round", "fix_base", "ask") == {"state": "fix", "fix_round": 1, "fix_base": 1,
+    head, line = s["out"].splitlines()
+    assert head == (f"pilot-house: meshy_regen: thêm 1 lần gọi Meshy (10 credit), budget-{h}.json max_credits=20. "
+                    "Tiếp: giao worker → `brief pilot-house`")
+    # D30.5: the approval dispatches the fix round in the same turn.
+    assert json.loads(line)["brief"] == f"{A}/texture/v2/brief-worker.md"
+    assert pick(s["st"], "state", "fix_round", "fix_base", "ask") == {"state": "running", "fix_round": 1, "fix_base": 1,
                                                                       "ask": None}
     assert flow["budget approve"] == {"max_credits": 20, "used_credits": 10}
     t = flow["t2 brief"]
@@ -170,7 +173,9 @@ def test_an_assemble_fail_blocks_with_the_fail_points_as_findings_for_the_board(
 
 
 def test_retry_runs_assemble_again_as_a_new_version_so_the_failed_run_keeps_its_report_and_findings(flow):
-    assert flow["retry a1"]["out"] == "pilot-house: → todo. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = flow["retry a1"]["out"].splitlines()
+    assert head == "pilot-house: → todo. Tiếp: giao worker → `brief pilot-house`"
+    assert json.loads(line) == flow["a1 again brief"]["out"]
     assert flow["a1 again brief"]["out"]["report"] == f"{A}/assemble/v2/report-script.md"
     s = flow["a1 again ingest"]
     assert s["out"] == ("pilot-house: script DONE → assemble/waiting_human. "
@@ -182,9 +187,11 @@ def test_needs_fix_at_assemble_must_name_texture_or_model(flow):
     assert flow["redo assemble"]["out"] == ("LỖI: pilot-house: assemble không có vòng sửa: chọn bước sửa, "
                                             "`--step texture` (vẽ lại) hoặc `--step model` (mesh, UV)\n")
     s = flow["redo texture"]
-    assert s["out"] == "pilot-house: làm lại texture từ v2. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = s["out"].splitlines()
+    assert head == "pilot-house: làm lại texture từ v2. Tiếp: giao worker → `brief pilot-house`"
+    assert json.loads(line)["brief"] == f"{A}/texture/v3/brief-worker.md"
     assert pick(s["st"], "stage", "state", "fix_round", "fix_base", "approved") == {
-        "stage": "texture", "state": "fix", "fix_round": 1, "fix_base": 2,
+        "stage": "texture", "state": "running", "fix_round": 1, "fix_base": 2,
         "approved": {"blockout": 1, "views_front": 1, "views_rest": 1, "model": 1}}
 
 

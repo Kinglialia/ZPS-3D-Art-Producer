@@ -275,8 +275,10 @@ def test_no_progress_at_the_review_of_v3_stops_early_and_offers_v2_because_v3_re
 
 
 def test_redo_opens_a_new_feedback_round_from_the_offered_version_with_counters_reset(flow):
-    assert flow["redo"]["out"] == "pilot-house: làm lại blockout từ v2. Tiếp: giao worker → `brief pilot-house`\n"
-    assert pick(flow["redo"]["st"]) == state(fix_base=2, round_versions=[2], label="", evidence_used=0, rejected={},
+    assert flow["redo"]["out"].splitlines() == [
+        "pilot-house: làm lại blockout từ v2. Tiếp: giao worker → `brief pilot-house`",
+        json.dumps(worker_json(4, "w1"), ensure_ascii=False)]
+    assert pick(flow["redo"]["st"]) == state(state="running", fix_base=2, round_versions=[2], label="", evidence_used=0, rejected={},
                                              note="làm lại theo feedback người dùng")
     assert list(flow["redo"]["st"]["decisions"]) == ["blockout v2"]
 
