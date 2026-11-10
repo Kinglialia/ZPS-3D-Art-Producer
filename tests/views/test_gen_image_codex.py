@@ -185,3 +185,45 @@ def test_a_truncated_png_is_a_broken_image_because_pillow_reads_only_the_header_
     r = gen("truncated")
     assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 3, False)
     assert r["record"]["errors"] == ["file ảnh hỏng"] * 3
+
+
+def gen_in_version(tmp_path, model=None):
+    """A gen whose --out lies in a version folder of a Producer root, as the views and texture briefs give it."""
+    path = fake_codex.install(tmp_path / "bin")
+    root = tmp_path / "production"
+    st = {"id": "hut", "inputs": {"views_front": {"v2": {"profile": "786cfc66bdd2"}}}}
+    (root / "assets/hut").mkdir(parents=True)
+    (root / "assets/hut/status.json").write_text(json.dumps(st), encoding="utf-8")
+    out = root / "assets/hut/views_front/v2/work/gen/front-1.png"
+    out.parent.mkdir(parents=True)
+    ref = tmp_path / "ref.png"
+    Image.new("RGB", (64, 64)).save(ref)
+    (tmp_path / "front.md").write_text(REQUEST, encoding="utf-8")
+    env = {**os.environ, "FAKE_CODEX_LOG": str(tmp_path / "calls.jsonl"), "PATH": path,
+           "FAKE_CODEX_PID_FILE": str(root / "pids/codex_image/hut.pid"), "CODEX_HOME": str(tmp_path / "codex-home"),
+           **({"FAKE_CODEX_MODEL": model} if model else {})}
+    env.pop("PRODUCER_ROOT", None)
+    p = subprocess.run([sys.executable, str(GEN), "--model", "gpt-6-astra", "--reasoning", "medium", "--pid-file",
+                        str(root / "pids/codex_image/hut.pid"), "--prompt", str(tmp_path / "front.md"),
+                        f"--image={ref}", "--out", str(out)], capture_output=True, text=True, env=env, cwd=tmp_path)
+    assert p.returncode == 0, p.stdout + p.stderr
+    rec = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
+    inp = json.loads((root / "assets/hut/status.json").read_text(encoding="utf-8"))["inputs"]["views_front"]["v2"]
+    return rec, inp, (root / "ledger.md").read_text(encoding="utf-8").splitlines()
+
+
+def test_the_ledger_and_the_version_inputs_keep_the_requested_and_the_actual_image_model_d28_1(tmp_path):
+    """Image models change over time (D28): a version must say which model made its images, so a later comparison
+    does not mix models. The actual model is what `codex exec` reports, not what the brief asked for."""
+    rec, inp, led = gen_in_version(tmp_path, "gpt-6-astra-2026-11")
+    assert (rec["model_requested"], rec["model_actual"]) == ("gpt-6-astra", "gpt-6-astra-2026-11")
+    assert inp == {"profile": "786cfc66bdd2", "image_model_requested": "gpt-6-astra",
+                   "image_model_actual": "gpt-6-astra-2026-11"}
+    assert [l.split(" · ", 2)[2] for l in led] == [
+        "hut · views_front v2 · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế gpt-6-astra-2026-11"]
+
+
+def test_without_a_model_line_from_codex_the_actual_model_is_no_number_never_the_requested_one(tmp_path):
+    rec, inp, led = gen_in_version(tmp_path)
+    assert (rec["model_actual"], inp["image_model_actual"]) == ("không có số", "không có số")
+    assert led[0].endswith(" · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế không có số")

@@ -35,7 +35,7 @@ production/                     # trong project Claude Code; chỉ script và su
 ## Các trường status.json đáng chú ý
 
 - `concept_dir`: thư mục `_approved/<id>/`.
-- `inputs[<step>]["vN"]`: đầu vào khi sinh brief vN: `{<bước trước đã duyệt>: {"v", "hash"}, "concept", "card", "profile", "art_direction"}`. `profile` là `PROFILE_HASH` của brief; `ingest` so report với giá trị này.
+- `inputs[<step>]["vN"]`: đầu vào khi sinh brief vN: `{<bước trước đã duyệt>: {"v", "hash"}, "concept", "card", "profile", "art_direction"}`. `profile` là `PROFILE_HASH` của brief; `ingest` so report với giá trị này. `gen_image_codex.py` thêm `image_model_requested` và `image_model_actual` (chuỗi, nhiều giá trị nối bằng ", "; không biết model thực tế → "không có số", D28.1). Hai khóa này là chuỗi, không phải dict, vì mọi dict trong `inputs` là bản của bước trước.
 - `approved`, `approved_hash`, `rejected`: version đã duyệt, sha256 của `final/` lúc duyệt, các version khác của bước. `redo` xóa cả ba từ bước đó trở đi. `final/` đã duyệt bị sửa → `brief` và `ingest` bước sau báo lỗi.
 - `locked[<bước>]`: sha256 của file `lock` của bước (`model`: `final/<id>-untextured.glb`) lúc duyệt; khóa mesh (D20.7). Mở lại bước đó (`redo`, `fix_uv_mesh`) thì xóa cùng `approved`.
 - `stale["<step> vN"] = "<bước trước> vM"`: vN dựng từ bản vM không còn là bản duyệt (so theo hash). Script tính lại khi sinh brief, khi duyệt, khi `redo`; trang duyệt hiện "dựng từ … — cũ".

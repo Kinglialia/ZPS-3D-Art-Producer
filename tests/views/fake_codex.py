@@ -2,7 +2,8 @@
 ok | small | home | home_two | none | fail:<n> (first n calls report an error, then ok) | slow:<s> (sleep, then ok) |
 hang_after_image (saves under CODEX_HOME, never returns) | error_with_bystander (reports an error; another asset's image
 sits under CODEX_HOME) | ok_but_error (valid image, result.json also carries an error) | truncated (cut-off PNG).
-Logs each call to FAKE_CODEX_LOG."""
+Logs each call to FAKE_CODEX_LOG.
+FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr."""
 import io
 import json
 import os
@@ -35,6 +36,9 @@ def main():
              "pid_name": own[0].name if own else None}
     with log.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
+    if os.environ.get("FAKE_CODEX_MODEL"):
+        print(f"OpenAI Codex v0.0.0\n--------\nworkdir: {os.getcwd()}\nmodel: {os.environ['FAKE_CODEX_MODEL']}\n"
+              "provider: openai\n--------", file=sys.stderr)
     out = Path(re.search(r"^OUTPUT_PATH: (.+)$", prompt, re.M).group(1))
     result = Path(re.search(r"^RESULT_PATH: (.+)$", prompt, re.M).group(1))
     w, h = map(int, re.search(r"^SIZE: (\d+)x(\d+)$", prompt, re.M).groups())

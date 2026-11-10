@@ -12,12 +12,16 @@ this also holds after a timeout. A valid --out image is accepted even if result.
 A try fails when there is no image, Codex reports an error, the image is broken, or the long side is 1040 px or less.
 The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset each hold a slot.
 3 failed tries in a row: exit 1 (D8.3). Writes <dir/name>.json, prints one line.
+D28.1: the record keeps the requested model (--model) and the actual one, the `model:` line of the header that
+`codex exec` prints on stderr ("không có số" without it). When --out lies in <root>/assets/<id>/<step>/vN/, both also go
+to the ledger and to `inputs[<step>]["vN"]` of status.json.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +32,7 @@ TRIES = 3
 MIN_LONG = 1041
 IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
 CODEX_KEYS = {"OPENAI_API_KEY", "CODEX_API_KEY"}
+NO_NUMBER = "không có số"
 FRAME = """You are one step of an art build pipeline. Do only this:
 1. Use your image generation tool once to make the image that REQUEST describes. Give the tool the attached images.
 2. Save the image as PNG at OUTPUT_PATH, SIZE pixels.
@@ -56,6 +61,40 @@ def codex_error(result: Path) -> str | None:
         return None
 
 
+def actual_model(stderr: str | None) -> str | None:
+    m = re.search(r"^model: *(\S+)\s*$", stderr or "", re.M)
+    return m[1] if m else None
+
+
+def version_of(out: Path) -> tuple[Path, str, str, int] | None:
+    parts = out.parts
+    for i in range(len(parts) - 4, -1, -1):
+        if parts[i] == "assets" and re.fullmatch(r"v\d+", parts[i + 3]):
+            return Path(*parts[:i]), parts[i + 1], parts[i + 2], int(parts[i + 3][1:])
+    return None
+
+
+def record_models(out: Path, requested: str, actual: str):
+    """Several gens of one asset run at once: status.json is written under the Producer lock."""
+    if not (where := version_of(out)):
+        return
+    root, aid, sid, n = where
+    os.environ["PRODUCER_ROOT"] = str(root)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from core.state import ProducerError, ledger, load_st, locked, save_st
+    try:
+        with locked():
+            st = load_st(aid)
+            inp = st.setdefault("inputs", {}).setdefault(sid, {}).setdefault(f"v{n}", {})
+            for k, v in (("image_model_requested", requested), ("image_model_actual", actual)):
+                seen = inp[k].split(", ") if inp.get(k) else []
+                inp[k] = ", ".join(seen + [v] if v not in seen else seen)
+            save_st(st)
+            ledger(f"{aid} · {sid} v{n} · gen ảnh {out.name}: model yêu cầu {requested} · model thực tế {actual}")
+    except (ProducerError, OSError) as ex:
+        print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
+
+
 def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, list[int] | None]:
     for p in (out, result):
         p.unlink(missing_ok=True)
@@ -67,6 +106,8 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
         p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=a.timeout, env=env)
     except subprocess.TimeoutExpired:
         p = None
+    if p is not None and (m := actual_model(p.stderr)):
+        a.actual = m
     err, fallback = codex_error(result), False
     if not out.is_file() and not err and len(found := new_images(start)) == 1:
         shutil.copyfile(found[0], out)
@@ -105,7 +146,8 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     result, rec_path = out.with_name(out.stem + ".result.json"), out.with_suffix(".json")
     prompt = FRAME.format(out=out, result=result, size=a.size, request=a.prompt.read_text(encoding="utf-8").strip())
-    rec = {"status": "fail", "attempts": 0, "model": a.model, "reasoning": a.reasoning, "prompt": str(a.prompt),
+    a.actual = None
+    rec = {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model, "model_actual": NO_NUMBER, "reasoning": a.reasoning, "prompt": str(a.prompt),
            "images": a.image, "size": None, "fallback": False, "errors": []}
     if shutil.which("codex") is None:
         rec["errors"].append("không thấy codex trên PATH")
@@ -123,9 +165,12 @@ def main():
                 rec["errors"].append(err)
         finally:
             pid_file.unlink(missing_ok=True)
+        rec["model_actual"] = a.actual or NO_NUMBER
     if rec["status"] != "ok":
         out.unlink(missing_ok=True)
     rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    if rec["attempts"]:
+        record_models(out, rec["model_requested"], rec["model_actual"])
     if rec["status"] == "ok":
         print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
         return
