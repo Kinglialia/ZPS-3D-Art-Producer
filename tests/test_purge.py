@@ -142,6 +142,7 @@ def test_a_new_session_deletes_exactly_the_files_outside_the_keep_set(proj, sour
 
 
 def test_keep_cancels_the_pending_deletion(proj):
+    """D29.5: the user changes their mind before the next session; nothing may be lost."""
     approve(proj)
     before = tree(proj)
     assert p(proj, "keep", AID, "--by", "giữ lại") == "pilot-house: đã hủy lệnh xóa; mọi file giữ nguyên\n"
@@ -151,6 +152,7 @@ def test_keep_cancels_the_pending_deletion(proj):
 
 
 def test_purge_deletes_now_and_zip_packs_the_files_first(proj):
+    """D29.5, D29.9: the user wants the space now and a copy of what goes, including the full-size board images."""
     approve(proj)
     z = proj / "keep" / "pilot.zip"
     out = p(proj, "purge", AID, "--by", "xóa luôn đi", "--zip", str(z))
@@ -161,6 +163,7 @@ def test_purge_deletes_now_and_zip_packs_the_files_first(proj):
 
 
 def test_purge_refuses_an_asset_before_duyet_2(proj):
+    """D29.1: before DUYỆT 2 the user still compares versions; every file stays."""
     assert p(proj, "purge", AID, "--by", "xóa", ok=False) == (
         "LỖI: pilot-house: không xóa: chưa DUYỆT 2 hoặc đang làm lại (state=waiting_human)\n")
 
@@ -175,6 +178,7 @@ def test_a_redo_between_the_arm_and_the_next_session_cancels_the_deletion(proj):
 
 
 def test_a_redo_after_a_purge_is_refused_with_the_manifest(proj):
+    """The locked mesh and the GLBs are gone: a fix round would build on missing inputs."""
     approve(proj)
     hook(proj, "startup")
     at = json.loads((proj / A / "status.json").read_text(encoding="utf-8"))["purged"]["at"]
@@ -221,13 +225,15 @@ def test_both_ab_folders_purge_and_the_codex_edition_never_deletes_by_itself(pro
 
 
 def test_next_warns_above_disk_warn_gb_and_disk_sums_by_asset_step_and_type(proj):
+    """D29.10: the user sees the disk fill before it is full; a broken policy never silences the hook's asset list."""
     pol = proj / "production/policy.yaml"
     text = pol.read_text(encoding="utf-8")
     assert "vượt disk_warn_gb" not in p(proj, "next")
     pol.write_text(text.replace("disk_warn_gb: 20", "disk_warn_gb: 0.00001"), encoding="utf-8")
     assert "vượt disk_warn_gb 1e-05 GB → `disk` để xem chỗ lớn" in p(proj, "next")
     pol.write_text(text.replace("disk_warn_gb: 20", "disk_warn_gb: 0"), encoding="utf-8")
-    assert "disk_warn_gb: phải là số GB lớn hơn 0" in p(proj, "next", ok=False)
+    out = p(proj, "next")
+    assert "LỖI: production/policy.yaml: disk_warn_gb: phải là số GB lớn hơn 0" in out and f"[{AID}] assemble/" in out
     pol.write_text(text, encoding="utf-8")
     out = p(proj, "disk").splitlines()
     heads = [l for l in out if not l.startswith("  ")]
@@ -237,3 +243,33 @@ def test_next_warns_above_disk_warn_gb_and_disk_sums_by_asset_step_and_type(proj
     steps = out[out.index("Theo bước:") + 1:out.index("Theo loại file:")]
     assert sorted(l.split(":")[0].strip() for l in steps) == ["assemble", "blockout", "feedback", "model", "texture",
                                                               "views_front", "views_rest"]
+
+
+def test_an_arm_that_cannot_write_its_zip_keeps_duyet_2_and_deletes_nothing(proj):
+    """The approval already filled deliver/; a bad --zip path must not undo it or arm a deletion without its copy."""
+    (proj / "zips").mkdir()
+    out = approve(proj, "--zip", str(proj / "zips"))
+    assert out.splitlines()[0] == "pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong"
+    assert out.splitlines()[1].startswith("chưa lập được lệnh xóa D29: ")
+    assert json.loads((proj / A / "status.json").read_text(encoding="utf-8"))["state"] == "done"
+    assert not (proj / A / "purge-pending.json").exists()
+
+
+def test_an_image_that_cannot_be_shrunk_keeps_its_pixels_and_the_purge_still_records(proj):
+    """A truncated PNG opens (size known) but does not decode: the purge must still write its manifest and marker."""
+    raw = (proj / A / HERO).read_bytes()
+    (proj / A / HERO).write_bytes(raw[:200])
+    approve(proj)
+    assert "đã xóa 10 file, thu nhỏ 1 ảnh" in p(proj, "purge", AID, "--by", "xóa")
+    man = json.loads((proj / A / "purge-manifest.json").read_text(encoding="utf-8"))
+    assert man["thumbnails"][0]["path"] == HERO and man["thumbnails"][0]["error"]
+    assert (proj / A / HERO).read_bytes() == raw[:200]
+    assert json.loads((proj / A / "status.json").read_text(encoding="utf-8"))["purged"]
+
+
+def test_archive_refuses_an_asset_with_a_pending_deletion(proj):
+    """`P next` and `P purge` read assets/ only: an archived pending deletion would never free its space."""
+    approve(proj)
+    assert p(proj, "archive", AID, ok=False) == (
+        "LỖI: pilot-house: còn lệnh xóa D29 đang chờ (archive/ không được dọn): `keep pilot-house` hoặc "
+        "`purge pilot-house` trước\n")

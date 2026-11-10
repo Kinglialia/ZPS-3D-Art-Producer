@@ -128,17 +128,22 @@ def blocked(st: dict, doc: dict | None) -> str | None:
     return None
 
 
-def shrink(f: Path) -> tuple[int, int]:
+def shrink(a: Path, r: str) -> dict:
+    """Best effort: an image PIL cannot shrink keeps its pixels, and the manifest says why."""
     from PIL import Image
-    before = f.stat().st_size
-    with Image.open(f) as im:
-        fmt = im.format
-        im.load()
-        im.thumbnail((THUMB_PX, THUMB_PX), Image.LANCZOS)
-        tmp = f.with_name(f".{f.name}.thumb")
-        im.save(tmp, fmt)
-    os.replace(tmp, f)
-    return before, f.stat().st_size
+    f = a / r
+    before, tmp = f.stat().st_size, f.with_name(f".{f.name}.thumb")
+    try:
+        with Image.open(f) as im:
+            fmt = im.format
+            im.load()
+            im.thumbnail((THUMB_PX, THUMB_PX), Image.LANCZOS)
+            im.save(tmp, fmt)
+        os.replace(tmp, f)
+    except (OSError, ValueError) as ex:
+        tmp.unlink(missing_ok=True)
+        return {"path": r, "before": before, "after": before, "error": str(ex)}
+    return {"path": r, "before": before, "after": f.stat().st_size}
 
 
 def execute(cfg: dict, st: dict, source: str, by: str | None, zip_path: str | None = None) -> str:
@@ -147,19 +152,21 @@ def execute(cfg: dict, st: dict, source: str, by: str | None, zip_path: str | No
     p = plan(cfg, st)
     zp = pack(aid, p, zip_path) if zip_path else (json.loads(pend.read_text(encoding="utf-8")).get("zip")
                                                    if pend.is_file() else None)
+    doc = {"asset": aid, "at": now(), "source": source, "by": by, "assemble": st["approved"]["assemble"],
+           "freed_bytes": p["bytes"], "zip": zp, "deleted": [{"path": r, "bytes": b} for r, b in p["delete"]],
+           "thumbnails": []}
+    write_atomic(a / MANIFEST, json.dumps(doc, ensure_ascii=False, indent=2))
+    st["purged"] = {"at": doc["at"], "manifest": rel(a / MANIFEST), "freed_bytes": p["bytes"], "zip": zp}
+    save_st(st)
+    pend.unlink(missing_ok=True)
     for r, _ in p["delete"]:
-        (a / r).unlink()
+        (a / r).unlink(missing_ok=True)
     for top, dirs, names in os.walk(a, topdown=False):
         if Path(top) != a and not os.listdir(top):
             os.rmdir(top)
-    th = [{"path": r, "before": b0, "after": b1} for r in p["thumbs"] for b0, b1 in [shrink(a / r)]]
-    freed = p["bytes"] + sum(t["before"] - t["after"] for t in th)
-    doc = {"asset": aid, "at": now(), "source": source, "by": by, "assemble": st["approved"]["assemble"],
-           "freed_bytes": freed, "zip": zp, "deleted": [{"path": r, "bytes": b} for r, b in p["delete"]],
-           "thumbnails": th}
+    th = doc["thumbnails"] = [shrink(a, r) for r in p["thumbs"]]
+    freed = doc["freed_bytes"] = st["purged"]["freed_bytes"] = p["bytes"] + sum(t["before"] - t["after"] for t in th)
     write_atomic(a / MANIFEST, json.dumps(doc, ensure_ascii=False, indent=2))
-    pend.unlink(missing_ok=True)
-    st["purged"] = {"at": doc["at"], "manifest": rel(a / MANIFEST), "freed_bytes": freed, "zip": zp}
     save_st(st)
     ledger(f"{aid} · đã xóa D29 ({source}): {len(p['delete'])} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}"
            + (f" · by: {by}" if by else "") + (f" · nén {zp}" if zp else ""))
@@ -191,7 +198,7 @@ def on_next(a) -> list[str]:
                     out.append(f"[{aid}] hủy lệnh xóa: {why}")
                 else:
                     out.append(execute(load_cfg(), st, src, None))
-        except (ProducerError, OSError, ValueError) as ex:
+        except Exception as ex:  # noqa: BLE001 — the hook must still print the asset list
             out.append(f"[{aid}] chưa xóa được: {ex}")
     return out
 
@@ -201,9 +208,12 @@ def tree_size(d: Path) -> int:
 
 
 def disk_warning() -> str | None:
-    lim = policy.load().get("disk_warn_gb")
+    try:
+        lim = policy.load().get("disk_warn_gb", policy.DISK_WARN_GB)
+    except ProducerError as ex:
+        return f"LỖI: {ex}"
     total = tree_size(ROOT)
-    if lim is None or total <= lim * GB:
+    if total <= lim * GB:
         return None
     return f"⚠ {rel(ROOT)}/ dùng {size(total)}, vượt disk_warn_gb {lim} GB → `disk` để xem chỗ lớn"
 
@@ -244,8 +254,8 @@ def disk(_a):
                 by_step[r[2]] = by_step.get(r[2], 0) + b
         t = f.suffix.lower() or "(không đuôi)"
         by_type[t] = by_type.get(t, 0) + b
-    lim = policy.load().get("disk_warn_gb")
-    out = [f"{rel(ROOT)}/: {size(sum(by_type.values()))}" + (f" · ngưỡng disk_warn_gb {lim} GB" if lim else "")]
+    lim = policy.load().get("disk_warn_gb", policy.DISK_WARN_GB)
+    out = [f"{rel(ROOT)}/: {size(sum(by_type.values()))} · ngưỡng disk_warn_gb {lim} GB"]
     for head, d in (("Theo asset", by_asset), ("Theo bước", by_step), ("Theo loại file", by_type)):
         out += [f"{head}:", *(f"  {k}: {size(v)}" for k, v in sorted(d.items(), key=lambda x: (-x[1], x[0])))]
     print("\n".join(out))

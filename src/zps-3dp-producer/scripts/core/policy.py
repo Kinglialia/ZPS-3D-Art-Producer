@@ -7,6 +7,7 @@ KEYS = ("blockout", "views_rest", "model")
 WHO = ("human", "reviewer")
 BOARDS = ("local", "local+remote")
 BY = {"human": "người dùng", "producer": "Producer (test_mode)", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
+DISK_WARN_GB = 20
 HEAD = "# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
 
 
@@ -24,7 +25,7 @@ def check(pol: dict) -> list[str]:
         errs.append(f"review_board: phải là {'|'.join(BOARDS)}")
     if not isinstance(pol.get("test_mode", False), bool):
         errs.append("test_mode: phải là true|false")
-    w = pol.get("disk_warn_gb", 20)
+    w = pol.get("disk_warn_gb", DISK_WARN_GB)
     if isinstance(w, bool) or not isinstance(w, int | float) or w <= 0:
         errs.append("disk_warn_gb: phải là số GB lớn hơn 0")
     return errs

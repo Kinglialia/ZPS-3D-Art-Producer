@@ -264,6 +264,8 @@ def archive(a):
     st = load_st(a.id)
     if st["state"] not in FINISHED and not a.force:
         die(f"{a.id} chưa done (state={st['state']}); dùng --force nếu người dùng muốn bỏ")
+    if (ASSETS / a.id / "purge-pending.json").is_file():
+        die(f"{a.id}: còn lệnh xóa D29 đang chờ (archive/ không được dọn): `keep {a.id}` hoặc `purge {a.id}` trước")
     ARCHIVE.mkdir(parents=True, exist_ok=True)
     shutil.move(str(ASSETS / a.id), str(ARCHIVE / a.id))
     ledger(f"{a.id} · archive")

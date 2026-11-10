@@ -680,7 +680,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         keep()
         return findings.add_human(aid, step, n, None, marks) if marks and waiting else []
 
-    ids, msg, armed = [], "đã ghi feedback", ""
+    ids, msg, armed = [], "đã ghi feedback", False
     if answer:
         decide()
         msg = texture.resolve(st, "call" if action == "approve" else "paint", policy.BY["human"])
@@ -692,8 +692,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         if not step.get("reviewer"):
             findings.close_human(aid, target, n)
         msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
-        if target == "assemble" and by == "user":
-            armed = "\n" + purge.arm(cfg, st, zip_path)
+        armed = target == "assemble" and by == "user"
     elif action == "redo" and st["state"] in REDO_FROM:
         decide()
         st.pop("ask", None)
@@ -714,4 +713,9 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
     save_st(st)
     ledger(f"{aid} · {'người dùng' if by == 'user' else 'Producer'} {action} {target} · {text[:80]}")
     build_outputs(cfg)
-    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}{armed}"
+    if armed:
+        try:
+            armed = "\n" + purge.arm(cfg, st, zip_path)
+        except (ProducerError, OSError) as ex:
+            armed = f"\nchưa lập được lệnh xóa D29: {ex}; DUYỆT 2 vẫn ghi. Xóa sau bằng `purge {aid} --by \"<nguyên văn>\"`"
+    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}{armed or ''}"
