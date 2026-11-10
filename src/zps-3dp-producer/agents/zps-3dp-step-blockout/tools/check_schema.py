@@ -3,7 +3,9 @@
 Usage: python3 tools/check_schema.py --work <dir> [--out <json>]
 Checks: header, unique part names, fixed_params (+ _fixed_reason), required fields (a mirror_of part writes its own
 material, role and tag, because the kit copies only shape fields), primitive, rotation_deg,
-segments, enums, custom_fn (a `custom` part names a function of custom_lib.FUNCTIONS, D27.13), connected (every part reaches the root through attach.to / mirror_of.of:
+segments, enums, custom_fn (a `custom` part names a function of custom_lib.FUNCTIONS or of the asset's
+custom_parts.py, D33), custom_parts (that file passes the static check of project_parts.py and redefines no
+custom_lib function), connected (every part reaches the root through attach.to / mirror_of.of:
 orphans and cycles), order (parent listed earlier, as graph.py requires), mirror (a mirror_of part whose
 source uses inset_into or through_axis, or whose source's parent may sit off the mirror plane: the kit
 copies the source's parent, contact and depth, so gates.py crashes or fails on it).
@@ -19,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 import custom_lib  # noqa: E402
+import project_parts as PP  # noqa: E402
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
 from root_guard import require_root  # noqa: E402
 
@@ -114,7 +117,8 @@ def segments_ok(p, params):
     return isinstance(s, int) and 8 <= s <= 24
 
 
-def run(graph):
+def run(graph, project=None):
+    """project: the source of the asset's custom_parts.py, read with ast and never run."""
     parts, params = graph.get("parts", []), graph.get("params") or {}
     by = {p.get("name"): p for p in parts}
     header = [k for k, v in HEADER.items() if graph.get(k) != v]
@@ -129,6 +133,13 @@ def run(graph):
     if not graph.get("_fixed_reason"):
         fx.append("_fixed_reason")
     real = [p for p in parts if not is_mirror(p)]
+    fns, bad_project = set(custom_lib.FUNCTIONS), []
+    if project is not None:
+        bad_project = PP.static_errors(project)
+        if not bad_project:
+            own = set(PP.functions(project))
+            bad_project = [f"redefines {n} of custom_lib.py" for n in sorted(own & fns)]
+            fns |= own
     names = [p.get("name") for p in parts]
     found = {
         "schema.header": header,
@@ -140,7 +151,8 @@ def run(graph):
         "schema.segments": [p["name"] for p in parts if "segments" in p and not segments_ok(p, params)],
         "schema.enums": [f"{p['name']}: {k}" for p in parts for k, ok in ENUMS.items() if k in p and p[k] not in ok],
         "schema.custom_fn": [f"{p['name']}: {p.get('fn')}" for p in real
-                             if p.get("primitive") == "custom" and p.get("fn") not in custom_lib.FUNCTIONS],
+                             if p.get("primitive") == "custom" and p.get("fn") not in fns],
+        "schema.custom_parts": bad_project,
     }
     checks = [common.check(k, "fail" if v else "pass", value=sorted(v)) for k, v in found.items()]
     orphans, cycles, order = connected(parts)
@@ -161,7 +173,11 @@ def main():
     out = a.out or os.path.join(a.work, "review", "checks", "schema.json")
     src = os.path.join(a.work, "part_graph.json")
     try:
-        checks, data = run(common.read_json(src))
+        project = PP.find(a.work)
+        if project:
+            with open(project, encoding="utf-8") as f:
+                project = f.read()
+        checks, data = run(common.read_json(src), project)
     except Exception as e:  # noqa: BLE001
         common.write_error(out, TOOL, e, source=src)
         sys.exit(2)

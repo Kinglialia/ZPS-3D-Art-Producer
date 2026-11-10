@@ -1,7 +1,6 @@
-"""`custom` part functions the user approved (D27.13). Source: run 4 wooden-chest, model v2 parts_lib.py, without arch_band.
-arch_cap_pointed: approved by the user on 2026-11-10 (run 5 wooden-chest, model F1).
-`seam` of plank_vault and arch_cap_pointed: approved by the user on 2026-11-10 (run 6 wooden-chest, blockout F1).
-Profiles lie in the Y-Z plane and extrude along X. FUNCTIONS is the only set of names a `custom` part may use.
+"""Shared `custom` part functions: generic and parametrized, usable for many kinds of object (D33).
+A function that only one asset needs goes into that project's production/assets/<id>/custom_parts.py instead.
+Profiles lie in the Y-Z plane and extrude along X. FUNCTIONS is the set of shared names a `custom` part may use.
 bmesh loads inside Blender or with the bpy module; without it this file still imports, so check_schema.py can read FUNCTIONS."""
 import math
 
@@ -12,7 +11,7 @@ except ImportError:
 
 
 def _profile(d, h, arch_h, seg):
-    """Lid end profile from front-bottom to back-bottom: vertical sides, then a half ellipse on top."""
+    """Arch profile from front-bottom to back-bottom: vertical sides, then a half ellipse on top."""
     seg = int(seg)
     a, side_h = d / 2.0, h - arch_h
     pts = [(-a, 0.0), (-a, side_h)]
@@ -28,6 +27,38 @@ def _profile(d, h, arch_h, seg):
         norms.append((nx / L, nz / L))
     norms += [(1.0, 0.0), (1.0, 0.0)]
     return pts, norms, h
+
+
+def _toward(p, o, dist):
+    dy, dz = o[0] - p[0], o[1] - p[1]
+    L = math.hypot(dy, dz)
+    return (p[0] + dy / L * dist, p[1] + dz / L * dist)
+
+
+def _plank_profile(d, h, arch_h, seg, gap, planks, depth):
+    """_profile, and when there are grooves (planks >= 2, gap > 0, depth > 0) each seam vertex replaced by two lips
+    gap apart. Seams split the seg arc steps into `planks` equal parts. Returns pts, norms, h and the index of the
+    first lip of each pair."""
+    pts, norms, h = _profile(d, h, arch_h, seg)
+    seg, planks = int(seg), int(planks)
+    if planks < 2 or gap <= 0 or depth <= 0:
+        return pts, norms, h, []
+    cut = {seg * j // planks + 1 for j in range(1, planks)}
+    out, outn, lips = [], [], []
+    for k, (p, n) in enumerate(zip(pts, norms)):
+        if k not in cut:
+            out.append(p)
+            outn.append(n)
+            continue
+        if abs(n[0]) < 1e-9:
+            # Apex: lips at apex height, so the top (bbox h) stays.
+            a, b = (p[0] - gap / 2.0, p[1]), (p[0] + gap / 2.0, p[1])
+        else:
+            a, b = _toward(p, pts[k - 1], gap / 2.0), _toward(p, pts[k + 1], gap / 2.0)
+        lips.append(len(out))
+        out += [a, b]
+        outn += [n, n]
+    return out, outn, h, lips
 
 
 def _centre(bm, h):
@@ -66,161 +97,11 @@ def bevel_box(w, d, h, r, seg, mask):
     return bm
 
 
-def vault(w, d, h, arch_h, seg):
-    """Solid lid: closed prism of the lid profile, w along X."""
-    pts, _, h = _profile(d, h, arch_h, seg)
-    bm = bmesh.new()
-    x0, x1 = -w / 2.0, w / 2.0
-    left = [bm.verts.new((x0, y, z)) for y, z in pts]
-    right = [bm.verts.new((x1, y, z)) for y, z in pts]
-    n = len(pts)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((left[i], left[j], right[j], right[i]))
-    bm.faces.new(list(reversed(left)))
-    bm.faces.new(right)
-    return _centre(bm, h)
-
-
-def arch_cap(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks=0.0, r=0.0, bseg=2):
-    return _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, 0.0)
-
-
-def arch_cap_pointed(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks=0.0, r=0.0, bseg=2,
-                     point=0.5, seam=0.0):
-    """arch_cap with a pointed inner arch: the rim meets at a peak on the centre line, at the same apex height.
-    point 0 gives the round arch of arch_cap, 1 gives two straight sides. Use an even seg so a vertex sits on the peak.
-    seam: as plank_vault, so the cap lips meet the lid grooves."""
-    return _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point, seam)
-
-
-def _point_inner(inner, point):
-    """Lower the inner arch points toward two lines that meet at the apex; the springing points stay."""
-    if point <= 0:
-        return inner
-    zs = inner[1][1]
-    ai = (inner[-2][0] - inner[1][0]) / 2.0
-    yc = (inner[-2][0] + inner[1][0]) / 2.0
-    top = max(z for _, z in inner[2:-2]) - zs
-    out = list(inner)
-    for k in range(2, len(inner) - 2):
-        y, z = inner[k]
-        u = min(abs(y - yc) / ai, 1.0)
-        f = (1.0 - point) * math.sqrt(max(0.0, 1.0 - u * u)) + point * (1.0 - u)
-        out[k] = (y, min(z, zs + top * f))
-    return out
-
-
-def _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point, seam=0.0):
-    """Lid end cap: arch rim of width `band` and depth w, with a recessed end panel `panel` thick on the lid side.
-    side +1: the lid is toward +X; side -1: toward -X. Open at the bottom like arch_band.
-    gap, depth, planks: the lid's plank grooves (plank_vault). The cap profile then has the same lips, and the
-    lid-side face closes each groove end with its own face, so the join keeps it while the rest is hidden.
-    r > 0: round the outer and inner arch edges of the outer face (x_out)."""
-    if gap > 0 and planks >= 2:
-        pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks, seam)
-    else:
-        (pts, norms, h), lips = _profile(d, h, arch_h, seg), []
-    inner = [(y - band * ny, z - band * nz) for (y, z), (ny, nz) in zip(pts, norms)]
-    inner[0] = (pts[0][0] + band, 0.0)
-    inner[-1] = (pts[-1][0] - band, 0.0)
-    inner = _point_inner(inner, point)
-    s = 1.0 if side > 0 else -1.0
-    x_in, x_out = s * w / 2.0, -s * w / 2.0
-    x_mid = x_in - s * panel
-    bm = bmesh.new()
-    oi = [bm.verts.new((x_in, y, z)) for y, z in pts]
-    oo = [bm.verts.new((x_out, y, z)) for y, z in pts]
-    io = [bm.verts.new((x_out, y, z)) for y, z in inner]
-    im = [bm.verts.new((x_mid, y, z)) for y, z in inner]
-    n = len(pts)
-    ring = []
-    for k, v in enumerate(oi):
-        ring.append(v)
-        if k in lips:
-            nk = norms[k]
-            ia = bm.verts.new((x_in, pts[k][0] - depth * nk[0], pts[k][1] - depth * nk[1]))
-            ib = bm.verts.new((x_in, pts[k + 1][0] - depth * nk[0], pts[k + 1][1] - depth * nk[1]))
-            ring += [ia, ib]
-            bm.faces.new((oi[k], oi[k + 1], ib, ia))
-    bm.faces.new(ring)
-    bm.faces.new(im)
-    for k in range(n - 1):
-        bm.faces.new((oo[k], oo[k + 1], io[k + 1], io[k]))
-        bm.faces.new((oo[k], oi[k], oi[k + 1], oo[k + 1]))
-        bm.faces.new((io[k], io[k + 1], im[k + 1], im[k]))
-    # Bottom as three quads (front leg, panel, back leg): the join then keeps a leg bottom that shows
-    # past a rounded post corner instead of deleting one big mostly hidden face.
-    bm.faces.new((oo[0], io[0], im[0], oi[0]))
-    bm.faces.new((oi[0], im[0], im[-1], oi[-1]))
-    bm.faces.new((im[-1], io[-1], oo[-1], oi[-1]))
-    _bevel(bm, [bm.edges.get((a[k], a[k + 1])) for a in (oo, io) for k in range(n - 1)], r, bseg)
-    bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
-    return _centre(bm, h)
-
-
-def grooved_box(w, d, h, gap, depth, z1, z2):
-    """Body box with two horizontal plank grooves around all four sides. Groove centres at z1, z2 from the bottom."""
-    g = gap / 2.0
-    levels = [(0.0, 0.0), (z1 - g, 0.0), (z1 - g, depth), (z1 + g, depth), (z1 + g, 0.0),
-              (z2 - g, 0.0), (z2 - g, depth), (z2 + g, depth), (z2 + g, 0.0), (h, 0.0)]
-    bm = bmesh.new()
-    loops = []
-    for z, ins in levels:
-        x, y = w / 2.0 - ins, d / 2.0 - ins
-        loops.append([bm.verts.new(c) for c in ((-x, -y, z), (x, -y, z), (x, y, z), (-x, y, z))])
-    for lo, hi in zip(loops, loops[1:]):
-        for k in range(4):
-            j = (k + 1) % 4
-            bm.faces.new((lo[k], lo[j], hi[j], hi[k]))
-    bm.faces.new(list(reversed(loops[0])))
-    bm.faces.new(loops[-1])
-    return _centre(bm, h)
-
-
-def _toward(p, o, dist):
-    dy, dz = o[0] - p[0], o[1] - p[1]
-    L = math.hypot(dy, dz)
-    return (p[0] + dy / L * dist, p[1] + dz / L * dist)
-
-
-def _seam_steps(seg, planks, seam):
-    """Arc steps (1..seg-1, counted from the front edge) of the plank seams. seam 0: `planks` equal parts.
-    seam in (0, 1): the first seam at that fraction of the arc from the front, the others split the rest equally."""
-    if seam <= 0:
-        return [seg * j // planks for j in range(1, planks)]
-    fr = [seam + (1.0 - seam) * (j - 1) / (planks - 1) for j in range(1, planks)]
-    return sorted({min(seg - 1, max(1, round(seg * f))) for f in fr})
-
-
-def _plank_profile(d, h, arch_h, seg, gap, planks, seam=0.0):
-    """_profile with each plank-seam vertex (see _seam_steps) replaced by two lips `gap` apart.
-    Returns pts, norms, h and the index of the first lip of each pair."""
-    pts, norms, h = _profile(d, h, arch_h, seg)
-    seg, planks = int(seg), int(planks)
-    cut = {i + 1 for i in _seam_steps(seg, planks, seam)}
-    out, outn, lips = [], [], []
-    for k, (p, n) in enumerate(zip(pts, norms)):
-        if k not in cut:
-            out.append(p)
-            outn.append(n)
-            continue
-        if abs(n[0]) < 1e-9:
-            # Apex: lips at apex height, so the lid top (bbox h) stays.
-            a, b = (p[0] - gap / 2.0, p[1]), (p[0] + gap / 2.0, p[1])
-        else:
-            a, b = _toward(p, pts[k - 1], gap / 2.0), _toward(p, pts[k + 1], gap / 2.0)
-        lips.append(len(out))
-        out += [a, b]
-        outn += [n, n]
-    return out, outn, h, lips
-
-
-def plank_vault(w, d, h, arch_h, seg, gap, depth, planks, r=0.0, bseg=2, seam=0.0):
-    """Lid like vault, with grooves along X between the lip pairs of _plank_profile, `depth` deep.
-    r > 0: round the two long bottom edges (front and back lower lid edges); groove edges stay sharp.
-    seam: arc fraction (0..1, from the front lower edge) of the first seam; 0 keeps equal planks."""
-    pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks, seam)
+def vault(w, d, h, arch_h, seg, planks=1, gap=0.0, depth=0.0, r=0.0, bseg=2):
+    """Solid arched prism, w along X: vertical sides h - arch_h high, then a half ellipse arch_h high (roofs, lids,
+    tunnel vaults). planks >= 2 with gap > 0 and depth > 0: `planks` equal strips along the arc, split by grooves
+    along X, gap wide and depth deep. r > 0: round the two long bottom edges; groove edges stay sharp."""
+    pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks, depth)
     out = []
     for k, p in enumerate(pts):
         out.append(p)
@@ -242,73 +123,40 @@ def plank_vault(w, d, h, arch_h, seg, gap, depth, planks, r=0.0, bseg=2, seam=0.
     return _centre(bm, h)
 
 
-def strap_band(w, d, h, arch_h, seg, t, embed, r=0.0, bseg=2):
-    """Lid strap as a band `t` thick lying on the lid: d, h, arch_h are the outer sizes (lid + 2t, lid + t,
-    lid arch + t). The inner face is the lid profile moved `embed` into the lid (a face exactly on the lid
-    surface breaks the union used by the gates); over a lid groove it bridges the groove opening.
-    Open at the bottom. The strap sides are only the visible strips, so the join keeps them;
-    r > 0 rounds their outer edges."""
-    pts, norms, _ = _profile(d - 2.0 * t, h - t, arch_h - t, seg)
-    outer = [(y + t * ny, z + t * nz) for (y, z), (ny, nz) in zip(pts, norms)]
-    pts = [(y - embed * ny, z - embed * nz) for (y, z), (ny, nz) in zip(pts, norms)]
+def _groove_centres(h, gap, rows, z0=0.0, pitch=0.0):
+    """Heights of the rows - 1 groove centres from the bottom. pitch <= 0: rows equal bands over h.
+    pitch > 0: the first centre at z0, then one every pitch. Grooves must not touch each other or the ends."""
+    rows = int(rows)
+    if pitch <= 0:
+        zs = [h * j / rows for j in range(1, rows)]
+    else:
+        zs = [z0 + k * pitch for k in range(rows - 1)]
+    edges = [0.0] + [e for z in zs for e in (z - gap / 2.0, z + gap / 2.0)] + [h]
+    if any(b <= a for a, b in zip(edges, edges[1:])):
+        raise ValueError(f"grooves {zs} of gap {gap} do not fit apart inside h {h}")
+    return zs
+
+
+def grooved_box(w, d, h, gap, depth, rows, z0=0.0, pitch=0.0):
+    """Box with rows - 1 horizontal grooves, gap high and depth deep, around all four sides (board walls, stone
+    courses, panel lines). Groove heights: _groove_centres. rows <= 1: a plain box."""
+    g = gap / 2.0
+    levels = [(0.0, 0.0)]
+    for z in _groove_centres(h, gap, rows, z0, pitch):
+        levels += [(z - g, 0.0), (z - g, depth), (z + g, depth), (z + g, 0.0)]
+    levels.append((h, 0.0))
     bm = bmesh.new()
-    x0, x1 = -w / 2.0, w / 2.0
-    o0 = [bm.verts.new((x0, y, z)) for y, z in outer]
-    o1 = [bm.verts.new((x1, y, z)) for y, z in outer]
-    i0 = [bm.verts.new((x0, y, z)) for y, z in pts]
-    i1 = [bm.verts.new((x1, y, z)) for y, z in pts]
-    n = len(pts)
-    for k in range(n - 1):
-        bm.faces.new((o0[k], o1[k], o1[k + 1], o0[k + 1]))
-        bm.faces.new((i0[k], i0[k + 1], i1[k + 1], i1[k]))
-        bm.faces.new((o0[k], o0[k + 1], i0[k + 1], i0[k]))
-        bm.faces.new((o1[k], i1[k], i1[k + 1], o1[k + 1]))
-    for k in (0, n - 1):
-        bm.faces.new((o0[k], i0[k], i1[k], o1[k]))
-    _bevel(bm, [bm.edges.get((a[k], a[k + 1])) for a in (o0, o1) for k in range(n - 1)], r, bseg)
+    loops = []
+    for z, ins in levels:
+        x, y = w / 2.0 - ins, d / 2.0 - ins
+        loops.append([bm.verts.new(c) for c in ((-x, -y, z), (x, -y, z), (x, y, z), (-x, y, z))])
+    for lo, hi in zip(loops, loops[1:]):
+        for k in range(4):
+            j = (k + 1) % 4
+            bm.faces.new((lo[k], lo[j], hi[j], hi[k]))
+    bm.faces.new(list(reversed(loops[0])))
+    bm.faces.new(loops[-1])
     return _centre(bm, h)
 
 
-def _quad_tris(bm, a, b, c, d, uv):
-    """Two triangles for a planar quad; picks the diagonal that keeps both the same winding (concave quads)."""
-    def area(p, q, r):
-        return (uv[q][0] - uv[p][0]) * (uv[r][1] - uv[p][1]) - (uv[q][1] - uv[p][1]) * (uv[r][0] - uv[p][0])
-    s1, s2 = area(a, b, c), area(a, c, d)
-    if s1 * s2 > 0:
-        bm.faces.new((a, b, c))
-        bm.faces.new((a, c, d))
-    else:
-        bm.faces.new((a, b, d))
-        bm.faces.new((b, c, d))
-
-
-def lock_plate(w, d, h, chamfer, key_r, key_z, key_drop, key_tail, key_depth, r=0.0, bseg=2):
-    """Lock plate: w x h octagon (corners cut by `chamfer`), d thick along Y, front at -Y.
-    Keyhole recess `key_depth` deep: round head radius key_r centred key_z above the plate centre,
-    tail widening to half-width key_tail at key_drop below the head centre."""
-    W, H, c = w / 2.0, h / 2.0, chamfer
-    oct2 = [(W, -H + c), (W, H - c), (W - c, H), (-W + c, H), (-W, H - c), (-W, -H + c), (-W + c, -H), (W - c, -H)]
-    key2 = [(key_r * math.cos(math.radians(t)), key_z + key_r * math.sin(math.radians(t)))
-            for t in (300, 0, 60, 120, 180, 240)]
-    key2 += [(-key_tail, key_z - key_drop), (key_tail, key_z - key_drop)]
-    yf, yb, yk = -d / 2.0, d / 2.0, -d / 2.0 + key_depth
-    bm = bmesh.new()
-    of = [bm.verts.new((x, yf, z)) for x, z in oct2]
-    ob = [bm.verts.new((x, yb, z)) for x, z in oct2]
-    kf = [bm.verts.new((x, yf, z)) for x, z in key2]
-    kb = [bm.verts.new((x, yk, z)) for x, z in key2]
-    uv = {v: (v.co.x, v.co.z) for v in of + kf}
-    for i in range(8):
-        j = (i + 1) % 8
-        _quad_tris(bm, of[i], of[j], kf[j], kf[i], uv)
-        bm.faces.new((of[i], ob[i], ob[j], of[j]))
-        bm.faces.new((kf[i], kf[j], kb[j], kb[i]))
-    back = bm.faces.new(list(reversed(ob)))
-    floor = bm.faces.new(kb)
-    bmesh.ops.triangulate(bm, faces=[back, floor], quad_method="BEAUTY", ngon_method="BEAUTY")
-    _bevel(bm, [bm.edges.get((of[i], of[(i + 1) % 8])) for i in range(8)], r, bseg)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    return bm
-
-
-FUNCTIONS = {f.__name__: f for f in (vault, arch_cap, arch_cap_pointed, grooved_box, plank_vault, bevel_box, strap_band, lock_plate)}
+FUNCTIONS = {f.__name__: f for f in (vault, grooved_box, bevel_box)}

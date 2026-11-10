@@ -101,6 +101,18 @@ def counts_line(st, step) -> list[str]:
     return lines(yaml.safe_load(card.read_text(encoding="utf-8")) or {})
 
 
+def builds_parts(step) -> bool:
+    """D33: a step whose output holds parts_lib.py builds a part graph, so it may use the asset's own functions."""
+    return "final/parts_lib.py" in step.get("outputs", [])
+
+
+def custom_parts_line(st, step) -> list[str]:
+    """D33: the one file outside the version folder the worker may write: the asset's `custom` functions."""
+    if not builds_parts(step):
+        return []
+    return [f"CUSTOM_PARTS: {rel(ASSETS / st['id'] / 'custom_parts.py')}", ""]
+
+
 def pid_line(st, step) -> list[str]:
     if "blender" not in step["uses"]:
         return []
@@ -123,6 +135,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra)),
         *views_line(st, step),
         *counts_line(st, step),
+        *custom_parts_line(st, step),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
