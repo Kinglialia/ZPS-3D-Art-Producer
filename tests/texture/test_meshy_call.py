@@ -118,6 +118,21 @@ def one_uv_moved(doc, binary):
     binary[off:off + 4] = struct.pack("<f", uv[0, 0] + 0.01)
 
 
+def uv_noise(amp):
+    def edit(doc, binary):
+        uv, off = view(doc, binary, uvs_of(doc), "<f4", 2, 2)
+        out = (uv + np.random.default_rng(7).uniform(-amp, amp, uv.shape)).astype("<f4")
+        binary[off:off + out.nbytes] = out.tobytes()
+    return edit
+
+
+def uv_moved_by(du):
+    def edit(doc, binary):
+        uv, off = view(doc, binary, uvs_of(doc), "<f4", 2, 2)
+        binary[off:off + 4] = struct.pack("<f", uv[0, 0] + du)
+    return edit
+
+
 def one_triangle_missing(doc, binary):
     doc["accessors"][indices_of(doc)]["count"] -= 3
 
@@ -339,7 +354,7 @@ def test_one_moved_uv_fails_as_a_hard_gate_and_leaves_no_albedo_because_the_pain
         meshy, run5):
     g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "moved.glb", one_uv_moved)
     r = meshy(model_path=run5, glb=g)
-    assert (r["rc"], failed(r), r["topology"]["hard_gate"]) == (4, ["meshy.uv_triples"], True)
+    assert (r["rc"], failed(r), r["topology"]["data"]["hard_gate"]) == (4, ["meshy.uv_triples"], True)
     assert r["topology"]["checks"][1]["value"] >= 1
     assert (r["record"]["status"], r["record"]["albedo"]) == ("topology_fail", None)
     assert json.loads(meshy.budget.read_text())["used_credits"] == 10
@@ -390,3 +405,15 @@ def test_the_signed_base_color_url_is_never_written_or_printed(meshy):
     r = meshy()
     text = r["out"] + r["err"] + "".join(p.read_text(errors="replace") for p in meshy.tmp.rglob("*.json"))
     assert r["rc"] == 0 and "Signature" not in text and "assets.meshy.fake" not in text
+
+
+def test_uv_noise_inside_the_tolerance_on_every_corner_passes_so_float_rounding_never_fails_a_paid_call(meshy, run5):
+    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "noise.glb", uv_noise(9e-5))
+    r = meshy(model_path=run5, glb=g)
+    assert (r["rc"], failed(r)) == (0, [])
+
+
+def test_one_uv_moved_just_past_the_tolerance_fails(meshy, run5):
+    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "past.glb", uv_moved_by(2e-4))
+    r = meshy(model_path=run5, glb=g)
+    assert (r["rc"], failed(r)) == (4, ["meshy.uv_triples"])

@@ -26,9 +26,9 @@ of the task, saved as <out>/base_color.png; the kit keeps only the GLB, so a chi
 The URL is never written or printed. A download error of base_color is an after-task try on the same task_id.
 Topology gate (hard, never ACCEPTED_FAIL): the Meshy GLB against --model, on triangles only, never on positions or scale:
   meshy.tris          same triangle count
-  meshy.uv_triples    the 3 UVs of each triangle sorted, the set of triangles sorted, then each row equal within UV_TOL
+  meshy.uv_triples    the multiset of per-triangle UV triples (corner order removed) equal, each UV within UV_TOL
   meshy.base_color_px base_color.png is texture_res x texture_res (asset card, default 2048)
-  Written to <out>/topology.json with the sha256 of the locked GLB, the Meshy GLB and base_color.png.
+  Written to <out>/topology.json (data.hard_gate: true) with the sha256 of the locked GLB, the Meshy GLB and base_color.png.
 An <out> of an earlier call is refused, unless its task has no GLB or no base_color yet: then the call gets them again
 from that task. A GLB counts only with the glTF magic and a header length equal to the file size; an image only when its
 PNG or JPEG end marker is there.
@@ -210,14 +210,28 @@ def tri_uvs(p: Path):
     return np.concatenate(out) if out else np.zeros((0, 3, 2))
 
 
-def uv_triples(t):
-    """Triangle order and corner order removed: corners sorted inside each triangle, then the rows sorted. Sorting keys
-    are the UVs rounded to UV_TOL, so float noise below the tolerance never reorders two rows."""
+def uv_triples(locked, meshy) -> tuple[int, float]:
+    """Triangles of `meshy` whose sorted UV triple is not in the multiset of sorted UV triples of `locked`, and the
+    largest snap distance. Each Meshy corner snaps to the nearest locked UV within UV_TOL (max of |du|, |dv|); a corner
+    with none matches nothing. Then the triples are compared exactly, so triangle and corner order never count and
+    float noise below UV_TOL never moves a triangle to another row."""
     import numpy as np
-    q = np.round(t / UV_TOL).astype(np.int64)
-    corner = np.lexsort((q[..., 1], q[..., 0]), axis=-1)[..., None]
-    t, q = np.take_along_axis(t, corner, 1).reshape(-1, 6), np.take_along_axis(q, corner, 1).reshape(-1, 6)
-    return t[np.lexsort(q.T[::-1])]
+    from collections import Counter
+    pts, ids = np.unique(locked.reshape(-1, 2), axis=0, return_inverse=True)
+    grid = {}
+    for i, c in enumerate(map(tuple, np.floor(pts / UV_TOL).astype(np.int64))):
+        grid.setdefault(c, []).append(i)
+    snap, worst = np.full(len(meshy) * 3, -1), 0.0
+    for k, (uv, c) in enumerate(zip(meshy.reshape(-1, 2), np.floor(meshy.reshape(-1, 2) / UV_TOL).astype(np.int64))):
+        near = [i for du in (-1, 0, 1) for dv in (-1, 0, 1) for i in grid.get((c[0] + du, c[1] + dv), [])]
+        if near:
+            d = np.abs(pts[near] - uv).max(axis=1)
+            j = int(d.argmin())
+            if d[j] <= UV_TOL:
+                snap[k], worst = near[j], max(worst, float(d[j]))
+    want = Counter(map(tuple, np.sort(ids.reshape(-1, 3), axis=1)))
+    got = Counter(map(tuple, np.sort(snap.reshape(-1, 3), axis=1)))
+    return sum((got - want).values()), worst
 
 
 def check(name, ok, value, threshold, note=None) -> dict:
@@ -235,17 +249,17 @@ def topology_check(locked: Path, out: Path, res: int) -> dict:
     else:
         checks = [check("meshy.tris", len(a) == len(b), len(b), len(a))]
         if len(a) == len(b):
-            d = np.abs(uv_triples(a) - uv_triples(b)).max(axis=1) if len(a) else np.zeros(0)
-            checks.append(check("meshy.uv_triples", int((d > UV_TOL).sum()) == 0, int((d > UV_TOL).sum()), 0,
-                                f"tam giác lệch UV > {UV_TOL:g}; lệch lớn nhất {float(d.max(initial=0)):.3g}"))
+            bad, worst = uv_triples(a, b)
+            checks.append(check("meshy.uv_triples", bad == 0, bad, 0,
+                                f"tam giác có UV lệch > {UV_TOL:g}; lệch lớn nhất trong dung sai {worst:.3g}"))
         else:
             checks.append(check("meshy.uv_triples", False, None, 0, "số tam giác khác: không so được"))
     with Image.open(out / "base_color.png") as im:
         size = list(im.size)
     checks.append(check("meshy.base_color_px", size == [res, res], size, [res, res], "texture_res của thẻ asset"))
     r = {"tool": "meshy_call/topology", "overall": "pass" if all(c["status"] == "pass" for c in checks) else "fail",
-         "hard_gate": True, "checks": checks,
-         "data": {"uv_tolerance": UV_TOL, "texture_res": res, "locked_sha256": sha256(locked),
+         "checks": checks,
+         "data": {"hard_gate": True, "uv_tolerance": UV_TOL, "texture_res": res, "locked_sha256": sha256(locked),
                   "glb_sha256": sha256(out / "glb.glb"), "base_color_sha256": sha256(out / "base_color.png")}}
     (out / "topology.json").write_text(json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8")
     return r
