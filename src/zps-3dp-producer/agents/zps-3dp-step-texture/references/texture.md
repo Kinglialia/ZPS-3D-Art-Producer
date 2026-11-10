@@ -4,12 +4,13 @@ Nguồn: `docs/agents/texture-artist.md` §2–§9. Ký hiệu `T`, `F`, `V`, `G
 
 ## 1. Chọn chế độ
 
-`texture_complexity.py` ghi `scores`, `simple`, `proposed` vào `F/texture_spec.json`. Đơn giản khi: vật liệu ≤ `texture_simple.max_materials`, cụm màu ≤ `max_color_clusters`, không có hoa văn, chữ, biển, hạng không phải `hero`.
+Script chọn chế độ và ghi vào brief một dòng `MODE:` (D30.11). Ledger ghi chế độ và lý do.
 
-- `proposed: paint` → VẼ MỚI. `proposed: meshy` → Meshy rồi SỬA.
-- Brief có `MODE: VẼ MỚI`, hoặc không có dòng `MESHY:`: VẼ MỚI, bất kể `proposed`.
-- Ca giáp ranh: nhìn concept và quyết. Ghi vào `F/texture_spec.json`: `"used": "meshy" | "paint"`, `"reason": "<một dòng>"`.
-- Đổi nhánh giữa chừng (ví dụ Meshy lần hai vẫn hỏng → VẼ MỚI) không đặt lại vòng sửa; ghi vào `notes.md`.
+- `MODE: Meshy SỬA`: có key Meshy và budget, hoặc mesh này đã có lớp Meshy qua topology. Meshy rồi SỬA, bất kể asset đơn giản hay phức tạp.
+- `MODE: VẼ MỚI`: profile không có `paths.env_file`, người dùng chỉ định, hoặc hết lần gọi mà không có lớp Meshy dùng được.
+- `texture_complexity.py --mode <meshy|paint>` ghi `scores`, `simple` và `proposed` (= chế độ của dòng `MODE:`) vào `F/texture_spec.json`. `simple` chỉ để tham khảo.
+- Ghi vào `F/texture_spec.json`: `"used": "meshy" | "paint"`, `"reason": "<một dòng>"`.
+- Đổi nhánh giữa chừng chỉ khi lớp Meshy không dùng được (topology fail, Meshy lần hai vẫn hỏng) và hết lần gọi → VẼ MỚI. Không đặt lại vòng sửa; ghi vào `notes.md`.
 
 ## 2. Meshy rồi SỬA
 

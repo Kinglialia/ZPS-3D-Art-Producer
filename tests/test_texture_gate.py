@@ -200,3 +200,51 @@ def test_a_paid_task_without_its_glb_is_named_in_the_next_brief_and_resumed_on_i
     f.meshy("t1 again", vd, "")
     assert (f.cp["t1 again meshy"]["rc"], list(budgets(tmp_path).values())) == (
         0, [{"max_credits": 10, "used_credits": 10}])
+
+
+def mode_lines(f, name):
+    return [l for l in f.cp[name]["text"].splitlines() if l.startswith("MODE: ")]
+
+
+def ledger_modes(root):
+    return [l.split(f"{AID} · texture · ", 1)[1] for l in
+            (root / "production/ledger.md").read_text(encoding="utf-8").splitlines() if " · texture · chế độ " in l]
+
+
+def test_a_meshy_key_and_budget_make_meshy_sua_the_default_and_the_ledger_says_why_d30_11(tmp_path):
+    f = to_texture(tmp_path)
+    f.brief("t1")
+    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (mặc định D30.11: có key và budget)"]
+    assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: mặc định D30.11: có key và budget"]
+
+
+def test_no_env_file_paints_and_the_ledger_records_that_choice_and_its_reason(tmp_path):
+    f = to_texture(tmp_path, env_line=None)
+    prof = yaml.safe_load((tmp_path / "production/PROJECT-PROFILE.yaml").read_text(encoding="utf-8"))
+    del prof["paths"]["env_file"]
+    (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof, allow_unicode=True), encoding="utf-8")
+    f.brief("t1")
+    assert ledger_modes(tmp_path) == ["chế độ VẼ MỚI: profile không có `paths.env_file`: không gọi Meshy"]
+
+
+def test_a_spent_budget_keeps_meshy_sua_on_the_paid_layer_and_a_rebrief_adds_no_ledger_line(tmp_path):
+    f = to_texture(tmp_path)
+    out = f.brief("t1 brief")
+    f.meshy("t1", (tmp_path / out["report"]).parent, "")
+    f.brief("t1 again brief")
+    f.brief("t1 third brief")
+    why = "hết lần gọi Meshy: sửa tiếp trên lớp Meshy đã qua topology của mesh này"
+    assert mode_lines(f, "t1 third brief") == [f"MODE: Meshy SỬA ({why})"]
+    assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: mặc định D30.11: có key và budget",
+                                      f"chế độ Meshy SỬA: {why}"]
+
+
+def test_a_spent_budget_whose_only_layer_failed_topology_paints_because_that_layer_is_unusable(tmp_path, monkeypatch):
+    f = to_texture(tmp_path)
+    out = f.brief("t1 brief")
+    monkeypatch.setenv("FAKE_MESHY_BASE_PX", "32")
+    f.meshy("t1", (tmp_path / out["report"]).parent, "")
+    assert f.cp["t1 meshy"]["rc"] == 4
+    f.brief("t1 again brief")
+    assert mode_lines(f, "t1 again brief") == [
+        "MODE: VẼ MỚI (hết lần gọi Meshy và không có lớp Meshy qua topology cho mesh này)"]

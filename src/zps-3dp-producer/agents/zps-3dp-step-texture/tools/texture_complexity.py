@@ -1,6 +1,7 @@
-"""Simple or not: the five numbers of docs/agents/texture-artist.md §2.1 (D10), and the proposed mode.
+"""Simple or not: the five numbers of docs/agents/texture-artist.md §2.1 (D10), and the proposed mode (D30.11).
 
-Usage: python3 T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile>
+Usage: python3 T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> \
+         --mode meshy|paint
   1 materials       codes in B/sources.json `materials`
   2 colour clusters palette_report (kit) clusters with share >= CLUSTER_SHARE on the concept albedo object pixels
                     (alpha when the image has one, else pixels away from the border colour by > BG_DIST)
@@ -8,7 +9,8 @@ Usage: python3 T/texture_complexity.py --final F --blockout B --concept C --view
   4 motif           card real_texture_only_notes and the TEXTURE NOTE section of VR/README.md name a motif, text, sign (whole words)
   5 tier            card tier
 Simple when materials <= texture_simple.max_materials, clusters <= texture_simple.max_color_clusters, no motif, tier not
-hero. Proposed mode: paint (VẼ MỚI) when simple, else meshy.
+hero. `simple` is information only (D30.11): the proposed mode is --mode, the mode the Producer script chose from the
+Meshy key and budget (brief line `MODE: Meshy SỬA` = meshy, `MODE: VẼ MỚI` = paint).
 Writes F/texture_spec.json {scores, thresholds, simple, proposed, used: null, reason: null}; the worker fills `used` and
 `reason`. Prints one line. Exit 0, 2 on error.
 """
@@ -65,7 +67,7 @@ def section(path, key):
     return out
 
 
-def score(a):
+def score(a, mode):
     import yaml
     card = yaml.safe_load(open(os.path.join(a.concept, "asset-card.yaml"), encoding="utf-8")) or {}
     prof = yaml.safe_load(open(a.profile, encoding="utf-8")) or {}
@@ -82,16 +84,17 @@ def score(a):
               and tier != "hero")
     return {"scores": scores, "thresholds": {"max_materials": th.get("max_materials", 2),
                                              "max_color_clusters": th.get("max_color_clusters", 6)},
-            "simple": bool(simple), "proposed": "paint" if simple else "meshy", "used": None, "reason": None}
+            "simple": bool(simple), "proposed": mode, "used": None, "reason": None}
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     for k in ("--final", "--blockout", "--concept", "--views-rest", "--profile"):
         p.add_argument(k, required=True)
+    p.add_argument("--mode", required=True, choices=("meshy", "paint"))
     a = p.parse_args()
     try:
-        r = score(a)
+        r = score(a, a.mode)
     except Exception as e:  # noqa: BLE001
         print(f"[texture_complexity] error: {e!r}")
         sys.exit(2)

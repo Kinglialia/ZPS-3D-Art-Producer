@@ -27,8 +27,8 @@ Chi tiết từng chế độ, `notes.md`, `texture_spec.json`: `R/texture.md`.
 ## Quy trình
 
 1. `PY T/check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Fail: `STATUS: NEEDS_CONTEXT`.
-2. `PY T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile>`, rồi `PY T/id_map.py --final F --model M --res R`.
-3. Chọn chế độ (`R/texture.md` mục 1): dòng `MODE: VẼ MỚI` của brief thắng; dòng `MESHY_DONE:` có topology pass thì SỬA trên lớp đó; không có dòng `MESHY:` thì VẼ MỚI; còn lại theo `proposed` của `F/texture_spec.json`, ca giáp ranh tự quyết. Ghi `used` và `reason` (một dòng) vào `F/texture_spec.json`.
+2. `PY T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> --mode <meshy|paint>` (`meshy` khi brief có `MODE: Meshy SỬA`, `paint` khi có `MODE: VẼ MỚI`), rồi `PY T/id_map.py --final F --model M --res R`.
+3. Chọn chế độ (`R/texture.md` mục 1): theo dòng `MODE:` của brief (script chọn, D30.11). `MODE: Meshy SỬA`: dòng `MESHY_DONE:` có topology pass thì SỬA trên lớp đó, không thì gọi Meshy. Ghi `used` và `reason` (một dòng) vào `F/texture_spec.json`.
 4. Làm theo chế độ: SỬA (`R/texture.md` mục 2) hoặc VẼ MỚI (mục 3). Kết quả là `F/albedo_<R>.png`.
 5. `BL T/render_texture.py -- --glb G --albedo F/albedo_<R>.png --spec M/spec.json --concept C/concept_shadow.png --final F`.
 6. `PY T/tex_measure.py --final F --glb G --model M --albedo F/albedo_<R>.png --concept-colors VF/concept_colors.json --profile <profile> --pilot <dòng PILOT của brief, none khi không có>`. Fail: sửa bằng script trước (`tone_fix.py`, `seam_fix.py`), rồi sửa theo crop; đo lại.

@@ -34,7 +34,14 @@ Script kiểm hash mesh khi sinh brief (D22.12). Texture Artist chỉ kiểm cá
 
 ## 2.1 Chọn chế độ: Meshy rồi SỬA, hay VẼ MỚI
 
-Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu anh hoặc Producer đã chỉ định cách làm, làm theo chỉ định đó. Nếu profile không có `paths.env_file`: VẼ MỚI. Có `env_file` mà thiếu key thì script đã chặn trước khi giao bước (`docs/producer.md` §6.3).
+**[Sửa theo D30.11]** Script chọn chế độ trước khi giao bước `texture` và ghi dòng `MODE:` vào brief. Ledger ghi chế độ đã chọn và lý do (mỗi lần chế độ hoặc lý do đổi).
+
+- Có key Meshy và budget → **Meshy SỬA**, không xét độ phức tạp. Đây là chế độ mặc định.
+- Hết lần gọi mà mesh này đã có lớp Meshy qua topology (D30.3) → Meshy SỬA trên lớp đó.
+- Profile không có `paths.env_file`, anh chỉ định (`meshy <id> paint`), hoặc hết lần gọi mà không có lớp Meshy dùng được → **VẼ MỚI**.
+- Có `env_file` mà thiếu key: script chặn trước khi giao bước (`docs/producer.md` §6.3).
+
+Năm chỉ số dưới đây vẫn được đo và ghi, chỉ để tham khảo và để đo lại sau 3–5 asset. `proposed` trong `texture_spec.json` là chế độ của dòng `MODE:`.
 
 `texture_complexity.py` đo 5 chỉ số:
 
@@ -48,7 +55,6 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 
 **Đơn giản** khi thỏa cả bốn điều: vật liệu ≤ 2; cụm màu ≤ 6; không có hoa văn, chữ, biển; hạng không phải hero. Ngưỡng nằm trong profile và đổi được. Ví dụ đơn giản: thùng gỗ, hòn đá.
 
-- Ca giáp ranh: Texture Artist nhìn concept và quyết định, ghi lý do một dòng vào `texture_spec.json`.
 - Script ghi đề xuất và điểm số vào `texture_spec.json` (trong `texture/vN/final/`). Texture Artist không ghi vào `spec.json` của 3D Artist (D20.11).
 - Texture Artist ghi điểm số, chế độ đề xuất và chế độ đã dùng vào `texture_spec.json`. Texture Artist **không** ghi ra ngoài thư mục version (D21.5). Muốn xem lại ngưỡng sau vài chục asset (D10): `P texture-stats` tổng hợp từ ledger và các `texture_spec.json` lúc cần, không duy trì file sổ riêng (D22.17).
 

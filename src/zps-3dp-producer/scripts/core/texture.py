@@ -1,4 +1,5 @@
-"""Texture step (docs/producer.md §6.3): key check, Meshy budget per mesh hash, the two Meshy questions, texture-stats."""
+"""Texture step (docs/producer.md §6.3): mode (D30.11), key check, Meshy budget per mesh hash, the two Meshy questions,
+texture-stats."""
 from __future__ import annotations
 
 import json
@@ -10,6 +11,7 @@ STEP = "texture"
 MESHY_CALL = SKILL_DIR / "scripts" / "meshy_call.py"
 ASK_MESH = "Mesh đổi, texture Meshy cũ mất hiệu lực. Gọi lại Meshy (tốn credit) hay VẼ MỚI?"
 ANSWER = "duyệt = gọi Meshy, `meshy {id} paint` = VẼ MỚI"
+MESHY, PAINT = "Meshy SỬA", "VẼ MỚI"
 
 
 def budget_path(aid: str, mesh_sha: str) -> Path:
@@ -39,9 +41,9 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
     import meshy_call
     aid, sha = st["id"], st["locked"]["model"]
     if not env_file(prof):
-        return ["MODE: VẼ MỚI (profile không có `paths.env_file`: không gọi Meshy)"]
+        return [mode(st, PAINT, "profile không có `paths.env_file`: không gọi Meshy")]
     if st.get("paint_for") == sha[:12]:
-        return ["MODE: VẼ MỚI (người dùng chọn cho mesh này: không gọi Meshy)"]
+        return [mode(st, PAINT, "người dùng chọn cho mesh này: không gọi Meshy")]
     try:
         if meshy_call.keys() != "key file":
             return "stuck", "thiếu MESHY_API_KEY trong env_file của profile: người dùng thêm key"
@@ -61,9 +63,35 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
     run = [f"MESHY: {MESHY_CALL}", f"MESHY_ARGS: --asset {aid} --pid-file {rel(ROOT / 'pids' / 'meshy' / f'{aid}.pid')}"]
     done, resume = paid_calls(st)
     if left <= 0:
-        return [f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy", *done,
+        if resume:
+            m = mode(st, MESHY, "task Meshy đã trả credit, chưa tải xong: chạy lại lệnh Meshy trên thư mục đó")
+        elif usable_layer(aid, sha):
+            m = mode(st, MESHY, "hết lần gọi Meshy: sửa tiếp trên lớp Meshy đã qua topology của mesh này")
+        else:
+            m = mode(st, PAINT, "hết lần gọi Meshy và không có lớp Meshy qua topology cho mesh này")
+        return [m, f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy", *done,
                 *(run if resume else [])]
-    return [*run, f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)", *done]
+    return [mode(st, MESHY, "mặc định D30.11: có key và budget"), *run,
+            f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)", *done]
+
+
+def mode(st: dict, which: str, why: str) -> str:
+    """D30.11: the brief line of the mode the script chose; the ledger gets it once per change of mode or reason."""
+    pick = {"mode": which, "reason": why, "mesh": st["locked"]["model"][:12]}
+    if st.get("texture_mode") != pick:
+        st["texture_mode"] = pick
+        ledger(f"{st['id']} · {STEP} · chế độ {which}: {why}")
+    return f"MODE: {which} ({why})"
+
+
+def usable_layer(aid: str, sha: str) -> bool:
+    """A paid Meshy call of any texture version of this asset whose topology gate passed on this mesh."""
+    import meshy_call
+    for c in (ASSETS / aid / STEP).glob("v*/work/meshy/call-*"):
+        t = meshy_call.topology(c)
+        if t.get("overall") == "pass" and (t.get("data") or {}).get("locked_sha256") == sha:
+            return True
+    return False
 
 
 def paid_calls(st: dict) -> tuple[list[str], bool]:
