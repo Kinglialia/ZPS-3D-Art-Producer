@@ -82,3 +82,4 @@ Cách làm lúc chốt (Concept Artist):
 ## Quy tắc chung
 - Xong một bản: báo người dùng đường dẫn file. Không tự coi là đã duyệt.
 - Mâu thuẫn giữa yêu cầu trong chat và art direction: hỏi người dùng trước khi làm.
+- Key API nằm trong file `.env` của project. Khi cần nói về key, chỉ nêu đường dẫn file `.env`. Không đính kèm và không dán nội dung `.env` vào chat: nội dung vào context và lộ mọi key trong đó.

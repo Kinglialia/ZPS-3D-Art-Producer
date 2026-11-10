@@ -653,3 +653,11 @@ def test_guideline_lists_required_files_and_the_check_command_with_no_placeholde
     venv_py = SCRIPTS / ".deps/venv/bin/python"
     assert f"{venv_py} {SCRIPTS / 'check_card.py'} " in g
     assert f"--profile {tmp_path.resolve() / 'production/PROJECT-PROFILE.yaml'}" in g
+
+
+def test_guideline_tells_agents_to_name_the_env_path_and_never_attach_the_file_d30_13(tmp_path, presets):
+    """Run 5: an attached .env put every key in it into the chat context."""
+    Proj(tmp_path, presets)
+    g = (tmp_path / "concepts/GUIDELINE.md").read_text(encoding="utf-8")
+    assert ("- Key API nằm trong file `.env` của project. Khi cần nói về key, chỉ nêu đường dẫn file `.env`. Không đính "
+            "kèm và không dán nội dung `.env` vào chat: nội dung vào context và lộ mọi key trong đó.") in g.splitlines()
