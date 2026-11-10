@@ -19,6 +19,8 @@ PROFILE = {
     "texture_simple": {"max_materials": 2, "max_color_clusters": 6},
 }
 PROFILE_HASH = "786cfc66bdd2"
+# Claude Code refuses a subagent Write to a file of this name: https://github.com/anthropics/claude-code/issues/44657
+SUBAGENT_WRITE_BLOCKED = re.compile(r"^(report|summary|findings|analysis).*\.md$", re.I)
 
 
 def write_profile(root, profile=None):

@@ -129,7 +129,7 @@ def test_approved_blockout_moves_on_to_views_front_instead_of_parking(flow):
 def test_the_front_brief_names_the_approved_blockout_only_the_concept_files_views_need_and_the_codex_call(flow):
     b = flow["vf1 brief"]
     assert b["out"] == {"role": "worker", "agent": "zps-3dp-step-views", "model": "opus", "resume": None,
-                        "brief": f"{A}/views_front/v1/brief-worker.md", "report": f"{A}/views_front/v1/report-worker.md"}
+                        "brief": f"{A}/views_front/v1/brief-worker.md", "report": f"{A}/views_front/v1/worker-out.md"}
     assert lines(b["text"], f"TOOLS: {SKILL / 'agents/zps-3dp-step-views/tools'}", "BLENDER: blender",
                  f"GEN_IMAGE: {SKILL / 'scripts/gen_image_codex.py'}",
                  "GEN_ARGS: --model gpt-6-astra --reasoning medium --pid-file production/pids/codex_image/pilot-house.pid",

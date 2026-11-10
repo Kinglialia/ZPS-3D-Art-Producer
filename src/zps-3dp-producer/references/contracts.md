@@ -26,7 +26,7 @@ production/                     # trong project Claude Code; chỉ script và su
     brief.md · rubric.md · feedback.md
     feedback/<step>-vN-<k>/     # một lần gửi có khoanh: regions.json, ảnh đã khoanh <tên ảnh>.png
     <step>/vN/
-      brief-worker.md · report-worker.md · brief-review.md · report-review.md · findings.json
+      brief-worker.md · worker-out.md · brief-review.md · review-out.md · findings.json
       final/ · work/ · review/evidence-<k>/
   archive/<id>/
 ```
@@ -63,7 +63,7 @@ production/                     # trong project Claude Code; chỉ script và su
 `ab/` ở gốc project (chung hai runtime):
 - `mapping.json`: `{"assets": {<id>: {"A": <runtime>, "B": <runtime>}}}`, nhãn ngẫu nhiên, gán một lần cho asset có ở cả hai thư mục.
 - `preferences.jsonl`: mỗi lần bấm "Bản nào tốt hơn" `{asset, choice: A|B|tie, text, by, at}`; dòng cuối của asset là lựa chọn.
-- `judge/<id>/concept/`, `judge/<id>/o<k>/{X,Y}/`: bản chép ảnh gói cuối; lần 1 X = A, lần 2 X = B. `brief.md`, `report.md` (`WINNER: <tiêu chí>=X|Y|tie; …`, `EVIDENCE_OPENED`), `result.json` (theo nhãn A/B). Hai lần lệch nhau thì tiêu chí đó hòa.
+- `judge/<id>/concept/`, `judge/<id>/o<k>/{X,Y}/`: bản chép ảnh gói cuối; lần 1 X = A, lần 2 X = B. `brief.md`, `judge-out.md` (`WINNER: <tiêu chí>=X|Y|tie; …`, `EVIDENCE_OPENED`), `result.json` (theo nhãn A/B). Hai lần lệch nhau thì tiêu chí đó hòa.
 - `compare.md`: bản cuối của `P compare`.
 
 ## Budget Meshy
@@ -100,7 +100,7 @@ Agent tự ghi report vào đường dẫn `report` của brief; tin nhắn tr�
 
 Script đọc dòng `KEY: value` đầu tiên của mỗi khóa trong cả file. `FINDINGS` và `PRIOR` là khối: các dòng `- ` và dòng thụt lề ngay sau, tới khóa kế tiếp hoặc dòng không thụt lề. Sai thì `ingest` in một dòng `LỖI: <report> sai contract: <lỗi>; <lỗi>`, không đổi state.
 
-Worker (`report-worker.md`). Tin nhắn trả về chỉ dòng `STATUS`.
+Worker (`worker-out.md`). Tin nhắn trả về chỉ dòng `STATUS`.
 ```
 STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED
 OUTPUT: <thư mục final/>
@@ -115,7 +115,7 @@ Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`
 
 Script (`report-script.md`, bước có `script` trong `pipeline.toml`, ví dụ `assemble`): `STATUS`, `OUTPUT`, `ISSUES`, `PROFILE_HASH` như worker (`PROFILE_HASH` là tham số cuối của lệnh), rồi `EVIDENCE_OPENED` và `FINDINGS` mỗi điểm fail một finding. `ingest` ghi các finding đó vào `findings.json` của version để trang duyệt hiện. `DONE` → waiting_human; `BLOCKED` → blocked.
 
-Reviewer (`report-review.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
+Reviewer (`review-out.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear; ...

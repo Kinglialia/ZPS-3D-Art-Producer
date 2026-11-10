@@ -225,7 +225,7 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
     for src in [mf / "review" / "model_sheet.png", tf / "final_lit_vs_concept.png", *sorted((tf / "review").glob("*.png"))]:
         if src.is_file():
             shutil.copy2(src, final / "review" / src.name)
-    rv = vdir(a.id, "texture", tv) / "report-review.md"
+    rv = vdir(a.id, "texture", tv) / "review-out.md"
     if rv.is_file():
         text = unwrap(rv.read_text(encoding="utf-8"))
         (final / "review" / "report-review-texture.md").write_text(text, encoding="utf-8")

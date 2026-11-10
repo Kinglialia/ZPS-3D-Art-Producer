@@ -90,7 +90,7 @@ def lines(text):
 def test_the_first_texture_brief_opens_a_budget_of_one_retexture_for_the_locked_mesh(flow):
     b, h = flow["t1 brief"], flow["h1"]
     assert b["out"] == {"role": "worker", "agent": "zps-3dp-step-texture", "model": "opus", "resume": None,
-                        "brief": f"{A}/texture/v1/brief-worker.md", "report": f"{A}/texture/v1/report-worker.md"}
+                        "brief": f"{A}/texture/v1/brief-worker.md", "report": f"{A}/texture/v1/worker-out.md"}
     want = [f"TOOLS: {SKILL / 'agents/zps-3dp-step-texture/tools'}", "BLENDER: blender",
             "PILOT: none (pilot_asset: null): so với pilot ghi not_checked",
             f"MESHY: {SKILL / 'scripts/meshy_call.py'}",

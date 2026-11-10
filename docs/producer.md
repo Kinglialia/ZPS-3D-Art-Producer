@@ -238,6 +238,8 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 ### 6.5 Agent tự ghi file report (D27.5)
 
 - Reviewer và worker tự ghi report vào đúng đường dẫn `report` của brief. Không ghi chỗ nào khác.
+- **Tên file report:** worker ghi `worker-out.md`, reviewer ghi `review-out.md`, A/B ghi `judge-out.md`. Harness Claude Code chặn lệnh Write của subagent khi tên file khớp `^(report|summary|findings|analysis).*\.md$` (không phân biệt hoa thường, https://github.com/anthropics/claude-code/issues/44657). Đây là nguyên nhân gốc của Run 4: tên cũ `report-worker.md`, `report-review.md` khớp mẫu này. Mọi file brief giao cho subagent ghi không được có tên khớp mẫu này (test kiểm).
+- Lệnh ghi bị chặn thì agent không ghi vòng qua Bash (`cat`, heredoc, `tee`, python). Agent dùng đường dự phòng.
 - **Đường dự phòng:** lệnh ghi bị chặn thì agent trả cả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi nguyên văn tin nhắn vào file report. `ingest` chỉ đọc phần giữa hai dòng đó, kể cả khi dòng có dấu cách thừa hoặc CRLF.
 - Đường dự phòng phải hiếm. Lý do: report lưu hộ đi qua context Producer.
 - Script ghi mỗi lần dự phòng vào ledger: sự kiện `report_fallback`, kèm vai trò và bước.

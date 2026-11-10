@@ -101,7 +101,7 @@ def test_the_readme_drops_a_note_only_when_a_later_approved_reviewer_confirmed_t
     finding_doc(tmp_path, "views_front", 3, F4=("regen", "front: đinh"))
     finding_doc(tmp_path, "views_rest", 2, F2=("note_texture", "back: hàng ván"), F3=("note_texture", "top: rêu"))
     tex = finding_doc(tmp_path, "texture", 4)
-    (tex / "report-review.md").write_text("--- report ---\nVERDICT: PASS\nRUBRIC: light=pass; texture_note=pass\n"
+    (tex / "review-out.md").write_text("--- report ---\nVERDICT: PASS\nRUBRIC: light=pass; texture_note=pass\n"
                                           "--- end ---\n", encoding="utf-8")
     finding_doc(tmp_path, "model", 3, notes=["views_rest v2 F3"])
     finding_doc(tmp_path, "model", 2, notes=["views_rest v2 F2"])

@@ -218,7 +218,7 @@ def worker_round(tmp, n):
     for o in OUTPUTS:
         (v / o).write_text("x", encoding="utf-8")
     h = brief_hash((v / "brief-worker.md").read_text(encoding="utf-8"))
-    (v / "report-worker.md").write_text(f"STATUS: DONE\nPROFILE_HASH: {h}\nFIXED: F1\n", encoding="utf-8")
+    (v / "worker-out.md").write_text(f"STATUS: DONE\nPROFILE_HASH: {h}\nFIXED: F1\n", encoding="utf-8")
     head, line = run(tmp, "ingest", "house-a").splitlines()
     assert head == "house-a: worker DONE → blockout/review. Tiếp: giao reviewer → `brief house-a`"
     out = json.loads(line)
@@ -235,7 +235,7 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
     brief, v = worker_round(tmp_path, 1)
     assert "- F1 [blocker|major|minor|preference|unclear] <structure|param>" in brief
     assert "PRIOR:" not in brief
-    (v / "report-review.md").write_text(report(counts=counts(major=2), top_fix="structure: F1", findings=[
+    (v / "review-out.md").write_text(report(counts=counts(major=2), top_fix="structure: F1", findings=[
         finding("F1", "major", "structure"), finding("F2", "major", "param", acceptance="mái chìa 0.3 m")]),
         encoding="utf-8")
     head, line = run(tmp_path, "ingest", "house-a").splitlines()
@@ -259,13 +259,13 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
 
     bad = report(counts=counts(major=1), top_fix="param: F2", compare="F1=better",
                  prior=["- F1: resolved | evidence: clay_front"])
-    (v2 / "report-review.md").write_text(bad, encoding="utf-8")
+    (v2 / "review-out.md").write_text(bad, encoding="utf-8")
     assert run(tmp_path, "ingest", "house-a", ok=False) == (
-        "LỖI: production/assets/house-a/blockout/v2/report-review.md sai contract: PRIOR thiếu F2\n")
+        "LỖI: production/assets/house-a/blockout/v2/review-out.md sai contract: PRIOR thiếu F2\n")
     assert not (v2 / "findings.json").exists()
     assert json.loads((tmp_path / "production/assets/house-a/status.json").read_text())["state"] == "reviewing"
 
-    (v2 / "report-review.md").write_text(report(
+    (v2 / "review-out.md").write_text(report(
         counts=counts(major=1, minor=1), top_fix="param: F2, F3", compare="F1=better",
         prior=["- F1: resolved | evidence: clay_front", "- F2: open | evidence: ?"],
         findings=[finding("F3", "minor", "param")]), encoding="utf-8")
@@ -284,9 +284,9 @@ def test_worker_report_missing_profile_hash_keeps_the_asset_running(tmp_path):
     run(tmp_path, "ready", "house-a")
     run(tmp_path, "brief", "house-a")
     v = tmp_path / "production/assets/house-a/blockout/v1"
-    (v / "report-worker.md").write_text("STATUS: DONE\nOUTPUT: final/\n", encoding="utf-8")
+    (v / "worker-out.md").write_text("STATUS: DONE\nOUTPUT: final/\n", encoding="utf-8")
     assert run(tmp_path, "ingest", "house-a", ok=False) == (
-        "LỖI: production/assets/house-a/blockout/v1/report-worker.md sai contract: thiếu PROFILE_HASH\n")
+        "LỖI: production/assets/house-a/blockout/v1/worker-out.md sai contract: thiếu PROFILE_HASH\n")
     assert json.loads((tmp_path / "production/assets/house-a/status.json").read_text())["state"] == "running"
 
 

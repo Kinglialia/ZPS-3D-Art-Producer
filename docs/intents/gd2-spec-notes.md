@@ -6,7 +6,7 @@ Points the build found in the spec. Each one names the source and what the code 
 
 1. `concept-views.md` §6 puts `front.png`, `views.json`, `concept_colors.json`, `bg_color.json` in `views_rest/final/`. §3 step 1 and D22.14 say the front is not copied. Code follows D22.14: these files stay in `views_front/final/`. When GĐ 3 and GĐ 4 enable `model` and `texture`, their `inputs` in `pipeline.toml` must name both `views_front` and `views_rest`.
 2. §3 renders guides in `views_front`, but its output list has no guides. `views_rest` and both reviewers need `<view>_guide.png`, `<view>_id.png`, `views.json`. Code puts them in `views_front/final/guides/`, so the approval hash locks them.
-3. §3 lists `report` (the worker contract) inside `final/`. `contracts.md` puts `report-worker.md` in `vN/`. Code follows `contracts.md`.
+3. §3 lists `report` (the worker contract) inside `final/`. `contracts.md` puts `worker-out.md` in `vN/`. Code follows `contracts.md`.
 4. `pipeline.toml` gave `views_front` only `uses = ["codex_image"]`, but step 2 renders in Blender. Code adds `blender`, so the brief has the `BLENDER:` and PID lines.
 5. §3 marks `report/VIEWS.md` of `views_front` "nếu có", but the review board needs it when the asset reaches `waiting_human` (D20.16). Code makes it a required output.
 6. §2 gives the worker the concept albedo and the card. The prompt needs material names, which only `<id>.material.md` has. Code adds that file to the views brief. The brief does not name `concept_shadow.png` (the kit uses it for mood only).

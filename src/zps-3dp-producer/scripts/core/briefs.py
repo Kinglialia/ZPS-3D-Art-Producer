@@ -68,7 +68,7 @@ def input_finals(st, ids: list[str]) -> list[tuple[str, Path]]:
 
 def handoff_issues(st, prev: str, v: int) -> str | None:
     """D20.3: the ISSUES line of the approved worker report of an input step; None when it hands over nothing."""
-    c, _ = parse_worker((vdir(st["id"], prev, v) / "report-worker.md").read_text(encoding="utf-8"))
+    c, _ = parse_worker((vdir(st["id"], prev, v) / "worker-out.md").read_text(encoding="utf-8"))
     issues = c.get("ISSUES", "")
     return None if issues.lower() in NONE else issues
 
@@ -173,7 +173,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     lines += [
         "",
         "## Báo cáo",
-        f"Ghi báo cáo đầy đủ vào `{rel(d / 'report-worker.md')}`. Các dòng đầu tiên đúng format:",
+        f"Ghi báo cáo đầy đủ vào `{rel(d / 'worker-out.md')}`. Các dòng đầu tiên đúng format:",
         "```",
         "STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED",
         f"OUTPUT: {rel(d / 'final')}/",
@@ -207,7 +207,7 @@ def review_brief(cfg, st, step, n) -> str:
     tie = sorted((k for k in step["top_fix"] if k in findings.TIE_RANK), key=lambda k: -findings.TIE_RANK[k])
     single = [k for k in step["top_fix"] if k in findings.SINGLE]
     notes = [k for k in step["top_fix"] if k in findings.NOTE]
-    wr = d / "report-worker.md"
+    wr = d / "worker-out.md"
     claimed = parse_worker(wr.read_text(encoding="utf-8"))[0]["RESOLVED_NOTES"] if wr.exists() else []
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
@@ -216,7 +216,7 @@ def review_brief(cfg, st, step, n) -> str:
         "",
         "## Chấm cái gì",
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
-        f"- Báo cáo tự check của worker: `{rel(d / 'report-worker.md')}` — tham khảo, không tin thay bằng chứng.",
+        f"- Báo cáo tự check của worker: `{rel(d / 'worker-out.md')}` — tham khảo, không tin thay bằng chứng.",
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
         *([f"- Concept đã duyệt để đối chiếu, trong `{st['concept_dir']}`: chỉ "
            + ", ".join(f"`{x}`" for x in concept_files(st, step, review=True)) + "."] if st.get("concept_dir") else []),
@@ -236,7 +236,7 @@ def review_brief(cfg, st, step, n) -> str:
            f"`v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."] if pick else []),
         "",
         "## Báo cáo",
-        f"Ghi report vào `{rel(d / 'report-review.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
+        f"Ghi report vào `{rel(d / 'review-out.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
         f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear; ...",
@@ -299,7 +299,7 @@ def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> s
         *pid_line(st, step),
         "",
         "## Báo cáo",
-        f"Ghi `{rel(ed / 'report-worker.md')}`, các dòng đầu đúng format:",
+        f"Ghi `{rel(ed / 'worker-out.md')}`, các dòng đầu đúng format:",
         "```",
         "STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED",
         f"OUTPUT: {rel(ed)}/",
@@ -379,7 +379,7 @@ def run(a):
             elif fix and step.get("escalate_model"):
                 model = step["escalate_model"]
             out = {"role": "worker", "agent": agent_name(step["agent"]), "model": model, "resume": resume,
-                   "brief": rel(bp), "report": rel(d / "report-worker.md")}
+                   "brief": rel(bp), "report": rel(d / "worker-out.md")}
     elif s in ("evidence", "evidence_running"):
         n = st["versions"][sid]
         ed = vdir(a.id, sid, n) / "review" / f"evidence-{st['evidence']['k']}"
@@ -387,14 +387,14 @@ def run(a):
         bp = ed / "brief-worker.md"
         bp.write_text(evidence_brief(st, step, n, ed, st["inputs"][sid][f"v{n}"]["profile"], pf, preset), encoding="utf-8")
         out = {"role": "worker", "agent": agent_name(step["agent"]), "model": step.get("model"), "resume": st.get("worker_agent_id"),
-               "brief": rel(bp), "report": rel(ed / "report-worker.md")}
+               "brief": rel(bp), "report": rel(ed / "worker-out.md")}
     elif s in ("review", "reviewing"):
         n = st["versions"][sid]
         d = vdir(a.id, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
         out = {"role": "reviewer", "agent": agent_name(step["reviewer"]), "model": r["reviewer_model"],
-               "resume": None, "brief": rel(bp), "report": rel(d / "report-review.md")}
+               "resume": None, "brief": rel(bp), "report": rel(d / "review-out.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")
     again = s in ("running", "reviewing", "evidence_running") and open_dispatch(st, sid, n, out["role"]) is not None

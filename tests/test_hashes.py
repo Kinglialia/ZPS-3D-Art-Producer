@@ -87,8 +87,8 @@ def test_brief_writes_the_profile_hash_records_inputs_and_names_the_full_agent(f
 
 @pytest.mark.parametrize("line, error", [
     ("PROFILE_HASH: 000000000000",
-     f"production/assets/{AID}/blockout/v1/report-worker.md: PROFILE_HASH 000000000000 khác brief ({PROFILE_HASH})"),
-    ("OUTPUT: final/", f"production/assets/{AID}/blockout/v1/report-worker.md sai contract: thiếu PROFILE_HASH"),
+     f"production/assets/{AID}/blockout/v1/worker-out.md: PROFILE_HASH 000000000000 khác brief ({PROFILE_HASH})"),
+    ("OUTPUT: final/", f"production/assets/{AID}/blockout/v1/worker-out.md sai contract: thiếu PROFILE_HASH"),
 ])
 def test_ingest_rejects_a_missing_or_foreign_profile_hash_and_keeps_the_asset_running(flow, line, error):
     out = flow.brief()

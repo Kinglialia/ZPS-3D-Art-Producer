@@ -158,12 +158,12 @@ def head(doc):
 
 def worker_json(n, resume):
     return {"role": "worker", "agent": "zps-3dp-step-blockout", "model": "opus", "resume": resume,
-            "brief": f"{V}{n}/brief-worker.md", "report": f"{V}{n}/report-worker.md"}
+            "brief": f"{V}{n}/brief-worker.md", "report": f"{V}{n}/worker-out.md"}
 
 
 def reviewer_json(n):
     return {"role": "reviewer", "agent": "zps-3dp-check-blockout", "model": "opus", "resume": None,
-            "brief": f"{V}{n}/brief-review.md", "report": f"{V}{n}/report-review.md"}
+            "brief": f"{V}{n}/brief-review.md", "report": f"{V}{n}/review-out.md"}
 
 
 def test_intake_finds_the_pilot_complete_and_registers_it_alone_because_pilot_asset_is_null(flow):

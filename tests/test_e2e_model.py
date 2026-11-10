@@ -172,7 +172,7 @@ def test_approving_the_view_set_moves_on_to_the_model_step(flow):
 def test_the_model_brief_names_the_three_approved_finals_and_only_the_concept_files_the_model_reads(flow):
     b = flow["m1 brief"]
     assert b["out"] == {"role": "worker", "agent": "zps-3dp-step-model", "model": "opus", "resume": None,
-                        "brief": f"{A}/model/v1/brief-worker.md", "report": f"{A}/model/v1/report-worker.md"}
+                        "brief": f"{A}/model/v1/brief-worker.md", "report": f"{A}/model/v1/worker-out.md"}
     assert missing(b["text"], f"TOOLS: {SKILL / 'agents/zps-3dp-step-model/tools'}", "BLENDER: blender",
                    "PILOT: none (pilot_asset: null): so với pilot ghi not_checked",
                    f"7. Đầu ra đã duyệt của bước `blockout`: `{A}/blockout/v1/final/`.",

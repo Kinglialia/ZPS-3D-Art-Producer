@@ -290,20 +290,20 @@ def judge_brief(aid: str, d: Path, k: int, lab: dict) -> str:
         "- Hai bản có cùng bộ ảnh, cùng tên file. Mở ảnh cùng tên của X và Y cạnh nhau.", "",
         "## Tiêu chí", crit, "",
         "## Báo cáo",
-        f"Ghi vào `{rel(d / 'report.md')}`, đúng hai dòng:",
+        f"Ghi vào `{rel(d / 'judge-out.md')}`, đúng hai dòng:",
         "```", f"WINNER: {shape}", "EVIDENCE_OPENED: <ảnh đã mở, cách nhau bằng dấu phẩy>", "```",
         "Chỉ trả về dòng `DONE`.", FALLBACK, ""])
 
 
 def take(d: Path, k: int, fallback: bool = False) -> dict:
     from .contract import parse_contract, unwrap
-    c = parse_contract(unwrap((d / "report.md").read_text(encoding="utf-8")), {"WINNER", "EVIDENCE_OPENED"})
+    c = parse_contract(unwrap((d / "judge-out.md").read_text(encoding="utf-8")), {"WINNER", "EVIDENCE_OPENED"})
     w = dict(pairs(c.get("WINNER", "")))
     errs = [f"thiếu {x}" for x in CRITERIA if x not in w] + [f"{x}={v} phải là X|Y|tie" for x, v in w.items()
                                                               if x in CRITERIA and v not in ("X", "Y", "tie")]
     errs += [f"tiêu chí lạ {x}" for x in w if x not in CRITERIA] + ([] if c.get("EVIDENCE_OPENED") else ["thiếu EVIDENCE_OPENED"])
     if errs:
-        die(f"{rel(d / 'report.md')} sai contract: {'; '.join(errs)}")
+        die(f"{rel(d / 'judge-out.md')} sai contract: {'; '.join(errs)}")
     o = order(k)
     res = {"order": k, "winner": {x: o.get(w[x], "tie") for x in CRITERIA}, "at": now(), "fallback": fallback}
     if fallback and ROOT.is_dir():
@@ -323,14 +323,14 @@ def judge(a):
             d = AB / "judge" / aid / f"o{k}"
             if (d / "result.json").exists():
                 continue
-            if (d / "report.md").exists():
+            if (d / "judge-out.md").exists():
                 take(d, k, bool(getattr(a, "fallback", False)))
                 continue
             d.mkdir(parents=True, exist_ok=True)
             (d / "brief.md").write_text(judge_brief(aid, d, k, lab), encoding="utf-8")
             generic = load_cfg()["review"]["reviewer_model"] if (ROOT / "pipeline.toml").exists() else "opus"
             out = {"role": "reviewer", "agent": agent_name("check-ab"), "model": model_of(generic), "resume": None,
-                   "brief": rel(d / "brief.md"), "report": rel(d / "report.md")}
+                   "brief": rel(d / "brief.md"), "report": rel(d / "judge-out.md")}
             if EDITION.get("agent_file"):
                 out["agent_file"] = rel(agent_file(out["agent"]))
             print(json.dumps(out, ensure_ascii=False))

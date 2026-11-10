@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from shared import P
+from shared import P, SUBAGENT_WRITE_BLOCKED
 from core import ab
 
 AID = "house-a"
@@ -204,12 +204,14 @@ def test_the_pairwise_reviewer_is_asked_twice_with_x_and_y_swapped_and_sees_no_r
     d1 = json.loads(judge(two))
     brief = (two / d1["brief"]).read_text(encoding="utf-8")
     x1 = Image.open(two / "ab/judge/house-a/o1/X/final_lit_vs_concept.png").size
-    assert (d1["agent"], d1["model"], d1["report"]) == ("zps-3dp-check-ab", "opus", "ab/judge/house-a/o1/report.md")
+    assert (d1["agent"], d1["model"], d1["report"]) == ("zps-3dp-check-ab", "opus", "ab/judge/house-a/o1/judge-out.md")
     assert HIDDEN.findall(brief) == [] and "WINNER: concept=X|Y|tie; geometry=X|Y|tie;" in brief
+    # D27.5: Claude Code refuses a subagent Write by this file name, so the judge must not get one.
+    assert not SUBAGENT_WRITE_BLOCKED.match(Path(d1["report"]).name) and f"`{d1['report']}`" in brief
     (two / d1["report"]).write_text(report(concept="X", geometry="X", texture="Y"), encoding="utf-8")
     d2 = json.loads(judge(two))
     x2 = Image.open(two / "ab/judge/house-a/o2/X/final_lit_vs_concept.png").size
-    assert (d2["report"], x1, x2) == ("ab/judge/house-a/o2/report.md", (60, 30), (40, 30))
+    assert (d2["report"], x1, x2) == ("ab/judge/house-a/o2/judge-out.md", (60, 30), (40, 30))
     (two / d2["report"]).write_text(f"--- report ---\n{report(concept='Y', geometry='X', texture='X')}--- end ---\n",
                                     encoding="utf-8")
     assert judge(two) == "OK: đủ so cặp (1 asset × 2 lần)\n"
@@ -220,8 +222,8 @@ def test_the_judge_writes_its_report_file_and_a_reply_the_producer_saved_is_logg
     done_both(two)
     d1 = json.loads(judge(two))
     rows = (two / d1["brief"]).read_text(encoding="utf-8").splitlines()
-    assert [r for r in rows if "report" in r.lower() or "DONE" in r] == [
-        "Ghi vào `ab/judge/house-a/o1/report.md`, đúng hai dòng:", "Chỉ trả về dòng `DONE`.",
+    assert [r for r in rows if "report" in r.lower() or "judge-out" in r or "DONE" in r] == [
+        "Ghi vào `ab/judge/house-a/o1/judge-out.md`, đúng hai dòng:", "Chỉ trả về dòng `DONE`.",
         "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`."]
     (two / d1["report"]).write_text(f"--- report ---\n{report(concept='X', geometry='X', texture='Y')}--- end ---\n",
                                     encoding="utf-8")
@@ -236,7 +238,7 @@ def test_a_judge_report_without_every_criterion_is_refused_and_asked_again(two):
     d1 = json.loads(judge(two))
     (two / d1["report"]).write_text("WINNER: concept=X; geometry=Z\nEVIDENCE_OPENED: X/a.png\n", encoding="utf-8")
     code, out = cli(two, None, "ab", "judge")
-    assert (code, out.strip()) == (1, "LỖI: ab/judge/house-a/o1/report.md sai contract: thiếu texture; thiếu coherence; "
+    assert (code, out.strip()) == (1, "LỖI: ab/judge/house-a/o1/judge-out.md sai contract: thiếu texture; thiếu coherence; "
                                       "thiếu game_read; geometry=Z phải là X|Y|tie")
 
 
@@ -308,7 +310,7 @@ def test_reveal_names_the_runtimes_with_totals_elo_and_agreement_with_the_user(t
     for k, w in ((1, {"concept": "X", "geometry": "X", "texture": "X"}), (2, {"concept": "Y", "geometry": "Y"})):
         d = two / f"ab/judge/{AID}/o{k}"
         d.mkdir(parents=True, exist_ok=True)
-        (d / "report.md").write_text(report(**w), encoding="utf-8")
+        (d / "judge-out.md").write_text(report(**w), encoding="utf-8")
         ab.take(d, k)
     out = compare(two, reveal=True)
     assert [l for l in out.splitlines() if l.startswith(("| codex |", "| claude |"))] == [

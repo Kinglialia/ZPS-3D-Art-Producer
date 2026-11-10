@@ -41,7 +41,7 @@ def test_the_model_worker_is_asked_which_notes_it_did_and_its_reviewer_confirms_
     body = dict(verdict="PASS", counts=counts(), top_fix=None, evidence="lit_34_front.png")
     rep.write_text(report(**body, extra="RESOLVED_CONFIRMED: views_rest v1 F2\n"), encoding="utf-8")
     assert f.p("ingest", AID, ok=False) == (
-        f"LỖI: {A}/model/v1/report-review.md sai contract: RESOLVED_CONFIRMED views_rest v1 F2 không có trong "
+        f"LỖI: {A}/model/v1/review-out.md sai contract: RESOLVED_CONFIRMED views_rest v1 F2 không có trong "
         "RESOLVED_NOTES của worker\n")
     rep.write_text(report(**body, extra="RESOLVED_CONFIRMED: views_rest v1 F1\n"), encoding="utf-8")
     f.p("ingest", AID)

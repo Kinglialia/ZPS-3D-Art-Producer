@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import SCRIPTS, blockout_only, brief_hash, finding, report, write_profile
+from shared import SCRIPTS, SUBAGENT_WRITE_BLOCKED, blockout_only, brief_hash, finding, report, write_profile
 from core import briefs, findings, intake, loop, policy
 from core.state import ProducerError, load_cfg, load_st, save_st
 
@@ -222,7 +222,7 @@ def test_need_evidence_renders_into_the_version_review_folder_and_the_reviewer_r
     out = flow.brief()
     ev = f"production/assets/{AID}/blockout/v1/review/evidence-1"
     assert (out["role"], out["resume"], out["brief"], out["report"]) == (
-        "worker", "w1", f"{ev}/brief-worker.md", f"{ev}/report-worker.md")
+        "worker", "w1", f"{ev}/brief-worker.md", f"{ev}/worker-out.md")
     assert "Không sửa `production/assets/house-a/blockout/v1/final/`" in flow.text(out)
     head, line = flow.work(out=out).splitlines()
     assert (head, json.loads(line)["brief"]) == ("house-a: evidence-1 DONE → blockout/review. Tiếp: giao reviewer → "
@@ -270,7 +270,7 @@ def test_redo_opens_a_new_feedback_round_from_the_best_version_and_carries_its_o
     assert {k: st[k] for k in ("state", "fix_round", "fix_base", "round_versions", "offer", "label")} == {
         "state": "fix", "fix_round": 1, "fix_base": 1, "round_versions": [1], "offer": None, "label": ""}
     out = flow.brief()
-    assert out["report"] == f"production/assets/{AID}/blockout/v4/report-worker.md"
+    assert out["report"] == f"production/assets/{AID}/blockout/v4/worker-out.md"
     assert f"Bản gốc: `production/assets/{AID}/blockout/v1/`" in flow.text(out)
     flow.work(out=out)
     rb = flow.text(flow.brief())
@@ -379,7 +379,7 @@ def test_needs_fix_after_approval_sends_the_approved_version_back_and_opens_a_ne
     assert {k: st[k] for k in ("stage", "state", "fix_round", "fix_base", "approved", "rejected", "approved_hash")} == {
         "stage": "blockout", "state": "fix", "fix_round": 1, "fix_base": 2, "approved": {}, "rejected": {},
         "approved_hash": {}}
-    assert flow.brief()["report"] == f"production/assets/{AID}/blockout/v3/report-worker.md"
+    assert flow.brief()["report"] == f"production/assets/{AID}/blockout/v3/worker-out.md"
 
 
 def test_a_second_needs_fix_click_on_the_same_waiting_version_is_ignored(flow):
@@ -513,10 +513,10 @@ def test_retry_sets_the_old_report_aside_so_ingest_waits_for_the_new_one(flow):
     flow.work(status="NEEDS_CONTEXT")
     assert flow.call(loop.retry, Namespace(id=AID)) == (
         "house-a: → running. Tiếp: đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)\n")
-    assert (flow.v(1) / "report-worker-1.md").read_text(encoding="utf-8").startswith("STATUS: NEEDS_CONTEXT")
+    assert (flow.v(1) / "worker-out-1.md").read_text(encoding="utf-8").startswith("STATUS: NEEDS_CONTEXT")
     with pytest.raises(ProducerError) as e:
         loop.ingest(Namespace(id=AID, agent_id=None))
-    assert str(e.value) == f"chưa có báo cáo production/assets/{AID}/blockout/v1/report-worker.md"
+    assert str(e.value) == f"chưa có báo cáo production/assets/{AID}/blockout/v1/worker-out.md"
 
 
 def test_a_redispatch_sets_the_old_review_aside_so_the_evidence_rereview_is_not_read_from_the_first(flow):
@@ -524,7 +524,7 @@ def test_a_redispatch_sets_the_old_review_aside_so_the_evidence_rereview_is_not_
     flow.work()
     flow.brief()
     assert loop.next_action(flow.st) == "đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)"
-    assert (flow.v(1) / "report-review-1.md").read_text(encoding="utf-8").startswith("VERDICT: FIX")
+    assert (flow.v(1) / "review-out-1.md").read_text(encoding="utf-8").startswith("VERDICT: FIX")
 
 
 def test_worker_brief_names_the_rubric_section_profile_preset_and_blender_path(flow):
@@ -569,7 +569,7 @@ def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_
 
 
 def test_a_reviewer_reply_saved_whole_with_its_report_markers_ingests_like_the_bare_report(flow):
-    """Run 4: every reviewer returned its report as text, and the Producer saved the reply as report-review.md."""
+    """Run 4: every reviewer returned its report as text, and the Producer saved the reply as review-out.md."""
     flow.work()
     out = flow.brief()
     body = report(counts=counts(major=1), findings=[finding("F1", "major")])
@@ -584,8 +584,8 @@ def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_
     label `v2 unlit_close_front`."""
     flow.work()
     text = flow.text(flow.brief())
-    assert [l for l in text.splitlines() if "report-review" in l or "--- report" in l or "nguyên văn" in l or "Tin nhắn" in l] == [
-        f"Ghi report vào `production/assets/{AID}/blockout/v1/report-review.md`. Report mở đầu đúng format, mỗi khóa "
+    assert [l for l in text.splitlines() if "review-out" in l or "--- report" in l or "nguyên văn" in l or "Tin nhắn" in l] == [
+        f"Ghi report vào `production/assets/{AID}/blockout/v1/review-out.md`. Report mở đầu đúng format, mỗi khóa "
         "một dòng:",
         "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
         "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
@@ -605,3 +605,32 @@ def test_a_report_the_producer_saved_from_a_reply_is_ingested_and_logged_as_a_fa
     assert [x.get("fallback", False) for x in flow.st["dispatches"]] == [False, True, False]
     assert [l.split(" · ", 2)[2] for l in flow.ledger().splitlines() if "report_fallback" in l] == [
         "house-a · blockout v1 · report_fallback · reviewer"]
+
+
+def test_the_old_report_names_are_the_ones_claude_code_refused_so_the_name_rule_can_catch_a_regression_d27_5():
+    assert [n for n in ("report-worker.md", "Report-Review.md", "report.md", "summary.md", "findings-v1.md",
+                        "worker-out.md", "review-out.md", "judge-out.md") if SUBAGENT_WRITE_BLOCKED.match(n)] == [
+        "report-worker.md", "Report-Review.md", "report.md", "summary.md", "findings-v1.md"]
+
+
+def test_no_brief_tells_a_subagent_to_write_a_file_that_claude_code_refuses_by_name_d27_5(flow):
+    """Run 4: Claude Code refused every worker and reviewer Write because the file was named `report-*.md`, so each
+    report came back as text through the Producer's context. Covers the worker, the reviewer, the fix worker and the
+    evidence worker. `role: script` is left out: a script writes its own report, and the rule binds only subagents."""
+    outs = [flow.brief()]
+    flow.work(out=outs[-1])
+    outs.append(flow.brief())
+    flow.review(out=outs[-1], counts=counts(major=1), top_fix="structure: F1", findings=[finding("F1", "major")])
+    outs.append(flow.brief())
+    flow.work(out=outs[-1])
+    outs.append(flow.brief())
+    flow.review(out=outs[-1], counts=counts(unclear=1), rubric="props=unclear", top_fix="need_evidence: F2",
+                findings=[finding("F2", "unclear", "param")], prior=["- F1: resolved | evidence: clay_front"],
+                compare="F1=better")
+    outs.append(flow.brief())
+    assert [(o["role"], Path(o["report"]).name) for o in outs] == [
+        ("worker", "worker-out.md"), ("reviewer", "review-out.md"), ("worker", "worker-out.md"),
+        ("reviewer", "review-out.md"), ("worker", "worker-out.md")]
+    assert outs[-1]["report"].endswith("/review/evidence-1/worker-out.md")
+    assert [o["report"] for o in outs if SUBAGENT_WRITE_BLOCKED.match(Path(o["report"]).name)] == []
+    assert [o["report"] for o in outs if f"`{o['report']}`" not in flow.text(o)] == []

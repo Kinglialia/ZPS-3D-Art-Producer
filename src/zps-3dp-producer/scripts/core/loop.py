@@ -102,9 +102,9 @@ def next_action(st: dict) -> str:
     if s in ("running", "reviewing", "evidence_running"):
         n = st.get("versions", {}).get(st["stage"])
         d = vdir(aid, st["stage"], n) if n else None
-        rep = {"running": ("report-worker.md", "report-script.md"), "reviewing": ("report-review.md",)}.get(s, ())
+        rep = {"running": ("worker-out.md", "report-script.md"), "reviewing": ("review-out.md",)}.get(s, ())
         if s == "evidence_running" and st.get("evidence"):
-            rep = (f"review/evidence-{st['evidence']['k']}/report-worker.md",)
+            rep = (f"review/evidence-{st['evidence']['k']}/worker-out.md",)
         if d and any((d / r).exists() for r in rep):
             return f"có báo cáo → `ingest {aid}`"
         return f"đang chờ subagent (mất kết nối thì `brief {aid}` để giao lại)"
@@ -183,7 +183,7 @@ def script_findings(st, sid: str, n: int, rep):
 
 def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
     script = not step.get("agent")
-    rep = d / ("report-script.md" if script else "report-worker.md")
+    rep = d / ("report-script.md" if script else "worker-out.md")
     c = worker_report(st, rep, a.agent_id, step["id"], n)
     st["last_rubric"] = c.get("RUBRIC", "")
     if script:
@@ -213,7 +213,7 @@ def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
 
 def on_evidence(cfg, st, step, d, n, a) -> tuple[str, str]:
     tag = f"evidence-{st['evidence']['k']}"
-    c = worker_report(st, d / "review" / tag / "report-worker.md", a.agent_id, step["id"], n)
+    c = worker_report(st, d / "review" / tag / "worker-out.md", a.agent_id, step["id"], n)
     if why := stuck(c):
         move(st, "stuck")
         st["note"] = why
@@ -243,9 +243,9 @@ def take_variant(d, pick: str, outputs: list[str]) -> str | None:
 
 def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     aid, sid, r = st["id"], step["id"], cfg["review"]
-    rep = d / "report-review.md"
+    rep = d / "review-out.md"
     rv = valid(rep, parse_review(read_report(rep)))
-    wr = d / "report-worker.md"
+    wr = d / "worker-out.md"
     claimed = parse_worker(read_report(wr))[0]["RESOLVED_NOTES"] if wr.exists() else []
     if extra := [x for x in rv["confirmed"] if x not in claimed]:
         die(f"{rel(rep)} sai contract: RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
@@ -428,7 +428,7 @@ def retry(a):
         move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
         st["note"] = ""
     if st["state"] == "running":
-        set_aside(vdir(a.id, st["stage"], st["versions"][st["stage"]]) / "report-worker.md")
+        set_aside(vdir(a.id, st["stage"], st["versions"][st["stage"]]) / "worker-out.md")
     save_st(st)
     ledger(f"{a.id} · retry")
     print(f"{a.id}: → {st['state']}. Tiếp: {next_action(st)}")
