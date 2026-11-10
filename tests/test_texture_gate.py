@@ -179,7 +179,8 @@ def test_a_worker_dispatched_again_after_a_paid_call_is_told_to_reuse_its_glb_in
     t = f.cp["t1 again brief"]["text"].splitlines()
     assert [l for l in t if l.startswith("MESHY")] == [
         "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
-        f"MESHY_DONE: `{A}/texture/v1/work/meshy/call-1/glb.glb` đã trả credit: dùng lại, không gọi lại Meshy"]
+        f"MESHY_DONE: `{A}/texture/v1/work/meshy/call-1` đã trả credit, topology pass: dùng lại `base_color.png`, "
+        "không gọi lại Meshy"]
 
 
 def test_a_paid_task_without_its_glb_is_named_in_the_next_brief_and_resumed_on_its_folder_at_no_extra_credit(tmp_path):
@@ -192,8 +193,8 @@ def test_a_paid_task_without_its_glb_is_named_in_the_next_brief_and_resumed_on_i
     call = f"{A}/texture/v1/work/meshy/call-1"
     assert [l for l in t if l.startswith("MESHY")] == [
         "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
-        f"MESHY_DONE: `{call}` task task-1 đã trả credit, chưa có GLB: chạy lại lệnh Meshy với `--out {call}`, "
-        "không tốn thêm credit",
+        f"MESHY_DONE: `{call}` task task-1 đã trả credit, chưa có GLB hoặc base_color: chạy lại lệnh Meshy với "
+        f"`--out {call}`, không tốn thêm credit",
         next(l for l in f.cp["t1 brief"]["text"].splitlines() if l.startswith("MESHY: ")),
         f"MESHY_ARGS: --asset {AID} --pid-file production/pids/meshy/{AID}.pid"]
     f.meshy("t1 again", vd, "")

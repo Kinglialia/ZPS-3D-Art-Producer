@@ -58,7 +58,7 @@ Texture Artist chọn chế độ ở đầu bước `texture` (D14.2). Nếu an
 - Ảnh tham chiếu style: concept albedo.
 - Trước mỗi lần gọi: chạy `--dry-run` để xem giá.
 - **Gọi qua `meshy_call.py`** (D24.2), không gọi thẳng `gen_api.py`. Wrapper lấy key từ `.env` của project (D24.3), quản budget theo hash mesh trong file `texture/budget-<mesh_hash>.json` đúng định dạng của kit, và xử lý lỗi (`docs/producer.md` §6.3). Texture Artist không đọc `.env`, không truyền key. Giới hạn `meshy = 1` trong `[limits]` bảo đảm không gọi song song.
-- Sau khi Meshy trả file: chạy `uv_check` và `mesh_check`. Nếu UV hoặc số tam giác đổi, loại file đó.
+- Sau khi Meshy trả file (D30.3): albedo là `texture_urls[0].base_color` của task, không phải ảnh trong GLB. Meshy chuẩn hóa GLB (scale ×2, dời tâm z), nên `meshy_call.py` chỉ so topology với mesh đã khóa: số tam giác, và tập bộ ba UV của tam giác (dung sai 1e-4). Cỡ `base_color` phải bằng `texture_res`. Lệch một điều: loại lớp đó. Đây là gate cứng, không khai `ACCEPTED_FAIL`.
 - **Gọi một lần cho mỗi mesh** (D20.14, D21.2). Texture Artist là agent duy nhất gọi Meshy.
 - **Mesh đổi** (sau `fix_uv_mesh` hoặc anh làm lại `model`): texture Meshy cũ làm trên UV cũ, không dùng được. Script hỏi anh gọi lại Meshy hay VẼ MỚI trước khi giao bước `texture`. Brief ghi chỉ định đó.
 - **Lỗi kỹ thuật:** kit trừ budget trước khi gọi. Lỗi trước khi task được tạo: wrapper hoàn budget và thử lại. Lỗi sau khi task đã tạo (hết thời gian chờ, lỗi tải file): wrapper chờ tiếp đúng `task_id` đó, **không tạo task mới**. Tối đa 3 lần (như D8.3). Sau 3 lần: `STATUS: BLOCKED` kèm lỗi, Producer hỏi anh (D24.2, sửa D20.14).

@@ -142,7 +142,7 @@ def test_the_users_approval_adds_one_call_and_the_next_brief_says_one_call_is_le
     assert f"MESHY_CALLS: 1 (giá 10 credit một lần; `{A}/texture/budget-{h}.json` chỉ script ghi)" in lines(t["text"])
     assert "`TOP_FIX: meshy_regen: F1`" in t["text"]
     assert flow["budget t2"] == {"max_credits": 20, "used_credits": 20}
-    assert [c["kind"] for c in flow["meshy log"][4:7]] == ["post", "poll", "download"]
+    assert [c["kind"] for c in flow["meshy log"][6:11]] == ["post", "poll", "download", "poll", "base_color"]
 
 
 def test_check_texture_gets_only_the_view_set_and_two_concept_images(flow):

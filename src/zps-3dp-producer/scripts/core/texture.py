@@ -73,12 +73,15 @@ def paid_calls(st: dict) -> tuple[list[str], bool]:
         return [], False
     out, resume = [], False
     for c in sorted((vdir(st["id"], STEP, st["versions"][STEP]) / "work" / "meshy").glob("call-*")):
-        if meshy_call.glb_ok(c / "glb.glb"):
-            out.append(f"MESHY_DONE: `{rel(c / 'glb.glb')}` đã trả credit: dùng lại, không gọi lại Meshy")
+        if meshy_call.complete(c) and meshy_call.topology(c).get("overall") == "pass":
+            out.append(f"MESHY_DONE: `{rel(c)}` đã trả credit, topology pass: dùng lại `base_color.png`, không gọi lại "
+                       "Meshy")
+        elif meshy_call.complete(c):
+            out.append(f"MESHY_DONE: `{rel(c)}` đã trả credit, topology fail (`topology.json`): không dùng lớp này")
         elif tid := meshy_call.task(c).get("task_id"):
             resume = True
-            out.append(f"MESHY_DONE: `{rel(c)}` task {tid} đã trả credit, chưa có GLB: chạy lại lệnh Meshy với "
-                       f"`--out {rel(c)}`, không tốn thêm credit")
+            out.append(f"MESHY_DONE: `{rel(c)}` task {tid} đã trả credit, chưa có GLB hoặc base_color: chạy lại lệnh "
+                       f"Meshy với `--out {rel(c)}`, không tốn thêm credit")
     return out, resume
 
 

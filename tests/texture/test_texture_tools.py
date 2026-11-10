@@ -139,25 +139,49 @@ def test_a_paint_view_of_another_aspect_is_skipped_and_named_so_only_that_view_i
     assert np.abs(front - (200, 30, 30)).max() <= 2
 
 
-def meshy_glb(path, shift_px=0.0, drop=0):
+def meshy_call_dir(path, m, shift_px=0.0, size=RES):
+    """A meshy_call.py folder: glb.glb, base_color.png and the topology.json that meshy_call writes for them."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src/zps-3dp-producer/scripts"))
+    import meshy_call
     v, uv, f = glbkit.box()
-    uv = uv + np.array([shift_px / RES, 0])
-    buf = __import__("io").BytesIO()
-    Image.new("RGB", (64, 64), (200, 100, 50)).save(buf, "PNG")
-    return glbkit.write(path, v, uv, f[:len(f) - drop], png=buf.getvalue())
+    path.mkdir(parents=True)
+    glbkit.write(path / "glb.glb", v * 2, uv + np.array([shift_px / RES, 0]), f)
+    Image.new("RGB", (size, size), (200, 100, 50)).save(path / "base_color.png")
+    meshy_call.topology_check(m / f"{AID}-untextured.glb", path, RES)
+    return path
 
 
-@pytest.mark.parametrize("shift,drop,rc,fails", [(0.0, 0, 0, []), (2.0, 0, 1, ["meshy.uv_shift_px"]),
-                                                 (0.0, 2, 1, ["meshy.tris", "meshy.unmatched_tris"])])
-def test_check_meshy_keeps_a_glb_only_with_the_same_triangles_and_uvs_checklist_75(m, tmp_path, shift, drop, rc, fails):
-    g = meshy_glb(tmp_path / "glb.glb", shift, drop)
-    code, out = tool("check_meshy.py", "--final", tmp_path / "F", "--locked", m / f"{AID}-untextured.glb", "--meshy", g,
-                     "--res", RES, "--albedo-out", tmp_path / "meshy_albedo.png")
+def run_check_meshy(tmp_path, m, call, locked=None):
+    code, out = tool("check_meshy.py", "--final", tmp_path / "F", "--locked", locked or m / f"{AID}-untextured.glb",
+                     "--call", call, "--albedo-out", tmp_path / "meshy_albedo.png")
     r = json.loads((tmp_path / "F/review/checks/meshy.json").read_text())
-    assert (code, [c["check"] for c in r["checks"] if c["status"] == "fail"]) == (rc, fails)
-    assert (tmp_path / "meshy_albedo.png").is_file() is (rc == 0)
-    if rc == 0:
-        assert Image.open(tmp_path / "meshy_albedo.png").size == (RES, RES)
+    return code, [c["check"] for c in r["checks"] if c["status"] == "fail"], r
+
+
+def test_check_meshy_keeps_the_base_color_of_a_call_whose_topology_gate_passed_checklist_75(m, tmp_path):
+    code, fails, r = run_check_meshy(tmp_path, m, meshy_call_dir(tmp_path / "call-1", m))
+    assert (code, fails, r["data"]["hard_gate"]) == (0, [], True)
+    assert np.asarray(Image.open(tmp_path / "meshy_albedo.png")).shape == (RES, RES, 3)
+    assert Image.open(tmp_path / "meshy_albedo.png").getpixel((5, 5)) == (200, 100, 50)
+
+
+@pytest.mark.parametrize("case,fails", [
+    ("uv", ["meshy.uv_triples", "meshy.topology"]),
+    ("size", ["meshy.base_color_px", "meshy.topology"]),
+    ("edited", ["meshy.files_unchanged"]),
+    ("other_mesh", ["meshy.locked_mesh"]),
+])
+def test_check_meshy_drops_a_layer_that_failed_or_changed_after_the_gate_so_no_wrong_albedo_reaches_sua(
+        m, tmp_path, case, fails):
+    call = meshy_call_dir(tmp_path / "call-1", m, shift_px=2.0 if case == "uv" else 0.0,
+                          size=RES // 2 if case == "size" else RES)
+    if case == "edited":
+        Image.new("RGB", (RES, RES), (0, 0, 0)).save(call / "base_color.png")
+    other = None
+    if case == "other_mesh":
+        other = glbkit.write(tmp_path / "other.glb", *glbkit.box((2, 1, 1)))
+    code, got, _ = run_check_meshy(tmp_path, m, call, other)
+    assert (code, got, (tmp_path / "meshy_albedo.png").exists()) == (1, fails, False)
 
 
 def test_a_crop_edit_changes_pixels_inside_the_region_only_checklist_18(tmp_path):

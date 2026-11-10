@@ -3,8 +3,10 @@ api.meshy.ai. It replaces urllib.request.urlopen. FAKE_MESHY_MODE is a comma lis
 of that kind fail): post_fail (connection refused: the POST never left), post_lost (the server creates the task, the
 response is lost as a connection reset), poll_fail (HTTP 503 on the task GET), task_failed (the
 task ends FAILED), download_fail
-(network error on the GLB URL), truncated (GLB cut off), echo_key (HTTP 401 whose body repeats the Authorization
-header). The returned GLB is the uploaded model, as Meshy returns the mesh with original UVs.
+(network error on the GLB URL), truncated (GLB cut off), base_fail (network error on the base_color URL), echo_key
+(HTTP 401 whose body repeats the Authorization header). The returned GLB is the uploaded model, as Meshy returns the mesh
+with original UVs, or the file FAKE_MESHY_GLB (a real Meshy GLB, normalized). A succeeded task also has
+texture_urls[0].base_color: a PNG of FAKE_MESHY_BASE_PX (default 2048) square.
 Each request is logged to FAKE_MESHY_LOG (method, url, authorization, and the pid files in FAKE_MESHY_PIDS)."""
 import base64
 import io
@@ -17,6 +19,7 @@ from pathlib import Path
 
 LOG = os.environ.get("FAKE_MESHY_LOG")
 ASSET = "https://assets.meshy.fake/task-{n}.glb"
+BASE = "https://assets.meshy.fake/task-{n}/base_color.png?Signature=fake-signed"
 
 
 def faults():
@@ -82,14 +85,25 @@ def urlopen(req, timeout=None):
                                     "task_error": {"message": "mesh không hợp lệ"}}).encode())
         n = m.group(1).split("-")[1]
         return Resp(json.dumps({"id": m.group(1), "status": "SUCCEEDED", "consumed_credits": 10,
-                                "model_urls": {"glb": ASSET.format(n=n)}}).encode())
+                                "model_urls": {"glb": ASSET.format(n=n)},
+                                "texture_urls": [{"base_color": BASE.format(n=n)}]}).encode())
+    if url.startswith("https://assets.meshy.fake/") and "/base_color.png" in url:
+        kind = "base_fail" if fail_now("base_fail", past) else "base_color"
+        log({"method": method, "url": url.split("?")[0], "auth": auth, "kind": kind})
+        if kind == "base_fail":
+            raise urllib.error.URLError("download reset")
+        from PIL import Image
+        px = int(os.environ.get("FAKE_MESHY_BASE_PX") or 2048)
+        buf = io.BytesIO()
+        Image.new("RGB", (px, px), (160, 110, 60)).save(buf, "PNG")
+        return Resp(buf.getvalue())
     if url.startswith("https://assets.meshy.fake/"):
         kind = ("download_fail" if fail_now("download_fail", past) else
                 "truncated" if fail_now("truncated", past) else "download")
         log({"method": method, "url": url, "auth": auth, "kind": kind})
         if kind == "download_fail":
             raise urllib.error.URLError("download reset")
-        data = store.read_bytes()
+        data = Path(os.environ.get("FAKE_MESHY_GLB") or store).read_bytes()
         return Resp(data[:len(data) // 2] if kind == "truncated" else data)
     raise urllib.error.URLError(f"fake meshy: no route for {method} {url}")
 
