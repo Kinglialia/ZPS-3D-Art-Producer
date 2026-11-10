@@ -317,3 +317,22 @@ def test_the_codex_rule_is_written_only_on_write_and_never_over_a_foreign_file(c
 def test_without_the_codex_cli_the_rule_is_not_tested_and_the_output_says_so(codex_project, dist):
     r = rules(codex_project, dist, path=False)
     assert (r.returncode, "codex CLI not found: rule not tested" in r.stdout) == (0, True)
+
+
+SHELL_WRITE = re.compile(r"heredoc|cat\s*>|\btee\b|<<\s*['\"]?[A-Z]+|python3?\s+-c", re.I)
+DISPATCH_RULE = ("   Lời giao việc chỉ gồm file role và brief: file role là agent `agent` (Codex: `agent_file`), brief là prompt "
+                 "trên. Không thêm gì vào prompt. Không hướng dẫn cách ghi file: không heredoc, không `cat >`, không `tee`, "
+                 "không python. Agent ghi report bằng tool ghi file, theo brief.")
+
+
+@pytest.mark.parametrize("edition, name", [("claude", "zps-3dp-producer"), ("codex", "zps-3dp-producer-codex")])
+def test_the_dispatch_is_the_role_file_and_the_brief_and_nothing_tells_an_agent_to_write_through_the_shell_d30_8(
+        dist, edition, name):
+    """Run 5: the Producer's dispatch prompt told the worker to write worker-out.md with a heredoc; the brief was right."""
+    prod = tree(dist, edition) / "skills" / name
+    skill = (prod / "SKILL.md").read_text(encoding="utf-8").splitlines()
+    assert (DISPATCH_RULE in skill, any(l.startswith("**Ngoại lệ (waive):**") for l in skill)) == (True, True)
+    assert any("Bạn không bao giờ sửa report của worker hay reviewer." in l for l in skill)
+    hits = [f"{p.relative_to(prod)}: {l.strip()[:80]}" for p in sorted(prod.rglob("*.md"))
+            for l in p.read_text(encoding="utf-8").splitlines() if SHELL_WRITE.search(l) and l != DISPATCH_RULE]
+    assert hits == []

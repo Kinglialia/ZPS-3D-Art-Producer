@@ -776,3 +776,15 @@ def test_compare_for_ids_outside_top_fix_is_ignored_with_a_ledger_warning_and_pr
     warn = [l.split(" · ", 2)[2] for l in flow.ledger().splitlines() if "cảnh báo report reviewer" in l]
     assert warn == [f"{AID} · blockout v2 · cảnh báo report reviewer · COMPARE {i}={c} bỏ qua: không có trong TOP_FIX vòng "
                     "trước hay feedback của người dùng" for i, c in (("F2", "same"), ("F3", "better"))]
+
+
+def test_no_worker_or_reviewer_brief_tells_the_agent_to_write_its_report_through_the_shell_d30_8(flow):
+    shell = re.compile(r"heredoc|cat\s*>|\btee\b|<<\s*['\"]?[A-Z]+|python3?\s+-c", re.I)
+    texts = [flow.text(flow.brief())]
+    flow.work()
+    out = flow.brief()
+    texts.append(flow.text(out))
+    flow.review(out=out, counts=counts(major=1), findings=[finding("F1", "major", "structure")])
+    texts.append(flow.text(flow.brief()))
+    assert [t.splitlines()[0][:16] for t in texts] == ["# Brief — House ", "# Review brief —", "# Brief — House "]
+    assert [l for t in texts for l in t.splitlines() if shell.search(l)] == []
