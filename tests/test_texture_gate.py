@@ -6,6 +6,7 @@ import os
 import yaml
 
 from flowkit import AID, A, PROJECT_KEY, counts, to_texture
+from shared import run
 
 
 def budgets(root):
@@ -219,10 +220,12 @@ def test_a_meshy_key_and_budget_make_meshy_sua_the_default_and_the_ledger_says_w
 
 
 def test_no_env_file_paints_and_the_ledger_records_that_choice_and_its_reason(tmp_path):
-    f = to_texture(tmp_path, env_line=None)
-    prof = yaml.safe_load((tmp_path / "production/PROJECT-PROFILE.yaml").read_text(encoding="utf-8"))
-    del prof["paths"]["env_file"]
-    (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof, allow_unicode=True), encoding="utf-8")
+    def drop_env_file():
+        prof = yaml.safe_load((tmp_path / "production/PROJECT-PROFILE.yaml").read_text(encoding="utf-8"))
+        del prof["paths"]["env_file"]
+        (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof, allow_unicode=True),
+                                                                   encoding="utf-8")
+    f = to_texture(tmp_path, env_line=None, prepare=drop_env_file)
     f.brief("t1")
     assert ledger_modes(tmp_path) == ["chế độ VẼ MỚI: profile không có `paths.env_file`: không gọi Meshy"]
 
@@ -264,9 +267,9 @@ def test_a_redo_with_the_budget_spent_names_the_passed_layer_of_v1_so_meshy_sua_
 
 
 def test_texture_mode_paint_before_the_step_never_opens_a_budget_so_no_credit_can_be_spent(tmp_path):
-    f = to_texture(tmp_path)
-    assert f.p("texture-mode", AID, "paint") == (
-        "pilot-house: texture-mode paint (bởi người dùng); áp dụng từ brief texture tiếp theo\n")
+    said = []
+    f = to_texture(tmp_path, prepare=lambda: said.append(run(tmp_path, "texture-mode", AID, "paint")))
+    assert said == ["pilot-house: texture-mode paint (bởi người dùng); áp dụng từ brief texture tiếp theo\n"]
     assert f.st()["texture_choice"]["mode"] == "paint"
     f.brief("t1")
     t = f.cp["t1"]["text"].splitlines()
@@ -286,8 +289,7 @@ def test_texture_mode_records_who_chose_it_and_auto_returns_to_the_meshy_default
 
 
 def test_texture_mode_meshy_with_a_key_says_the_user_forced_meshy(tmp_path):
-    f = to_texture(tmp_path)
-    f.p("texture-mode", AID, "meshy")
+    f = to_texture(tmp_path, prepare=lambda: run(tmp_path, "texture-mode", AID, "meshy"))
     f.brief("t1")
     assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (người dùng chọn `texture-mode meshy`)"]
 

@@ -209,7 +209,7 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 
 **Chế độ mặc định** (D30.11, sửa D10): có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Ledger ghi chế độ đã chọn và lý do. Mới có 1 mẫu (Run 5); đo lại sau 3–5 asset.
 
-**Anh chọn chế độ trước bước texture:** `P texture-mode <id> auto|meshy|paint [--by "<lời anh>"]`. Script lưu vào `status.json` (`texture_choice`), không ghi vào thẻ asset. Ledger ghi giá trị, ai đổi (mặc định người dùng) và lúc đổi.
+**Anh chọn chế độ trước bước texture:** `P texture-mode <id> auto|meshy|paint [--by "<lời anh>"]`. Script lưu vào `status.json` (`texture_choice`), không ghi vào thẻ asset. Ledger ghi giá trị, ai đổi (mặc định người dùng) và lúc đổi. Anh chọn trước khi duyệt model: lúc duyệt model, script sinh brief texture và giao worker luôn (D30.5). Chọn sau đó thì áp dụng từ brief texture tiếp theo.
 - `auto` (mặc định): Meshy SỬA khi có key và budget, như trên.
 - `meshy`: buộc Meshy. Lệnh từ chối khi profile không có `env_file` hoặc thiếu key. Hết budget mà không có lớp Meshy qua topology: asset `blocked` trước khi giao, không tự chuyển VẼ MỚI.
 - `paint`: VẼ MỚI. Script không mở budget, không gọi Meshy, không hỏi gọi lại Meshy khi `UNFIXABLE`.
