@@ -6,8 +6,10 @@ task ends FAILED), download_fail
 (network error on the GLB URL), truncated (GLB cut off), base_fail (network error on the base_color URL), echo_key
 (HTTP 401 whose body repeats the Authorization header). The returned GLB is the uploaded model, as Meshy returns the mesh
 with original UVs, or the file FAKE_MESHY_GLB (a real Meshy GLB, normalized). A succeeded task also has
-texture_urls[0].base_color: a PNG of FAKE_MESHY_BASE_PX (default 2048) square.
-Each request is logged to FAKE_MESHY_LOG (method, url, authorization, and the pid files in FAKE_MESHY_PIDS)."""
+texture_urls[0].base_color: a PNG of FAKE_MESHY_BASE_PX (default 2048) square, one colour, or
+one-pixel black and white columns when FAKE_MESHY_BASE_STRIPES is set.
+Each request is logged to FAKE_MESHY_LOG (method, url, authorization, the texture_resolution of a POST, and the pid
+files in FAKE_MESHY_PIDS)."""
 import base64
 import io
 import json
@@ -63,7 +65,8 @@ def urlopen(req, timeout=None):
     store = Path(LOG).with_suffix(".model.glb")
     if method == "POST" and url.endswith("/retexture"):
         kind = next((k for k in ("echo_key", "post_fail", "post_lost") if fail_now(k, past)), "post")
-        log({"method": method, "url": url, "auth": auth, "kind": kind})
+        log({"method": method, "url": url, "auth": auth, "kind": kind,
+             "texture_resolution": json.loads(req.data).get("texture_resolution")})
         if kind == "echo_key":
             raise urllib.error.HTTPError(url, 401, "Unauthorized", {}, io.BytesIO(f"bad token {auth}".encode()))
         if kind == "post_fail":
@@ -95,7 +98,12 @@ def urlopen(req, timeout=None):
         from PIL import Image
         px = int(os.environ.get("FAKE_MESHY_BASE_PX") or 2048)
         buf = io.BytesIO()
-        Image.new("RGB", (px, px), (160, 110, 60)).save(buf, "PNG")
+        im = Image.new("RGB", (px, px), (160, 110, 60))
+        if os.environ.get("FAKE_MESHY_BASE_STRIPES"):
+            im.paste((0, 0, 0), (0, 0, px, px))
+            for x in range(0, px, 2):
+                im.paste((255, 255, 255), (x, 0, x + 1, px))
+        im.save(buf, "PNG")
         return Resp(buf.getvalue())
     if url.startswith("https://assets.meshy.fake/"):
         kind = ("download_fail" if fail_now("download_fail", past) else

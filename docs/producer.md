@@ -214,7 +214,9 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 - `meshy`: buộc Meshy. Lệnh từ chối khi profile không có `env_file` hoặc thiếu key. Hết budget mà không có lớp Meshy qua topology: asset `blocked` trước khi giao, không tự chuyển VẼ MỚI.
 - `paint`: VẼ MỚI. Script không mở budget, không gọi Meshy, không hỏi gọi lại Meshy khi `UNFIXABLE`.
 
-**Albedo và kiểm topology** (D30.3): `meshy_call.py` tải `texture_urls[].base_color` làm albedo. GLB Meshy chỉ dùng để so topology với mesh đã khóa: số tam giác, và tập hợp bộ ba UV của tam giác (mỗi bộ ba sắp xếp, cả tập sắp xếp, so có dung sai). Không so theo thứ tự tam giác, không phụ thuộc scale và vị trí. Kích thước `base_color` phải bằng `texture_res`. Lệch thì fail. Bỏ khớp bbox và ngưỡng 1e-5.
+**Albedo và kiểm topology** (D30.3): `meshy_call.py` tải `texture_urls[].base_color` làm albedo. GLB Meshy chỉ dùng để so topology với mesh đã khóa: số tam giác, và tập hợp bộ ba UV của tam giác (mỗi bộ ba sắp xếp, cả tập sắp xếp, so có dung sai). Không so theo thứ tự tam giác, không phụ thuộc scale và vị trí. Lệch thì fail. Bỏ khớp bbox và ngưỡng 1e-5.
+
+**Cỡ `base_color`:** wrapper gửi `texture_resolution` (API retexture: `2k`, `4k`, `8k`, mặc định `2k`) là mức nhỏ nhất ≥ `texture_res`. `texture_res` > 8192: từ chối trước khi trừ credit. Sau khi topology pass: `base_color` lớn hơn `texture_res` → thu về đúng `texture_res` bằng bộ lọc vùng (Pillow `BOX`); `topology.json` và ledger ghi cỡ gốc và cỡ mới. `base_color` nhỏ hơn `texture_res`, hoặc không vuông → fail (gate cứng).
 
 **Gọi qua wrapper, không sửa kit.** Texture Artist chỉ gọi Meshy qua `meshy_call.py` (tool của Producer). Wrapper gọi `gen_api.py texture` của kit (chép nguyên, không sửa, theo D2). Chỉ Texture Artist gọi Meshy.
 

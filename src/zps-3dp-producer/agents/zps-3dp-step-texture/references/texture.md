@@ -14,7 +14,7 @@ Script chọn chế độ và ghi vào brief một dòng `MODE:` (D30.11). Ledge
 
 ## 2. Meshy rồi SỬA
 
-1. `--dry-run` để xem giá, rồi gọi Meshy (lệnh ở file agent). Một lần gọi cho mỗi mesh; brief cho biết số lần còn lại. Wrapper tải `base_color.png` của task (albedo) và kiểm topology với `G` vào `V/work/meshy/call-<k>/topology.json`. Thoát 4: topology fail.
+1. `--dry-run` để xem giá, rồi gọi Meshy (lệnh ở file agent). Một lần gọi cho mỗi mesh; brief cho biết số lần còn lại. Wrapper tải `base_color.png` của task (albedo) và kiểm topology với `G` vào `V/work/meshy/call-<k>/topology.json`. `base_color.png` đã ở đúng `R` (wrapper thu nhỏ khi Meshy trả lớn hơn). Thoát 4: topology fail.
 2. `PY T/check_meshy.py --final F --locked G --call V/work/meshy/call-<k> --albedo-out V/work/meshy/meshy_albedo.png`. Fail (số tam giác, bộ ba UV hoặc cỡ `base_color` sai): bỏ lớp đó, ghi vào `notes.md`; không còn lần gọi thì VẼ MỚI. Gate cứng: không khai `ACCEPTED_FAIL`. Không lấy ảnh trong `glb.glb` làm albedo, không tự viết script so mesh.
 3. Chép `V/work/meshy/meshy_albedo.png` sang `F/review/meshy_albedo.png` (reviewer đặt cạnh bản đã sửa).
 4. Script sửa trước (D17): `PY T/tone_fix.py --glb G --model M --albedo V/work/meshy/meshy_albedo.png --profile <profile> --res R --out V/work/tone.png`. Cân tông 4 mặt bên, nâng vùng bị che, làm đều seam.

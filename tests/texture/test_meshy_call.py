@@ -50,10 +50,12 @@ def meshy(tmp_path):
                                                    encoding="utf-8")
     log, pids = tmp_path / "meshy.jsonl", tmp_path / "production/pids/meshy"
 
-    def run(*extra, mode="", cmd="texture", out="work/meshy/call-1", model_path=model, glb=None, base_px=RES):
+    def run(*extra, mode="", cmd="texture", out="work/meshy/call-1", model_path=model, glb=None, base_px=RES,
+            stripes=False):
         env = {**os.environ, "PYTHONPATH": str(HERE / "fake_meshy"), "FAKE_MESHY_LOG": str(log),
                "FAKE_MESHY_MODE": mode, "FAKE_MESHY_PIDS": str(pids), "MESHY_API_KEY": SHELL_KEY,
-               "FAKE_MESHY_GLB": str(glb or ""), "FAKE_MESHY_BASE_PX": str(base_px)}
+               "FAKE_MESHY_GLB": str(glb or ""), "FAKE_MESHY_BASE_PX": str(base_px),
+               "FAKE_MESHY_BASE_STRIPES": "1" if stripes else ""}
         args = {"texture": ["--asset", AID, "--model", str(model_path), "--style-image", str(style), "--out", out,
                             "--pid-file", str(pids / f"{AID}.pid")],
                 "price": ["--model", str(model_path), "--style-image", str(style)], "keys": []}[cmd]
@@ -66,7 +68,7 @@ def meshy(tmp_path):
                 "topology": json.loads(topo.read_text()) if topo.exists() else None,
                 "budget": json.loads(budget.read_text()), "files": sorted(x.name for x in (tmp_path / out).glob("*"))
                 if (tmp_path / out).is_dir() else []}
-    run.tmp, run.model, run.budget, run.pids = tmp_path, model, budget, pids
+    run.tmp, run.model, run.budget, run.pids, run.card = tmp_path, model, budget, pids, card
     return run
 
 
@@ -417,3 +419,42 @@ def test_one_uv_moved_just_past_the_tolerance_fails(meshy, run5):
     g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "past.glb", uv_moved_by(2e-4))
     r = meshy(model_path=run5, glb=g)
     assert (r["rc"], failed(r)) == (4, ["meshy.uv_triples"])
+
+
+def card_res(meshy, res):
+    meshy.card.write_text(yaml.safe_dump({"asset": AID, "texture_res": res}), encoding="utf-8")
+
+
+def test_a_larger_base_color_is_cut_to_texture_res_with_an_area_filter_and_both_sizes_are_recorded(meshy):
+    from PIL import Image
+    card_res(meshy, 1024)
+    r = meshy(base_px=2048, stripes=True)
+    assert (r["rc"], failed(r)) == (0, [])
+    d = r["topology"]["data"]
+    assert (d["base_color_px_meshy"], d["base_color_px"]) == ([2048, 2048], [1024, 1024])
+    im = Image.open(r["record"]["albedo"]).convert("RGB")
+    assert im.size == (1024, 1024)
+    assert set(map(tuple, np.asarray(im).reshape(-1, 3))) <= {(127, 127, 127), (128, 128, 128)}
+    assert d["base_color_sha256"] == hashlib.sha256(Path(r["record"]["albedo"]).read_bytes()).hexdigest()
+    ledger = (meshy.tmp / "production/ledger.md").read_text(encoding="utf-8")
+    assert f"{AID} · texture · Meshy base_color 2048x2048 → 1024x1024 (BOX, texture_res) · call-1" in ledger
+
+
+def test_a_base_color_smaller_than_texture_res_fails_because_upscaling_would_invent_detail(meshy):
+    card_res(meshy, 2048)
+    r = meshy(base_px=1024)
+    assert (r["rc"], failed(r), r["record"]["albedo"]) == (4, ["meshy.base_color_px"], None)
+
+
+@pytest.mark.parametrize("res,asked", [(1024, "2k"), (2048, "2k"), (4096, "4k")])
+def test_the_request_asks_meshy_for_the_smallest_texture_resolution_that_covers_texture_res(meshy, res, asked):
+    card_res(meshy, res)
+    r = meshy(base_px=res)
+    assert (r["rc"], [c["texture_resolution"] for c in r["calls"] if c["kind"] == "post"]) == (0, [asked])
+
+
+def test_a_texture_res_above_8k_is_refused_before_any_charge_because_meshy_cannot_make_it(meshy):
+    card_res(meshy, 16384)
+    r = meshy()
+    assert (r["rc"], r["calls"], r["budget"]["used_credits"]) == (3, [], 0)
+    assert r["out"] == "[meshy_call] từ chối: texture_res 16384 lớn hơn 8k, mức lớn nhất của Meshy retexture: chọn VẼ MỚI\n"

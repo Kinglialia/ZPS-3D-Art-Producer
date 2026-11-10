@@ -149,5 +149,6 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 143 | Producer | v0.7.0: worktree `./.worktrees/feat-v0.7.0`, toàn bộ test 0 skip, merge fast-forward vào `main` | D30.15 |  |
 | 144 | Mọi reviewer | Mỗi lần chấm là một reviewer mới; Producer không resume reviewer qua các vòng | D31.7 |  |
 | 145 | Producer | `P texture-mode <id> auto\|meshy\|paint` lưu vào `status.json`, ledger ghi ai đổi và lúc đổi; `paint` không mở budget; `meshy` không key → từ chối, hết budget không lớp dùng được → `blocked` | producer.md §6.3, D30.11 | `tests/test_texture_gate.py` (6 test `texture_mode`) |
+| 146 | Texture Artist | `meshy_call.py` gửi `texture_resolution` nhỏ nhất (`2k`/`4k`/`8k`) ≥ `texture_res`; `base_color` lớn hơn → thu về `texture_res` bằng `BOX`, ghi cỡ gốc và cỡ mới vào `topology.json` và ledger; nhỏ hơn → fail | producer.md §6.3, D30.3 | `tests/texture/test_meshy_call.py` (1024 với base 2048 → pass, 1024; 2048 với 1024 → fail; payload 2k, 2k, 4k; > 8k → từ chối). Kit không có cờ: child import `gen_api.py` nguyên bản và thêm trường vào body. Chưa chạy Meshy thật |
 
 Claude Code version checked: 2.1.317 (desktop app subagent, 2026-11-10): `review-out.md` and `worker-out.md` write OK; `report-review.md` and `report-worker.md` are blocked. CLI on the same machine: 2.1.318.
