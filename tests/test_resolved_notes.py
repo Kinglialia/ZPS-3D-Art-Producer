@@ -1,5 +1,5 @@
 """D27.8: a later worker names the notes of an earlier step it did (RESOLVED_NOTES); its reviewer confirms them
-(RESOLVED_CONFIRMED). Run 4: the README kept "3 board rows on the back" open after the model step built them."""
+(RESOLVED_CONFIRMED). Pilot run: the README kept "3 board rows on the back" open after the model step built them."""
 import json
 
 from flowkit import A, AID, Flow, counts, mf

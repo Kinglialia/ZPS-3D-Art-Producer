@@ -85,7 +85,7 @@ def worker_report(flow, out):
 
 def test_a_dispatch_records_its_model_and_the_ingest_records_the_role_times_tokens_and_duration_d27_3(
         flow, monkeypatch):  # noqa: F811
-    """Run 4 had tokens per step only, so nobody could tell whether the worker, the reviewer or the Producer grew."""
+    """A pilot run had tokens per step only, so nobody could tell whether the worker, the reviewer or the Producer grew."""
     clock(monkeypatch, "2026-11-10 09:00:00", "2026-11-10 09:12:30", "2026-11-10 09:12:31")
     out = flow.brief()
     worker_report(flow, out)

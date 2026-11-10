@@ -154,7 +154,7 @@ def test_bevel_comes_from_the_card_field_over_the_profile_field_with_numbers_fro
 
 
 @pytest.mark.parametrize("card, profile", [
-    ({"real_texture_only_notes": ["real: thân hộp, nắp vòm, cạnh bo toon."]}, {}),
+    ({"real_texture_only_notes": ["real: thân hộp, mái vòm, cạnh bo toon."]}, {}),
     ({}, {"overrides": {"detail": {"bevel": True}}}),
 ])
 def test_bevel_stays_off_for_notes_and_profile_overrides_because_only_the_two_fields_decide_it_d27_10(
@@ -240,8 +240,8 @@ def test_detail_fails_over_the_tier_cap_and_without_new_tris(detail, tmp_path):
 def test_density_is_compared_with_the_pilot_package_of_this_runtime_d22_10(detail, tmp_path):
     b, f = detail
     spec_of(f)
-    write_glb(tmp_path / "deliver/wooden-chest/model/wooden-chest.glb", *box((0, 0, 0), (1, 1, 1)))
-    tool("check_detail", "--final", f, "--blockout", b, "--pilot", tmp_path / "deliver/wooden-chest")
+    write_glb(tmp_path / "deliver/pilot-prop/model/pilot-prop.glb", *box((0, 0, 0), (1, 1, 1)))
+    tool("check_detail", "--final", f, "--blockout", b, "--pilot", tmp_path / "deliver/pilot-prop")
     _, checks, data = result(f, "detail")
     assert (checks["detail.vs_pilot"], data["pilot"]["tris_per_m2"]) == (("info", 1.6), 2.0)
 

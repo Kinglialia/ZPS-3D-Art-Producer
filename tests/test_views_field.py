@@ -166,11 +166,11 @@ def test_texture_complexity_with_views_none_reads_the_motif_from_the_material_fi
     im = Image.new("RGB", (64, 64), (255, 255, 255))
     im.paste((120, 80, 40), (16, 16, 48, 48))
     im.save(c / "concept_albedo.png")
-    (c / "C.material.md").write_text("| WOOD | gỗ | biển chữ TAVERN trên nắp |\n", encoding="utf-8")
+    (c / "C.material.md").write_text("| WOOD | gỗ | biển chữ TAVERN trên mái |\n", encoding="utf-8")
     prof = tmp_path / "p.yaml"
     prof.write_text("texture_simple: {max_materials: 2, max_color_clusters: 6}\n", encoding="utf-8")
     r = tool("zps-3dp-step-texture", "texture_complexity.py", "--final", f, "--blockout", b, "--concept", c,
              "--profile", prof, "--mode", "paint")
     assert r.returncode == 0, r.stdout
     spec = json.loads((f / "texture_spec.json").read_text(encoding="utf-8"))
-    assert (spec["simple"], spec["scores"]["motif"]) == (False, ["| WOOD | gỗ | biển chữ TAVERN trên nắp |"])
+    assert (spec["simple"], spec["scores"]["motif"]) == (False, ["| WOOD | gỗ | biển chữ TAVERN trên mái |"])

@@ -197,7 +197,7 @@ def test_best_version_has_fewest_open_blocker_major_and_a_tie_with_a_regressed_f
 
 
 def test_best_version_prefers_the_version_that_resolved_a_major_when_open_counts_tie():
-    # Run 4: v2 fixed F1 and the reviewer then saw F2; the fix brief must start from v2, not rebuild v1.
+    # Pilot run: v2 fixed F1 and the reviewer then saw F2; the fix brief must start from v2, not rebuild v1.
     v1 = doc_of(1, F1=("open", "major"))
     v2 = doc_of(2, F1=("resolved", "major"), F2=("open", "major"))
     v3 = doc_of(3, F1=("resolved", "major"), F2=("open", "major"))
@@ -206,8 +206,8 @@ def test_best_version_prefers_the_version_that_resolved_a_major_when_open_counts
     assert best_version([v1, v2, v3]) == 3
 
 
-def test_best_version_run5_picks_v2_that_also_fixed_the_minor_f3_when_both_keep_two_majors_open_d30_2():
-    # Run 5 model: the v3 brief started from v1 although v2 = v1 + F3 fixed; the next round redid F3.
+def test_best_version_picks_v2_that_also_fixed_the_minor_f3_when_both_keep_two_majors_open_d30_2():
+    # Pilot run, model step: the v3 brief started from v1 although v2 = v1 + F3 fixed; the next round redid F3.
     v1 = doc_of(1, F1=("open", "major"), F2=("open", "major"), F3=("open", "minor"))
     v2 = doc_of(2, F1=("open", "major"), F2=("open", "major"), F3=("resolved", "minor"))
     assert best_version([v1, v2]) == 2

@@ -185,7 +185,7 @@ def test_the_set_reviewer_gets_the_view_region_rule_and_both_inputs(flow):
 
 
 def test_the_set_reviewer_is_told_a_wrong_part_count_is_a_regen_and_preserve_names_the_neighbours_d27_11(flow):
-    """Run 4: `back.png` had 2 board rows for 3 and passed as a `note_texture`."""
+    """Pilot run: `back.png` had 2 board rows for 3 and passed as a `note_texture`."""
     assert lines(flow["vr1 review brief"]["text"],
                  "- Sai số thành phần (hàng ván, cửa, trụ) so với concept hoặc `blockout.md`: luôn `regen`, không phải "
                  "`note_exception`, `note_texture`.",

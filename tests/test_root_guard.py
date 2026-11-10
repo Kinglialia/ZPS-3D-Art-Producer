@@ -1,6 +1,6 @@
 """D30.12: every tool that writes files refuses to run outside the project root and creates no file.
 
-Run 5: a texture check started from the repo root wrote production/assets/.../review/checks/inputs.json there."""
+Pilot run: a texture check started from the repo root wrote production/assets/.../review/checks/inputs.json there."""
 import os
 import re
 import subprocess

@@ -17,9 +17,8 @@ import glbkit
 
 HERE = Path(__file__).resolve().parent
 CALL = HERE.parents[1] / "src/zps-3dp-producer/scripts/meshy_call.py"
-RUN5 = HERE.parent / "fixtures/meshy_run5"
 PROJECT_KEY, SHELL_KEY = "msy-project-0123456789", "msy-shell-9876543210"
-AID = "chest"
+AID = "crate"
 RES = 64
 OK_KINDS = ["post", "poll", "download", "poll", "base_color"]
 
@@ -40,7 +39,7 @@ def meshy(tmp_path):
     (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof), encoding="utf-8")
     (tmp_path / ".env").write_text(f"MESHY_API_KEY={PROJECT_KEY}\n", encoding="utf-8")
     v, uv, f = glbkit.box()
-    model = glbkit.write(tmp_path / "chest-untextured.glb", v, uv, f)
+    model = glbkit.write(tmp_path / f"{AID}-untextured.glb", v, uv, f)
     style = tmp_path / "concept_albedo.png"
     style.write_bytes(b"\x89PNG\r\n\x1a\nfake")
     budget = budget_for(tmp_path, model)
@@ -140,10 +139,34 @@ def one_triangle_missing(doc, binary):
     doc["accessors"][indices_of(doc)]["count"] -= 3
 
 
+def tiles(nx=3, ny=3, nz=2):
+    """nx * ny * nz boxes, 12 triangles each, every box its own UV cell of a 6 x 3 grid: a locked mesh with UV islands."""
+    v, uv, f = [], [], []
+    for k, (i, j, m) in enumerate((i, j, m) for m in range(nz) for j in range(ny) for i in range(nx)):
+        bv, buv, bf = glbkit.box()
+        f += (bf + len(v)).tolist()
+        v += (bv + np.array([i, j, m]) * 1.5).tolist()
+        uv += ((buv + [k % 6, k // 6]) / [6, 3]).tolist()
+    return np.array(v), np.array(uv), np.array(f)
+
+
 @pytest.fixture
-def run5(meshy):
-    locked = meshy.tmp / "wooden-chest-untextured.glb"
-    locked.write_bytes((RUN5 / "locked.glb").read_bytes())
+def normalized(meshy):
+    """The locked mesh, and the GLB Meshy returns for it: scaled x2 about its centre, moved up, with the vertex order,
+    the triangle order and the corner order of every triangle changed (D30.3). As Blender exports it, the locked mesh
+    has 16-bit indices and split vertices (the second triangle of each quad of the first box has its own copies);
+    Meshy welds them and writes 32-bit indices, so the two files differ in vertex count and index type."""
+    v, uv, f = tiles()
+    split = f.copy()
+    split[1:12:2] = len(v) + np.arange(18).reshape(6, 3)
+    lv, luv = np.r_[v, v[f[1:12:2].reshape(-1)]], np.r_[uv, uv[f[1:12:2].reshape(-1)]]
+    locked = glbkit.write(meshy.tmp / f"{AID}-tiles-untextured.glb", lv, luv, split, index_dtype="<u2")
+    rng = np.random.default_rng(3)
+    perm = rng.permutation(len(v))
+    mv, muv = np.empty_like(v), np.empty_like(uv)
+    mv[perm], muv[perm] = (v - (v.min(0) + v.max(0)) / 2) * 2 + [0, 0, 0.37], uv
+    mf = np.roll(perm[f][rng.permutation(len(f))], 1, axis=1)
+    meshy.normalized = glbkit.write(meshy.tmp / "meshy-normalized.glb", mv, muv, mf)
     meshy.budget = budget_for(meshy.tmp, locked)
     return locked
 
@@ -334,29 +357,41 @@ def failed(r):
     return [c["check"] for c in r["topology"]["checks"] if c["status"] == "fail"]
 
 
-def test_the_real_run5_meshy_glb_passes_although_meshy_scaled_it_x2_and_moved_it_because_only_triangles_and_uvs_count(
-        meshy, run5):
-    meshy_max = json.loads((RUN5 / "meshy.glb").read_bytes()[20:20 + struct.unpack(
-        "<I", (RUN5 / "meshy.glb").read_bytes()[12:16])[0]])["accessors"][0]["max"]
-    assert meshy_max[0] == 1.0
-    r = meshy(model_path=run5, glb=RUN5 / "meshy.glb")
+def accessors(glb: Path):
+    data = glb.read_bytes()
+    return json.loads(data[20:20 + struct.unpack("<I", data[12:16])[0]])["accessors"]
+
+
+def bbox(glb: Path):
+    a = accessors(glb)[0]
+    return [round(x, 4) for x in a["min"]], [round(x, 4) for x in a["max"]]
+
+
+def test_a_meshy_glb_scaled_x2_moved_and_reordered_passes_because_only_triangles_and_uvs_count(meshy, normalized):
+    """Meshy's retexture API always normalizes the GLB; a check on position or order would fail every paid call."""
+    assert (bbox(normalized), bbox(meshy.normalized)) == (([-0.5, 0.0, -3.5], [3.5, 2.5, 0.5]),
+                                                          ([-4.0, -2.13, -4.0], [4.0, 2.87, 4.0]))
+    assert [(a["count"], a["componentType"]) for a in accessors(normalized)] == [(450, 5126), (450, 5126), (648, 5123)]
+    assert [(a["count"], a["componentType"]) for a in accessors(meshy.normalized)] == [(432, 5126), (432, 5126),
+                                                                                       (648, 5125)]
+    r = meshy(model_path=normalized, glb=meshy.normalized)
     assert (r["rc"], r["record"]["status"], r["topology"]["overall"], failed(r)) == (0, "ok", "pass", [])
     assert [(c["check"], c["value"], c["threshold"]) for c in r["topology"]["checks"]] == [
-        ("meshy.tris", 2471, 2471), ("meshy.uv_triples", 0, 0), ("meshy.base_color_px", [RES, RES], [RES, RES])]
-    assert r["topology"]["data"]["locked_sha256"] == hashlib.sha256(run5.read_bytes()).hexdigest()
+        ("meshy.tris", 216, 216), ("meshy.uv_triples", 0, 0), ("meshy.base_color_px", [RES, RES], [RES, RES])]
+    assert r["topology"]["data"]["locked_sha256"] == hashlib.sha256(normalized.read_bytes()).hexdigest()
 
 
 def test_the_same_triangles_in_another_order_and_corner_order_pass_because_meshy_may_rewrite_the_index_buffer(
-        meshy, run5):
-    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "shuffled.glb", shuffled)
-    r = meshy(model_path=run5, glb=g)
+        meshy, normalized):
+    g = edit_glb(meshy.normalized, meshy.tmp / "shuffled.glb", shuffled)
+    r = meshy(model_path=normalized, glb=g)
     assert (r["rc"], failed(r)) == (0, [])
 
 
 def test_one_moved_uv_fails_as_a_hard_gate_and_leaves_no_albedo_because_the_paint_would_land_off_the_locked_uv(
-        meshy, run5):
-    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "moved.glb", one_uv_moved)
-    r = meshy(model_path=run5, glb=g)
+        meshy, normalized):
+    g = edit_glb(meshy.normalized, meshy.tmp / "moved.glb", one_uv_moved)
+    r = meshy(model_path=normalized, glb=g)
     assert (r["rc"], failed(r), r["topology"]["data"]["hard_gate"]) == (4, ["meshy.uv_triples"], True)
     assert r["topology"]["checks"][1]["value"] >= 1
     assert (r["record"]["status"], r["record"]["albedo"]) == ("topology_fail", None)
@@ -365,11 +400,11 @@ def test_one_moved_uv_fails_as_a_hard_gate_and_leaves_no_albedo_because_the_pain
                         f"10 credit -> {meshy.tmp}/work/meshy/call-1/topology.json\n")
 
 
-def test_one_missing_triangle_fails_because_the_meshy_mesh_is_no_longer_the_locked_mesh(meshy, run5):
-    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "missing.glb", one_triangle_missing)
-    r = meshy(model_path=run5, glb=g)
+def test_one_missing_triangle_fails_because_the_meshy_mesh_is_no_longer_the_locked_mesh(meshy, normalized):
+    g = edit_glb(meshy.normalized, meshy.tmp / "missing.glb", one_triangle_missing)
+    r = meshy(model_path=normalized, glb=g)
     assert (r["rc"], failed(r)) == (4, ["meshy.tris", "meshy.uv_triples"])
-    assert r["topology"]["checks"][0]["value"] == 2470
+    assert r["topology"]["checks"][0]["value"] == 215
 
 
 def test_a_base_color_of_another_size_than_texture_res_fails_because_assemble_needs_the_card_resolution(meshy):
@@ -410,15 +445,15 @@ def test_the_signed_base_color_url_is_never_written_or_printed(meshy):
     assert r["rc"] == 0 and "Signature" not in text and "assets.meshy.fake" not in text
 
 
-def test_uv_noise_inside_the_tolerance_on_every_corner_passes_so_float_rounding_never_fails_a_paid_call(meshy, run5):
-    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "noise.glb", uv_noise(9e-5))
-    r = meshy(model_path=run5, glb=g)
+def test_uv_noise_inside_the_tolerance_on_every_corner_passes_so_float_rounding_never_fails_a_paid_call(meshy, normalized):
+    g = edit_glb(meshy.normalized, meshy.tmp / "noise.glb", uv_noise(9e-5))
+    r = meshy(model_path=normalized, glb=g)
     assert (r["rc"], failed(r)) == (0, [])
 
 
-def test_one_uv_moved_just_past_the_tolerance_fails(meshy, run5):
-    g = edit_glb(RUN5 / "meshy.glb", meshy.tmp / "past.glb", uv_moved_by(2e-4))
-    r = meshy(model_path=run5, glb=g)
+def test_one_uv_moved_just_past_the_tolerance_fails(meshy, normalized):
+    g = edit_glb(meshy.normalized, meshy.tmp / "past.glb", uv_moved_by(2e-4))
+    r = meshy(model_path=normalized, glb=g)
     assert (r["rc"], failed(r)) == (4, ["meshy.uv_triples"])
 
 

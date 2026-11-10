@@ -22,11 +22,11 @@ def box(size=(1.0, 1.0, 1.0)):
     return np.array(v), np.array(uv), np.array(f)
 
 
-def write(path, v, uv, f, png: bytes | None = None, unlit=False):
+def write(path, v, uv, f, png: bytes | None = None, unlit=False, index_dtype="<u4"):
     zup_to_gltf = np.array([[1.0, 0, 0], [0, 0, 1.0], [0, -1.0, 0]])
     pos = (np.asarray(v, float) @ zup_to_gltf.T).astype("<f4")
     tex = np.c_[np.asarray(uv)[:, 0], 1 - np.asarray(uv)[:, 1]].astype("<f4")
-    idx = np.asarray(f, "<u4").reshape(-1)
+    idx = np.asarray(f, index_dtype).reshape(-1)
     chunks = [pos.tobytes(), tex.tobytes(), idx.tobytes()] + ([png] if png else [])
     views, off, blob = [], 0, b""
     for c in chunks:
@@ -42,7 +42,8 @@ def write(path, v, uv, f, png: bytes | None = None, unlit=False):
            "accessors": [{"bufferView": 0, "componentType": 5126, "count": len(pos), "type": "VEC3",
                           "min": pos.min(0).tolist(), "max": pos.max(0).tolist()},
                          {"bufferView": 1, "componentType": 5126, "count": len(tex), "type": "VEC2"},
-                         {"bufferView": 2, "componentType": 5125, "count": len(idx), "type": "SCALAR"}]}
+                         {"bufferView": 2, "componentType": {"<u2": 5123, "<u4": 5125}[index_dtype], "count": len(idx),
+                          "type": "SCALAR"}]}
     if png:
         doc["images"] = [{"bufferView": 3, "mimeType": "image/png"}]
         doc["textures"] = [{"source": 0}]

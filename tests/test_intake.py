@@ -178,11 +178,11 @@ def test_optional_card_field_may_be_absent_and_means_default(tmp_path, key):
 
 
 HIDDEN_ERR = "thẻ: hidden_sides sai: cần đủ 4 mặt {back, left, right, top}, mỗi mặt một chuỗi (chưa biết thì ghi 'chưa biết')"
-SIDES4 = {"back": "gỗ ghép, hai bản lề", "left": "chưa biết", "right": "chưa biết", "top": "nắp vòm, hai đai da"}
+SIDES4 = {"back": "gỗ ghép, một cửa sau", "left": "chưa biết", "right": "chưa biết", "top": "mái ngói, hai ống khói"}
 
 
 def test_hidden_sides_names_the_unseen_faces_it_lacks_so_blockout_never_guesses_a_side_d27_6(tmp_path):
-    card = mutated(hidden_sides={"back": "gỗ ghép", "top": "nắp vòm"})
+    card = mutated(hidden_sides={"back": "gỗ ghép", "top": "mái ngói"})
     assert messages(make_asset(tmp_path, card=card)) == [HIDDEN_ERR + "; thiếu: left, right"]
 
 
@@ -240,7 +240,7 @@ BEVEL_WARN = ("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nh�
 @pytest.mark.parametrize("note", ["real: thân hộp, bo cạnh toon.", "real: cạnh bo toon"])
 @pytest.mark.parametrize("bevel, out", [(None, [BEVEL_WARN]), ("toon", []), ("none", [])])
 def test_card_cli_warns_when_a_note_asks_to_round_edges_but_the_bevel_field_is_empty_d27_10(tmp_path, bevel, out, note):
-    # Run 4's card wrote "cạnh bo toon"; both word orders must warn.
+    # A pilot card wrote "cạnh bo toon"; both word orders must warn.
     card = mutated(bevel=bevel, real_texture_only_notes=[note])
     assert card_cli(make_asset(tmp_path, card=card)) == (0, out)
 
@@ -656,7 +656,7 @@ def test_guideline_lists_required_files_and_the_check_command_with_no_placeholde
 
 
 def test_guideline_tells_agents_to_name_the_env_path_and_never_attach_the_file_d30_13(tmp_path, presets):
-    """Run 5: an attached .env put every key in it into the chat context."""
+    """Pilot run: an attached .env put every key in it into the chat context."""
     Proj(tmp_path, presets)
     g = (tmp_path / "concepts/GUIDELINE.md").read_text(encoding="utf-8")
     assert ("- Key API nằm trong file `.env` của project. Khi cần nói về key, chỉ nêu đường dẫn file `.env`. Không đính "

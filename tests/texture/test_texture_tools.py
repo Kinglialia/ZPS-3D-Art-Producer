@@ -86,7 +86,7 @@ def complexity(tmp, mats, cols=None, card=None, note=None, concept_img=None, mod
     return json.loads((f / "texture_spec.json").read_text())
 
 
-def test_a_simple_crate_and_rock_still_get_meshy_when_the_script_chose_meshy_because_run5_meshy_was_faster_d30_11(
+def test_a_simple_crate_and_rock_still_get_meshy_when_the_script_chose_meshy_because_meshy_was_faster_d30_11(
         tmp_path):
     crate = complexity(tmp_path / "crate", ["WOOD", "IRON"], [(120, 80, 40), (60, 60, 64)])
     rock = complexity(tmp_path / "rock", ["ROCK"], [(110, 110, 105), (90, 95, 80), (130, 125, 118)])
@@ -395,7 +395,7 @@ def measure_groove(gm, tmp, img):
     return {c["check"]: (c["status"], c["value"]) for c in r["checks"]}, r["data"]
 
 
-def test_concept_ink_in_a_narrow_groove_is_line_art_not_baked_shading_run4(tmp_path):
+def test_concept_ink_in_a_narrow_groove_is_line_art_not_baked_shading(tmp_path):
     gm = grooved_model(tmp_path / "model")
     img, inked = groove_texture(gm, tmp_path)
     assert inked > 0
@@ -411,7 +411,7 @@ def test_baked_ao_under_an_overhang_still_fails_next_to_an_inked_groove(tmp_path
     assert c["light.shaded_share.TIMBER"][0] == "fail" and c["light.shaded_share.TIMBER"][1] > 0.05, c
 
 
-def test_a_bright_side_beside_a_dark_island_in_the_atlas_is_not_counted_as_shaded_run4(tmp_path):
+def test_a_bright_side_beside_a_dark_island_in_the_atlas_is_not_counted_as_shaded(tmp_path):
     gm = quads_model(tmp_path / "tight", {"body": ("TIMBER", slab((-0.5, -0.5, 0), (0.5, 0.5, 1)))}, margin=0.01)
     g, tm = tex.load_map(gm / f"{AID}-untextured.glb", GROOVE_RES)
     img = tex.load_rgb(base_fill_at(gm, tmp_path))

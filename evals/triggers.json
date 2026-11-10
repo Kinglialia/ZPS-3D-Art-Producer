@@ -9,7 +9,7 @@
         {"query": "kho-lua: mái thấp quá, làm lại blockout", "should_trigger": true, "kind": "positive", "why": "Feedback on a pipeline asset"},
         {"query": "còn concept nào chưa làm?", "should_trigger": true, "kind": "positive", "why": "Intake listing"},
         {"query": "tiếp tục", "should_trigger": true, "kind": "edge", "why": "Argued: the project CLAUDE.md line points every asset request at the Producer"},
-        {"query": "ZPS - 3D Artist dựng model cái rương", "should_trigger": false, "kind": "negative", "why": "Kit skill zps-3d-artist named by its display name"},
+        {"query": "ZPS - 3D Artist dựng model cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit skill zps-3d-artist named by its display name"},
         {"query": "vẽ concept 3 view cho cái đèn", "should_trigger": false, "kind": "negative", "why": "Concept art: kit zps-concept-artist"},
         {"query": "ZPS Texture Artist vẽ texture cho cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-texture-artist named"}
       ]
@@ -28,7 +28,7 @@
       "cases": [
         {"query": "Đọc `production/assets/kho-lua/blockout/v1/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/blockout/v1/worker-out.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
         {"query": "dựng blockout nhanh cho cái nhà kho này", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-3d-artist self-build"},
-        {"query": "ZPS - 3D Artist làm part graph cho cái rương", "should_trigger": false, "kind": "negative", "why": "Kit zps-3d-artist named"}
+        {"query": "ZPS - 3D Artist làm part graph cho cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-3d-artist named"}
       ]
     },
     "zps-3dp-step-views": {
@@ -43,7 +43,7 @@
       "rule": "Run only on a Producer brief for the model step.",
       "cases": [
         {"query": "Đọc `production/assets/kho-lua/model/v2/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/model/v2/worker-out.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
-        {"query": "ZPS - 3D Artist dựng model cái rương", "should_trigger": false, "kind": "negative", "why": "Kit zps-3d-artist named"},
+        {"query": "ZPS - 3D Artist dựng model cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-3d-artist named"},
         {"query": "dựng model cho concept này", "should_trigger": false, "kind": "negative", "why": "No brief, no name: kit zps-3d-artist"},
         {"query": "giảm mặt model này xuống 1500 tris", "should_trigger": false, "kind": "negative", "why": "Optimization: kit zps-3d-artist"}
       ]

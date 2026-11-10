@@ -119,7 +119,7 @@ def test_cli_approvals_and_delegate_print_one_line(tmp_path):
 
 
 def test_the_user_turns_test_mode_on_through_the_single_policy_writer_and_only_true_or_false_is_kept_d30_1(prod, capsys):
-    setp("test_mode", "true", by="chạy thử wooden-chest")
+    setp("test_mode", "true", by="chạy thử pilot")
     assert (capsys.readouterr().out, policy.load()["test_mode"]) == ("OK: approvals test_mode=true\n", True)
     with pytest.raises(ProducerError) as e:
         setp("test_mode", "yes")

@@ -257,7 +257,7 @@ def progress(base: dict, doc: dict) -> bool:
 def best_version(docs: list[dict | None]) -> int | None:
     """§7.5, D30.2: fewest open blocker+major; then most blocker+major resolved; then, among versions without a
     regressed finding, most findings resolved at any level; then the newer version.
-    Run 5: v2 = v1 + F3 fixed, with the same 2 majors open; the fix round must start from v2."""
+    Example: v2 = v1 + F3 fixed, with the same 2 majors open; the fix round must start from v2."""
     docs = [d for d in docs if d]
     if not docs:
         return None

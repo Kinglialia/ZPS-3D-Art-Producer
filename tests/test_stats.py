@@ -1,6 +1,6 @@
-"""`P stats` (D27.3, D30.10, D31.4): time and tokens per step and role, and the Producer wait. Run 4 knew only tokens per
+"""`P stats` (D27.3, D30.10, D31.4): time and tokens per step and role, and the Producer wait. A pilot run knew only tokens per
 step, so the decision to keep the reviewer with the Producer rests on this table: a Producer wait over 15% of a step is
-a review. Run 5 spent 1.33M tokens on reviewers, so R1-R3 (D31) are judged by the reviewer split per round kind."""
+a review. A pilot run spent over a million tokens on reviewers, so R1-R3 (D31) are judged by the reviewer split per round kind."""
 import datetime as dt
 import json
 import subprocess

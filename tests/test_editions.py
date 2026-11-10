@@ -145,7 +145,7 @@ def test_the_static_trigger_eval_needs_every_agent_and_a_kit_overlap_negative_ro
 
 def test_the_shipped_trigger_eval_covers_the_kit_overlap_the_spec_names(dist):
     cases = json.loads(build.EVALS.read_text(encoding="utf-8"))["targets"]["zps-3dp-step-model"]["cases"]
-    assert {"query": "ZPS - 3D Artist dựng model cái rương", "should_trigger": False, "kind": "negative",
+    assert {"query": "ZPS - 3D Artist dựng model cái thùng", "should_trigger": False, "kind": "negative",
             "why": "Kit zps-3d-artist named"} in cases
 
 
@@ -329,7 +329,7 @@ DISPATCH_RULE = ("   Lời giao việc chỉ gồm file role và brief: file rol
 @pytest.mark.parametrize("edition, name", [("claude", "zps-3dp-producer"), ("codex", "zps-3dp-producer-codex")])
 def test_the_dispatch_is_the_role_file_and_the_brief_and_nothing_tells_an_agent_to_write_through_the_shell_d30_8(
         dist, edition, name):
-    """Run 5: the Producer's dispatch prompt told the worker to write worker-out.md with a heredoc; the brief was right."""
+    """Pilot run: the Producer's dispatch prompt told the worker to write worker-out.md with a heredoc; the brief was right."""
     prod = tree(dist, edition) / "skills" / name
     skill = (prod / "SKILL.md").read_text(encoding="utf-8").splitlines()
     assert (DISPATCH_RULE in skill, any(l.startswith("**Ngoại lệ (waive):**") for l in skill)) == (True, True)

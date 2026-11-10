@@ -284,5 +284,5 @@ def test_a_second_duyet_2_of_one_asset_replaces_its_estimate_record_so_the_proje
 
 
 def test_the_texture_review_brief_says_a_note_finding_is_minor_because_ingest_refuses_any_other_level(flow):
-    """Run 4: the texture reviewer wrote two `note` findings as major and ingest refused the report."""
+    """Pilot run: the texture reviewer wrote two `note` findings as major and ingest refused the report."""
     assert "- Loại `note`: mức `minor`." in lines(flow["t1 review brief"]["text"])

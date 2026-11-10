@@ -85,7 +85,7 @@ def test_an_issues_handoff_from_a_step_outside_inputs_is_one_error_line_so_no_br
 
 
 @pytest.mark.parametrize("pilot, line", [(None, "PILOT: none (pilot_asset: null): so với pilot ghi not_checked"),
-                                         ("wooden-chest", "PILOT: deliver/wooden-chest/")])
+                                         ("pilot-prop", "PILOT: deliver/pilot-prop/")])
 def test_the_pilot_line_points_at_the_pilot_package_in_this_runtime_deliver_d22_10(proj, pilot, line):
     from core import briefs
     assert briefs.pilot_line({"pilot_asset": pilot}) == line

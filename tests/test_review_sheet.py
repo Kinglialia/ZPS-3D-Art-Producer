@@ -1,5 +1,5 @@
 """D31.1 (R1): the reviewer gets one sheet of the step's renders, and an image on disk without a worker round.
-Run 5: reviewers spent 1.33M tokens, much of it opening one render at a time."""
+Pilot run: reviewers spent over a million tokens, much of it opening one render at a time."""
 import json
 
 import pytest
@@ -88,7 +88,7 @@ def test_the_original_image_is_served_whole_when_the_reviewer_asks_no_box(flow):
         assert a.tobytes() == b.tobytes()
 
 
-@pytest.mark.parametrize("condition", ["xin ảnh close_up_lock", "cận cảnh khóa, 512 px", "ảnh game_cam, 512 px",
+@pytest.mark.parametrize("condition", ["xin ảnh close_up_door", "cận cảnh cửa, 512 px", "ảnh game_cam, 512 px",
                                        "xin ảnh game_cam box 100,200,400,500", "xin ảnh game_cam box 0.5,0,0.2,1"])
 def test_an_image_not_on_disk_a_view_note_or_a_pixel_box_still_goes_to_the_worker_render_round(flow, condition):  # noqa: F811
     assert ask(flow, condition).endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`\n")

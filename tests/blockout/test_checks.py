@@ -107,7 +107,7 @@ def test_schema_rejects_mirror_the_kit_gates_cannot_check(tmp_path, run_check, c
 
 
 def test_schema_accepts_mirror_of_a_child_of_a_part_centred_on_the_plane_and_a_mirror_of_a_mirror(tmp_path, run_check):
-    """A mirror of a mirror keeps the first source's parent (pilot wooden-chest strap_bpx passed every gate)."""
+    """A mirror of a mirror keeps the first source's parent (a pilot graph built this way passed every gate)."""
     g = hut()
     g["parts"] += [{"name": "sign", "primitive": "box", "dims": ["crate_s"] * 3,
                     "attach": {"type": "on_top", "to": "walls", "offset_uv": [0.5, 0.0]}, "material": "TIMBER",
@@ -399,7 +399,7 @@ def test_inputs_report_missing_sources_keys(tmp_path, run_check):
 def test_inputs_accept_no_door_height_for_a_prop_without_a_door_when_the_source_says_why(tmp_path, run_check):
     a, prof = approved(tmp_path, has_map=True)
     s = sources_for(a, "05-hut.layout.md")
-    s["door_h"], s["door_h_source"] = None, "không có cửa (rương)"
+    s["door_h"], s["door_h_source"] = None, "không có cửa (thùng)"
     r = run_check("check_inputs", "--work", write_build(tmp_path / "w", sources=s), "--approved", a, "--profile", prof)
     assert r.check("inputs.sources_keys") == {"status": "pass", "value": []}
     s["door_h_source"] = ""

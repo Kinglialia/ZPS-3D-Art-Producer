@@ -72,7 +72,7 @@ def test_an_id_that_leaves_the_assets_folder_is_refused_before_assemble_deletes_
 
 
 def test_run_from_outside_the_project_it_refuses_before_it_writes_anything(tmp_path):
-    """Run 4: started from another folder, assemble.py wrote a blocked report under that folder."""
+    """Pilot run: started from another folder, assemble.py wrote a blocked report under that folder."""
     project(tmp_path)
     other = tmp_path / "other"
     other.mkdir()
@@ -103,7 +103,7 @@ def finding_doc(t: Path, step: str, n: int, notes=(), **fs):
 
 def test_the_readme_drops_a_note_only_when_a_later_approved_reviewer_confirmed_the_worker_did_it_d27_8(tmp_path,
                                                                                                       monkeypatch):
-    """Run 4: "Việc còn mở" listed views_rest F2 (back has 3 board rows), which model built. A texture review with
+    """Pilot run: "Việc còn mở" listed views_rest F2 (back has 3 board rows), which model built. A texture review with
     `texture_note=pass` no longer drops it: only RESOLVED_CONFIRMED of an approved version does."""
     import assemble
     monkeypatch.chdir(tmp_path)

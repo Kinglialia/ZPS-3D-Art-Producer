@@ -1,4 +1,4 @@
-"""fit_view.py finds a 3/4 concept camera on the -X side, where the kit fit_camera.py cannot look (pilot wooden-chest)."""
+"""fit_view.py finds a 3/4 concept camera on the -X side, where the kit fit_camera.py cannot look."""
 import json
 import subprocess
 

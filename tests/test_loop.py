@@ -564,7 +564,7 @@ def current(f) -> list[str]:
 
 
 def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_approved_by_its_reviewer(flow, held):
-    """Run 4: redo text went only to the Log, so the texture worker and reviewers read an empty "Hiện hành"."""
+    """Pilot run: redo text went only to the Log, so the texture worker and reviewers read an empty "Hiện hành"."""
     policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
     flow.cap.readouterr()
     fb = flow.root / f"production/assets/{AID}/feedback.md"
@@ -581,7 +581,7 @@ def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_
 
 
 def test_a_reviewer_reply_saved_whole_with_its_report_markers_ingests_like_the_bare_report(flow):
-    """Run 4: every reviewer returned its report as text, and the Producer saved the reply as review-out.md."""
+    """Pilot run: every reviewer returned its report as text, and the Producer saved the reply as review-out.md."""
     flow.work()
     out = flow.brief()
     body = report(counts=counts(major=1), findings=[finding("F1", "major")])
@@ -592,7 +592,7 @@ def test_a_reviewer_reply_saved_whole_with_its_report_markers_ingests_like_the_b
 
 def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_states_the_label_rule(flow):
     """D27.5: a report saved by the Producer passes through its context, so the reviewer writes the file and replies
-    with two lines (D22.6). Run 4: ingest refused a PRIOR whose evidence named `unlit_close_front (lock crop)` for the
+    with two lines (D22.6). Pilot run: ingest refused a PRIOR whose evidence named `unlit_close_front (lock crop)` for the
     label `v2 unlit_close_front`."""
     flow.work()
     text = flow.text(flow.brief())
@@ -626,7 +626,7 @@ def test_the_old_report_names_are_the_ones_claude_code_refused_so_the_name_rule_
 
 
 def test_no_brief_tells_a_subagent_to_write_a_file_that_claude_code_refuses_by_name_d27_5(flow):
-    """Run 4: Claude Code refused every worker and reviewer Write because the file was named `report-*.md`, so each
+    """Pilot run: Claude Code refused every worker and reviewer Write because the file was named `report-*.md`, so each
     report came back as text through the Producer's context. Covers the worker, the reviewer, the fix worker and the
     evidence worker. `role: script` is left out: a script writes its own report, and the rule binds only subagents."""
     outs = [flow.brief()]
@@ -661,7 +661,7 @@ def held_fix(f, monkeypatch, n=1, kind="structure"):
 
 
 def test_waiving_the_only_major_during_fix_sends_the_same_version_to_a_reviewer_and_no_worker_d30_1(flow, monkeypatch):
-    """Run 5: F2 of the model cost 4 versions because the user could not accept it as an exception while in FIX."""
+    """Pilot run: F2 of the model cost 4 versions because the user could not accept it as an exception while in FIX."""
     held_fix(flow, monkeypatch)
     head, line = waive(flow, "F1", "mái thấp là chủ ý").splitlines()
     assert head == ("house-a: waive blockout F1 (người dùng): đã đóng; v1 hết lỗi chặn → reviewer chấm lại v1, không gọi "
@@ -753,7 +753,7 @@ def cli(f, *argv):
 
 
 def test_each_state_change_command_ends_with_the_one_dispatch_line_that_brief_prints_d30_5(flow):
-    """Run 5: after a redo or a retry the Producer ran `P brief` in a separate turn; the dispatch now comes with it."""
+    """Pilot run: after a redo or a retry the Producer ran `P brief` in a separate turn; the dispatch now comes with it."""
     pass_v2(flow)
     out = cli(flow, "feedback", AID, "mái thấp quá", "--action", "redo").splitlines()
     assert (len(out), out[0]) == (2, "house-a: làm lại blockout từ v2. Tiếp: giao worker → `brief house-a`")
@@ -773,7 +773,7 @@ def test_a_feedback_that_changes_no_state_prints_no_dispatch_d30_5(flow):
 
 
 def test_compare_for_ids_outside_top_fix_is_ignored_with_a_ledger_warning_and_prior_sets_their_status_d30_4(flow):
-    """Run 5 model v2: the reviewer compared F2 and F3 too; ingest refused the whole report and the Producer edited it."""
+    """Pilot run, model v2: the reviewer compared F2 and F3 too; ingest refused the whole report and the Producer edited it."""
     flow.work()
     flow.review(counts=counts(major=2, minor=1), top_fix="structure: F1",
                 findings=[finding("F1", "major", "structure"), finding("F2", "major", "param"),
@@ -810,7 +810,7 @@ def acceptable(root, *names):
 
 
 def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_counts_as_a_round_d31_3(flow):
-    """Run 5: reviewers spent tokens judging versions a script had already failed; the fix needs the script's words."""
+    """Pilot run: reviewers spent tokens judging versions a script had already failed; the fix needs the script's words."""
     head, line = flow.work(checks={"join.json": "fail", "layout.json": "pass"}).splitlines()
     assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
     out = json.loads(line)
@@ -827,7 +827,7 @@ def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_
 
 @pytest.mark.parametrize("name", ["join.json", "unwrap.json"])
 def test_a_failed_join_or_unwrap_json_in_final_review_goes_straight_back_to_the_worker_d31_3(flow, name):
-    """join_mesh.py and unwrap.py write to final/review/, not checks/; Run 5 model v1 had join.json fail
+    """join_mesh.py and unwrap.py write to final/review/, not checks/; a pilot model v1 had join.json fail
     (removed_faces_seen = 9) and a scan of {gates,checks}/ alone sent it to the reviewer."""
     out = flow.brief()
     write_json(flow.v(1) / "final/review" / name, {"overall": "fail"})
