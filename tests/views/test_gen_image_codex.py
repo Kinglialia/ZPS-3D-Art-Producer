@@ -247,3 +247,23 @@ def test_a_broken_status_json_only_warns_because_the_image_is_already_paid_for(t
                         str(tmp_path / "hut.pid"), "--prompt", str(tmp_path / "front.md"), f"--image={ref}", "--out",
                         str(out)], capture_output=True, text=True, env=env, cwd=tmp_path)
     assert (p.returncode, out.is_file(), "không ghi được model" in p.stderr) == (0, True, True)
+
+
+FORBIDDEN = ("--full-auto", "--approve-for-me", "--dangerously-bypass-approvals-and-sandbox")
+
+
+def test_the_default_gen_command_has_no_flag_that_lifts_the_sandbox_or_approves_for_the_user_d30_18(gen):
+    """codex-cli 0.164.0 removed --full-auto (it exits 2), and --approve-for-me approves every permission request by
+    itself (D30.21). A default command with either one breaks every gen or hands the user's approval away."""
+    r = gen()
+    assert r["rc"] == 0, r["out"]
+    assert [f for f in FORBIDDEN for c in r["calls"] if f in c["argv"]] == []
+
+
+def test_no_shipped_file_names_the_removed_full_auto_flag(tmp_path):
+    """A doc or brief that still says --full-auto makes an agent type a command that codex-cli 0.164.0 refuses."""
+    repo = Path(__file__).resolve().parents[2]
+    hits = [str(p.relative_to(repo)) for d in ("src", "editions") for p in (repo / d).rglob("*")
+            if p.is_file() and ".deps" not in p.parts and p.suffix in (".py", ".md", ".json", ".toml", ".yaml", ".sh")
+            and "--full-auto" in p.read_text(encoding="utf-8", errors="replace")]
+    assert hits == []

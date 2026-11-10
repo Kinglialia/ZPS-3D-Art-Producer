@@ -10,8 +10,8 @@ installer/codex_rules.py (v0.10.4). The rule allows only these literal commands:
 A Codex rule matches only the start of a command, so each rule ends where the program stops reading options: Blender
 gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and preflight has no
 options. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Scripts that run code the agent
-wrote (AGENT_CODE: graph.py loads <work>/parts_lib.py; build_parts.py runs the asset's custom_parts.py)
-never match either. Any other command still runs in the sandbox or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
+wrote (AGENT_CODE: graph.py loads <work>/parts_lib.py) never match either. Any other command still runs in the sandbox
+or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
 
 Usage (run outside Codex, from the project, after install.py):
   python3 installer/codex_rules.py            # preview the file and self-test it, write nothing
@@ -33,7 +33,7 @@ FILE = "zps-3dp-producer.rules"
 MAC_BLENDER = "/Applications/Blender.app/Contents/MacOS/Blender"
 PRODUCER = "zps-3dp-producer-codex"
 NETWORK_SCRIPTS = ("gen_api.py", "generate_image.py", "meshy_call.py", "gen_image_codex.py")
-AGENT_CODE = ("self_build/assembly.py", "self_build/param_fit.py", "self_build/apply_edit.py", "tools/build_parts.py")
+AGENT_CODE = ("self_build/assembly.py", "self_build/param_fit.py", "self_build/apply_edit.py")
 SPAWNERS = ("scripts/assemble.py",)
 
 
@@ -100,6 +100,7 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
              ([blender, "-b", "--python", "/tmp/other.py", "--"], None)]
     cases += [([blender, "-b", "--python", n, "--", "generate"], None) for n in scripts(root, network=True)]
     cases += [([blender, "-b", "--python", n, "--", "--work", "w"], None) for n in agent_code(root)]
+    cases.append((["codex", "exec", "-s", "workspace-write", "--skip-git-repo-check", "-"], None))
     if venv_py:
         py, spawner = str(venv_py), str(prod / SPAWNERS[0])
         cases += [([py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"], "allow"),
@@ -108,6 +109,7 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
                   ([py, str(prod / "scripts/producer.py"), "preflight"], "allow"),
                   ([py, str(prod / "scripts/producer.py"), "brief", "house-a"], None),
                   ([py, str(prod / "scripts/meshy_call.py"), "texture"], None),
+                  ([py, str(prod / "scripts/gen_image_codex.py"), "--model", "m"], None),
                   ([py, "-c", "print(1)"], None)]
     bad = []
     for cmd, want in cases:

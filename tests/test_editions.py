@@ -281,9 +281,9 @@ def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_option
 
 
 def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written_code(codex_project, dist):
-    """graph.py loads `<work>/parts_lib.py`, which the agent writes, and build_parts.py runs the asset's custom_parts.py,
-    which the agent writes too (D32); outside the sandbox that code would run unchecked. These commands still run, but
-    only after the user approves each one."""
+    """graph.py loads `<work>/parts_lib.py`, which the agent writes; outside the sandbox that code would run unchecked.
+    These commands still run, but only after the user approves each one. build_parts.py is allowed again (D32): Blender
+    builds only the mesh JSON that pure Python made from custom_parts.py, never the agent's code itself."""
     r = rules(codex_project, dist)
     assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
     preview = r.stdout.split("Preview only: ", 1)[1].splitlines()[0]
@@ -304,7 +304,26 @@ def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written
         "zps-3dp-step-blockout-codex/tools/self_build/param_fit.py": None,
         "zps-3dp-step-blockout-codex/tools/self_build/apply_edit.py": None,
         "zps-3dp-step-model-codex/tools/self_build/gates.py": "allow",
-        "zps-3dp-step-blockout-codex/tools/build_parts.py": None}
+        "zps-3dp-step-blockout-codex/tools/build_parts.py": "allow"}
+
+
+def test_the_codex_rule_never_allows_the_codex_exec_image_call_because_each_one_spends_the_users_codex_usage(
+        codex_project, dist):
+    """D30.18: the gen command is `codex exec ... -s workspace-write --skip-git-repo-check` (codex-cli 0.164.0 has no
+    --full-auto). It needs the network and costs Codex usage, so the user approves each run; no rule may match it."""
+    r = rules(codex_project, dist)
+    assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
+    preview = r.stdout.split("Preview only: ", 1)[1].splitlines()[0]
+    prod = codex_project / ".agents/skills/zps-3dp-producer-codex"
+
+    def decision(*cmd):
+        out = subprocess.run([str(codex_project / "bin/codex"), "execpolicy", "check", "--rules", preview, "--", *cmd],
+                             capture_output=True, text=True).stdout
+        return json.loads(out or "{}").get("decision")
+    assert [decision(*c) for c in (
+        ["codex", "exec", "-m", "m", "-C", "w", "-s", "workspace-write", "--skip-git-repo-check", "-"],
+        [str(prod / "scripts/.deps/venv/bin/python"), str(prod / "scripts/gen_image_codex.py"), "--model", "m"])] == [
+        None, None]
 
 def test_the_codex_rule_is_written_only_on_write_and_never_over_a_foreign_file(codex_project, dist):
     assert rules(codex_project, dist, "--write").returncode == 0
