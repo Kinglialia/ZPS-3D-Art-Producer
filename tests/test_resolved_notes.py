@@ -20,7 +20,7 @@ def to_model(root):
     f.review("vf1", verdict="PASS", counts=counts(), top_fix=None)
     f.work("vr1")
     f.review("vr1", verdict="PASS", counts=MINOR, top_fix=None,
-             findings=[mf(1, "note_texture", "back: 3 hàng ván", "minor"), mf(2, "note_texture", "top: rêu", "minor")])
+             findings=[mf(1, "note_texture", "back: 3 hàng ván", "minor"), mf(2, "note_texture", "left: rêu", "minor")])
     f.human("approve vr1", "đạt", "--action", "approve")
     return f
 

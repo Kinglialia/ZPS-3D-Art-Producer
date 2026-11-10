@@ -152,7 +152,7 @@ def view_set(tmp_path, flip_line="right = left lật ngang"):
                                             "## 3. Lật ảnh", flip_line, "## 4. Trạng thái duyệt",
                                             "chờ duyệt, 2026-11-09", ""]), encoding="utf-8")
     card = tmp_path / "asset-card.yaml"
-    card.write_text("symmetric: {left_right: true, front_back: false}\n", encoding="utf-8")
+    card.write_text("views: full_top\nsymmetric: {left_right: true, front_back: false}\n", encoding="utf-8")
     concept = png(tmp_path / "concept_albedo.png", (200, 200), "#FFFFFF")
     return f, front, card, concept
 
@@ -164,21 +164,48 @@ def package(f, front, card):
 
 def test_views_sheet_puts_concept_and_5_views_over_their_overlays_and_records_what_it_was_built_from(tmp_path):
     f, front, card, concept = view_set(tmp_path)
-    rc, out, _ = tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)
+    rc, out, _ = tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
     assert rc == 0 and out == f"[views/views_sheet] 2 hàng 2004x720 -> {f / 'report/VIEWS_sheet.png'}\n"
     assert sorted(read(f / "report/VIEWS_sheet.json")["inputs"]) == sorted(VIEWS)
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--crop", "back:40,30,140,130")
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card, "--crop", "back:40,30,140,130")
     with Image.open(f / "report/VIEWS_sheet.png") as im:
         assert im.size == (2004, 1074)
     assert package(f, front, card) == (0, {"package.views": ("pass", []), "package.sheet": ("pass", []),
                                            "package.readme": ("pass", []), "package.flip": ("pass", [])})
 
 
+@pytest.mark.parametrize("mode, shipped, width", [
+    ("back", ["back", "front"], 12 + 3 * 332),
+    ("full", ["back", "front", "left", "right"], 12 + 5 * 332),
+    (None, ["back", "front", "left", "right"], 12 + 5 * 332),
+])
+def test_views_sheet_and_check_package_take_only_the_views_of_the_card_so_full_ships_no_top_d32(tmp_path, mode,
+                                                                                                  shipped, width):
+    """D32: no step after views needs top; `back` keeps front because front is the colour reference."""
+    f, front, card, concept = view_set(tmp_path)
+    for v in {"back", "left", "right", "top"} - set(shipped):
+        (f / f"{v}.png").unlink()
+    card.write_text(("" if mode is None else f"views: {mode}\n") + "symmetric: {left_right: true, front_back: false}\n",
+                    encoding="utf-8")
+    assert tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)[0] == 0
+    assert sorted(read(f / "report/VIEWS_sheet.json")["inputs"]) == shipped
+    with Image.open(f / "report/VIEWS_sheet.png") as im:
+        assert im.width == width
+    assert package(f, front, card) == (0, {"package.views": ("pass", []), "package.sheet": ("pass", []),
+                                           "package.readme": ("pass", []), "package.flip": ("pass", [])})
+
+
+def test_check_package_fails_a_full_top_set_without_top_png_d32(tmp_path):
+    f, front, card, concept = view_set(tmp_path)
+    (f / "top.png").unlink()
+    assert package(f, front, card)[1]["package.views"] == ("fail", ["top"])
+
+
 def test_views_sheet_marks_kept_views_in_the_label_strip_only_so_the_user_sees_which_views_are_new(tmp_path):
     f, front, card, concept = view_set(tmp_path)
     shots = []
     for kept in ((), ("--kept", "back,left")):
-        tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, *kept)
+        tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card, *kept)
         shots.append(Image.open(f / "report/VIEWS_sheet.png").convert("RGB"))
     strip, cells = (0, 0, 2004, 12 + 22), (0, 12 + 22, 2004, 720)
     assert (shots[0].crop(strip).tobytes() != shots[1].crop(strip).tobytes(),
@@ -206,14 +233,14 @@ def test_views_sheet_labels_use_the_bundled_noto_sans_on_every_machine_and_it_dr
 
 def test_check_package_fails_a_view_changed_after_the_sheet_because_the_user_approves_the_sheet(tmp_path):
     f, front, card, concept = view_set(tmp_path)
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
     png(f / "back.png", (300, 200), "#000000")
     assert package(f, front, card)[1]["package.sheet"] == ("fail", ["back"])
 
 
 def test_check_package_wants_the_pointer_line_and_all_four_readme_sections(tmp_path):
     f, front, card, concept = view_set(tmp_path)
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
     text = (f / "README.md").read_text(encoding="utf-8")
     (f / "README.md").write_text(text.replace(POINTER, "# Bộ view").replace("## 2. TEXTURE NOTE\nkhông có\n", ""),
                                  encoding="utf-8")
@@ -223,12 +250,12 @@ def test_check_package_wants_the_pointer_line_and_all_four_readme_sections(tmp_p
 
 def test_a_symmetric_card_needs_the_flip_line_and_right_must_be_left_mirrored_pixel_for_pixel(tmp_path):
     f, front, card, concept = view_set(tmp_path, flip_line="không có")
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
     assert package(f, front, card)[1]["package.flip"] == (
         "fail", ["thẻ có symmetric.left_right: true, mục Lật ảnh cần `right = left lật ngang`"])
     f, front, card, concept = view_set(tmp_path / "b")
     png(f / "right.png", (300, 200), "#E8E8E8", [((40, 30, 200, 190), "#8B0000")])
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
     assert package(f, front, card)[1]["package.flip"] == ("fail", ["right.png không phải left.png lật ngang"])
 
 

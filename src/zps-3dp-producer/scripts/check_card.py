@@ -22,6 +22,9 @@ CARD = "asset-card.yaml"
 SIDES = ("back", "left", "right", "top")
 VIEWS = ("front", "34", "game_camera")
 BEVELS = ("none", "toon")
+# D32: `views` -> the side views views_rest makes; views_front always makes front unless `none`. No field = full.
+VIEW_SETS = {"none": (), "back": ("back",), "full": ("back", "left", "right"), "full_top": ("back", "left", "right", "top")}
+DEFAULT_VIEWS = "full"
 IMAGES = ("concept_albedo.png", "concept_shadow.png")
 MIN_EDGE = 1024
 BORDER_PX, BORDER_TOL, BORDER_OFF_MAX = 4, 12, 0.02
@@ -30,6 +33,18 @@ BORDER_PX, BORDER_TOL, BORDER_OFF_MAX = 4, 12, 0.02
 def required_files(aid: str, has_map: bool | None) -> list[str]:
     return ["concept_albedo.png", "concept_shadow.png", CARD, f"{aid}.material.md"] + (
         [f"{aid}.layout.md"] if has_map else [])
+
+
+def views_of(card) -> str:
+    """The card's `views` mode; no field or null = full (D32). A wrong value is check()'s error, not this function's."""
+    v = card.get("views") if isinstance(card, dict) else None
+    return DEFAULT_VIEWS if v is None else str(v)
+
+
+def card_views(concept_dir) -> str:
+    """views_of() of `<concept_dir>/asset-card.yaml`; no dir or no card (an asset made by `new`) = full."""
+    f = Path(concept_dir) / CARD if concept_dir else None
+    return views_of(load_yaml(f)) if f and f.is_file() else DEFAULT_VIEWS
 
 
 def present(f: Path) -> bool:
@@ -86,6 +101,8 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     if "view" in c and not (isinstance(c["view"], (str, int)) and not isinstance(c["view"], bool)
                             and str(c["view"]) in VIEWS):
         bad("view", f"'{c['view']}' ({' | '.join(VIEWS)})")
+    if c.get("views") is not None and not (isinstance(c["views"], str) and c["views"] in VIEW_SETS):
+        bad("views", f"'{c['views']}' ({' | '.join(VIEW_SETS)}; không ghi = {DEFAULT_VIEWS})")
     if c.get("bevel") is not None and c["bevel"] not in BEVELS:
         bad("bevel", f"'{c['bevel']}' (null | {' | '.join(BEVELS)})")
     for k in ("texture_res", "tris_max"):
@@ -145,7 +162,6 @@ def warnings(d: Path) -> list[str]:
         out.append("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nhưng bevel trống; "
                    "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
     return out
-
 
 def has_map_of(profile: Path) -> bool:
     p = load_yaml(profile)

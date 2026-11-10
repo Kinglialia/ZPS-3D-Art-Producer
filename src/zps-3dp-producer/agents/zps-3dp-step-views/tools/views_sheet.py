@@ -1,11 +1,11 @@
 """Review sheet of the view set, crops, and the mirrored side view (concept-views.md §7, §3).
 
   python3 tools/views_sheet.py make --final <V/final> --concept <concept_albedo.png> --front <front.png>
-          [--kept back,left] [--crop <view>:x0,y0,x1,y1 ...]
-      Row 1: concept, front, back, left, right, top; --kept views (copied from the prior approved set) are labelled
+          --card <asset-card.yaml> [--kept back,left] [--crop <view>:x0,y0,x1,y1 ...]
+      Row 1: concept, front, then the side views of the card's `views` (D32; full: back, left, right); --kept views (copied from the prior approved set) are labelled
       "(giữ)". Row 2: report/overlay_<view>.png with score, IoU, dE from
       report/report.json. Row 3: the crops, in pixels of the view image. Writes <final>/report/VIEWS_sheet.png and
-      VIEWS_sheet.json (sha256 of the 5 view files, which check_package.py compares).
+      VIEWS_sheet.json (sha256 of the view files, which check_package.py compares).
       Labels use the Noto Sans that ships with the skill (fonts/, OFL); without it, the default font and no diacritics.
   python3 tools/views_sheet.py crop --image <png> --box x0,y0,x1,y1 --out <png> [--scale 2]
   python3 tools/views_sheet.py flip --src <left.png> --out <right.png>    right = left mirrored (symmetric left_right)
@@ -20,9 +20,17 @@ import unicodedata
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-VIEWS = ("front", "back", "left", "right", "top")
 CELL, PAD, HEAD = 320, 12, 22
 FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "fonts", "NotoSans-Regular.ttf")
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+
+
+def card_set(card):
+    """front + the side views of the card's `views` (check_card.VIEW_SETS, D32)."""
+    import yaml
+    from check_card import VIEW_SETS, views_of
+    with open(card, encoding="utf-8") as f:
+        return ("front",) + VIEW_SETS[views_of(yaml.safe_load(f))]
 FONT_SIZE = 13
 
 
@@ -62,13 +70,14 @@ def label(r):
 
 
 def make(a):
-    paths = {v: a.front if v == "front" else os.path.join(a.final, f"{v}.png") for v in VIEWS}
+    views = card_set(a.card)
+    paths = {v: a.front if v == "front" else os.path.join(a.final, f"{v}.png") for v in views}
     rdir = os.path.join(a.final, "report")
     rep = json.load(open(os.path.join(rdir, "report.json"), encoding="utf-8"))
     kept = set((a.kept or "").split(","))
-    rows = [[("concept", Image.open(a.concept))] + [(v + " (giữ)" * (v in kept), Image.open(paths[v])) for v in VIEWS],
+    rows = [[("concept", Image.open(a.concept))] + [(v + " (giữ)" * (v in kept), Image.open(paths[v])) for v in views],
             [(f"{v} {label(rep['views'].get(v))}", Image.open(os.path.join(rdir, f"overlay_{v}.png")))
-             for v in VIEWS if os.path.isfile(os.path.join(rdir, f"overlay_{v}.png"))]]
+             for v in views if os.path.isfile(os.path.join(rdir, f"overlay_{v}.png"))]]
     crops = [c.split(":", 1) for c in a.crop or []]
     if crops:
         rows.append([(f"{v} {b}", Image.open(paths[v]).crop(box(b))) for v, b in crops])
@@ -109,6 +118,7 @@ def main():
     m.add_argument("--final", required=True)
     m.add_argument("--concept", required=True)
     m.add_argument("--front", required=True)
+    m.add_argument("--card", required=True)
     m.add_argument("--crop", action="append")
     m.add_argument("--kept")
     c = sub.add_parser("crop")

@@ -7,7 +7,7 @@ import shutil
 from argparse import Namespace
 from pathlib import PurePosixPath
 
-from . import annotate, findings, hashes, policy, purge, texture
+from . import annotate, asset_card, findings, hashes, policy, purge, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
 from .state import (ASSETS, DELIVER, FINISHED, HARD_GATES, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
                     stamp, step_of, vdir)
@@ -52,7 +52,7 @@ def move(st: dict, event: str, cfg: dict | None = None):
         return
     i, _ = step_of(cfg, st["stage"])
     st |= fresh() | {"worker_agent_id": None}
-    after = cfg["steps"][i + 1] if i + 1 < len(cfg["steps"]) else None
+    after = next((s for s in cfg["steps"][i + 1:] if not asset_card.skipped(s, st)), None)
     if after is None:
         st["state"] = "done"
     elif not after["enabled"]:
@@ -325,7 +325,8 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     if extra := [x for x in rv["confirmed"] if x not in claimed]:
         die(f"{rel(rep)} sai contract: RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
     warns = []
-    doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv, step, n, warns))
+    doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv,
+                                    step | {"regions": asset_card.regions(step, st)}, n, warns))
     for w in warns:
         ledger(f"{aid} · {sid} v{n} · cảnh báo report reviewer · {w}")
     st["rereview"] = None
@@ -631,6 +632,8 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
     i, step = step_of(cfg, target)
     if action == "redo" and i > step_of(cfg, st["stage"])[0]:
         die(f"{aid}: không làm lại {target} được: asset đang ở bước {st['stage']}")
+    if asset_card.skipped(step, st):
+        die(f"{aid}: bước {target} không chạy cho asset này (thẻ views: none)")
     n = shown(st, target)
     key = f"{target} v{n}"
     done = st.setdefault("decisions", {})

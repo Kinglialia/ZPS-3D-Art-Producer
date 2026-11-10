@@ -31,7 +31,7 @@ Bạn là 3DP Check · Views. Bạn không vẽ các view này và không sửa 
 ## Ảnh và số
 
 - `<view>.png`: ảnh gen. `guides/<view>_guide.png`: hình phải giữ. `guides/views.json`: màu ID → mã vật liệu.
-- `report/overlay_<view>.png`: đỏ = guide có, ảnh thiếu; xanh = ảnh thừa; vàng = ranh giới vật liệu phải có. `report/VIEWS_sheet.png` (`views_rest`): concept và cả bộ trên một trang.
+- `report/overlay_<view>.png`: đỏ = guide có, ảnh thiếu; xanh = ảnh thừa; vàng = ranh giới vật liệu phải có. `report/VIEWS_sheet.png` (`views_rest`): concept, front và các view của `VIEWS` trên một trang.
 - `blockout.md` của blockout đã duyệt: thành phần đếm, phần khuất, "Blockout tự quyết".
 
 ## Gen lại hay ghi chú
@@ -61,7 +61,7 @@ Finding `regen_front` mang từ `views_rest` sang đây: chấm nó chỉ trên 
 
 ### views_rest
 
-Chỉ chấm 4 view mới. Front đã duyệt ở `views_front`: không chấm lại, không ghi finding về front. Front lệch so với cả bộ đến mức gen lại các view kia không sửa được (ví dụ màu gỗ của front sai so với concept khi đặt cạnh bộ): một finding `regen_front`, `region` mở đầu bằng `front:`. `acceptance` của nó phải thấy được trên `front.png` một mình, vì reviewer của `views_front` chấm nó chỉ trên `front.png`.
+Chỉ chấm các view mới, là các view trong ngoặc ở dòng `VIEWS:` của brief (trường `views` của thẻ). Không có view nào ngoài danh sách đó, kể cả top: không ghi finding vì thiếu. Front đã duyệt ở `views_front`: không chấm lại, không ghi finding về front. Front lệch so với cả bộ đến mức gen lại các view kia không sửa được (ví dụ màu gỗ của front sai so với concept khi đặt cạnh bộ): một finding `regen_front`, `region` mở đầu bằng `front:`. `acceptance` của nó phải thấy được trên `front.png` một mình, vì reviewer của `views_front` chấm nó chỉ trên `front.png`.
 
 1. `style`: như `views_front`, cho từng view mới.
 2. `shape`: như `views_front`, cho từng view mới.

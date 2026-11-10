@@ -8,6 +8,7 @@ import json
 import re
 from pathlib import Path
 
+from . import asset_card
 from .state import ROOT, die, ledger, load_st, save_st, vdir
 
 AD_LINE = re.compile(r"^\s*-\s*`?([^`\s]+\.md)`?.*?steps:\s*([a-z0-9_,\s-]+)\s*$", re.I)
@@ -143,7 +144,7 @@ def refresh_stale(cfg: dict, st: dict):
         i = ids.index(sid) if sid in ids else 0
         if i == 0:
             continue
-        prev = ids[i - 1]
+        prev = next((s["id"] for s in reversed(cfg["steps"][:i]) if not asset_card.skipped(s, st)), ids[i - 1])
         for v, inp in vers.items():
             if (rec := inp.get(prev)) and rec["hash"] != ah.get(prev):
                 out[f"{sid} {v}"] = f"{prev} v{rec['v']}"

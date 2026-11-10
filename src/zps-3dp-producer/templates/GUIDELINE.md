@@ -35,6 +35,8 @@ view: front                    # bắt buộc. Góc vẽ concept: front | '34' |
 texture_res: null              # null = 2048. Hoặc số nguyên
 tris_max: null                 # null = theo hạng. Hoặc số nguyên
 bevel: null                    # null = theo profile. none | toon: bo cạnh riêng asset này
+views: full                    # không ghi = full. none (không gen view; mặt khuất theo hidden_sides) | back |
+                               # full (back, left, right) | full_top (thêm top: chỉ khi mái có thiết kế riêng)
 scale_overrides:               # [] = dùng thước của profile. Ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
 symmetric: {left_right: true, front_back: true}   # bắt buộc

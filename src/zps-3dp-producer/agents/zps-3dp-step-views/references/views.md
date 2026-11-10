@@ -90,7 +90,7 @@ Dòng đầu cố định, đúng từng chữ:
 Thông số, mốc chiều cao, phần khuất, Blockout tự quyết, ghi chú real/texture_only: xem `blockout.md` của blockout đã duyệt. Không chiếu hay bake màu từ ảnh view lên model; màu lấy từ albedo.
 ```
 
-Sau đó đúng 4 mục, theo thứ tự. Mục không có nội dung ghi "không có". Không chép lại nội dung của `blockout.md`. Mục 3 ghi `right = left lật ngang` khi thẻ có `symmetric.left_right: true`.
+Sau đó đúng 4 mục, theo thứ tự. Mục không có nội dung ghi "không có". Không chép lại nội dung của `blockout.md`. Mục 3 ghi `right = left lật ngang` khi thẻ có `symmetric.left_right: true` và `VIEWS` có left, right.
 
 ```text
 ## 1. NGOẠI LỆ

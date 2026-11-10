@@ -26,7 +26,7 @@ Chi tiết từng chế độ, `notes.md`, `texture_spec.json`: `R/texture.md`.
 
 ## Quy trình
 
-1. `PY T/check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Fail: `STATUS: NEEDS_CONTEXT`.
+1. `PY T/check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Brief có dòng `VIEWS: none`: không có `VF`, `VR`, bỏ cờ của chúng ở mọi tool. TEXTURE NOTE, NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và `C/<id>.material.md`. Màu concept: mỗi mã vật liệu một ô pixel nằm trọn trong vùng đó trên `C/concept_albedo.png`, rồi `PY T/../../zps-3dp-step-views/tools/concept_colors.py --final F --concept C/concept_albedo.png --box <MÃ>=x0,y0,x1,y1 ...`; `VF/concept_colors.json` ở các bước sau thành `F/concept_colors.json`. Fail: `STATUS: NEEDS_CONTEXT`.
 2. `PY T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> --mode <meshy|paint>` (`meshy` khi brief có `MODE: Meshy SỬA`, `paint` khi có `MODE: VẼ MỚI`), rồi `PY T/id_map.py --final F --model M --res R`.
 3. Chọn chế độ (`R/texture.md` mục 1): theo dòng `MODE:` của brief (script chọn, D30.11). `MODE: Meshy SỬA`: dòng `MESHY_DONE:` có topology pass thì SỬA trên lớp đó, không thì gọi Meshy. Ghi `used` và `reason` (một dòng) vào `F/texture_spec.json`.
 4. Làm theo chế độ: SỬA (`R/texture.md` mục 2) hoặc VẼ MỚI (mục 3). Kết quả là `F/albedo_<R>.png`.

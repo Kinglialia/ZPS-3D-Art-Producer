@@ -12,6 +12,9 @@
 # script: bước không có agent; `P brief` in lệnh chạy script (scripts/<script>), script ghi report-script.md.
 # acceptable: tên JSON trong final/review/{gates,checks}/ mà worker được khai ACCEPTED_FAIL khi fail (D31.3); JSON fail
 #   khác trả thẳng về worker, không gọi reviewer. Gate cứng không bao giờ được: inputs, package, schema, qa_export_check, meshy.
+# views_set: bước làm bộ view (D32). Thẻ `views: none` bỏ bước này; `final/<mặt>.png` và regions ngoài `views` của thẻ
+#   không bắt buộc (back: back; full: back, left, right; full_top: thêm top; không ghi = full).
+# no_views_concept: file concept thêm cho worker khi thẻ `views: none`; reviewer khi đó nhận đúng danh sách của worker.
 
 [project]
 name = "{{PROJECT}}"
@@ -49,6 +52,7 @@ gate = "review"
 uses = ["blender", "codex_image"]
 top_fix = ["regen"]
 acceptable = ["measure.json"]
+views_set = true
 inputs = ["blockout"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
 outputs = ["final/front.png", "final/guides/views.json", "final/concept_colors.json", "final/bg_color.json",
@@ -63,6 +67,7 @@ gate = "review_human"
 uses = ["codex_image"]
 top_fix = ["regen", "regen_front", "note_exception", "note_texture"]
 acceptable = ["measure.json"]
+views_set = true
 inputs = ["blockout", "views_front"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
 regions = ["back", "left", "right", "top"]
@@ -98,6 +103,7 @@ inputs = ["blockout", "views_front", "views_rest", "model"]
 review_inputs = ["views_rest"]
 concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
 review_concept = ["concept_albedo.png", "concept_shadow.png"]
+no_views_concept = ["{id}.material.md"]
 issues = ["model"]
 pilot = true
 outputs = ["final/albedo_{res}.png", "final/texture_spec.json", "final/notes.md", "final/final_lit_vs_concept.png",

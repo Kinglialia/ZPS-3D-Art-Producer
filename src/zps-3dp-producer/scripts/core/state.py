@@ -42,7 +42,7 @@ PORT = 8765
 FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 GATES = {"review", "review_human", "checks_human"}
-# D31.3: hash, schema, export_check and Meshy topology results never take an ACCEPTED_FAIL, whatever pipeline.toml says.
+# D31.3: hash, schema, export_check, and Meshy topology results never take an ACCEPTED_FAIL, whatever pipeline.toml says.
 HARD_GATES = ("inputs.json", "package.json", "schema.json", "qa_export_check.json", "meshy.json")
 
 STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", "evidence_running", "waiting_human",
@@ -181,9 +181,10 @@ def texture_res(st: dict) -> int:
 
 
 def outputs_of(step: dict, st: dict) -> list[str]:
-    """`{id}` = asset id, `{res}` = texture_res."""
+    """`{id}` = asset id, `{res}` = texture_res. A side view outside the card's `views` is not an output (D32)."""
+    from .asset_card import keep_output
     res = texture_res(st) if any("{res}" in o for o in step["outputs"]) else None
-    return [o.format(id=st["id"], res=res) for o in step["outputs"]]
+    return [o.format(id=st["id"], res=res) for o in step["outputs"] if keep_output(step, st, o)]
 
 
 def step_of(cfg: dict, sid: str) -> tuple[int, dict]:

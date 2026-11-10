@@ -179,7 +179,7 @@ def test_the_set_brief_points_at_the_approved_front_folder_without_a_copy_and_ne
 def test_the_set_reviewer_gets_the_view_region_rule_and_both_inputs(flow):
     assert lines(flow["vr1 review brief"]["text"],
                  f"- Đầu ra đã duyệt của bước `views_front` (đầu vào, không chấm lại): `{A}/views_front/v2/final/`.",
-                 "- region mở đầu bằng back|left|right|top, vd `back: mép mái`; `regen_front` nói về đầu ra của "
+                 "- region mở đầu bằng back|left|right, vd `back: mép mái`; `regen_front` nói về đầu ra của "
                  "`views_front`, không theo luật này.",
                  "- F1 [blocker|major|minor|preference|unclear] <regen|regen_front|note_exception|note_texture>") == []
 
@@ -292,3 +292,9 @@ def test_every_views_brief_stays_under_the_token_budget_without_the_install_and_
                 t = t.replace(s, "")
             sizes[k] = len(t.encode())
     assert len(sizes) == 15 and max(sizes.values()) < BRIEF_MAX, sizes
+
+
+def test_the_set_brief_names_the_views_of_the_card_and_the_default_full_set_has_no_top_d32(flow):
+    """The pilot card has no `views` field: full = back, left, right; the worker gens no top.png."""
+    assert "VIEWS: full (back, left, right)" in flow["vr1 brief"]["text"].splitlines()
+    assert "`final/top.png`" not in flow["vr1 brief"]["text"]

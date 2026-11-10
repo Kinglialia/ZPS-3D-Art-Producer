@@ -1,12 +1,13 @@
 """Simple or not: the five numbers of docs/agents/texture-artist.md §2.1 (D10), and the proposed mode (D30.11).
 
-Usage: python3 T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> \
+Usage: python3 T/texture_complexity.py --final F --blockout B --concept C [--views-rest VR] --profile <profile> \
          --mode meshy|paint
   1 materials       codes in B/sources.json `materials`
   2 colour clusters palette_report (kit) clusters with share >= CLUSTER_SHARE on the concept albedo object pixels
                     (alpha when the image has one, else pixels away from the border colour by > BG_DIST)
   3 detail density  mean gradient of the object pixels, 0..1 (shown only, never decides)
-  4 motif           card real_texture_only_notes and the TEXTURE NOTE section of VR/README.md name a motif, text, sign (whole words)
+  4 motif           card real_texture_only_notes and the TEXTURE NOTE section of VR/README.md name a motif, text, sign (whole words);
+                    no --views-rest (card `views: none`, D32): the lines of C/<id>.material.md instead of that section
   5 tier            card tier
 Simple when materials <= texture_simple.max_materials, clusters <= texture_simple.max_color_clusters, no motif, tier not
 hero. `simple` is information only (D30.11): the proposed mode is --mode, the mode the Producer script chose from the
@@ -74,8 +75,10 @@ def score(a, mode):
     th = prof.get("texture_simple") or {}
     mats = json.load(open(os.path.join(a.blockout, "sources.json"), encoding="utf-8")).get("materials") or []
     n_clusters, density = clusters(os.path.join(a.concept, "concept_albedo.png"))
-    notes = [str(x) for x in card.get("real_texture_only_notes") or []] + section(
-        os.path.join(a.views_rest, "README.md"), "TEXTURE NOTE")
+    material = os.path.join(a.concept, f"{os.path.basename(os.path.normpath(a.concept))}.material.md")
+    notes = [str(x) for x in card.get("real_texture_only_notes") or []] + (
+        section(os.path.join(a.views_rest, "README.md"), "TEXTURE NOTE") if a.views_rest else
+        [l.strip() for l in open(material, encoding="utf-8") if l.strip()] if os.path.isfile(material) else [])
     motif = [n for n in notes if MOTIF.search(n)]
     tier = card.get("tier") or "standard"
     scores = {"materials": len(mats), "color_clusters": int(n_clusters), "detail_density": density,
@@ -89,8 +92,9 @@ def score(a, mode):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    for k in ("--final", "--blockout", "--concept", "--views-rest", "--profile"):
+    for k in ("--final", "--blockout", "--concept", "--profile"):
         p.add_argument(k, required=True)
+    p.add_argument("--views-rest")
     p.add_argument("--mode", required=True, choices=("meshy", "paint"))
     a = p.parse_args()
     try:

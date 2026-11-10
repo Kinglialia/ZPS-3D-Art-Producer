@@ -24,7 +24,7 @@ Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng
 
 ## Quy trình
 
-1. `PY T/check_inputs.py --final F --blockout B --views-front FF --views-rest VR --concept C`. Fail: `STATUS: NEEDS_CONTEXT`.
+1. `PY T/check_inputs.py --final F --blockout B --views-front FF --views-rest VR --concept C`. Brief có dòng `VIEWS: none`: không có `FF`, `VR`, bỏ hai cờ đó; mặt khuất theo `hidden_sides` của thẻ và `blockout.md`. Fail: `STATUS: NEEDS_CONTEXT`.
 2. Chép `B/part_graph.json`, `B/parts_lib.py` vào `F`. `PY T/make_spec.py --final F --blockout B --card C/asset-card.yaml --profile <profile> --preset <preset>` (hai file ở mục 4 của brief). Số hình học chỉ lấy từ `B/sources.json`, qua `F/spec.json`; không đọc lại `size_m` của thẻ hay profile.
 3. Detail pass (`R/model.md` mục 1): thêm hoặc sửa part trong `F/part_graph.json`, mỗi lần một part. `PY T/../../zps-3dp-step-blockout/tools/build_parts.py assembly --work F`, rồi gate của part đó: `PY T/self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`. Graph có part `custom`: `BLENDER -b --python T/../../zps-3dp-step-blockout/tools/build_parts.py -- assembly --work F`. Không gọi thẳng `T/self_build/assembly.py`: nó chạy `parts_lib.py` trong `F`. Không đổi param trong `fixed_params`.
 4. `BL T/join_mesh.py -- --final F`, rồi `BL T/unwrap.py -- --final F`.

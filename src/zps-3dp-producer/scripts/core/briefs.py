@@ -7,7 +7,7 @@ import shlex
 import sys
 from pathlib import Path
 
-from . import findings, hashes, preflight, texture
+from . import asset_card, findings, hashes, preflight, texture
 from .contract import FALLBACK, NONE, parse_worker
 from .hashes import ad_text
 from .loop import current_v, log_wait, move, next_action, open_dispatch, review_base, set_aside
@@ -63,7 +63,9 @@ def failed_checks(vd) -> list[str]:
 def concept_files(st, step, review: bool = False) -> list[str]:
     from check_card import required_files
     d = Path(st["concept_dir"])
-    want = step["review_concept"] if review and step["review_concept"] is not None else step["concept"]
+    alone = asset_card.views(st) == "none" and not step.get("views_set")
+    want = step["review_concept"] if review and step["review_concept"] is not None and not alone else step["concept"]
+    want = want and [*want, *(step.get("no_views_concept") or [] if alone else [])]
     names = [x.format(id=st["id"]) for x in want] if want else required_files(st["id"], True)
     return [x for x in names if not x.endswith(".layout.md") or (d / x).is_file()]
 
@@ -77,6 +79,16 @@ def handoff_issues(st, prev: str, v: int) -> str | None:
     c, _ = parse_worker((vdir(st["id"], prev, v) / "worker-out.md").read_text(encoding="utf-8"))
     issues = c.get("ISSUES", "")
     return None if issues.lower() in NONE else issues
+
+
+NO_VIEWS = "VIEWS: none"  # the role files say what a step does without a view set
+
+
+def views_line(st, step) -> list[str]:
+    """D32: the views of the card, for a views step; for the other steps only when there is no view set."""
+    if step.get("views_set"):
+        return [f"VIEWS: {asset_card.views(st)} ({', '.join(asset_card.sides(st))})", ""]
+    return [NO_VIEWS, ""] if asset_card.views(st) == "none" else []
 
 
 def pid_line(st, step) -> list[str]:
@@ -99,6 +111,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
         *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra)),
+        *views_line(st, step),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
@@ -227,6 +240,7 @@ def review_scope(st, sid: str, n: int) -> str:
 
 def review_brief(cfg, st, step, n) -> str:
     aid, sid = st["id"], step["id"]
+    step = step | {"regions": asset_card.regions(step, st)}
     d = vdir(aid, sid, n)
     a = ASSETS / aid
     m = review_base(st, n)
@@ -250,6 +264,7 @@ def review_brief(cfg, st, step, n) -> str:
         "",
         "Bạn chấm độc lập. Không sửa file nào ngoài report.",
         "",
+        *views_line(st, step),
         "## Chấm cái gì",
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
         f"- Báo cáo tự check của worker: `{rel(d / 'worker-out.md')}` — tham khảo, không tin thay bằng chứng.",

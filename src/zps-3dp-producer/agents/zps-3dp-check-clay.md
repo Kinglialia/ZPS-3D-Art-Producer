@@ -34,6 +34,7 @@ Bạn là 3DP Check · Clay. Bạn không dựng model này và không sửa đ�
 - `review/wire_34.png`: mọi cạnh. `review/thumb.png`: kích thước thật trên màn hình. `review/lineup.png`: cạnh hình nhân vật cao `character_h`. `review/model_sheet.png`: trang tổng hợp.
 - `model.md`: bảng detail pass, thông số và nguồn, ghi chú real/texture_only.
 - Blockout đã duyệt (đầu vào, không chấm lại): `part_graph.json` (`fixed_params`), `blockout.md`.
+- Brief có dòng `VIEWS: none`: không có bộ view. Mặt khuất chấm theo `hidden_sides` của thẻ và `blockout.md`, không theo ảnh view.
 
 ## Rubric (key trong `RUBRIC` = key của mục `## model` trong `rubric.md`; cách chấm từng key mặc định)
 

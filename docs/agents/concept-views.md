@@ -8,7 +8,16 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-concept-vi
 
 ## 1. Vai trò và phạm vi
 
-Concept Views vẽ 5 view (front, back, left, right, top) của một asset. **Hình dáng lấy từ blockout đã duyệt.** Model ảnh chỉ tô màu và vật liệu lên ảnh guide.
+Concept Views vẽ front và các view mà trường `views` của thẻ asset yêu cầu (D32). **Hình dáng lấy từ blockout đã duyệt.** Model ảnh chỉ tô màu và vật liệu lên ảnh guide.
+
+| `views` của thẻ | Bước chạy | Ảnh ở `views_rest` |
+|---|---|---|
+| `none` | không có bước views | — |
+| `back` | `views_front`, `views_rest` | back |
+| `full` (không ghi trường = `full`) | `views_front`, `views_rest` | back, left, right (right lật từ left khi `symmetric.left_right: true`) |
+| `full_top` | `views_front`, `views_rest` | back, left, right, top |
+
+Front luôn chạy khi có bước views, vì front là tham chiếu màu. `full_top` chỉ dùng khi mái có thiết kế riêng, không suy ra được từ concept. `none`: mặt khuất lấy từ `hidden_sides` và blockout; TEXTURE NOTE và NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và file material; bước texture tự đo màu concept (`concept_colors.py`). Giá trị lạ → `check_card.py` fail. Brief của bước views ghi dòng `VIEWS: <giá trị> (<các view>)`.
 
 **Dùng cho:** công trình, props cứng, cây và đá low-poly. Mọi asset phải có blockout đã duyệt.
 **Không dùng cho:** nhân vật, sinh vật. Hai nhóm này có bộ agent riêng ở version sau (D9).
@@ -19,7 +28,7 @@ Concept Views vẽ 5 view (front, back, left, right, top) của một asset. **H
 | Gen view qua Codex (D8): front trước, rồi các mặt còn lại | Quyết định phần khuất (lấy từ blockout và brief) |
 | Đo bằng script, gen lại view bị lỗi hình | Sửa ảnh để pass. Đổi ngưỡng |
 | Ghi báo cáo contract cho Producer | Gọi reviewer hay agent khác (D14.1). Tự duyệt |
-| Tạo sheet 5 view, viết README của bộ view | Dựng model |
+| Tạo sheet của bộ view, viết README của bộ view | Dựng model |
 
 Quy ước view: vật quay mặt về −Y. `left` là bên trái của chính vật (camera ở +X). `right` là bên phải của vật (camera ở −X). Giống Blockout và 3D Artist.
 
@@ -64,9 +73,9 @@ final/
 
 | # | Việc | Kiểm bằng |
 |---|---|---|
-| 1 | Gen back, left, right, top. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước (brief trỏ thẳng tới `views_front/vN/final/`, không chép sang, D22.14) + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
+| 1 | Gen các view trong dòng `VIEWS:` của brief. Ảnh tham chiếu: concept albedo + front đã duyệt ở bước trước (brief trỏ thẳng tới `views_front/vN/final/`, không chép sang, D22.14) + guide của view đó. Nhà đối xứng: chỉ gen left, lật thành right | `gen_image_codex.py` |
 | 2 | Đo cả bộ. Gen lại view có lỗi hình trước khi báo cáo | `measure_views.py` |
-| 3 | Tạo sheet 5 view, tóm tắt, README 4 mục (mục 6) | `views_sheet.py`, `check_package.py` |
+| 3 | Tạo sheet của bộ view, tóm tắt, README 4 mục (mục 6) | `views_sheet.py`, `check_package.py` |
 | 4 | Ghi báo cáo. Producer giao check-views (cả bộ). Vòng sửa: gen lại **mọi** view có trong `TOP_FIX: regen` (kiểu lô, D21.1), giữ nguyên các view khác. Ghi `FIXED:` | — |
 | 5 | Duyệt theo `approvals.views_rest` (D14.4) | Anh hoặc chính sách |
 
@@ -104,7 +113,7 @@ Bỏ thư mục `View Concept/` riêng (D14.8). Bước `views_rest` ghi vào `p
 ```
 final/
   README.md
-  front.png, back.png, left.png, right.png, top.png, views.json
+  front.png, các view của `views` (back.png, left.png, right.png; top.png chỉ với full_top), views.json
   concept_colors.json, bg_color.json   ← màu vật liệu đo trên concept; màu nền đã dùng
   report/       ← report.md, overlay_sheet.png, report.json, VIEWS_sheet.png
 ```
@@ -121,7 +130,7 @@ Dòng đầu cố định, không phải một mục: "Thông số, mốc chiề
 Không chép vào gói: prompt, bản không chọn, log.
 
 **`check_package.py`:**
-- Đủ 5 file view, và sheet được dựng từ đúng 5 file đó (so hash).
+- Đủ front và các file view của `views` trong thẻ, và sheet được dựng từ đúng các file đó (so hash).
 - README có đủ 4 mục và dòng trỏ đầu tiên.
 
 Hash blockout do script của Producer kiểm khi sinh brief và khi ingest (D22.12), không ghi vào README.
@@ -134,7 +143,7 @@ Nếu một điều không đúng, báo cáo `STATUS: BLOCKED`.
 
 | Hàng | Nội dung |
 |---|---|
-| 1 | Concept albedo, front, back, left, right, top |
+| 1 | Concept albedo, front, các view của `views` |
 | 2 | Overlay từng view (blockout đỏ, ảnh gen xanh) với IoU, dE, vị trí chi tiết |
 | 3 | Crop các chỗ reviewer ghi chú (nếu có) |
 
