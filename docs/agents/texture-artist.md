@@ -38,7 +38,8 @@ Script kiểm hash mesh khi sinh brief (D22.12). Texture Artist chỉ kiểm cá
 
 - Có key Meshy và budget → **Meshy SỬA**, không xét độ phức tạp. Đây là chế độ mặc định.
 - Hết lần gọi mà mesh này đã có lớp Meshy qua topology (D30.3) → Meshy SỬA trên lớp đó.
-- Profile không có `paths.env_file`, anh chỉ định (`meshy <id> paint`, trả lời câu hỏi Meshy của script), hoặc hết lần gọi mà không có lớp Meshy dùng được → **VẼ MỚI**.
+- Profile không có `paths.env_file`, anh chỉ định, hoặc hết lần gọi mà không có lớp Meshy dùng được → **VẼ MỚI**. Anh chỉ định bằng `P texture-mode <id> paint` trước bước texture, hoặc `meshy <id> paint` khi trả lời câu hỏi Meshy của script.
+- `P texture-mode <id> meshy` buộc Meshy; hết budget mà không có lớp dùng được thì asset `blocked`. `auto` trả về quy tắc mặc định (`docs/producer.md` §6.3).
 - Có `env_file` mà thiếu key: script chặn trước khi giao bước (`docs/producer.md` §6.3).
 
 Năm chỉ số dưới đây vẫn được đo và ghi, chỉ để tham khảo và để đo lại sau 3–5 asset. `proposed` trong `texture_spec.json` là chế độ của dòng `MODE:`.

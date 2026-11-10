@@ -261,3 +261,58 @@ def test_a_redo_with_the_budget_spent_names_the_passed_layer_of_v1_so_meshy_sua_
     assert [l for l in t if l.startswith("MESHY")] == [
         "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
         f"MESHY_DONE: `{A}/texture/v1/work/meshy/call-1` topology pass: dùng `base_color.png`, không gọi Meshy"]
+
+
+def test_texture_mode_paint_before_the_step_never_opens_a_budget_so_no_credit_can_be_spent(tmp_path):
+    f = to_texture(tmp_path)
+    assert f.p("texture-mode", AID, "paint") == (
+        "pilot-house: texture-mode paint (bởi người dùng); áp dụng từ brief texture tiếp theo\n")
+    assert f.st()["texture_choice"]["mode"] == "paint"
+    f.brief("t1")
+    t = f.cp["t1"]["text"].splitlines()
+    assert mode_lines(f, "t1") == ["MODE: VẼ MỚI (người dùng chọn `texture-mode paint`: không gọi Meshy)"]
+    assert (not any(l.startswith("MESHY") for l in t), budgets(tmp_path)) == (True, {})
+    assert any(l.endswith(f"{AID} · texture · texture-mode paint · bởi người dùng")
+               for l in (tmp_path / "production/ledger.md").read_text(encoding="utf-8").splitlines())
+
+
+def test_texture_mode_records_who_chose_it_and_auto_returns_to_the_meshy_default(tmp_path):
+    f = to_texture(tmp_path)
+    f.p("texture-mode", AID, "paint", "--by", "anh Trung: vẽ tay")
+    assert f.st()["texture_choice"]["by"] == "anh Trung: vẽ tay"
+    f.p("texture-mode", AID, "auto")
+    f.brief("t1")
+    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (mặc định D30.11: có key và budget)"]
+
+
+def test_texture_mode_meshy_with_a_key_says_the_user_forced_meshy(tmp_path):
+    f = to_texture(tmp_path)
+    f.p("texture-mode", AID, "meshy")
+    f.brief("t1")
+    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (người dùng chọn `texture-mode meshy`)"]
+
+
+def test_texture_mode_meshy_without_a_key_is_refused_and_changes_nothing(tmp_path):
+    f = to_texture(tmp_path, env_line="OTHER=1\n")
+    assert f.p("texture-mode", AID, "meshy", ok=False) == (
+        "LỖI: pilot-house: `texture-mode meshy` cần MESHY_API_KEY trong env_file của profile: người dùng thêm key\n")
+    assert "texture_choice" not in f.st()
+
+
+def test_texture_mode_meshy_with_the_budget_spent_and_no_usable_layer_blocks_instead_of_painting(tmp_path, monkeypatch):
+    f = to_texture(tmp_path)
+    out = f.brief("t1 brief")
+    monkeypatch.setenv("FAKE_MESHY_BASE_PX", "32")
+    f.meshy("t1", (tmp_path / out["report"]).parent, "")
+    f.p("texture-mode", AID, "meshy")
+    f.brief("t1 again")
+    assert f.cp["t1 again"]["out"].startswith("pilot-house: texture → blocked trước khi giao. Tiếp: xử lý: "
+                                              "`texture-mode meshy`: hết budget Meshy cho mesh này")
+
+
+def test_unfixable_under_texture_mode_paint_never_asks_for_another_paid_call(tmp_path):
+    f = to_texture(tmp_path)
+    f.brief("gate")
+    f.p("texture-mode", AID, "paint")
+    f.work("t1", unfixable=True, issues="hỏng")
+    assert ("ask" in f.st(), f.st()["state"]) == (False, "blocked")

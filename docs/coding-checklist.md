@@ -148,5 +148,6 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 142 | Blockout, 3D Artist | Hàm `custom` được duyệt vào repo ngay kèm test; không có bản thư viện riêng theo run | D30.9 | `arch_cap_pointed` vào `custom_lib.py` kèm test: `26549c6` |
 | 143 | Producer | v0.7.0: worktree `./.worktrees/feat-v0.7.0`, toàn bộ test 0 skip, merge fast-forward vào `main` | D30.15 |  |
 | 144 | Mọi reviewer | Mỗi lần chấm là một reviewer mới; Producer không resume reviewer qua các vòng | D31.7 |  |
+| 145 | Producer | `P texture-mode <id> auto\|meshy\|paint` lưu vào `status.json`, ledger ghi ai đổi và lúc đổi; `paint` không mở budget; `meshy` không key → từ chối, hết budget không lớp dùng được → `blocked` | producer.md §6.3, D30.11 | `tests/test_texture_gate.py` (6 test `texture_mode`) |
 
 Claude Code version checked: 2.1.317 (desktop app subagent, 2026-11-10): `review-out.md` and `worker-out.md` write OK; `report-review.md` and `report-worker.md` are blocked. CLI on the same machine: 2.1.318.

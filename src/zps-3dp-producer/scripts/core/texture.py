@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .state import ASSETS, ROOT, SKILL_DIR, all_status, die, ledger, load_st, rel, save_st, vdir, write_atomic
+from .state import ASSETS, ROOT, SKILL_DIR, all_status, die, ledger, load_st, now, rel, save_st, vdir, write_atomic
 
 STEP = "texture"
 MESHY_CALL = SKILL_DIR / "scripts" / "meshy_call.py"
@@ -40,7 +40,12 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
     """Before every texture worker brief: brief lines, or (event, note) when the asset must stop first (§6.3)."""
     import meshy_call
     aid, sha = st["id"], st["locked"]["model"]
+    choice = choice_of(st)
+    if choice == "paint":
+        return [mode(st, PAINT, "người dùng chọn `texture-mode paint`: không gọi Meshy")]
     if not env_file(prof):
+        if choice == "meshy":
+            return "stuck", "`texture-mode meshy` cần `paths.env_file` trong profile: thêm, hoặc `texture-mode auto|paint`"
         return [mode(st, PAINT, "profile không có `paths.env_file`: không gọi Meshy")]
     if st.get("paint_for") == sha[:12]:
         return [mode(st, PAINT, "người dùng chọn cho mesh này: không gọi Meshy")]
@@ -70,12 +75,44 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
             m = mode(st, MESHY, "hết lần gọi: sửa trên lớp Meshy qua topology")
             if not any("topology pass" in line for line in done):
                 done.append(f"MESHY_DONE: `{rel(layer)}` topology pass: dùng `base_color.png`, không gọi Meshy")
+        elif choice == "meshy":
+            return "stuck", ("`texture-mode meshy`: hết budget Meshy cho mesh này và không có lớp Meshy qua topology: "
+                             "duyệt thêm lần gọi, hoặc `texture-mode auto|paint`")
         else:
             m = mode(st, PAINT, "hết lần gọi, không có lớp Meshy qua topology")
         return [m, f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy", *done,
                 *(run if resume else [])]
-    return [mode(st, MESHY, "mặc định D30.11: có key và budget"), *run,
+    why = "người dùng chọn `texture-mode meshy`" if choice == "meshy" else "mặc định D30.11: có key và budget"
+    return [mode(st, MESHY, why), *run,
             f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)", *done]
+
+
+CHOICES = ("auto", "meshy", "paint")
+
+
+def choice_of(st: dict) -> str:
+    return (st.get("texture_choice") or {}).get("mode", "auto")
+
+
+def set_choice(a):
+    """`texture-mode <id> auto|meshy|paint`: the user's mode for the texture step; gate() reads it (D30.11)."""
+    from .intake import load_profile
+    import meshy_call
+    st = load_st(a.id)
+    if a.mode == "meshy":
+        if not env_file(load_profile()):
+            die(f"{a.id}: `texture-mode meshy` cần `paths.env_file` trong profile; không có thì chỉ VẼ MỚI")
+        try:
+            key = meshy_call.keys()
+        except meshy_call.Refused as ex:
+            die(f"{a.id}: `texture-mode meshy`: {ex}")
+        if key != "key file":
+            die(f"{a.id}: `texture-mode meshy` cần MESHY_API_KEY trong env_file của profile: người dùng thêm key")
+    by = a.by or "người dùng"
+    st["texture_choice"] = {"mode": a.mode, "by": by, "at": now()}
+    save_st(st)
+    ledger(f"{a.id} · {STEP} · texture-mode {a.mode} · bởi {by}")
+    print(f"{a.id}: texture-mode {a.mode} (bởi {by}); áp dụng từ brief texture tiếp theo")
 
 
 def mode(st: dict, which: str, why: str) -> str:
@@ -124,7 +161,7 @@ def ask(st: dict, kind: str, nxt: str, base: int | None = None, new_round: bool 
 
 def ask_regen(st: dict, n: int, from_review: bool, why: str) -> str | None:
     """`TOP_FIX: meshy_regen` or `UNFIXABLE: yes`: the note for waiting_human, or None when there is no Meshy budget."""
-    if not current_budget(st) or st.get("paint_for") == st["locked"]["model"][:12]:
+    if not current_budget(st) or st.get("paint_for") == st["locked"]["model"][:12] or choice_of(st) == "paint":
         return None
     if from_review:
         ask(st, "meshy_regen", "fix", base=n, new_round=True)

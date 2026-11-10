@@ -209,6 +209,11 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 
 **Chế độ mặc định** (D30.11, sửa D10): có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Ledger ghi chế độ đã chọn và lý do. Mới có 1 mẫu (Run 5); đo lại sau 3–5 asset.
 
+**Anh chọn chế độ trước bước texture:** `P texture-mode <id> auto|meshy|paint [--by "<lời anh>"]`. Script lưu vào `status.json` (`texture_choice`), không ghi vào thẻ asset. Ledger ghi giá trị, ai đổi (mặc định người dùng) và lúc đổi.
+- `auto` (mặc định): Meshy SỬA khi có key và budget, như trên.
+- `meshy`: buộc Meshy. Lệnh từ chối khi profile không có `env_file` hoặc thiếu key. Hết budget mà không có lớp Meshy qua topology: asset `blocked` trước khi giao, không tự chuyển VẼ MỚI.
+- `paint`: VẼ MỚI. Script không mở budget, không gọi Meshy, không hỏi gọi lại Meshy khi `UNFIXABLE`.
+
 **Albedo và kiểm topology** (D30.3): `meshy_call.py` tải `texture_urls[].base_color` làm albedo. GLB Meshy chỉ dùng để so topology với mesh đã khóa: số tam giác, và tập hợp bộ ba UV của tam giác (mỗi bộ ba sắp xếp, cả tập sắp xếp, so có dung sai). Không so theo thứ tự tam giác, không phụ thuộc scale và vị trí. Kích thước `base_color` phải bằng `texture_res`. Lệch thì fail. Bỏ khớp bbox và ngưỡng 1e-5.
 
 **Gọi qua wrapper, không sửa kit.** Texture Artist chỉ gọi Meshy qua `meshy_call.py` (tool của Producer). Wrapper gọi `gen_api.py texture` của kit (chép nguyên, không sửa, theo D2). Chỉ Texture Artist gọi Meshy.

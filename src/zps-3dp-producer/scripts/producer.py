@@ -4,9 +4,9 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · waive · meshy · approvals
-             delegate · rule · ledger · stats · dashboard · serve · show · board · validate · cleanup · archive · texture-stats
-             ab · compare
+Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · waive · meshy
+             texture-mode · approvals · delegate · rule · ledger · stats · dashboard · serve · show · board · validate
+             cleanup · archive · texture-stats · ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
 from __future__ import annotations
@@ -102,6 +102,11 @@ def cmd_delegate(a):
 def cmd_meshy(a):
     from core.texture import answer
     answer(a)
+
+
+def cmd_texture_mode(a):
+    from core.texture import set_choice
+    set_choice(a)
 
 
 def cmd_texture_stats(a):
@@ -220,6 +225,9 @@ def main(argv: list[str] | None = None):
     x.add_argument("--confirm-spend", action="store_true")
     x = sub.add_parser("meshy", help="trả lời câu hỏi Meshy của bước texture: call = gọi thêm, paint = VẼ MỚI")
     x.add_argument("id"); x.add_argument("choice", choices=["call", "paint"]); x.add_argument("--by", default="")
+    x = sub.add_parser("texture-mode", help="chế độ texture người dùng chọn: auto = Meshy khi có key và budget, "
+                                            "meshy = buộc Meshy, paint = VẼ MỚI")
+    x.add_argument("id"); x.add_argument("mode", choices=["auto", "meshy", "paint"]); x.add_argument("--by", default="")
     sub.add_parser("texture-stats", help="đề xuất chế độ texture so với chế độ đã dùng, credit Meshy")
     sub.add_parser("rule", help="ghi quyết định Producer tự đưa ra").add_argument("text")
     x = sub.add_parser("ledger", help="xem cuối ledger")
