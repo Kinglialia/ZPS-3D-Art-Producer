@@ -35,8 +35,9 @@ class Flow:
     def text(self, out):
         return (self.root / out["brief"]).read_text(encoding="utf-8")
 
-    def work(self, status="DONE", out=None, extra="", checks=None):
-        """checks: {name: overall} of result JSON the worker leaves in final/review/checks/."""
+    def work(self, status="DONE", out=None, extra="", checks=None, fixed=""):
+        """checks: {name: overall} of result JSON the worker leaves in final/review/checks/. fixed: the FIXED line; a DONE
+        that names every open finding gets a `full` review (D31.2)."""
         out = out or self.brief()
         rep = self.root / out["report"]
         if rep.parent.name.startswith("v"):
@@ -44,7 +45,8 @@ class Flow:
                 (rep.parent / "final" / o).write_text("x", encoding="utf-8")
             for name, overall in (checks or {}).items():
                 write_json(rep.parent / "final/review/checks" / name, {"overall": overall})
-        rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n" + extra, encoding="utf-8")
+        rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n"
+                       + (f"FIXED: {fixed}\n" if fixed else "") + extra, encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
 
     def review(self, out=None, **kw):
@@ -291,7 +293,7 @@ def stall(f):
 
 def pass_v2(f):
     fix_v1(f, 1)
-    f.work()
+    f.work(fixed="F1")
     return f.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better",
                     prior=["- F1: resolved | evidence: clay_front"])
 
@@ -406,7 +408,7 @@ PICKED = dict(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pas
 def test_a_picked_variant_missing_a_required_output_blocks_the_review_and_copies_nothing(flow):
     """Copied as is, the incomplete variant reached waiting_human and the approval then died on the missing lock file."""
     fix_v1(flow, 1, "param")
-    flow.work()
+    flow.work(fixed="F1")
     b = flow.v(2) / "variants/b"
     b.mkdir(parents=True)
     (b / "blockout.md").write_text("b", encoding="utf-8")
@@ -422,7 +424,7 @@ def test_a_picked_variant_missing_a_required_output_blocks_the_review_and_copies
 
 def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_variant_a(flow):
     fix_v1(flow, 1, "param")
-    flow.work()
+    flow.work(fixed="F1")
     b = flow.v(2) / "variants/b"
     b.mkdir(parents=True)
     for o in OUTPUTS:
@@ -472,8 +474,11 @@ def test_redo_of_an_unreviewed_version_files_the_user_text_as_H1_so_the_next_rev
     flow.work()
     rb = flow.text(flow.brief())
     assert "- H1: ? | evidence: ? | acceptance: đạt yêu cầu của người dùng: mái cao hơn" in rb
+    assert "REVIEW_SCOPE: fix" in rb.splitlines()  # the worker did not name H1 in FIXED
     flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass", compare="H1=better",
                 prior=["- H1: resolved | evidence: clay_front"])
+    assert pick(flow.st)["state"] == "review"  # D31.2: a PASS at a fix round is judged once more in full
+    flow.review(out=flow.brief(), verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass")
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 1, "fix_base": 1, "offer": 2, "label": "",
                              "note": "duyệt blockout v2"}
 
@@ -569,7 +574,7 @@ def test_a_redo_stays_in_the_current_section_the_worker_reads_until_the_step_is_
     flow.human("redo", "mái cao hơn\nmái đỏ")
     flow.human("note", "chỉ là ghi chú")
     assert current(flow) == ["- giữ mái ngói đỏ (Producer gộp)", "- blockout v1 · redo · mái cao hơn mái đỏ"]
-    flow.work()
+    flow.work(fixed="F1, H1")
     flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="F1=better; H1=better",
                 prior=["- F1: resolved | evidence: clay_front", "- H1: resolved | evidence: clay_front"])
     assert (flow.st["approved"], current(flow)) == ({"blockout": 2}, ["- giữ mái ngói đỏ (Producer gộp)"])
@@ -712,8 +717,11 @@ def test_a_waive_while_the_reviewer_judges_applies_at_its_ingest_and_the_last_ma
     assert waive(flow, "F1").startswith(
         "house-a: waive blockout F1 (người dùng): reviewer đang chấm, áp dụng ở lần ingest tới → blockout/reviewing.")
     assert findings.load(AID, "blockout", 1)["findings"]["F1"]["status"] == "open"
-    assert flow.review(out=out, counts=counts(major=1), top_fix="structure: F1", compare="F1=same",
-                       prior=["- F1: open"]) == (
+    head, line = flow.review(out=out, counts=counts(major=1), top_fix="structure: F1", compare="F1=same",
+                             prior=["- F1: open"]).splitlines()
+    assert head == ("house-a: review PASS (0 mở) → blockout/review. Tiếp: giao reviewer → `brief house-a`")
+    assert flow.text(json.loads(line)).splitlines()[2] == "REVIEW_SCOPE: full"
+    assert flow.review(out=json.loads(line), verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass") == (
         "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
     assert [findings.load(AID, "blockout", v)["findings"]["F1"]["status"] for v in (1, 2)] == ["waived", "waived"]
     assert "waive_pending" not in flow.st or flow.st["waive_pending"] == {}
@@ -889,3 +897,50 @@ def test_an_accepted_fail_in_a_step_readme_reaches_the_exceptions_of_the_duyet_2
                                                encoding="utf-8")
     assert assemble.exceptions(flow.st | {"approved": {"blockout": 1}}) == [
         "- blockout: layout.json — bbox lệch 6% do diềm 0.2 m"]
+
+
+def scope_of(f, out):
+    return f.text(out).splitlines()[2]
+
+
+def test_the_first_review_is_full_a_fix_with_findings_left_is_fix_and_a_fix_naming_every_open_finding_is_full_d31_2(flow):
+    """D31.2: a fix round judges only what it fixed; the version about to pass gets every rubric key judged again."""
+    flow.work()
+    assert scope_of(flow, flow.brief()) == "REVIEW_SCOPE: full"
+    assert flow.st["dispatches"][-1]["scope"] == "full"
+    flow.review(counts=counts(major=2), top_fix="param: F1, F2",
+                findings=[finding("F1", "major", "param"), finding("F2", "major", "param")])
+    flow.work(fixed="F1")
+    out = flow.brief()
+    assert (scope_of(flow, out), flow.st["dispatches"][-1]["scope"]) == ("REVIEW_SCOPE: fix", "fix")
+    assert "RUBRIC: <key trong mục ## blockout>=pass|fail|unclear|not_checked; ..." in flow.text(out).splitlines()
+    flow.review(out=out, counts=counts(major=1), top_fix="param: F2", compare="F1=better; F2=same",
+                rubric="massing=fail; props=not_checked", prior=["- F1: resolved | evidence: clay_front", "- F2: open"])
+    flow.work(fixed="F2")
+    assert scope_of(flow, flow.brief()) == "REVIEW_SCOPE: full"
+
+
+def test_not_checked_is_refused_in_a_full_review_d31_2(flow):
+    flow.work()
+    out = flow.brief()
+    with pytest.raises(ProducerError) as e:
+        flow.review(out=out, verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass; props=not_checked")
+    assert str(e.value) == (f"production/assets/{AID}/blockout/v1/review-out.md sai contract: RUBRIC props=not_checked chỉ "
+                            "dùng khi REVIEW_SCOPE: fix")
+    assert flow.st["state"] == "reviewing"
+
+
+def test_a_pass_in_a_fix_round_sends_the_same_version_to_a_full_review_without_a_worker_and_no_extra_round_d31_2(flow):
+    fix_v1(flow, 1)
+    flow.work()
+    head, line = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass; props=not_checked",
+                             compare="F1=better", prior=["- F1: resolved | evidence: clay_front"]).splitlines()
+    assert head == "house-a: review PASS (0 mở) → blockout/review. Tiếp: giao reviewer → `brief house-a`"
+    out = json.loads(line)
+    assert (out["role"], out["brief"], flow.st["versions"], flow.st["fix_round"]) == (
+        "reviewer", f"production/assets/{AID}/blockout/v2/brief-review.md", {"blockout": 2}, 1)
+    rb = flow.text(out)
+    assert (scope_of(flow, out), "COMPARE:" in rb, "PRIOR:" in rb) == ("REVIEW_SCOPE: full", False, False)
+    assert flow.review(out=out, verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass; props=pass") == (
+        "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
+    assert findings.load(AID, "blockout", 2)["base"] == 1

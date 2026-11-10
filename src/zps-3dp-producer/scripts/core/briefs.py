@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -204,6 +205,21 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     return "\n".join(lines) + "\n"
 
 
+def review_scope(st, sid: str, n: int) -> str:
+    """D31.2: `full` for a review with no reviewed base, for the same version judged again, and for a version whose
+    worker reports DONE with every open finding of the base in FIXED; `fix` otherwise. An evidence round keeps the scope
+    of the review that asked for it."""
+    if st.get("evidence"):
+        return st.get("review_scope") or "full"
+    m = review_base(st, n)
+    if m == n or not (base := findings.load(st["id"], sid, m)):
+        return "full"
+    wr = vdir(st["id"], sid, n) / "worker-out.md"
+    c = parse_worker(wr.read_text(encoding="utf-8"))[0] if wr.exists() else {}
+    fixed = set(re.findall(r"[FH]\d+", c.get("FIXED", "")))
+    return "full" if c.get("STATUS") == "DONE" and set(findings.open_of(base)) <= fixed else "fix"
+
+
 def review_brief(cfg, st, step, n) -> str:
     aid, sid = st["id"], step["id"]
     d = vdir(aid, sid, n)
@@ -221,8 +237,11 @@ def review_brief(cfg, st, step, n) -> str:
     notes = [k for k in step["top_fix"] if k in findings.NOTE]
     wr = d / "worker-out.md"
     claimed = parse_worker(wr.read_text(encoding="utf-8"))[0]["RESOLVED_NOTES"] if wr.exists() else []
+    scope = st.get("review_scope") or "full"
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
+        "",
+        f"REVIEW_SCOPE: {scope}",
         "",
         "Bạn chấm độc lập. Không sửa file nào ngoài report.",
         "",
@@ -257,7 +276,7 @@ def review_brief(cfg, st, step, n) -> str:
         f"Ghi report vào `{rel(d / 'review-out.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
-        f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear; ...",
+        f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear{'|not_checked' if scope == 'fix' else ''}; ...",
         "COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N",
         f"TOP_FIX: <{'|'.join(findings.top_fix_kinds(step))}>: F<n>[, F<m>]",
         "EVIDENCE_OPENED: <nhãn ảnh và file đã mở>",
@@ -409,6 +428,8 @@ def run(a):
     elif s in ("review", "reviewing"):
         n = current_v(st, sid)
         d = vdir(a.id, sid, n)
+        if s == "review" or not st.get("review_scope"):
+            st["review_scope"] = review_scope(st, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
         out = {"role": "reviewer", "agent": agent_name(step["reviewer"]), "model": r["reviewer_model"],
@@ -426,7 +447,8 @@ def run(a):
             out["agent_file"] = rel(agent_file(out["agent"]))
         if not again:
             st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"],
-                                                    "at": stamp()})
+                                                    "at": stamp()} | ({"scope": st["review_scope"]}
+                                                                      if out["role"] == "reviewer" else {}))
         who = f"{out['agent']}, {out['model'] or 'model của phiên'}"
     save_st(st)
     if not again:

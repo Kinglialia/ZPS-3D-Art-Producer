@@ -78,6 +78,18 @@ def finding(fid="F1", prio="major", kind="structure", evidence="clay_front: mái
     return "\n".join([f"- {fid} [{prio}] {kind}", *[b for b in body if b.strip()]])
 
 
+def fixed_line(root, aid) -> str:
+    """D31.2: a fake fix-round worker names every open finding of its base in FIXED, so its review is `full` and a PASS
+    passes, as before review scopes; tests of the `fix` scope write FIXED themselves."""
+    import json
+    a = Path(root) / "production/assets" / aid
+    st = json.loads((a / "status.json").read_text(encoding="utf-8"))
+    p = a / st["stage"] / f"v{st.get('fix_base')}" / "findings.json"
+    ids = [i for i, f in json.loads(p.read_text(encoding="utf-8"))["findings"].items()
+           if f["status"] in ("open", "regressed")] if st.get("fix_base") and p.is_file() else []
+    return f"FIXED: {', '.join(ids)}\n" if ids else ""
+
+
 def report(verdict="FIX", counts="blocker=0; major=1; minor=0; preference=0; unclear=0",
            top_fix="structure: F1", evidence="clay_front.png, clay_side.png", rubric="massing=fail",
            findings=(), prior=(), compare=None, pick=None, extra=""):

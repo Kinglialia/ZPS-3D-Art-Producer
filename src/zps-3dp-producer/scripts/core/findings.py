@@ -192,7 +192,9 @@ def apply(base: dict | None, rv: dict, step: dict, n: int, warns: list[str] | No
             errs.append(f"{i}: region phải mở đầu bằng {'|'.join(names)}, vd `{names[0]}: …`")
         fs[i] = {"priority": f["priority"], "kind": f["kind"], "status": "open", "first_v": n, "last_v": n,
                  **{k: v for k, v in f.items() if k not in ("priority", "kind")}}
-    doc = {"version": n, "base": base["version"] if base else None, "top_fix": rv["top_fix"], "pick": rv["pick"],
+    same = bool(base) and base["version"] == n
+    doc = {"version": n, "base": (base.get("base") if same else base["version"]) if base else None,
+           "top_fix": rv["top_fix"], "pick": rv["pick"],
            "next_id": max([nxt - 1] + [int(i[1:]) for i in fs if i.startswith("F")]) + 1, "findings": fs}
     if notes := list(dict.fromkeys((base or {}).get("resolved_notes", []) + rv.get("confirmed", []))):
         doc["resolved_notes"] = notes

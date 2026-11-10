@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import glbkit
-from shared import finding, pilot_project, report, run
+from shared import finding, fixed_line, pilot_project, report, run
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -87,7 +87,8 @@ class Flow:
         r = subprocess.run(cmd, cwd=self.root, capture_output=True, text=True, env=env)
         self.cp[name + " meshy"] = {"rc": r.returncode, "out": r.stdout}
 
-    def work(self, name, issues="none", meshy=None, unfixable=False, mesh_size=(1.0, 1.0, 1.0), extra=""):
+    def work(self, name, issues="none", meshy=None, unfixable=False, mesh_size=(1.0, 1.0, 1.0), extra="", fixed=True):
+        """fixed: a fix round names every open finding of its base in FIXED, so its review is `full` (D31.2)."""
         out = self.brief(name + " brief")
         vd = (self.root / out["report"]).parent
         step = self.st()["stage"]
@@ -97,7 +98,8 @@ class Flow:
         ph = brief_lines(self.cp[name + " brief"]["text"], "PROFILE_HASH")
         (self.root / out["report"]).write_text(
             f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: {issues}\nPROFILE_HASH: {ph}\n"
-            + ("UNFIXABLE: yes\n" if unfixable else "") + extra, encoding="utf-8")
+            + ("UNFIXABLE: yes\n" if unfixable else "") + (fixed_line(self.root, AID) if fixed else "") + extra,
+            encoding="utf-8")
         self.keep(name + " worker", self.p("ingest", AID, "--agent-id", f"w-{name}"))
 
     def review(self, name, evidence="lit_34_front.png, albedo_2048.png, tex_measure.json", **kw):

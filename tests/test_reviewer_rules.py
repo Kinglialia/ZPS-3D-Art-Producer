@@ -59,3 +59,14 @@ ACCEPTED = ("JSON fail trong `final/review/{gates,checks}/` trả thẳng về b
 def test_each_worker_knows_a_failed_check_comes_back_to_it_and_how_to_accept_one_d31_3(step):
     rows = (AGENTS / f"zps-3dp-step-{step}" / f"zps-3dp-step-{step}.md").read_text(encoding="utf-8").splitlines()
     assert ACCEPTED in rows
+
+
+SCOPE = ("- `REVIEW_SCOPE` ở đầu brief. `full`: chấm đủ mọi key rubric, không dùng `not_checked`. `fix`: chỉ chấm id trong "
+         "`COMPARE` và `TOP_FIX`, vùng `preserve` của chúng, rồi nhìn nhanh toàn bộ ảnh để bắt lỗi mới; key rubric không "
+         "chấm ghi `not_checked`. PASS ở vòng `fix` chưa cho bước qua: script giao thêm một lượt `full`.")
+
+
+@pytest.mark.parametrize("step", sorted(COUNT))
+def test_each_step_reviewer_knows_what_a_fix_round_judges_and_that_only_a_full_round_passes_d31_2(step):
+    """The brief carries only the REVIEW_SCOPE line, so the role file holds what each scope judges."""
+    assert SCOPE in (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8").splitlines()

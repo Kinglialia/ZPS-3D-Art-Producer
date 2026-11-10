@@ -107,7 +107,7 @@ def test_bad_compare_and_pick_values_are_rejected():
 
 def test_rubric_accepts_unclear_and_rejects_other_values():
     rv, errs = parse_review(report(rubric="massing=fail; props=unclear; base=ok"))
-    assert errs == ["RUBRIC base: 'ok' phải là pass|fail|unclear"]
+    assert errs == ["RUBRIC base: 'ok' phải là pass|fail|unclear|not_checked"]
     assert rv["rubric"] == {"massing": "fail", "props": "unclear"}
 
 

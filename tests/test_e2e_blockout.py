@@ -131,6 +131,7 @@ def flow(tmp_path_factory):
     f.work("v4", fixed=(3, 4))
     f.review("v4", verdict="PASS", counts=counts(0), top_fix=None, compare="F3=better; F4=better; H1=better",
              rubric="concept_match=pass; scale=pass", prior=resolved(3, 4) + ["- H1: resolved | evidence: clay_front"])
+    f.review("v4 full", verdict="PASS", counts=counts(0), top_fix=None, rubric="concept_match=pass; scale=pass")
     f.save("approve", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("approve again", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("cleanup dry-run", f.p("cleanup", AID))
@@ -304,9 +305,16 @@ def test_redo_carries_the_open_findings_of_the_offered_version_into_the_new_roun
 
 
 def test_pass_on_a_review_human_step_waits_for_the_human_without_a_not_passed_label(flow):
-    assert flow["v4 review"]["out"] == ("pilot-house: review PASS (0 mở) → blockout/waiting_human. "
+    """D31.2: v4's worker named F3, F4 but not H1 in FIXED, so its review was a `fix` round and its PASS only sends v4 to a
+    `full` review; that PASS waits for the human."""
+    head, line = flow["v4 review"]["out"].splitlines()
+    assert (head, json.loads(line)) == (
+        "pilot-house: review PASS (0 mở) → blockout/review. Tiếp: giao reviewer → `brief pilot-house`", reviewer_json(4))
+    assert ("REVIEW_SCOPE: fix" in flow["v4 review brief"]["text"].splitlines(),
+            "REVIEW_SCOPE: full" in flow["v4 full review brief"]["text"].splitlines()) == (True, True)
+    assert flow["v4 full review"]["out"] == ("pilot-house: review PASS (0 mở) → blockout/waiting_human. "
                                         "Tiếp: chờ người dùng: duyệt blockout v4 (review page)\n")
-    assert pick(flow["v4 review"]["st"]) == state(state="waiting_human", fix_base=2, round_versions=[2, 4], offer=4,
+    assert pick(flow["v4 full review"]["st"]) == state(state="waiting_human", fix_base=2, round_versions=[2, 4], offer=4,
                                                   label="", evidence_used=0, rejected={}, note="duyệt blockout v4")
 
 
@@ -346,7 +354,10 @@ def test_the_ledger_records_every_dispatch_report_and_decision_in_order(flow):
         *rnd(2, "FIX (major=2) · concept_match=fail; scale=pass"),
         *rnd(3, "FIX (major=2) · concept_match=fail; scale=pass · không tiến bộ ở vòng 2"),
         "pilot-house · người dùng redo blockout · mái chìa thêm 10 cm",
-        *rnd(4, "PASS (0 mở) · concept_match=pass; scale=pass"),
+        *rnd(4, "PASS (0 mở) · concept_match=pass; scale=pass · PASS ở vòng fix → reviewer chấm full lại v4, không gọi "
+                "worker"),
+        "pilot-house · blockout v4 · giao reviewer (zps-3dp-check-blockout, opus)",
+        "pilot-house · blockout v4 · review PASS (0 mở) · concept_match=pass; scale=pass",
         "pilot-house · blockout v4 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt",
         "pilot-house · cleanup 3 thư mục work/"]
 
@@ -360,7 +371,7 @@ def test_every_brief_stays_under_the_token_budget_without_the_install_and_projec
             for s in strip:
                 t = t.replace(s, "")
             sizes[k] = len(t.encode())
-    assert len(sizes) == 8 and max(sizes.values()) < BRIEF_MAX, sizes
+    assert len(sizes) == 9 and max(sizes.values()) < BRIEF_MAX, sizes
 
 
 def test_a_review_step_without_a_reviewer_fails_at_config_load_instead_of_a_dead_default(tmp_path):

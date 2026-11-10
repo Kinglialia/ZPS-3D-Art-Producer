@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import P, finding, model_only, pilot_project, report, run
+from shared import P, finding, fixed_line, model_only, pilot_project, report, run
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -80,7 +80,8 @@ class Flow:
         ph = re.search(r"^PROFILE_HASH: (\w+)$", self.cp[name + " brief"]["text"], re.M).group(1)
         accepted = "ACCEPTED_FAIL: qa_screen_tris_check.json — 6% tam giác nhỏ ở mép mái\n" if failing else ""
         (self.root / out["report"]).write_text(
-            f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: {issues}\nPROFILE_HASH: {ph}\n" + accepted, encoding="utf-8")
+            f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: {issues}\nPROFILE_HASH: {ph}\n" + accepted
+            + fixed_line(self.root, AID), encoding="utf-8")
         self.keep(name + " worker", self.p("ingest", AID, "--agent-id", f"w-{name}"))
 
     def review(self, name, **kw):

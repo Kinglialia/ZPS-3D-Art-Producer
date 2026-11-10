@@ -35,6 +35,7 @@ MOVES = {
     ("todo", "ask_human"): "waiting_human", ("fix", "ask_human"): "waiting_human", ("running", "ask_human"): "waiting_human",
     ("waiting_human", "answer_fix"): "fix", ("waiting_human", "answer_todo"): "todo",
     ("fix", "full_again"): "review", ("waiting_human", "full_again"): "review", ("evidence", "full_again"): "review",
+    ("reviewing", "full_again"): "review",
     **{(s, "redo"): "fix" for s in REDO_FROM},
 }
 
@@ -316,6 +317,9 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     aid, sid, r = st["id"], step["id"], cfg["review"]
     rep = d / "review-out.md"
     rv = valid(rep, parse_review(read_report(rep)))
+    scope = st.get("review_scope") or "full"
+    if scope == "full" and (nc := [k for k, x in rv["rubric"].items() if x == "not_checked"]):
+        die(f"{rel(rep)} sai contract: RUBRIC {', '.join(nc)}=not_checked chỉ dùng khi REVIEW_SCOPE: fix")
     wr = d / "worker-out.md"
     claimed = parse_worker(read_report(wr))[0]["RESOLVED_NOTES"] if wr.exists() else []
     if extra := [x for x in rv["confirmed"] if x not in claimed]:
@@ -353,7 +357,12 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     st["evidence"] = None
     st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
     best = findings.best_version([findings.load(aid, sid, v) for v in rvs])
-    if event == "reopen":
+    if event in ("approve", "await_approval") and scope == "fix":
+        event, reason = "full_again", f"PASS ở vòng fix → reviewer chấm full lại v{n}, không gọi worker"
+    if event == "full_again":
+        move(st, event)
+        st |= {"rereview": n, "note": f"chấm full lại v{n}"}
+    elif event == "reopen":
         move(st, event)
         tid, ids = findings.REOPEN[kind], rv["top_fix"]["ids"]
         ti, target = step_of(cfg, tid)
