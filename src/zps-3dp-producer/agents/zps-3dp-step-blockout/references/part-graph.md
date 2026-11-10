@@ -15,7 +15,7 @@
 ```
 
 - Mọi kích thước là tên trong `params`. Part không ghi số trực tiếp trong `dims`. Số thực ghi `1.0`, không ghi `1` (số nguyên là số segment).
-- `fixed_params`: danh sách tên. Kích thước lấy từ MAP-LAYOUT hoặc `size_m`, `door_h`, `character_h` nằm ở đây. Ghi lý do vào `_fixed_reason`. `param_fit.py` không đổi các param này; `check_fix.py` báo fail nếu một vòng sửa đổi chúng.
+- `fixed_params`: danh sách tên. Kích thước lấy từ MAP-LAYOUT hoặc `size_m`, `door_h`, `character_h` nằm ở đây. Số đếm của thẻ (`counts`, dòng `COUNTS:` của brief) cũng là một param có tên ở đây. Ghi lý do vào `_fixed_reason`. `param_fit.py` không đổi các param này; `check_fix.py` báo fail nếu một vòng sửa đổi chúng.
 
 ## Mỗi part
 

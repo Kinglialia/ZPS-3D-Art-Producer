@@ -91,6 +91,16 @@ def views_line(st, step) -> list[str]:
     return [NO_VIEWS, ""] if asset_card.views(st) == "none" else []
 
 
+def counts_line(st, step) -> list[str]:
+    """D30.6: the card counts the ingest compares with the part graph, for a counts_gate step."""
+    card = Path(st["concept_dir"]) / "asset-card.yaml" if st.get("concept_dir") else None
+    if not (step.get("counts_gate") and card and card.is_file()):
+        return []
+    import yaml
+    from check_counts import lines
+    return lines(yaml.safe_load(card.read_text(encoding="utf-8")) or {})
+
+
 def pid_line(st, step) -> list[str]:
     if "blender" not in step["uses"]:
         return []
@@ -112,6 +122,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "",
         *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra)),
         *views_line(st, step),
+        *counts_line(st, step),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",

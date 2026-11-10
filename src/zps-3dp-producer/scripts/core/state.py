@@ -42,8 +42,8 @@ PORT = 8765
 FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 GATES = {"review", "review_human", "checks_human"}
-# D31.3: hash, schema, export_check, and Meshy topology results never take an ACCEPTED_FAIL, whatever pipeline.toml says.
-HARD_GATES = ("inputs.json", "package.json", "schema.json", "qa_export_check.json", "meshy.json")
+# D31.3: hash, schema, export_check, Meshy topology and card counts (D30.6) never take an ACCEPTED_FAIL, whatever pipeline.toml says.
+HARD_GATES = ("inputs.json", "package.json", "schema.json", "qa_export_check.json", "meshy.json", "counts.json")
 
 STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", "evidence_running", "waiting_human",
           "blocked", "done", "done_enabled"}

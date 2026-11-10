@@ -5,7 +5,7 @@ import hashlib
 import re
 import shutil
 from argparse import Namespace
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from . import annotate, asset_card, findings, hashes, policy, purge, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
@@ -225,6 +225,9 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
     """D31.3: a failed gate or check JSON the worker did not validly accept goes straight back to the worker, no
     reviewer. The round counts toward max_fix_rounds."""
     from .briefs import failed_checks
+    if step.get("counts_gate") and st.get("concept_dir") and (card := Path(st["concept_dir"]) / "asset-card.yaml").is_file():
+        from check_counts import write
+        write(d / "final", card)
     if step["gate"] == "checks_human" or not (bad := failed_checks(d)):
         return False
     sid, r = step["id"], cfg["review"]
