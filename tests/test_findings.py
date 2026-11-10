@@ -344,3 +344,8 @@ def test_a_confirmed_note_carries_into_the_next_round_so_the_approved_fix_versio
                                extra="RESOLVED_CONFIRMED: views_rest v2 F3\n"), STEP, 2)
     assert (base["resolved_notes"], doc["resolved_notes"], errs) == (
         ["views_rest v2 F2"], ["views_rest v2 F2", "views_rest v2 F3"], [])
+
+
+def test_a_reviewer_cannot_waive_a_finding_in_prior_because_only_the_user_waives_d30_1():
+    _, errs = parse_review(report(verdict="PASS", top_fix=None, counts=counts(), prior=["- F1: waived"]))
+    assert errs == ["PRIOR F1: 'waived' phải là open|resolved|regressed|superseded"]

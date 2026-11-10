@@ -93,7 +93,7 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | done | xong | `archive` |
 
 Brief `texture` ở todo/fix có thể đổi state trước khi tạo version: thiếu key → blocked; mesh đổi → waiting_human với `ask`.
-`waive <id> F<n>` (D30.1) chạy ở mọi state và không tự đổi state, trừ khi finding đó là finding chặn cuối cùng: khi đó → review (reviewer `full` trên version đó). Mọi lần chuyển state in dòng JSON giao việc tiếp theo (D30.5).
+`waive <id> F<n>` (D30.1) chạy ở mọi state và không tự đổi state, trừ khi finding đó là finding chặn cuối cùng của bản `fix_base` (fix), bản đang đưa duyệt (waiting_human) hoặc bản xin bằng chứng (evidence): khi đó → review, `rereview` = version đó (reviewer `full` trên chính version đó, base là findings của chính nó, không có `COMPARE`). Ở reviewing: ghi `waive_pending`, áp dụng khi ingest report đó; FIX mà không còn finding chặn sau khi áp dụng → như PASS. Mọi lần chuyển state in dòng JSON giao việc tiếp theo (D30.5).
 FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. Vòng trả thẳng của D31.3 tính vào `max_fix_rounds`. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.
 
 ## Contract báo cáo

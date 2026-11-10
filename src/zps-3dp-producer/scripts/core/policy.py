@@ -22,6 +22,8 @@ def check(pol: dict) -> list[str]:
              if not isinstance(d, dict) or d.get("step") not in KEYS or not isinstance(d.get("ids"), list)]
     if pol.get("review_board", "local") not in BOARDS:
         errs.append(f"review_board: phải là {'|'.join(BOARDS)}")
+    if not isinstance(pol.get("test_mode", False), bool):
+        errs.append("test_mode: phải là true|false")
     return errs
 
 
@@ -60,11 +62,15 @@ def guard(step: str, who: str, confirm_spend: bool):
 
 
 def set_approval(a):
-    """`set review_board local|local+remote` too: Project Setup writes the whole policy through this one writer."""
+    """`set review_board local|local+remote` and `set test_mode true|false` too: Project Setup and the user write the
+    whole policy through this one writer."""
     pol = load()
     if a.step == "review_board":
         a.who in BOARDS or die(f"review_board phải là {'|'.join(BOARDS)}")
         pol["review_board"] = a.who
+    elif a.step == "test_mode":
+        a.who in ("true", "false") or die("test_mode phải là true|false")
+        pol["test_mode"] = a.who == "true"
     else:
         guard(a.step, a.who, a.confirm_spend)
         pol.setdefault("approvals", {})[a.step] = a.who

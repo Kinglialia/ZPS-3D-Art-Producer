@@ -32,13 +32,14 @@ MOVES = {
     ("blocked", "retry_fix"): "fix", ("todo", "stuck"): "blocked", ("fix", "stuck"): "blocked",
     ("todo", "ask_human"): "waiting_human", ("fix", "ask_human"): "waiting_human", ("running", "ask_human"): "waiting_human",
     ("waiting_human", "answer_fix"): "fix", ("waiting_human", "answer_todo"): "todo",
+    ("fix", "full_again"): "review", ("waiting_human", "full_again"): "review", ("evidence", "full_again"): "review",
     **{(s, "redo"): "fix" for s in REDO_FROM},
 }
 
 
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0,
-            "offer": None, "offer_key": None, "label": "", "note": ""}
+            "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -86,7 +87,14 @@ def reopened_of(st: dict) -> dict:
 
 
 def review_base(st: dict, n: int) -> int | None:
-    return n if st.get("evidence") else st.get("fix_base")
+    """An evidence round and a review of the same version again (D30.1) judge version n against its own findings."""
+    return n if st.get("evidence") or st.get("rereview") == n else st.get("fix_base")
+
+
+def current_v(st: dict, sid: str) -> int | None:
+    """The version a review judges: `rereview` when the same version is judged again without a worker, else the newest."""
+    rr = st.get("rereview")
+    return rr if rr and sid == st["stage"] and st["state"] in ("review", "reviewing") else st["versions"].get(sid)
 
 
 def next_action(st: dict) -> str:
@@ -100,7 +108,7 @@ def next_action(st: dict) -> str:
     if s == "review":
         return f"giao reviewer → `brief {aid}`"
     if s in ("running", "reviewing", "evidence_running"):
-        n = st.get("versions", {}).get(st["stage"])
+        n = current_v(st, st["stage"]) if st.get("versions") else None
         d = vdir(aid, st["stage"], n) if n else None
         rep = {"running": ("worker-out.md", "report-script.md"), "reviewing": ("review-out.md",)}.get(s, ())
         if s == "evidence_running" and st.get("evidence"):
@@ -250,6 +258,14 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     if extra := [x for x in rv["confirmed"] if x not in claimed]:
         die(f"{rel(rep)} sai contract: RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
     doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv, step, n))
+    st["rereview"] = None
+    if pend := (st.get("waive_pending") or {}).pop(sid, None):
+        findings.waive(aid, sid, st["versions"][sid], pend, doc)
+        tf = doc["top_fix"]
+        doc["top_fix"] = tf and ({**tf, "ids": ids} if (ids := [i for i in tf["ids"] if i not in pend]) else None)
+        if rv["verdict"] == "FIX" and not findings.blocking(doc):
+            rv = rv | {"verdict": "PASS", "top_fix": None}
+            doc["top_fix"] = None
     who = "human"
     if step["gate"] == "review":
         who = "reviewer"
@@ -323,7 +339,8 @@ def ingest(a):
     cfg = load_cfg()
     st = load_st(a.id)
     _, step = step_of(cfg, st["stage"])
-    sid, n = step["id"], st["versions"].get(step["id"])
+    sid = step["id"]
+    n = current_v(st, sid)
     h = HANDLERS.get(st["state"]) or die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
     role = "reviewer" if st["state"] == "reviewing" else "script" if step["script"] else "worker"
     rec = open_dispatch(st, sid, n, role)
@@ -358,6 +375,47 @@ def dispatch_next(cfg: dict, st: dict):
         run(Namespace(id=st["id"]))
     except ProducerError as ex:
         print(f"{st['id']}: chưa giao được: {ex}")
+
+
+WAIVE_BY = {"user": "người dùng", "producer": "Producer"}
+
+
+def waive(a):
+    """D30.1 `P waive <id> F<n> "lý do"`: in any state. The finding closes as `waived` now, or at the next ingest while a
+    reviewer judges a brief that still lists it. Waiving the last blocking finding of the version a fix round, an
+    offer or an evidence round stands on sends that version to a `full` review again, without a worker."""
+    from .board import build_outputs
+    cfg = load_cfg()
+    st = load_st(a.id)
+    sid = a.step or st["stage"]
+    _, step = step_of(cfg, sid)
+    if a.by == "producer" and policy.load().get("test_mode") is not True:
+        die(f"{a.id}: --by producer chỉ chạy khi production/policy.yaml có test_mode: true; dự án thật do người dùng waive")
+    why = " ".join(a.why.split()) or die("waive cần lý do")
+    top = st["versions"].get(sid, 0)
+    hit = [d["findings"][a.fid] for v in range(1, top + 1) if a.fid in findings.open_of(d := findings.load(a.id, sid, v))]
+    hit or die(f"{a.id}: {sid} không có {a.fid} đang mở")
+    rec = {"by": a.by, "why": why, "at": now()}
+    here = sid == st["stage"]
+    if here and st["state"] == "reviewing":
+        st.setdefault("waive_pending", {}).setdefault(sid, {})[a.fid] = rec
+        msg = "reviewer đang chấm, áp dụng ở lần ingest tới"
+    else:
+        findings.waive(a.id, sid, top, {a.fid: rec})
+        msg = "đã đóng"
+        target = {"fix": st.get("fix_base"), "waiting_human": st.get("offer"),
+                  "evidence": (st.get("evidence") or {}).get("version")}.get(st["state"])
+        doc = findings.load(a.id, sid, target) if here and target and step.get("reviewer") and not st.get("ask") else None
+        if doc and hit[-1]["priority"] in findings.BLOCKING and not findings.blocking(doc):
+            move(st, "full_again")
+            st |= {"rereview": target, "evidence": None, "offer": None, "label": "",
+                   "note": f"chấm lại v{target} sau waive {a.fid}"}
+            msg += f"; v{target} hết lỗi chặn → reviewer chấm lại v{target}, không gọi worker"
+    save_st(st)
+    ledger(f"{a.id} · {sid} {a.fid} · waive bởi {WAIVE_BY[a.by]} · {why}")
+    print(f"{a.id}: waive {sid} {a.fid} ({WAIVE_BY[a.by]}): {msg} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
+    dispatch_next(cfg, st)
+    build_outputs(cfg)
 
 
 def approve(cfg: dict, st: dict, step: dict, n: int, by: str):

@@ -121,6 +121,17 @@ def open_work(st: dict) -> list[str]:
     return [r for _, r in sorted(rows, key=lambda r: r[0])]
 
 
+def waived(st: dict, by: str, tag: str = "") -> list[str]:
+    """D30.1: findings waived in the approved version of every step, by the user or by the Producer (test_mode)."""
+    rows = []
+    for sid in STEPS:
+        n = st["approved"].get(sid)
+        for i, f in findings.waived_of(findings.load(st["id"], sid, n)).items():
+            if f["waived"]["by"] == by:
+                rows.append(f"- {sid} v{n} {i} [{f['priority']}] {f['region']}: {tag}{f['waived']['why']}")
+    return rows
+
+
 def meshy_spend(st: dict) -> tuple[int, float]:
     price = st.get("meshy_price") or 10
     used = sum(json.loads(p.read_text(encoding="utf-8"))["used_credits"]
@@ -135,7 +146,8 @@ def readme(st, mv, tv, mf, tf, res, qa, data) -> str:
                   if c.get("check") == "screen.small_tri_ratio"), None)
     exc = [*section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "NGOẠI LỆ"),
            *section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "TEXTURE NOTE"),
-           *section(vdir(st["id"], "blockout", st["approved"].get("blockout", 0)) / "final" / "blockout.md", "Blockout tự quyết")]
+           *section(vdir(st["id"], "blockout", st["approved"].get("blockout", 0)) / "final" / "blockout.md", "Blockout tự quyết"),
+           *waived(st, "user", "người dùng waive: ")]
     work = open_work(st)
     cam = json.loads((mf / "spec.json").read_text(encoding="utf-8")).get("camera") or {}
     return "\n".join([
@@ -145,7 +157,8 @@ def readme(st, mv, tv, mf, tf, res, qa, data) -> str:
         f"Meshy {calls} lần gọi, {credits:g} credit (file budget).",
         f"- `model/{st['id']}.glb`: 1 mesh, 1 node, 1 material, unlit, base color `texture/albedo_{res}.png`.",
         "- Trong engine: material unlit, chỉ base color.", "", "## Ngoại lệ", *(exc or ["- không có"]), "",
-        "## Việc còn mở", *(work or ["- không có"]), "", "## Chưa kiểm",
+        "## Việc còn mở", *(work or ["- không có"]), "",
+        *(["## Producer đã waive", *by_producer, ""] if (by_producer := waived(st, "producer")) else []), "## Chưa kiểm",
         "- Engine: ảnh render bằng Blender (Workbench), chưa mở trong engine.",
         f"- Camera game: {'chưa chốt (spec không có distance_m)' if not cam.get('distance_m') else 'đã chốt'}.",
         f"- Tam giác nhỏ ở camera game: {small if small is not None else 'not_checked'} (screen_tris_check, chỉ cảnh báo).",

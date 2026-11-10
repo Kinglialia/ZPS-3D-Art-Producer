@@ -116,3 +116,15 @@ def test_cli_approvals_and_delegate_print_one_line(tmp_path):
         "LỖI: model: reviewer cần --confirm-spend: bước sau gọi Meshy (tốn credit) trên mesh vừa khóa. "
         "Hỏi lại người dùng\n")
     assert run(tmp_path, "delegate", "blockout", "a", "b") == "OK: delegate blockout → reviewer: a, b\n"
+
+
+def test_the_user_turns_test_mode_on_through_the_single_policy_writer_and_only_true_or_false_is_kept_d30_1(prod, capsys):
+    setp("test_mode", "true", by="chạy thử wooden-chest")
+    assert (capsys.readouterr().out, policy.load()["test_mode"]) == ("OK: approvals test_mode=true\n", True)
+    with pytest.raises(ProducerError) as e:
+        setp("test_mode", "yes")
+    assert str(e.value) == "test_mode phải là true|false"
+    (prod / "policy.yaml").write_text("test_mode: 'yes'\n", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        policy.load()
+    assert str(e.value) == "production/policy.yaml: test_mode: phải là true|false"

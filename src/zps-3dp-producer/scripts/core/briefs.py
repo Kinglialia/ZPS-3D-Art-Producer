@@ -9,7 +9,7 @@ from pathlib import Path
 from . import findings, hashes, preflight, texture
 from .contract import FALLBACK, NONE, parse_worker
 from .hashes import ad_text
-from .loop import log_wait, move, next_action, open_dispatch, review_base, set_aside
+from .loop import current_v, log_wait, move, next_action, open_dispatch, review_base, set_aside
 from .state import (ASSETS, DELIVER, EDITION, ROOT, SKILL_DIR, agent_file, agent_name, die, ledger, load_cfg, load_st,
                     model_of, outputs_of, rel, save_st, stamp, step_of, vdir)
 
@@ -132,6 +132,8 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         bad = failed_checks(pd)
         doc = findings.load(aid, step["id"], m) or {}
         tf = doc.get("top_fix")
+        if tf and not (tf := {**tf, "ids": [i for i in tf["ids"] if i not in findings.waived_of(doc)]})["ids"]:
+            tf = None
         part = findings.REOPENED_PART.get(tf["kind"]) if tf else None
         outside = (f"{part[0].upper() + part[1:]} đã duyệt ở `{findings.REOPEN[tf['kind']]}`, sửa ngoài bước này: "
                    f"không sửa {part} ở đây." if part else "")
@@ -201,7 +203,8 @@ def review_brief(cfg, st, step, n) -> str:
     base = findings.load(aid, sid, m)
     op = findings.open_of(base)
     tf = (base or {}).get("top_fix")
-    cmp_ids = findings.compare_ids(base)
+    cmp_ids = [] if m == n else findings.compare_ids(base)
+    waived = findings.waived_of(base)
     pick = bool(tf and tf["kind"] == "param")
     nxt = (base or {}).get("next_id", 1)
     tie = sorted((k for k in step["top_fix"] if k in findings.TIE_RANK), key=lambda k: -findings.TIE_RANK[k])
@@ -229,9 +232,13 @@ def review_brief(cfg, st, step, n) -> str:
            + ", ".join(f"`{rel(findings.path(aid, s, int(v[1:])))}`" for s, v in dict.fromkeys(
                tuple(x.split()[:2]) for x in claimed)) + "."] if claimed else []),
         *([f"- Chấm lại v{n} với ảnh thêm `{rel(d / 'review' / ('evidence-%d' % st['evidence']['k']))}/`; "
-           f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n else
+           f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n and st.get("evidence") else
+          [f"- Chấm lại toàn bộ v{n}, không có bản mới; finding đủ trường `{rel(findings.path(aid, sid, n))}`."]
+          if m == n else
           [f"- Bản gốc v{m}: ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`; finding đủ trường "
            f"`{rel(findings.path(aid, sid, m))}`."] if base else []),
+        *([f"- Đã waive (người dùng chấp nhận là ngoại lệ): {', '.join(waived)}. Không mở lại, không ghi PRIOR, "
+           "không ghi lại thành finding mới."] if waived else []),
         *([f"- Phương án param: `{rel(d / 'variants')}/<a|b|c>/`; a là `final/`. Nhãn ảnh trong EVIDENCE_OPENED: "
            f"`v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."] if pick else []),
         "",
@@ -389,7 +396,7 @@ def run(a):
         out = {"role": "worker", "agent": agent_name(step["agent"]), "model": step.get("model"), "resume": st.get("worker_agent_id"),
                "brief": rel(bp), "report": rel(ed / "worker-out.md")}
     elif s in ("review", "reviewing"):
-        n = st["versions"][sid]
+        n = current_v(st, sid)
         d = vdir(a.id, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")

@@ -635,3 +635,98 @@ def test_no_brief_tells_a_subagent_to_write_a_file_that_claude_code_refuses_by_n
     assert outs[-1]["report"].endswith("/review/evidence-1/worker-out.md")
     assert [o["report"] for o in outs if SUBAGENT_WRITE_BLOCKED.match(Path(o["report"]).name)] == []
     assert [o["report"] for o in outs if f"`{o['report']}`" not in flow.text(o)] == []
+
+
+def waive(f, fid, why="anh chấp nhận", by="user", step=None):
+    return f.call(loop.waive, Namespace(id=AID, fid=fid, why=why, by=by, step=step))
+
+
+def held_fix(f, monkeypatch, n=1, kind="structure"):
+    """FIX on v1 with the dispatch held, so the asset waits in `fix` as before the Producer sends the worker."""
+    with monkeypatch.context() as m:
+        m.setattr(loop, "dispatch_next", lambda cfg, st: None)
+        fix_v1(f, n, kind)
+    assert f.st["state"] == "fix"
+
+
+def test_waiving_the_only_major_during_fix_sends_the_same_version_to_a_reviewer_and_no_worker_d30_1(flow, monkeypatch):
+    """Run 5: F2 of the model cost 4 versions because the user could not accept it as an exception while in FIX."""
+    held_fix(flow, monkeypatch)
+    head, line = waive(flow, "F1", "mái thấp là chủ ý").splitlines()
+    assert head == ("house-a: waive blockout F1 (người dùng): đã đóng; v1 hết lỗi chặn → reviewer chấm lại v1, không gọi "
+                    "worker → blockout/review. Tiếp: giao reviewer → `brief house-a`")
+    assert json.loads(line) | {"model": None} == {
+        "role": "reviewer", "agent": "zps-3dp-check-blockout", "model": None, "resume": None,
+        "brief": f"production/assets/{AID}/blockout/v1/brief-review.md",
+        "report": f"production/assets/{AID}/blockout/v1/review-out.md"}
+    assert (flow.st["state"], flow.st["versions"], flow.st["fix_round"]) == ("reviewing", {"blockout": 1}, 1)
+    f1 = findings.load(AID, "blockout", 1)["findings"]["F1"]
+    assert (f1["status"], f1["waived"]["by"], f1["waived"]["why"]) == ("waived", "user", "mái thấp là chủ ý")
+    assert "house-a · blockout F1 · waive bởi người dùng · mái thấp là chủ ý" in flow.ledger()
+    rb = flow.text(json.loads(line))
+    assert (f"- Chấm lại toàn bộ v1, không có bản mới; finding đủ trường `production/assets/{AID}/blockout/v1/findings.json`."
+            in rb.splitlines(), "COMPARE:" in rb, "PRIOR:" in rb) == (True, False, False)
+    assert ("- Đã waive (người dùng chấp nhận là ngoại lệ): F1. Không mở lại, không ghi PRIOR, không ghi lại thành finding "
+            "mới.") in rb.splitlines()
+    out = flow.review(out=json.loads(line), verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
+    assert out == "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v1 (review page)\n"
+    assert findings.load(AID, "blockout", 1)["findings"]["F1"]["status"] == "waived"
+
+
+def test_waive_by_producer_is_refused_outside_test_mode_and_changes_nothing_d30_1(flow, monkeypatch):
+    """A real project never lets the Producer accept a finding for the user; only test runs may."""
+    held_fix(flow, monkeypatch)
+    before, ledger = flow.st, flow.ledger()
+    with pytest.raises(ProducerError) as e:
+        waive(flow, "F1", "thử", by="producer")
+    assert str(e.value) == (f"{AID}: --by producer chỉ chạy khi production/policy.yaml có test_mode: true; dự án thật do "
+                            "người dùng waive")
+    assert (flow.st, flow.ledger(), findings.load(AID, "blockout", 1)["findings"]["F1"]["status"]) == (
+        before, ledger, "open")
+    policy.set_approval(Namespace(step="test_mode", who="true", by="chạy thử", confirm_spend=False))
+    waive(flow, "F1", "chạy thử", by="producer")
+    assert findings.load(AID, "blockout", 1)["findings"]["F1"]["waived"]["by"] == "producer"
+    assert "house-a · blockout F1 · waive bởi Producer · chạy thử" in flow.ledger()
+
+
+def test_waiving_one_of_two_keeps_the_fix_round_and_the_next_briefs_skip_the_waived_finding_d30_1(flow, monkeypatch):
+    held_fix(flow, monkeypatch, 2, "param")
+    head, line = waive(flow, "F2").splitlines()
+    assert head == "house-a: waive blockout F2 (người dùng): đã đóng → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    wb = flow.text(json.loads(line))
+    assert "`TOP_FIX: param: F1`" in wb and "F2" not in wb
+    rb = flow.text(json.loads(flow.work(out=json.loads(line)).splitlines()[-1]))
+    assert ("COMPARE: F1=?" in rb.splitlines(), "- F2: ?" in rb, "F2" in rb.split("## Báo cáo")[1]) == (True, False, False)
+
+
+def test_a_waive_while_the_reviewer_judges_applies_at_its_ingest_and_the_last_major_gone_passes_d30_1(flow):
+    fix_v1(flow, 1)
+    flow.work()
+    out = flow.brief()
+    assert waive(flow, "F1").startswith(
+        "house-a: waive blockout F1 (người dùng): reviewer đang chấm, áp dụng ở lần ingest tới → blockout/reviewing.")
+    assert findings.load(AID, "blockout", 1)["findings"]["F1"]["status"] == "open"
+    assert flow.review(out=out, counts=counts(major=1), top_fix="structure: F1", compare="F1=same",
+                       prior=["- F1: open"]) == (
+        "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
+    assert [findings.load(AID, "blockout", v)["findings"]["F1"]["status"] for v in (1, 2)] == ["waived", "waived"]
+    assert "waive_pending" not in flow.st or flow.st["waive_pending"] == {}
+
+
+def test_waive_of_an_id_that_is_not_open_is_refused(flow, monkeypatch):
+    held_fix(flow, monkeypatch)
+    with pytest.raises(ProducerError) as e:
+        waive(flow, "F9")
+    assert str(e.value) == f"{AID}: blockout không có F9 đang mở"
+
+
+def test_the_duyet_2_readme_lists_producer_waives_apart_and_user_waives_as_exceptions_d30_1(flow, monkeypatch):
+    import assemble
+    held_fix(flow, monkeypatch, 2, "param")
+    waive(flow, "F1", "mái thấp là chủ ý")
+    policy.set_approval(Namespace(step="test_mode", who="true", by="chạy thử", confirm_spend=False))
+    waive(flow, "F2", "chạy thử 0.1 m", by="producer")
+    st = flow.st | {"approved": {"blockout": 1}}
+    assert (assemble.waived(st, "user", "người dùng waive: "), assemble.waived(st, "producer")) == (
+        ["- blockout v1 F1 [major] mái: người dùng waive: mái thấp là chủ ý"],
+        ["- blockout v1 F2 [major] mái: chạy thử 0.1 m"])

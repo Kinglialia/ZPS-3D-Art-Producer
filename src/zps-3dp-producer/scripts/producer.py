@@ -4,7 +4,7 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · meshy · approvals
+Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · waive · meshy · approvals
              delegate · rule · ledger · stats · dashboard · serve · show · board · validate · cleanup · archive · texture-stats
              ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
@@ -71,6 +71,11 @@ def cmd_ingest(a):
 def cmd_retry(a):
     from core.loop import retry
     retry(a)
+
+
+def cmd_waive(a):
+    from core.loop import waive
+    waive(a)
 
 
 def cmd_feedback(a):
@@ -198,7 +203,12 @@ def main(argv: list[str] | None = None):
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
     x.add_argument("--regions", help="JSON vùng khoanh [{n, image, shape, coords, note}] trên ảnh của thẻ đang chờ")
     x.add_argument("--offer", help="khóa lần đưa duyệt mà người dùng đã thấy; khóa cũ thì bỏ qua")
-    x = sub.add_parser("approvals", help="đổi người duyệt một bước (hoặc review_board local|local+remote) trong policy.yaml")
+    x = sub.add_parser("waive", help="chấp nhận một finding là ngoại lệ (D30.1): ở mọi state, finding thành waived")
+    x.add_argument("id"); x.add_argument("fid", help="id finding, vd F2"); x.add_argument("why", help="lý do")
+    x.add_argument("--by", default="user", choices=["user", "producer"],
+                   help="producer: chỉ khi policy.yaml có test_mode: true")
+    x.add_argument("--step", help="bước của finding (mặc định: bước hiện tại)")
+    x = sub.add_parser("approvals", help="đổi người duyệt một bước (hoặc review_board local|local+remote, test_mode true|false) trong policy.yaml")
     x.add_argument("op", choices=["set"]); x.add_argument("step"); x.add_argument("who")
     x.add_argument("--by", required=True, help="nguyên văn lời người dùng"); x.add_argument("--confirm-spend", action="store_true")
     x = sub.add_parser("delegate", help="ủy quyền reviewer duyệt bước này cho các asset")

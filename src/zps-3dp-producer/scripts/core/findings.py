@@ -8,7 +8,9 @@ from .contract import PRIORITIES
 from .state import vdir, write_atomic
 
 OPEN = {"open", "regressed"}
+WAIVED = "waived"
 BM = ("blocker", "major")
+BLOCKING = BM + ("unclear",)
 SINGLE = {"structure", "regen_front"}
 NOTE = {"note", "note_exception", "note_texture"}
 TIE_RANK = {"structure": 2, "fix_uv_mesh": 2, "regen_front": 2, "meshy_regen": 1}
@@ -96,6 +98,38 @@ def open_of(doc: dict | None) -> dict:
     return {i: f for i, f in (doc or {}).get("findings", {}).items() if f["status"] in OPEN}
 
 
+def blocking(doc: dict | None) -> list[str]:
+    """Open findings that stop a PASS: blocker, major, unclear (§6.1)."""
+    return [i for i, f in open_of(doc).items() if f["priority"] in BLOCKING]
+
+
+def waived_of(doc: dict | None) -> dict:
+    return {i: f for i, f in (doc or {}).get("findings", {}).items() if f["status"] == WAIVED}
+
+
+def waive(aid: str, step: str, upto: int, recs: dict, doc: dict | None = None) -> list[int]:
+    """D30.1: the finding closes as `waived` in every saved version of the step where it is open, and in `doc` (a
+    review not saved yet), so no later brief, PRIOR or best-version count sees it again. Returns the saved versions."""
+    out = []
+    for v in range(1, upto + 1):
+        d = load(aid, step, v)
+        if d and mark_waived(d, recs):
+            save(aid, step, d)
+            out.append(v)
+    if doc is not None:
+        mark_waived(doc, recs)
+    return out
+
+
+def mark_waived(doc: dict, recs: dict) -> bool:
+    hit = False
+    for i, rec in recs.items():
+        if (f := doc["findings"].get(i)) and f["status"] in OPEN:
+            f |= {"status": WAIVED, "waived": rec}
+            hit = True
+    return hit
+
+
 def open_counts(doc: dict) -> dict:
     o = open_of(doc).values()
     return {p: sum(f["priority"] == p for f in o) for p in PRIORITIES}
@@ -113,7 +147,7 @@ def compare_ids(base: dict | None) -> list[str]:
     tf = (base or {}).get("top_fix")
     if tf and tf["kind"] == "need_evidence":
         return []
-    ids = list(tf["ids"]) if tf else []
+    ids = [i for i in tf["ids"] if base["findings"].get(i, {}).get("status") != WAIVED] if tf else []
     return ids + [i for i in open_of(base) if i.startswith("H") and i not in ids]
 
 
@@ -130,7 +164,7 @@ def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[s
         if i in prior:
             fs[i] |= {"status": prior[i], "last_v": n}
     tf = (base or {}).get("top_fix")
-    need = compare_ids(base)
+    need = [] if base and base["version"] == n else compare_ids(base)
     if miss := [i for i in need if i not in rv["compare"]]:
         errs.append("COMPARE thiếu " + ", ".join(miss))
     for i, c in rv["compare"].items():
