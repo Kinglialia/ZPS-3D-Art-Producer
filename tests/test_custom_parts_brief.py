@@ -1,4 +1,4 @@
-"""D33: the worker of a step that builds a part graph writes the asset's own `custom` functions outside its version
+"""D32: the worker of a step that builds a part graph writes the asset's own `custom` functions outside its version
 folder, so the brief must name that one file; agents write only the paths their brief names."""
 from test_loop import AID, flow  # noqa: F401  (flow is the blockout-only fixture)
 

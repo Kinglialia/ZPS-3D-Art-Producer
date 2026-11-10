@@ -1,5 +1,5 @@
 """Run the kit's self_build assembly.py or param_fit.py with `custom` parts taken only from custom_lib.py and from the
-asset's custom_parts.py (D33).
+asset's custom_parts.py (D32).
 
 Usage:
   PY T/build_parts.py assembly --work <w> [assembly.py options]

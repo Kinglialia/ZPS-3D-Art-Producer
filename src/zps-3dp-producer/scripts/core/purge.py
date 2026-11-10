@@ -58,7 +58,7 @@ def big(p: Path) -> bool:
 def plan(cfg: dict, st: dict) -> dict:
     """D29.6: keep text records and step text sources outside `work/`, and the images the board links (shrunk when
     larger than THUMB_PX). Everything else under assets/<id>/ is deleted. `feedback/` keeps its marked images:
-    feedback.md links them. D33: the asset's code goes too: custom_parts.py and every parts_lib.py, the copy
+    feedback.md links them. D32: the asset's code goes too: custom_parts.py and every parts_lib.py, the copy
     build_parts.py writes beside each graph (it holds custom_parts.py)."""
     a = ASSETS / st["id"]
     shown = linked(cfg, st)

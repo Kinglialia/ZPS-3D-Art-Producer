@@ -7,7 +7,7 @@ Usage: python3 T/texture_complexity.py --final F --blockout B --concept C [--vie
                     (alpha when the image has one, else pixels away from the border colour by > BG_DIST)
   3 detail density  mean gradient of the object pixels, 0..1 (shown only, never decides)
   4 motif           card real_texture_only_notes and the TEXTURE NOTE section of VR/README.md name a motif, text, sign (whole words);
-                    no --views-rest (card `views: none`, D32): the lines of C/<id>.material.md instead of that section
+                    no --views-rest (card `views: none`, D35): the lines of C/<id>.material.md instead of that section
   5 tier            card tier
 Simple when materials <= texture_simple.max_materials, clusters <= texture_simple.max_color_clusters, no motif, tier not
 hero. `simple` is information only (D30.11): the proposed mode is --mode, the mode the Producer script chose from the

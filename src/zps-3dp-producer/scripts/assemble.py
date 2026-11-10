@@ -134,7 +134,7 @@ def waived(st: dict, by: str, tag: str = "") -> list[str]:
 
 
 def card_notes(st: dict) -> list[str]:
-    """Card `views: none` (D32): no views_rest README, so the texture_only notes of the card stand for its TEXTURE NOTE."""
+    """Card `views: none` (D35): no views_rest README, so the texture_only notes of the card stand for its TEXTURE NOTE."""
     from core import asset_card
     if asset_card.views(st) != "none":
         return []

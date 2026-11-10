@@ -282,7 +282,7 @@ def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_option
 
 def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written_code(codex_project, dist):
     """graph.py loads `<work>/parts_lib.py`, which the agent writes, and build_parts.py runs the asset's custom_parts.py,
-    which the agent writes too (D33); outside the sandbox that code would run unchecked. These commands still run, but
+    which the agent writes too (D32); outside the sandbox that code would run unchecked. These commands still run, but
     only after the user approves each one."""
     r = rules(codex_project, dist)
     assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout

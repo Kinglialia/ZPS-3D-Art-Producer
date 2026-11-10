@@ -13,7 +13,7 @@
 # acceptable: tên JSON trong final/review/{gates,checks}/ mà worker được khai ACCEPTED_FAIL khi fail (D31.3); JSON fail
 #   khác trả thẳng về worker, không gọi reviewer. Gate cứng không bao giờ được: inputs, package, schema, qa_export_check, meshy,
 #   counts.
-# views_set: bước làm bộ view (D32). Thẻ `views: none` bỏ bước này; `final/<mặt>.png` và regions ngoài `views` của thẻ
+# views_set: bước làm bộ view (D35). Thẻ `views: none` bỏ bước này; `final/<mặt>.png` và regions ngoài `views` của thẻ
 #   không bắt buộc (back: back; full: back, left, right; full_top: thêm top; không ghi = full).
 # counts_gate: `P ingest` so `counts` của thẻ với `final/part_graph.json` (scripts/check_counts.py, D30.6): mỗi khóa cần
 #   một param cùng tên trong `fixed_params`, cùng giá trị. Ghi final/review/checks/counts.json trước khi đọc JSON fail;

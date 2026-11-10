@@ -3,7 +3,7 @@
 Usage: python3 tools/check_inputs.py --final F --blockout B [--views-front FF --views-rest VR] --concept C
 Existence only: the Producer script checks input hashes (D22.12).
   inputs.blockout     B/part_graph.json, parts_lib.py, sources.json, blockout.md, assembly.json
-  inputs.views        FF/front.png and the side views of the card's `views` in VR (D32: full = back, left, right).
+  inputs.views        FF/front.png and the side views of the card's `views` in VR (D35: full = back, left, right).
                       `views: none`: no view set; FF and VR are not read
   inputs.concept      C/concept_albedo.png, concept_shadow.png, asset-card.yaml
 Writes F/review/checks/inputs.json. Exit 0 pass, 1 fail, 2 error.

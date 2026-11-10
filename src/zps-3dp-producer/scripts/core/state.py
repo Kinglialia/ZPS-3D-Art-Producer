@@ -181,7 +181,7 @@ def texture_res(st: dict) -> int:
 
 
 def outputs_of(step: dict, st: dict) -> list[str]:
-    """`{id}` = asset id, `{res}` = texture_res. A side view outside the card's `views` is not an output (D32)."""
+    """`{id}` = asset id, `{res}` = texture_res. A side view outside the card's `views` is not an output (D35)."""
     from .asset_card import keep_output
     res = texture_res(st) if any("{res}" in o for o in step["outputs"]) else None
     return [o.format(id=st["id"], res=res) for o in step["outputs"] if keep_output(step, st, o)]

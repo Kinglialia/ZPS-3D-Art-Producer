@@ -1,4 +1,4 @@
-"""The project's own `custom` part functions (D33): <PRODUCER_ROOT>/assets/<id>/custom_parts.py, written by the step
+"""The project's own `custom` part functions (D32): <PRODUCER_ROOT>/assets/<id>/custom_parts.py, written by the step
 agent for one asset and deleted by the D29 purge. Plain Python: this module reads the file with `ast` and never runs it.
 
 static_errors() is the check build_parts.py runs before it executes the file: imports only from ALLOWED_IMPORTS, no
@@ -8,7 +8,7 @@ import ast
 import os
 
 FILE = "custom_parts.py"
-MARK = "# ---- custom_parts.py of this asset (D33): written for this asset only ----"
+MARK = "# ---- custom_parts.py of this asset (D32): written for this asset only ----"
 ALLOWED_IMPORTS = {"math", "bmesh", "mathutils"}
 BANNED_NAMES = {"open", "exec", "eval", "compile", "__import__", "globals", "locals", "vars", "getattr", "setattr",
                 "delattr", "breakpoint", "input", "os", "sys", "subprocess", "shutil", "pathlib", "importlib",

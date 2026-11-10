@@ -41,7 +41,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 - Viết lệnh Blender bằng đường dẫn tuyệt đối: `<BLENDER> -b --python <script đã cài>.py -- …` hoặc `<BLENDER> -b --python-exit-code 1 --python <script đã cài>.py -- …`. Dòng `TOOLS:` và `BLENDER:` của brief đã tuyệt đối. Biến shell hoặc đường dẫn tương đối không khớp rule.
 - `P preflight` và lệnh `command` của bước `assemble` chạy ngoài sandbox qua rule. Các lệnh khác chạy trong sandbox.
 - `meshy_call.py` và `gen_image_codex.py` cần mạng. Xin người dùng duyệt từng lần chạy. Rule không bao giờ cho phép hai script này.
-- `self_build/assembly.py`, `param_fit.py`, `apply_edit.py` chạy `parts_lib.py` do agent viết. `build_parts.py` chạy `custom_parts.py` do agent viết (D33). Rule không cho phép bốn script này. Lệnh Blender của chúng (part `custom`) chạy ngoài sandbox thì xin người dùng duyệt từng lần.
+- `self_build/assembly.py`, `param_fit.py`, `apply_edit.py` chạy `parts_lib.py` do agent viết. `build_parts.py` chạy `custom_parts.py` do agent viết (D32). Rule không cho phép bốn script này. Lệnh Blender của chúng (part `custom`) chạy ngoài sandbox thì xin người dùng duyệt từng lần.
 
 ## Phiên mới
 

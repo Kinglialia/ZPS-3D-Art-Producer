@@ -1,7 +1,7 @@
 """The files the texture brief names exist (D22.12: the script checks hashes, this tool only existence).
 
 Usage: python3 T/check_inputs.py --final F --blockout B [--views-front VF --views-rest VR] --model M --concept C
-Card `views: none` (D32): no view set, so VF/concept_colors.json and VR/README.md are not wanted; C/<id>.material.md is.
+Card `views: none` (D35): no view set, so VF/concept_colors.json and VR/README.md are not wanted; C/<id>.material.md is.
 Writes F/review/checks/inputs.json. Prints one line. Exit 0, 1 when a file is missing.
 """
 import argparse

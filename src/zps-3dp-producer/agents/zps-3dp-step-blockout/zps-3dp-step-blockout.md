@@ -26,7 +26,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa>
 - Mask concept: `PY T/concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}, "config": {"paths": {"blender": "<BLENDER>"}}}` (view `front|back|left|right|top`; view `34` cần `PY T/fit_view.py --work F --spec V/work/spec.json --side <left|right> --write-spec`, `--side` là phía ảnh concept có mặt hông) để có `overlay_*`.
 - Đọc JSON của tool khi fail; đừng đọc log Blender.
 
-Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `R/part-graph.md`. Cách nhận việc, bằng chứng ảnh, preflight: `R/craft.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/custom_lib.py` (đọc docstring để biết tham số), hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief (D33).
+Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `R/part-graph.md`. Cách nhận việc, bằng chứng ảnh, preflight: `R/craft.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/custom_lib.py` (đọc docstring để biết tham số), hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief (D32).
 
 ## Quy trình
 
@@ -64,7 +64,7 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 - Nhân vật, sinh vật, hoặc dáng quá phức tạp so với primitive: `STATUS: BLOCKED`, nêu lý do.
 - `check_schema` báo `schema.mirror`: viết các part đó tường minh, không dùng `mirror_of` (gate của kit lỗi khi part gốc dùng `inset_into`, `through_axis` hoặc part cha lệch khỏi mặt phẳng gương).
 - Mái dốc dùng `wedge` hoặc `custom`. Marker nhô ít nhất 2 cm. Props là part rời. Chép nguyên ghi chú real/texture_only của thẻ vào `blockout.md`.
-- Dáng cần hàm mới: dùng `box`, `wedge`, `cylinder` và hàm chung trước. Không đủ thì viết hàm vào file `CUSTOM_PARTS:` của brief (D33). File này là file duy nhất ngoài `V` được ghi.
+- Dáng cần hàm mới: dùng `box`, `wedge`, `cylinder` và hàm chung trước. Không đủ thì viết hàm vào file `CUSTOM_PARTS:` của brief (D32). File này là file duy nhất ngoài `V` được ghi.
   - Mỗi hàm trả `bmesh` kín, tâm tại bbox; 3 tham số đầu là w, d, h. Chỉ import `math`, `bmesh`, `mathutils`. `build_parts.py` từ chối file có `open`, `exec`, `eval`, `os`, `subprocess`, `sys`, module mạng hoặc tên `__…__`.
   - Không đặt tên trùng hàm của `T/custom_lib.py`. Không sửa `T/custom_lib.py`.
   - Chỉ thêm hàm. Không sửa, không xóa hàm mà một version đã dùng: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó. Cần dáng khác: thêm hàm tên mới.

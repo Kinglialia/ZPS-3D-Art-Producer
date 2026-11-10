@@ -16,7 +16,7 @@ from flowkit import A, AID, counts, to_texture
 from shared import P
 
 # The fake flow writes text into every output; these are the files a purge must delete: the GLB and .blend files of
-# every final/, all of work/ (the Meshy download), and the asset's code (D33: custom_parts.py and each parts_lib.py
+# every final/, all of work/ (the Meshy download), and the asset's code (D32: custom_parts.py and each parts_lib.py
 # that holds a copy of it). Text records, step text sources and board images stay.
 DELETED = [
     "assemble/v1/final/model/pilot-house.blend", "assemble/v1/final/model/pilot-house.glb",

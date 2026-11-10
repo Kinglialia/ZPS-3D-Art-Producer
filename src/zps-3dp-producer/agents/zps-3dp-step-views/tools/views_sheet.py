@@ -2,7 +2,7 @@
 
   python3 tools/views_sheet.py make --final <V/final> --concept <concept_albedo.png> --front <front.png>
           --card <asset-card.yaml> [--kept back,left] [--crop <view>:x0,y0,x1,y1 ...]
-      Row 1: concept, front, then the side views of the card's `views` (D32; full: back, left, right); --kept views (copied from the prior approved set) are labelled
+      Row 1: concept, front, then the side views of the card's `views` (D35; full: back, left, right); --kept views (copied from the prior approved set) are labelled
       "(giữ)". Row 2: report/overlay_<view>.png with score, IoU, dE from
       report/report.json. Row 3: the crops, in pixels of the view image. Writes <final>/report/VIEWS_sheet.png and
       VIEWS_sheet.json (sha256 of the view files, which check_package.py compares).
@@ -27,7 +27,7 @@ from root_guard import require_root  # noqa: E402
 
 
 def card_set(card):
-    """front + the side views of the card's `views` (check_card.VIEW_SETS, D32)."""
+    """front + the side views of the card's `views` (check_card.VIEW_SETS, D35)."""
     import yaml
     from check_card import VIEW_SETS, views_of
     with open(card, encoding="utf-8") as f:

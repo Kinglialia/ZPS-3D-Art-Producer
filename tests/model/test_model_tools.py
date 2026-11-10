@@ -197,8 +197,8 @@ def test_check_inputs_names_each_missing_file_the_brief_promised(tmp_path):
     ("asset: x\n", True, (0, ("pass", []))),
     ("views: none\n", False, (0, ("pass", []))),
 ])
-def test_check_inputs_wants_the_view_files_of_the_card_and_none_when_views_is_none_d32(tmp_path, card, views, out):
-    """D32: the default set has no top, and `views: none` has no view set, so the model brief names no view folder."""
+def test_check_inputs_wants_the_view_files_of_the_card_and_none_when_views_is_none_d35(tmp_path, card, views, out):
+    """D35: the default set has no top, and `views: none` has no view set, so the model brief names no view folder."""
     assert inputs_of(tmp_path, card, views) == out
 
 

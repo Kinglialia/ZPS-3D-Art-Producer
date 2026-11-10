@@ -1,4 +1,4 @@
-"""D33: the skill repo holds only what every kind of object shares. A function, fixture or data file of one asset
+"""D34, D32.6: the skill repo holds only what every kind of object shares. A function, fixture or data file of one asset
 would ship with the skill and steer the agent toward that asset, so nothing tracked under src/ or tests/ names one,
 and every binary fixture is one a script in the repo makes from synthetic data."""
 import subprocess

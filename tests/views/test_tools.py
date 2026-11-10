@@ -179,9 +179,9 @@ def test_views_sheet_puts_concept_and_5_views_over_their_overlays_and_records_wh
     ("full", ["back", "front", "left", "right"], 12 + 5 * 332),
     (None, ["back", "front", "left", "right"], 12 + 5 * 332),
 ])
-def test_views_sheet_and_check_package_take_only_the_views_of_the_card_so_full_ships_no_top_d32(tmp_path, mode,
+def test_views_sheet_and_check_package_take_only_the_views_of_the_card_so_full_ships_no_top_d35(tmp_path, mode,
                                                                                                   shipped, width):
-    """D32: no step after views needs top; `back` keeps front because front is the colour reference."""
+    """D35: no step after views needs top; `back` keeps front because front is the colour reference."""
     f, front, card, concept = view_set(tmp_path)
     for v in {"back", "left", "right", "top"} - set(shipped):
         (f / f"{v}.png").unlink()
@@ -195,7 +195,7 @@ def test_views_sheet_and_check_package_take_only_the_views_of_the_card_so_full_s
                                            "package.readme": ("pass", []), "package.flip": ("pass", [])})
 
 
-def test_check_package_fails_a_full_top_set_without_top_png_d32(tmp_path):
+def test_check_package_fails_a_full_top_set_without_top_png_d35(tmp_path):
     f, front, card, concept = view_set(tmp_path)
     (f / "top.png").unlink()
     assert package(f, front, card)[1]["package.views"] == ("fail", ["top"])

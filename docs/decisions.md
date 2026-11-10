@@ -2,6 +2,22 @@
 
 Mỗi dòng là một quyết định của anh. Ghi ngày và lý do ngắn. Phân tích nền: `docs/review-kit-v0.10.4-vs-process.md`.
 
+## Đối chiếu số hiệu (v0.7.1, 2026-11-11)
+
+v0.7.1 đánh số lại theo `NEXT-VERSION-BACKLOG.md`. Commit trước v0.7.1 dùng số cũ.
+
+| Số cũ | Nội dung | Số mới |
+|---|---|---|
+| D32 | Trường `views` trong thẻ asset | D35 (nội dung giữ nguyên) |
+| D33.1 | Repo chỉ giữ phần chung; test dùng dữ liệu tổng hợp | D34 (nguyên tắc), D32.6 |
+| D33.2 | Hàm vào thư viện chung chỉ khi có tham số và dùng được cho nhiều loại vật | D32.4 |
+| D33.3 | Hàm riêng của asset trong `custom_parts.py` | D32.2, D32.3 (đổi: Python thuần, chạy ngoài Blender; giữ file sau DUYỆT 2) |
+| D33.4 | Rule Codex không cho `build_parts.py` | D32.2 (đảo lại: allow-list Codex như trước `3a4f64b`) |
+| D33.5 | Khóa `counts` = tên param trong `fixed_params` | D32.5, D34.3 (thêm: số part có `tag`; khóa thuộc profile) |
+| D33.6 | File đi theo dist chỉ dùng ví dụ chung | D34.4 |
+| — | Chống thời gian chết giữa Producer và agent (backlog 4g) | D33 (mới) |
+| — | Skill chạy cho mọi object (backlog 4i) | D34 (mới) |
+
 ## D1 — 4 reviewer riêng (2026-11-08)
 
 - Người làm và người kiểm là hai sub-agent khác nhau.
@@ -326,17 +342,16 @@ Nguồn: `RUN4-REPORT.md`; câu hỏi của anh về việc ai gọi reviewer; g
 7. **`assemble.py` chỉ chạy từ gốc project.** Thư mục đang đứng không có `production/assets/<id>/status.json` thì script thoát mã 2 và không ghi gì. Code: `9711540`. **[Mở rộng theo D30.12: mọi tool ghi file]**
 8. **"Việc còn mở" của README** chỉ lấy finding còn mở của version được duyệt. Worker bước sau ghi `RESOLVED_NOTES: <mục>` khi đã làm một ghi chú của bước trước. Reviewer của bước đó xác nhận các mục này trong report. README chỉ bỏ mục đã được reviewer xác nhận. Code hiện tại (`1620c40`) mới làm một trường hợp: bỏ finding `note_texture` khi review texture đã duyệt có `texture_note=pass`.
 9. **Đo bóng bỏ mặt khe rãnh.** `light.shaded_share` bỏ các mặt nằm trong khe rãnh và hốc lõm. `tex_measure.py` nhận ra các mặt này bằng phép thử che tia. Không lọc nét mực theo màu. Không có cờ `style.line_art`. Code: `852e217`.
-10. **Bevel chỉ đọc từ trường riêng:** `bevel` (thẻ), `style.bevel` (profile). Giá trị: `none | toon`. Số đo chỉ nằm trong preset (`toon`: bán kính 9 mm, 2 segment). Tool không suy ra bevel từ ghi chú chữ. `check_card.py` chỉ cảnh báo khi một ghi chú có "bo cạnh" mà trường `bevel` trống. Code hiện tại (`e2ff049`, `a83f9b1`) còn bật bevel theo bảng cụm từ: phải đổi sang chỉ đọc trường.
+10. **Bevel chỉ đọc từ trường riêng:** `bevel` (thẻ), `style.bevel` (profile). Giá trị: `none | toon`. Số đo chỉ nằm trong preset (`toon`: bán kính 9 mm, 2 segment). Tool không suy ra bevel từ ghi chú chữ. `check_card.py` chỉ cảnh báo khi một ghi chú có "bo cạnh" mà trường `bevel` trống. Code hiện tại (`e2ff049`, `a83f9b1`) còn bật bevel theo bảng cụm từ: phải đổi sang chỉ đọc trường. **[Sửa theo D34.2]** 9 mm / 2 segment là số tạm, rút từ một asset (Run 4). Số này chỉ nằm trong preset, kèm nguồn gốc (asset, run) và ghi chú "tạm, đo lại sau 3–5 asset khác loại". Code không chứa số này.
 11. **Hai lỗi review lọt qua:** sai số lượng thành phần so với concept luôn là `regen`; `preserve` phải nêu tên chi tiết cạnh vùng sửa.
 12. **Font có dấu tiếng Việt** (Noto Sans, giấy phép OFL) đi kèm skill cho mọi sheet. Code hiện tại (`e78c6a7`) còn chọn font hệ thống: phải đổi sang font đi kèm.
-13. **Part `custom` chỉ gọi hàm của hai file** (cả hai bản). **[Viết lại theo D33]**
-    - `custom_lib.py` của skill chỉ chứa hàm chung có tham số, dùng được cho nhiều loại vật: `vault`, `grooved_box`, `bevel_box`.
-    - Hàm riêng của một asset: agent của bước viết vào `production/assets/<id>/custom_parts.py` của project. File này chỉ dùng bmesh.
-    - `build_parts.py` kiểm tĩnh file đó trước khi chạy. Chỉ cho import `math`, `bmesh`, `mathutils`. Từ chối `open`, `exec`, `eval`, `__import__`, `os`, `subprocess`, `sys`, module mạng, tên và thuộc tính `__…__`. Kiểm tĩnh không phải sandbox.
+13. **Part `custom` chỉ gọi hàm của hai file** (cả hai bản). **[Viết lại theo D32]**
+    - `custom_lib.py` của skill chỉ chứa hàm chung có tham số, dùng được cho nhiều loại vật: `vault`, `grooved_box`, `bevel_box` (D32.1, D32.4).
+    - Hàm riêng của một asset: agent của bước viết vào `production/assets/<id>/custom_parts.py` của project (D32.2). File này là Python thuần, chỉ dùng `math`. Hàm trả đỉnh và mặt. File chạy ngoài Blender và ghi một file JSON lưới. Blender chỉ chạy script đã duyệt `mesh_from_json`.
+    - Check tĩnh dạng danh sách trắng (AST) chạy trước: chỉ `math` và phép tính; cấm `open`, `exec`, `eval`, `__import__`, thuộc tính dạng `__xxx__`. Check tĩnh không phải sandbox.
     - Hàm của project trùng tên một hàm của `custom_lib.py` → dừng dựng, báo tên. `check_schema.py` đọc tên hàm của hai file bằng `ast`, không chạy file project.
-    - `build_parts.py` ghi `parts_lib.py` cạnh graph = `custom_lib.py` + `custom_parts.py`. Đó là code đã chạy. Reviewer đọc code này như một phần bằng chứng.
-    - Không cần anh duyệt từng hàm nữa.
-    - Lịch sử: trước D33, thư viện chứa thêm `arch_cap`, `arch_cap_pointed`, `plank_vault`, `strap_band`, `lock_plate` và tham số `seam`, lấy từ Run 4–6 (wooden-chest), mỗi hàm do anh duyệt. Các hàm đó chỉ hợp một asset, nên D33 bỏ khỏi repo.
+    - Không cần anh duyệt từng hàm. Reviewer đọc code hàm riêng như một phần bằng chứng.
+    - Lịch sử: trước D33 cũ (nay là D32, D34), thư viện chứa thêm `arch_cap`, `arch_cap_pointed`, `plank_vault`, `strap_band`, `lock_plate` và tham số `seam`, lấy từ Run 4–6 (wooden-chest), mỗi hàm do anh duyệt. Các hàm đó chỉ hợp một asset, nên đã bỏ khỏi repo (`ef86fee`). Bản code `ef86fee`–`3a4f64b` chạy `custom_parts.py` bằng bmesh trong Blender: `build_parts.py` ghi `parts_lib.py` = `custom_lib.py` + `custom_parts.py`, và chỉ cho import `math`, `bmesh`, `mathutils`. v0.7.1 đổi bản đó theo D32.2.
 
 ## D28 — Model ảnh: ghi vào ledger trước, cấu hình sau (2026-11-10)
 
@@ -359,9 +374,9 @@ Lý do: agent sinh rất nhiều file trung gian. Sau khi anh duyệt kết qu�
 6. **Sau khi xóa chỉ còn:**
    - `deliver/<id>/` (GLB, albedo, `.blend`, ảnh review, README).
    - Hồ sơ text: `status.json`, ledger, findings, report, feedback.
-   - File nguồn dạng text của từng bước: `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json` (vài KB, để sửa lại không phải làm từ đầu).
+   - File nguồn dạng text của từng bước: `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json` (vài KB, để sửa lại không phải làm từ đầu). **[Thêm theo D32.3]** `custom_parts.py` của asset.
 7. **Mọi thứ khác xóa thật**, không chuyển vào Thùng rác: version bị loại, version được duyệt của bước giữa, phương án `param` không chọn, ảnh evidence, ảnh gen không dùng, `work/`, `.blend` trung gian, file tải Meshy.
-8. **Script ghi manifest** những gì đã xóa và dung lượng (`assets/<id>/purge-manifest.json`; lệnh đang chờ: `purge-pending.json`). Đường dẫn trong ledger và trang duyệt không gãy: giữ report, findings, `feedback/` (ảnh khoanh), và mọi ảnh trang duyệt trỏ tới, thu cạnh dài về 1024 px tại chỗ, cùng tên. Giữ mọi file text ngoài `work/` (kết quả check JSON), trừ code của asset. **[Sửa theo D33]** `custom_parts.py` và mọi bản `parts_lib.py` (bản này chứa `custom_parts.py`) bị xóa, không giữ làm text. GLB của các bước giữa bị xóa; thẻ trên trang duyệt không còn nút GLB; `deliver/<id>/` giữ GLB.
+8. **Script ghi manifest** những gì đã xóa và dung lượng (`assets/<id>/purge-manifest.json`; lệnh đang chờ: `purge-pending.json`). Đường dẫn trong ledger và trang duyệt không gãy: giữ report, findings, `feedback/` (ảnh khoanh), và mọi ảnh trang duyệt trỏ tới, thu cạnh dài về 1024 px tại chỗ, cùng tên. Giữ mọi file text ngoài `work/` (kết quả check JSON). **[Sửa theo D32.3]** Giữ `custom_parts.py` như file nguồn dạng text. File JSON lưới tạm mà `custom_parts.py` sinh ra bị xóa. Lịch sử: bản D33 cũ (`3a4f64b`) xóa `custom_parts.py` và mọi bản `parts_lib.py`; D32.3 đảo lại. GLB của các bước giữa bị xóa; thẻ trên trang duyệt không còn nút GLB; `deliver/<id>/` giữ GLB.
 9. **`--zip`** nén phần sắp xóa ra chỗ khác, khi anh muốn giữ.
 10. **`P disk`** in dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb` của `policy.yaml`.
 11. Áp cho cả hai thư mục khi chạy A/B. **Thêm (Producer chốt 2026-11-10):** trong `production-<runtime>/`, không xóa (hook hay `P purge`) trước khi cặp có kết quả so: `ab prefer` hoặc đủ hai lần `ab judge`. Tới lúc đó `P next` chỉ nhắc; `P purge` từ chối và nêu kết quả còn thiếu. Lý do: trang so cặp mù không được có một bên đã xóa GLB và thu nhỏ ảnh. Có kết quả rồi thì theo quy tắc thường: bên Claude xóa khi `startup` hoặc `clear`, bên Codex chỉ nhắc.
@@ -373,19 +388,36 @@ Nguồn: Run 5, `NEXT-VERSION-BACKLOG.md` mục 4d, `docs/intents/v0.7.0-plan.md
 
 1. **`P waive <id> F<n> "lý do"`.** Anh chấp nhận một finding là ngoại lệ ở mọi state, kể cả đang FIX. Finding chuyển `waived`. Brief sau bỏ qua finding đó. Reviewer không mở lại finding đó. Ledger ghi ai waive và lý do. Mặc định `by: user`. `--by producer` chỉ chạy khi `policy.yaml` có `test_mode: true`; không có cờ thì script từ chối, state không đổi. Sheet DUYỆT 2 có mục riêng "Producer đã waive"; finding anh waive vào mục Ngoại lệ. Waive finding chặn cuối của bản đang sửa, đang đưa duyệt hoặc đang xin bằng chứng → reviewer `full` chấm lại chính bản đó, không gọi worker, không tính vào `max_fix_rounds`. Waive khi reviewer đang chấm: áp dụng ở lần `ingest` tới. Anh bật `test_mode` bằng `P approvals set test_mode true --by "<nguyên văn>"` hoặc sửa `policy.yaml` (`P rule` chỉ ghi ruling, không ghi `policy.yaml`). Lý do (Run 5): F2 model mất 4 version vì không có đường này; `feedback --action approve` chỉ chạy khi `waiting_human`.
 2. **Quy tắc hòa của bản tốt nhất** (sửa D27.1). Theo thứ tự: ít `blocker` + `major` đang mở nhất → giải quyết nhiều `blocker` + `major` hơn → giải quyết nhiều finding hơn ở mọi mức và không có `regressed` → version mới hơn. Lý do (Run 5): brief model v3 chọn v1, dù v2 = v1 + F3 đã sửa.
-3. **Meshy: albedo lấy từ `texture_urls[].base_color`.** API retexture không có tham số tắt chuẩn hóa GLB (scale ×2, dời tâm z). GLB Meshy chỉ dùng để so topology với mesh đã khóa. So số tam giác. So tập hợp bộ ba UV của tam giác: mỗi bộ ba sắp xếp, cả tập sắp xếp, so có dung sai. Không so theo thứ tự tam giác. Không phụ thuộc scale và vị trí. Kích thước ảnh `base_color` phải bằng `texture_res`. Lệch một điều trên thì fail. Bỏ khớp bbox và ngưỡng 1e-5. Worker không tự viết script cho việc này. Test dùng GLB Meshy thật của Run 5. **[Sửa theo D33]** Test dùng cặp GLB tổng hợp: mesh khóa và bản sao scale ×2, dời, đổi thứ tự đỉnh, tam giác và góc.
+3. **Meshy: albedo lấy từ `texture_urls[].base_color`.** API retexture không có tham số tắt chuẩn hóa GLB (scale ×2, dời tâm z). GLB Meshy chỉ dùng để so topology với mesh đã khóa. So số tam giác. So tập hợp bộ ba UV của tam giác: mỗi bộ ba sắp xếp, cả tập sắp xếp, so có dung sai. Không so theo thứ tự tam giác. Không phụ thuộc scale và vị trí. Kích thước ảnh `base_color` phải bằng `texture_res`. Lệch một điều trên thì fail. Bỏ khớp bbox và ngưỡng 1e-5. Worker không tự viết script cho việc này. Test dùng GLB Meshy thật của Run 5. **[Sửa theo D32.6]** Test dùng cặp GLB tổng hợp: mesh khóa và bản sao scale ×2, dời, đổi thứ tự đỉnh, tam giác và góc.
 4. **`ingest` bỏ qua `COMPARE` cho id ngoài `TOP_FIX`** và ghi cảnh báo vào ledger, không báo lỗi. Producer không bao giờ sửa report của reviewer hay worker. Report sai contract thì giao lại cho chính agent đó.
 5. **Mọi lần chuyển state in JSON giao việc tiếp theo** (mở rộng D27.2): gồm `feedback --action approve|redo`, `waive`, `retry`.
-6. **`counts` trong thẻ asset.** Trường tùy chọn, chỉ có 6 khóa: `body_board_rows`, `lid_board_rows`, `doors`, `windows`, `pillars`, `steps`. Giá trị là số nguyên ≥ 0; khóa khác hoặc giá trị sai → `check_card` fail. Lý do: số hàng ván là tham số hàm, không phải số part. Gate blockout và model so hai số; sai thì fail. Lý do: lỗi đếm đã lọt hai lần (Run 4 view, Run 5 blockout). **[Sửa theo D33]** Không còn bảng ánh xạ (`templates/counts.yaml` đã bỏ). Mỗi khóa của thẻ phải là tên một param trong `fixed_params` của part graph, và hàm dựng số đó nhận tên param này. Gate so giá trị param với số của thẻ. Không có param cùng tên → gate fail và nêu param cần thêm.
+6. **`counts` trong thẻ asset.** Trường tùy chọn. Giá trị là số nguyên ≥ 0; giá trị sai → `check_card` fail. Gate blockout và model so số của thẻ với part graph; sai thì fail. Lý do: lỗi đếm đã lọt hai lần (Run 4 view, Run 5 blockout). **[Sửa theo D32.5, D34.3]**
+   - Skill không có bảng khóa cố định. Danh sách khóa là `counts_keys` của profile dự án (khóa và nghĩa, AD hoặc anh duyệt). Khóa ngoài danh sách → `check_card` cảnh báo, không fail.
+   - Khóa của thẻ khớp một param cùng tên trong `fixed_params`, hoặc khớp số part có `tag: <khóa>`. Lệch số → gate fail và nêu param hoặc tag cần có.
+   - Brief dặn agent đặt tên param và tag theo khóa trong thẻ.
+   - Không khóa nào viết cứng trong code hay test của skill.
+   - Lịch sử: bản đầu có 6 khóa cố định (`body_board_rows`, `lid_board_rows`, `doors`, `windows`, `pillars`, `steps`), khóa khác → fail, và bảng ánh xạ `templates/counts.yaml`. D33 cũ bỏ bảng ánh xạ, chỉ so với param cùng tên (`d05930a`).
 7. **Installer gộp `settings.snippet.json`** vào settings của project: allow rule (Blender, `meshy_call`, `codex exec`, ghi `production/`) và hook SessionStart chạy `P next`. Không ghi đè rule có sẵn. In diff trước khi ghi. Chạy hai lần không nhân đôi. `P preflight` báo khi chưa có.
 8. **Lời giao việc chỉ gồm file role và brief.** Lời giao việc không bao giờ gợi ý ghi file bằng shell (heredoc, `cat >`, `tee`, python). Worker ghi `worker-out.md` bằng Write. Mẫu brief đã đúng; lỗi Run 5 nằm ở lời giao việc.
-9. **Hàm `custom` riêng của asset không vào repo** (viết lại theo D33). Agent viết hàm vào `custom_parts.py` của project, dùng, và D29 xóa file đó sau DUYỆT 2. Repo chỉ nhận hàm chung có tham số, kèm test bằng hình tổng hợp. Lịch sử: bản cũ của mục này đưa `arch_cap_pointed` (Run 5) vào `custom_lib.py` (`26549c6`); D33 bỏ hàm đó.
+9. **Hàm `custom` riêng của asset không vào repo** (viết lại theo D32). Agent viết hàm vào `custom_parts.py` của project và dùng hàm đó (D32.2). File giữ lại sau DUYỆT 2 như file nguồn dạng text (D32.3). Repo chỉ nhận hàm chung có tham số, dùng được cho nhiều loại vật, anh duyệt, kèm test bằng dữ liệu tổng hợp (D32.4). Lịch sử: bản đầu của mục này đưa `arch_cap_pointed` (Run 5) vào `custom_lib.py` (`26549c6`); D33 cũ bỏ hàm đó và cho D29 xóa `custom_parts.py`.
 10. **Token của Producer trong `P stats`.** Hook SessionStart ghi đường dẫn transcript vào `production/session.json`. Script đọc `usage` trong transcript JSONL của phiên chính, bỏ dòng `isSidechain`. Parse chịu lỗi: không đọc được thì ghi "không có số". Bản Codex ghi "chưa hỗ trợ".
-11. **Meshy SỬA là chế độ texture mặc định** (sửa D10). Có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Giữ budget gate. Ledger ghi chế độ đã chọn và lý do. Lý do (Run 5): Meshy SỬA 15m32s, 2 version, 10 credit; VẼ MỚI ở Run 4: 38m25s, 4 version. Mới có 1 mẫu; đo lại sau 3–5 asset.
+11. **Meshy SỬA là chế độ texture mặc định** (sửa D10). Có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Giữ budget gate. Ledger ghi chế độ đã chọn và lý do. Lý do (Run 5): Meshy SỬA 15m32s, 2 version, 10 credit; VẼ MỚI ở Run 4: 38m25s, 4 version. Mới có 1 mẫu; đo lại sau 3–5 asset. **[Sửa theo D34.2]** Chế độ mặc định nằm trong `policy.yaml` (`texture_default`), không viết cứng trong code. Giá trị kèm nguồn gốc (Run 5, một asset) và ghi chú "tạm, đo lại sau 3–5 asset khác loại".
 12. **Mọi tool ghi file từ chối chạy ngoài project root** (mở rộng D27.7). Một helper `require_root()` dùng chung. Thư mục đang đứng sai thì tool thoát mã lỗi và không tạo file nào. Lý do (Run 5): một check của bước texture ghi `production/` vào gốc repo vì chạy từ sai cwd.
 13. **`.env` chỉ trỏ đường dẫn.** Guideline và `setup.md` chỉ nêu đường dẫn `.env`. Không bao giờ đính kèm file `.env` vào chat. Lý do (Run 5): file `.env` đính kèm làm lộ mọi key trong đó.
 14. **Version lên 0.7.0**, để bản cài V6 khác tên với v0.6.0.
 15. **Cách làm v0.7.0:** worktree `./.worktrees/feat-v0.7.0`, chạy toàn bộ test, merge fast-forward vào `main`.
+
+### Bổ sung v0.7.1: Meshy, `counts` và Codex CLI 0.164.0 (backlog 4f, 2026-11-11)
+
+16. **4f.1, 4f.2 đã làm ở v0.7.0.** `P texture-mode <id> auto|meshy|paint` (`6640e61`). `meshy_call.py` gửi `texture_resolution` nhỏ nhất ≥ `texture_res`, rồi thu `base_color` lớn hơn về đúng `texture_res` (`b17e390`). Ghi nhận: ngưỡng nhiễu UV đã chọn hợp lý (9e-5 qua, 2e-4 fail; 1e-4 ≈ 0,2 px ở 2048).
+17. **4f.3 — khóa `counts`:** theo D30.6, D32.5, D34.3. GUIDELINE Concept Artist trỏ tới `counts_keys` của dự án, không liệt kê khóa.
+18. **4f.4 — Codex CLI 0.164.0 đã bỏ `--full-auto`** (flag cũ lỗi exit 2). Không file nào trong repo dùng flag này; `gen_image_codex.py` đã dùng `codex exec -s workspace-write --skip-git-repo-check`. Sinh lại allow-list Codex theo lệnh hiện tại. Tài liệu skill ghi phiên bản đã test: 0.164.0. Test quét flag cấm.
+19. **4f.5 — phiên bản codex-cli.** `P preflight` ghi phiên bản codex-cli và kiểm `codex exec --help` có đủ flag skill dùng. Ledger ghi phiên bản codex-cli mỗi lần gen.
+20. **4f.6 — kiểm từng file.** Sau mỗi lần gọi, script kiểm từng file (tồn tại, PNG header hợp lệ). Chỉ gen lại file thiếu, không gọi lại cả batch. Timeout mỗi lần gọi ≥ 5 phút.
+21. **4f.7 — không dùng `--approve-for-me` làm mặc định.** Cờ này tự duyệt mọi yêu cầu quyền. Chỉ dùng khi bị chặn thật; ledger ghi lý do.
+22. **4f.8 — gộp nhiều ảnh vào một lần gọi.** Tùy chọn trong config, mặc định tắt. Chỉ cho các ảnh dùng chung tham chiếu (paint view của texture). Kiểm `-i` với nhiều ảnh đầu vào trước. Bật thử ở V6 và so số finding `regen`/`repaint` với gọi từng ảnh; không kém thì giữ.
+    - Số đo (2026-11-10): overhead khoảng 11,7 s mỗi lần gọi; batch 4 ảnh 124,8 s, 4 lần gọi lẻ 212,6 s (−41%). Pipeline nhỏ (khoảng 13 s mỗi ảnh, Run 5 có 9 lần gen) lợi ít hơn, và có rủi ro trộn tham chiếu giữa các view. Vì vậy phải đo chất lượng.
+    - `-m` là model của agent, chưa chắc là model ảnh (khớp D28: backend `codex` có thể chỉ ghi nhận model).
 
 ## D31 — Giảm chi phí review (2026-11-10)
 
@@ -406,7 +438,96 @@ Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
 6. **Để sau V6:** bỏ reviewer ở bước có gate người duyệt ngay sau, nếu V6 xác nhận `views: none` dùng được cho phần lớn asset.
 7. **Không làm:** resume cùng một reviewer qua nhiều vòng. Lý do: reviewer bị neo vào nhận xét cũ, mất tính độc lập.
 
-## D32 — Trường `views` trong thẻ asset (2026-11-10, thay ý "bỏ view top")
+## D32 — Hàm riêng của asset nằm trong project, không vào repo (2026-11-11, thay D27.13, D30.9 và D33 cũ)
+
+Nguyên tắc: repo skill chỉ chứa thứ dùng chung cho mọi object. Nguồn: backlog 4h. Lý do: hàm, fixture và dữ liệu của một asset (wooden-chest) đã vào repo. Chúng đi theo skill tới mọi project và kéo agent về asset đó.
+
+1. **Repo chỉ giữ hàm chung:** `bevel_box`, `vault`, `grooved_box` (nhận số khe `N`). Đã gỡ `plank_vault`, `arch_cap`, `arch_cap_pointed`, `strap_band`, `lock_plate` và tham số `seam` (`ef86fee`). Kiểm bằng test dữ liệu tổng hợp trong repo và bằng V6 trên asset mới. Không dựng lại wooden-chest.
+   - Hệ quả: part graph của wooden-chest gọi các hàm đã gỡ. Muốn sửa asset đó thì agent viết lại `custom_parts.py` cho nó. Gói `deliver/` (GLB, `.blend`) không bị ảnh hưởng.
+2. **Hàm riêng của agent** nằm trong `production/assets/<id>/custom_parts.py`.
+   - Python thuần, chỉ dùng `math`. Hàm trả đỉnh và mặt. File chạy ngoài Blender và ghi một file JSON lưới.
+   - Blender chỉ chạy script đã duyệt `mesh_from_json`. Blender không chạy code agent viết.
+   - Check tĩnh dạng danh sách trắng (AST): chỉ `math` và phép tính. Cấm `open`, `exec`, `eval`, `__import__` và thuộc tính dạng `__xxx__`. Check tĩnh không phải sandbox.
+   - Allow-list Codex giữ nguyên như trước `3a4f64b`. Lý do: Blender chỉ chạy script đã duyệt. Mục này đảo lại D33.4 cũ (rule Codex không cho `build_parts.py`).
+   - Giữ từ D33 cũ: chỉ thêm hàm, không sửa hay xóa hàm mà một version đã dùng. Lý do: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó. Hàm trùng tên một hàm của `custom_lib.py` → dừng dựng, báo tên. Không cần anh duyệt từng hàm.
+   - Bỏ từ D33 cũ: hàm bmesh chạy trong Blender (`ef86fee`–`3a4f64b`).
+3. **Giữ `custom_parts.py` sau DUYỆT 2** như file nguồn dạng text của D29 (D29.6, D29.8). Mục này đảo lại ý "D29 xóa file này" của D33 cũ.
+4. **Hàm chỉ lên thư viện chung khi đã tham số hóa và dùng được cho nhiều loại object.** Xuất hiện ở hai asset chưa đủ. Anh duyệt thì commit kèm test.
+5. **`counts`:** khóa của thẻ khớp một param trong `fixed_params`, hoặc khớp số part có `tag: <khóa>`. Brief dặn agent đặt tên param và tag theo khóa trong thẻ. Danh sách khóa thuộc dự án (D34.3). Chi tiết: D30.6.
+6. **Test trong repo dùng dữ liệu tổng hợp.** Không có hàm, fixture hay dữ liệu riêng của asset nào, kể cả wooden-chest. Đã rà và gỡ ở `230ce13`; `tests/test_generic_only.py` giữ quy tắc này.
+
+## D33 — Chống thời gian chết giữa Producer và agent (2026-11-11)
+
+Hiện tượng: pipeline đứng im cho tới khi anh nhắn, rồi mới chạy tiếp. Nguyên nhân rất có thể là lỗi đã biết của Claude Code: subagent chạy lệnh `run_in_background` rồi kết thúc lượt thì không được đánh thức; phiên chính đôi khi không nhận thông báo subagent xong. Tin nhắn bất kỳ làm agent chạy lại. Nguồn: backlog 4g; anthropics/claude-code #108836, #87689, #104789, #89505, #92410, #49150, #61405, #94178; VKirill/claude-lane-stack v1.4.0.
+
+**Nguyên tắc:** không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên đĩa. Số mục giữ đúng số của backlog.
+
+**Việc làm trước tiên (chỉ đọc)**
+
+1. Kiểm transcript Run 5. Mỗi chỗ pipeline đứng im: subagent có vừa chạy `run_in_background` trước khi dừng không, lệnh nào, đứng bao lâu. Ghi thêm: mỗi lần gọi Meshy mất bao lâu, và lệnh Bash nào bị cắt ở khoảng 2 phút.
+
+**Quy tắc 1: không ai kết thúc lượt để chờ**
+
+2. Worker và reviewer không bao giờ chạy lệnh nền. File agent của mọi worker và reviewer ghi quy tắc này. Test quét: không có `run_in_background` trong tool, file role, mẫu brief.
+3. Mọi lệnh dài đi qua tool của Producer (Blender, `codex exec`, `meshy_call.py`). Mỗi tool có timeout riêng, dưới giới hạn Bash.
+4. **Bash timeout:** Claude Code mặc định cắt lệnh Bash thường sau khoảng 2 phút. `settings.snippet.json` đặt timeout mặc định 10 phút (kiểm tên biến cấu hình trên bản 2.1.317), hoặc agent truyền `timeout` cho từng lệnh. `P preflight` báo khi chưa đặt.
+5. **Meshy `pending`:** `meshy_call.py` chờ tối đa khoảng 8 phút. Chưa xong thì thoát với trạng thái `pending` (không phải lỗi); `task_id` nằm trong `task.json`. `meshy_call.py --resume` chờ tiếp đúng task đó: không tạo task mới, không tốn thêm credit. Quá hạn tổng (mặc định 30 phút) → `BLOCKED`.
+6. **Giới hạn số lượt** của mỗi agent: `maxTurns` trong file agent (kiểm có chạy trên bản Claude Code đang dùng không). Vượt → agent dừng, trả `BLOCKED`.
+
+**Quy tắc 2: tool tự ghi nhịp tim, agent không phải làm gì**
+
+7. Mỗi tool của Producer ghi `vN/heartbeat.log` (thời gian, tool, trạng thái) khi bắt đầu, khi xong, và mỗi khoảng 30 giây khi tiến trình con còn chạy và còn dùng CPU hoặc còn ra output. Không ghi nhịp tim chỉ theo đồng hồ. Lý do: render Blender 8 phút không bị báo kẹt nhầm, và tiến trình treo thật không giả vờ còn sống.
+8. File output (`worker-out.md`, `review-out.md`) là tín hiệu xong việc. Agent ghi file này là việc cuối cùng trước khi trả kết quả.
+9. **Hook `SubagentStop`** gọi `P on-stop`. Script kiểm file output của lần giao tương ứng (theo id trong ledger) và ghi trạng thái xuống đĩa. Thông báo cho Producer bị mất thì đĩa vẫn đúng. Installer gộp hook này (D30.7).
+
+**Quy tắc 3: hạn chót và một quy tắc xử lý kẹt**
+
+10. Mỗi lần giao ghi hạn chót vào ledger: thời gian thường lệ của bước × `deadline_factor`. Thời gian thường lệ lấy từ `P stats` các lần chạy trước. Chưa có số thì dùng giá trị mặc định theo bước trong `pipeline.toml`.
+11. **Kẹt** = quá `stall_min` phút không có nhịp tim mới, hoặc quá hạn chót. Xử lý theo bậc: lần 1 nudge (SendMessage "Tiếp tục, báo trạng thái"); lần 2 giao lại cho agent mới cùng brief; lần 3 `waiting_human`. Ledger ghi mỗi lần.
+
+**Hai chế độ chạy, cùng bộ quy tắc**
+
+12. **Pilot, từng asset:** Producer giao subagent ở chế độ thường (`run_in_background: false`). Cần song song thì giao nhiều agent trong cùng một lượt. Kết quả trả về thẳng.
+13. **Lô nhiều asset:** giao chạy nền và `P wait`. Producer chạy nền lệnh chờ của chính mình. Lệnh này thức dậy khi có file output, khi nhịp tim ngừng, hoặc khi tới hạn chót. Chỉ một `P wait` tại một thời điểm (file khóa). Đã có thì không tạo thêm, để các vòng lặp canh không tích lũy.
+14. Chế độ chọn trong `policy.yaml` (`dispatch: foreground | background`), mặc định `foreground`.
+
+**Theo dõi ở một chỗ**
+
+15. `P next` hiện mỗi việc đang chạy một dòng: asset, bước, version, vai trò, đã chạy bao lâu, nhịp tim gần nhất, hạn chót, trạng thái (`OK`, `KẸT 12m · nudge 1/2`).
+16. `P stats` đếm số lần kẹt, nudge, giao lại theo bước.
+17. Trang duyệt gắn nhãn "kẹt" cho asset đang kẹt.
+18. Cấu hình duy nhất nằm trong `policy.yaml`. Các số là của dự án (D34.2):
+    ```yaml
+    dispatch: foreground
+    watch:
+      stall_min: 10
+      deadline_factor: 2
+      max_nudges: 1
+    ```
+
+**Khác**
+
+- **18b.** Theo D34: test của D33 dùng tác vụ giả lập (lệnh chạy lâu, lệnh treo), không gắn với object nào.
+
+19. Lối thoát của anh: Esc rồi `P retry`. Trạng thái nằm trong file nên không mất gì. Ghi vào `setup.md`.
+20. Bản Codex: kiểm có hiện tượng tương tự không. Cơ chế dựa trên file nên dùng chung được. Ghi kết quả.
+21. Ghi D33 vào `decisions.md`, `producer.md`, file agent, `coding-checklist.md` (một dòng cho mỗi việc). Mỗi việc kèm test: nhịp tim không ghi khi tiến trình treo; `pending` của Meshy không tạo task mới; hai `P wait` → cái thứ hai bị từ chối; kẹt → đúng bậc xử lý; `SubagentStop` ghi trạng thái khi Producer không nhận thông báo.
+
+- **Không làm:** để worker tự chạy vòng lặp shell canh file; đặt nhịp tim chỉ theo đồng hồ.
+
+## D34 — Skill chạy cho mọi object, không lệch về một loại (2026-11-11, gộp D33 cũ)
+
+Nguyên tắc: skill là thứ dùng chung. Code, số mặc định, từ vựng, ví dụ và test trong skill không được lệch về một loại object. Lý do: Run 4–5 chỉ chạy wooden-chest. Dấu ấn của asset đó đã lan vào code (D32), số mặc định (bevel 9 mm, Meshy mặc định), tên khóa `counts` (`body_board_rows`) và ví dụ trong tài liệu. Nguồn: backlog 4i.
+
+1. **Phân loại mọi thay đổi trước khi làm.** Ba loại: *chung* (vào skill), *dự án* (vào profile, preset, art bible, `policy.yaml`), *asset* (vào thẻ asset hoặc `custom_parts.py`). Câu kiểm: "Nếu là cái bàn, cái cây hay một ngôi nhà, thay đổi này còn đúng không?" Không đúng thì không vào skill. Plan và báo cáo mỗi đợt ghi rõ phân loại của từng việc. Đây là bước bắt buộc của mọi plan.
+2. **Không có số mặc định nào rút từ một asset nằm trong code.** Số nằm trong preset, profile hoặc `policy.yaml`, kèm nguồn gốc (asset, run) và ghi chú "tạm, đo lại sau N asset". Rà repo, chuyển các số đang viết cứng ra config. Áp cho D27.10 (bevel `toon`) và D30.11 (Meshy mặc định).
+3. **Từ vựng thuộc về dự án.** Danh sách khóa `counts` (`counts_keys`) và bộ từ vựng dạng khối (`shape_hints`, khi có) do profile và art bible của dự án định nghĩa. Skill chỉ cung cấp cơ chế kiểm (D30.6, D32.5).
+4. **Ví dụ và test trải qua nhiều loại vật.** Ví dụ trong file agent, brief, spec và test lấy từ building, prop, cây, đá, vật đối xứng và bất đối xứng; không lặp một object. Rà và sửa các ví dụ đang chỉ nói về rương (hàng ván, khe nắp, bản lề). Test dùng dữ liệu tổng hợp (D32.6).
+   - Giữ từ D33 cũ: mọi file đi theo dist (SKILL.md, file agent, references, templates, scripts) chỉ dùng ví dụ chung. Tên lần chạy cũ chỉ còn trong `decisions.md` và `coding-checklist.md`, làm lịch sử và lý do.
+5. **Mỗi lần chạy thử dùng một loại vật khác lần trước.** V6 chạy trên một asset mới, không phải rương (backlog 4f.9). Các lần sau xoay vòng building, prop, vật hữu cơ, đối xứng, bất đối xứng. Báo cáo mỗi run có mục "thay đổi chỉ giúp riêng asset này", để các thay đổi đó không vào skill.
+6. Ghi D34 vào `decisions.md`, `SKILL.md` và quy trình làm việc của bên code (đầu `docs/coding-checklist.md`). Mục 1 là bước bắt buộc của mọi plan.
+
+## D35 — Trường `views` trong thẻ asset (2026-11-10, thay ý "bỏ view top"; số cũ D32)
 
 Một trường duy nhất: `views: none | back | full | full_top`. Không thêm `views_top`. Trường này khác trường `view` của D27.6 (góc của ảnh concept).
 
@@ -416,22 +537,6 @@ Một trường duy nhất: `views: none | back | full | full_top`. Không thêm
 4. **`full_top`:** `full` cộng top. Chỉ dùng khi mái có thiết kế riêng, không suy ra được từ concept.
 5. **Lý do bỏ top:** không bước nào sau views cần ảnh top. Hình mái do blockout quyết. Màu mái thấy trên concept 3/4. VẼ MỚI tự gen paint view. Meshy không dùng top.
 6. Giá trị lạ → `check_card` fail. V6 chọn giá trị mặc định.
-
-## D33 — Repo chỉ giữ phần chung của mọi loại vật (2026-11-11)
-
-Lý do: hàm, fixture và dữ liệu của một asset (wooden-chest) đã vào repo. Chúng đi theo skill tới mọi project và kéo agent về asset đó.
-
-1. **Repo skill chỉ giữ phần chung của mọi loại vật.** Không commit hàm, fixture hay dữ liệu của một asset, kể cả wooden-chest. Test dùng dữ liệu tổng hợp.
-2. **Một hàm vào thư viện chung chỉ khi có tham số và dùng được cho nhiều loại vật.** Xuất hiện ở hai asset chưa đủ.
-3. **Asset cần hàm riêng:** agent của bước viết hàm vào `production/assets/<id>/custom_parts.py`, dùng hàm đó, và file bị xóa sau đó.
-   - Chỉ bmesh. `build_parts.py` kiểm tĩnh trước khi chạy (D27.13).
-   - Chỉ thêm hàm, không sửa hay xóa hàm một version đã dùng. Lý do: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó.
-   - Giữ tới DUYỆT 2, vì bước model và mọi lần `redo` dựng lại từ part graph.
-   - D29 xóa file này và các bản `parts_lib.py` chứa nó.
-   - Không cần anh duyệt từng hàm. Reviewer đọc code trong `final/parts_lib.py` như một phần bằng chứng.
-4. **Bản Codex:** `build_parts.py` giờ chạy code agent viết. Rule Codex không cho phép script này nữa, nên lệnh Blender dựng part `custom` lại chờ anh duyệt từng lần.
-5. **`counts`:** bỏ bảng ánh xạ. Khóa của thẻ là tên param trong `fixed_params` (D30.6).
-6. **Mọi file đi theo dist** (SKILL.md, file agent, references, templates, scripts) chỉ dùng ví dụ chung. Tên lần chạy cũ chỉ còn trong `decisions.md` và `coding-checklist.md`, làm lịch sử và lý do.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.

@@ -79,7 +79,7 @@ def test_done_enabled_counts_as_finished_in_next(proj, capsys):
 
 
 def views_none_parked_at_blockout(root, model_on):
-    """A `views: none` card skips views_front and views_rest (D32), so the step after blockout is model."""
+    """A `views: none` card skips views_front and views_rest (D35), so the step after blockout is model."""
     card = root / "concepts/a-hut"
     card.mkdir(parents=True)
     (card / "asset-card.yaml").write_text("views: none\n", encoding="utf-8")

@@ -8,7 +8,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-concept-vi
 
 ## 1. Vai trò và phạm vi
 
-Concept Views vẽ front và các view mà trường `views` của thẻ asset yêu cầu (D32). **Hình dáng lấy từ blockout đã duyệt.** Model ảnh chỉ tô màu và vật liệu lên ảnh guide.
+Concept Views vẽ front và các view mà trường `views` của thẻ asset yêu cầu (D35). **Hình dáng lấy từ blockout đã duyệt.** Model ảnh chỉ tô màu và vật liệu lên ảnh guide.
 
 | `views` của thẻ | Bước chạy | Ảnh ở `views_rest` |
 |---|---|---|

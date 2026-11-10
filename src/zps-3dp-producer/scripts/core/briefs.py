@@ -85,7 +85,7 @@ NO_VIEWS = "VIEWS: none"  # the role files say what a step does without a view s
 
 
 def views_line(st, step) -> list[str]:
-    """D32: the views of the card, for a views step; for the other steps only when there is no view set."""
+    """D35: the views of the card, for a views step; for the other steps only when there is no view set."""
     if step.get("views_set"):
         return [f"VIEWS: {asset_card.views(st)} ({', '.join(asset_card.sides(st))})", ""]
     return [NO_VIEWS, ""] if asset_card.views(st) == "none" else []
@@ -102,12 +102,12 @@ def counts_line(st, step) -> list[str]:
 
 
 def builds_parts(step) -> bool:
-    """D33: a step whose output holds parts_lib.py builds a part graph, so it may use the asset's own functions."""
+    """D32: a step whose output holds parts_lib.py builds a part graph, so it may use the asset's own functions."""
     return "final/parts_lib.py" in step.get("outputs", [])
 
 
 def custom_parts_line(st, step) -> list[str]:
-    """D33: the one file outside the version folder the worker may write: the asset's `custom` functions."""
+    """D32: the one file outside the version folder the worker may write: the asset's `custom` functions."""
     if not builds_parts(step):
         return []
     return [f"CUSTOM_PARTS: {rel(ASSETS / st['id'] / 'custom_parts.py')}", ""]

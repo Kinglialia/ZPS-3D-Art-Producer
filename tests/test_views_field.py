@@ -1,4 +1,4 @@
-"""D32: the `views` field of the asset card decides which views steps run and which side images they make."""
+"""D35: the `views` field of the asset card decides which views steps run and which side images they make."""
 import copy
 import sys
 from pathlib import Path
@@ -17,7 +17,7 @@ TOOLS = SCRIPTS.parent / "agents"
 
 
 def test_the_four_values_and_their_side_views_are_the_d32_table():
-    """full has no top: no step after views needs a top image (D32.5); back keeps front as the colour reference."""
+    """full has no top: no step after views needs a top image (D35.5); back keeps front as the colour reference."""
     assert check_card.VIEW_SETS == {"none": (), "back": ("back",), "full": ("back", "left", "right"),
                                     "full_top": ("back", "left", "right", "top")}
     assert check_card.DEFAULT_VIEWS == "full"
@@ -100,20 +100,20 @@ def none_flow(tmp_path_factory):
     return no_views_flow(tmp_path_factory.mktemp("none"))
 
 
-def test_views_none_goes_from_blockout_straight_to_model_and_then_texture_d32(none_flow):
+def test_views_none_goes_from_blockout_straight_to_model_and_then_texture_d35(none_flow):
     assert none_flow.cp["approve b1"]["st"]["stage"] == "model"
     assert none_flow.cp["approve m1"]["st"]["stage"] == "texture"
     assert not (none_flow.root / A / "views_front").exists()
 
 
 @pytest.mark.parametrize("name", ["m1 brief", "m1 review brief", "t1"])
-def test_views_none_model_and_texture_briefs_build_and_point_at_no_view_folder_d32(none_flow, name):
+def test_views_none_model_and_texture_briefs_build_and_point_at_no_view_folder_d35(none_flow, name):
     text = none_flow.cp[name]["text"]
     assert ("views_front" in text, "views_rest" in text) == (False, False)
     assert "VIEWS: none" in text.splitlines()
 
 
-def test_views_none_texture_brief_names_the_material_file_for_the_texture_notes_d32(none_flow):
+def test_views_none_texture_brief_names_the_material_file_for_the_texture_notes_d35(none_flow):
     row = next(l for l in none_flow.cp["t1"]["text"].splitlines() if l.startswith("5. Concept đã duyệt"))
     assert row.endswith("chỉ đọc `concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`, `pilot-house.material.md`. "
                         "Bỏ qua file và thư mục khác (bản nháp cũ).")
@@ -124,7 +124,7 @@ def test_views_none_redo_of_a_views_step_is_refused(none_flow):
     assert out.strip().endswith("pilot-house: bước views_rest không chạy cho asset này (thẻ views: none)")
 
 
-def test_views_none_exceptions_of_the_final_readme_take_the_texture_only_notes_of_the_card_d32(tmp_path):
+def test_views_none_exceptions_of_the_final_readme_take_the_texture_only_notes_of_the_card_d35(tmp_path):
     import assemble
     d = make_asset(tmp_path, card=mutated(views="none", real_texture_only_notes=[
         "real: cửa nhô 5 cm", "texture_only: vân gỗ, không dựng"]))
@@ -138,7 +138,7 @@ def tool(agent, name, *args):
                           text=True)
 
 
-def test_texture_check_inputs_with_views_none_wants_the_material_file_not_the_view_folders_d32(tmp_path):
+def test_texture_check_inputs_with_views_none_wants_the_material_file_not_the_view_folders_d35(tmp_path):
     import json
     c, b, m = tmp_path / "C", tmp_path / "B", tmp_path / "M"
     for d in (c, b, m / "parts", m / "review"):
@@ -155,7 +155,7 @@ def test_texture_check_inputs_with_views_none_wants_the_material_file_not_the_vi
                 "--concept", c).returncode == 0
 
 
-def test_texture_complexity_with_views_none_reads_the_motif_from_the_material_file_d32(tmp_path):
+def test_texture_complexity_with_views_none_reads_the_motif_from_the_material_file_d35(tmp_path):
     import json
     from PIL import Image
     b, c, f = tmp_path / "B", tmp_path / "C", tmp_path / "F"

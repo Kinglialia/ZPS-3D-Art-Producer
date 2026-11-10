@@ -1,7 +1,7 @@
 """The view set of views_rest is complete (concept-views.md §6). Pure Python + Pillow + PyYAML.
 
 Usage: python3 tools/check_package.py --final <V/final> --front <views_front final>/front.png --card <asset-card.yaml>
-  package.views   front (--front) and the side views of the card's `views` exist (D32: back; full: back, left, right;
+  package.views   front (--front) and the side views of the card's `views` exist (D35: back; full: back, left, right;
                   full_top: and top; no field = full)
   package.sheet   report/VIEWS_sheet.json holds the sha256 of exactly these files (the sheet shows what ships)
   package.readme  README.md line 1 is the fixed pointer line; the 4 sections exist in order, none empty

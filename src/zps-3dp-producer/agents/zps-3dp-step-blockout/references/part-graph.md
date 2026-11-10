@@ -59,7 +59,7 @@ Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material
 - `has_map: false`: `files.layout` là `_approved/<id>/asset-card.yaml`; `layout.w/d/h` bằng `size_m`; `character_h` từ `scale_refs` của profile; `door_h` từ `scale_overrides` của thẻ, hoặc đo trên concept với `character_h` làm thước, cách đo ghi vào `door_h_source`. Asset không có cửa (prop): `door_h: null`, `door_h_source` ghi lý do, ví dụ "không có cửa".
 - Hàm `custom` nhận mọi param dạng số thực: ép `int(...)` cho số đoạn, số cạnh.
 
-## Hàm `custom` (D33)
+## Hàm `custom` (D32)
 
 - Hàm chung trong `tools/custom_lib.py` (đọc docstring để biết tham số):
   - `vault(w, d, h, arch_h, seg, planks=1, gap=0, depth=0, r=0, bseg=2)`: khối vòm theo X (mái vòm, nắp, đường hầm); `planks` ≥ 2 chia vòm thành dải bằng rãnh.

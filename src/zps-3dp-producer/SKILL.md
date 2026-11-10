@@ -46,6 +46,10 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash, chờ xong, rồi `P ingest <id>`.
 5. `P brief` in một dòng thay cho JSON khi bước `texture` dừng trước khi giao (thiếu key Meshy, câu hỏi Meshy): làm theo phần "Tiếp" của dòng đó.
 
+**Chế độ giao việc** (D33): không kết thúc lượt để chờ thông báo. Việc xong hay chưa đọc từ file trên đĩa (`P next`, file report).
+- Mặc định (`dispatch: foreground`, hoặc `policy.yaml` không có khóa này): giao subagent ở chế độ thường, không chạy nền. Cần song song thì giao nhiều subagent trong cùng một lượt.
+- `policy.yaml` có `dispatch: background` (lô nhiều asset): giao chạy nền, rồi chạy một `P wait`. Chỉ một `P wait` tại một thời điểm; đã có thì không tạo thêm.
+
 **Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`): chạy `P ingest <id>`; với worker thêm `--agent-id <id subagent>` để vòng sửa sau resume được. Runtime báo số token và thời lượng của subagent thì thêm `--tokens <N> --duration-ms <M>` (`references/runtime.md`, mục Token); không có số thì bỏ cờ đó, script ghi "không có số". `P stats <id>` in bảng theo bước: thời gian và token của worker, reviewer, khoảng chờ Producer. Script tự đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Kết quả dẫn tới lần giao tiếp (reviewer sau worker, worker vòng sửa sau FIX hoặc sau check fail, reviewer `full` chấm lại sau PASS ở vòng `fix`) thì `ingest` in thêm đúng dòng JSON của `P brief`: giao ngay theo dòng đó, trong cùng lượt (bước 2 ở trên). `P brief` gọi lại khi subagent chưa trả về chỉ in lại dòng đó, không giao thêm. Đừng tự diễn giải report thay script. Bạn không bao giờ sửa report của worker hay reviewer. Script báo report sai contract thì giao lại cho chính agent đó (gửi tiếp tới đúng subagent đó, `references/runtime.md` mục Resume): "Report sai contract: <dòng lỗi của script>. Sửa `<report>` rồi trả lại các dòng brief yêu cầu.". Script cảnh báo mà không báo lỗi (ví dụ `COMPARE` cho id ngoài `TOP_FIX`) thì không giao lại.
 
 **Lệnh đổi state cũng in lệnh giao việc:** `P feedback ... --action approve|redo`, `P waive`, `P retry` làm asset đổi state thì in thêm đúng dòng JSON của `P brief` ở dòng cuối (hoặc dòng dừng của bước texture). Giao ngay theo dòng đó, trong cùng lượt. Trang duyệt (`P serve`, `P board pull`) không giao: sau đó chạy `P next`.
@@ -110,6 +114,15 @@ Asset nhận rubric chung của loại (`production/rubrics/<type>.md`). Rubric 
 Muốn chỉnh rubric cho một asset riêng: sửa `assets/<id>/rubric.md` của asset đó. Viết rubric cần chuẩn thì đọc `art-direction/README.md` rồi đúng tài liệu liên quan.
 
 Asset không đến từ `_approved/`: `P new <id> --title "..." [--priority 1-3] [--deadline YYYY-MM-DD]`, rồi ghi yêu cầu của người dùng vào `assets/<id>/brief.md`, sát nguyên văn.
+
+## Phân loại thay đổi (D34)
+
+Skill dùng chung cho mọi loại vật. Người dùng muốn đổi quy tắc, số mặc định, từ vựng hay cách làm: phân loại trước khi đề xuất hay ghi. Đề xuất nào cũng ghi rõ loại; đây là bước bắt buộc.
+- *chung*: thay đổi của skill. Bạn không sửa skill: báo người dùng để chuyển cho bên code.
+- *dự án*: profile, preset, art direction, `policy.yaml` (`P approvals set`, `P rule`, Project Setup).
+- *asset*: thẻ asset hoặc `custom_parts.py` của asset (`P feedback <id> ...`).
+
+Câu kiểm: "Nếu là cái bàn, cái cây hay một ngôi nhà, thay đổi này còn đúng không?" Không đúng thì không phải *chung*.
 
 ## Không sửa file của người khác
 

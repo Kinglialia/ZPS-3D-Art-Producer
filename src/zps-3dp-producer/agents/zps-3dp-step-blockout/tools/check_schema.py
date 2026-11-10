@@ -4,7 +4,7 @@ Usage: python3 tools/check_schema.py --work <dir> [--out <json>]
 Checks: header, unique part names, fixed_params (+ _fixed_reason), required fields (a mirror_of part writes its own
 material, role and tag, because the kit copies only shape fields), primitive, rotation_deg,
 segments, enums, custom_fn (a `custom` part names a function of custom_lib.FUNCTIONS or of the asset's
-custom_parts.py, D33), custom_parts (that file passes the static check of project_parts.py and redefines no
+custom_parts.py, D32), custom_parts (that file passes the static check of project_parts.py and redefines no
 custom_lib function), connected (every part reaches the root through attach.to / mirror_of.of:
 orphans and cycles), order (parent listed earlier, as graph.py requires), mirror (a mirror_of part whose
 source uses inset_into or through_axis, or whose source's parent may sit off the mirror plane: the kit

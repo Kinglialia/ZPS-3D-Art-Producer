@@ -294,7 +294,7 @@ def test_every_views_brief_stays_under_the_token_budget_without_the_install_and_
     assert len(sizes) == 15 and max(sizes.values()) < BRIEF_MAX, sizes
 
 
-def test_the_set_brief_names_the_views_of_the_card_and_the_default_full_set_has_no_top_d32(flow):
+def test_the_set_brief_names_the_views_of_the_card_and_the_default_full_set_has_no_top_d35(flow):
     """The pilot card has no `views` field: full = back, left, right; the worker gens no top.png."""
     assert "VIEWS: full (back, left, right)" in flow["vr1 brief"]["text"].splitlines()
     assert "`final/top.png`" not in flow["vr1 brief"]["text"]

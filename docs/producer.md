@@ -1,7 +1,7 @@
 # Spec — Producer (v2)
 
 Tên kỹ thuật: `zps-3dp-producer`. Tên hiển thị: ZPS-3DP · Producer.
-v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D26). v0.7.0: 2026-11-10 (D28–D32). Quyết định nền: `docs/decisions.md` (D14, D21–D32 và các quyết định trước còn hiệu lực).
+v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D26). v0.7.0: 2026-11-10 (D28–D31, D35). v0.7.1: 2026-11-11 (D32–D34; `views` đổi số từ D32 thành D35, bảng đối chiếu ở đầu `docs/decisions.md`). Quyết định nền: `docs/decisions.md` (D14, D21–D35 và các quyết định trước còn hiệu lực).
 
 **Nền:** skill `producer` anh đã làm (`producer-skill.zip`: `SKILL.md`, `scripts/producer.py`, `references/`, `templates/`). Spec này giữ cơ chế của skill đó và ghi những chỗ thay đổi.
 
@@ -16,6 +16,8 @@ Producer là **skill chạy trong phiên chính**. Producer chỉ điều phối
 - Chuyển câu hỏi của agent cho anh, và chuyển nguyên văn feedback của anh vào file.
 
 Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **không** tự ghi trạng thái (D21.5): mọi đánh dấu (version cũ, số lần gọi Meshy, hash) do script tính. Trạng thái nằm trong file, không nằm trong trí nhớ của Producer.
+
+**Skill phục vụ mọi object** (D34). Mọi thay đổi được phân loại trước khi làm: *chung* (skill), *dự án* (profile, preset, art bible, `policy.yaml`), *asset* (thẻ asset, `custom_parts.py`). Câu kiểm: "Nếu là cái bàn, cái cây hay một ngôi nhà, thay đổi này còn đúng không?" Không đúng thì không vào skill. Số mặc định rút từ một asset nằm trong config, kèm nguồn gốc và ghi chú "tạm, đo lại sau N asset". Từ vựng (`counts_keys`, `shape_hints`) thuộc profile của dự án.
 
 ## 2. Giữ nguyên từ skill nền
 
@@ -80,6 +82,12 @@ review_board: local    # local | local+remote
 delegations: []        # ghi bởi P delegate
 test_mode: false       # true: cho phép P waive --by producer (D30.1)
 disk_warn_gb: 20       # P next cảnh báo khi production/ vượt ngưỡng này (D29)
+texture_default: meshy # chế độ của `auto` khi có key và budget (D30.11, D34.2); tạm, nguồn Run 5 (một asset), đo lại sau 3–5 asset khác loại
+dispatch: foreground   # foreground | background (D33.12–14)
+watch:                 # số của dự án (D33.11, D33.18)
+  stall_min: 10        # phút không có nhịp tim mới → kẹt
+  deadline_factor: 2   # hạn chót = thời gian thường lệ của bước × hệ số này
+  max_nudges: 1
 ```
 
 - Project Setup hỏi anh các giá trị này lúc khởi tạo, ghi file. Gợi ý: pilot để `human` hết.
@@ -91,6 +99,8 @@ disk_warn_gb: 20       # P next cảnh báo khi production/ vượt ngưỡng n�
 - Mọi lần duyệt ghi **ai duyệt** (anh, chính sách, ủy quyền). Anh bấm Cần sửa được bất cứ lúc nào.
 - **`test_mode`** (D30.1): chỉ khi `true` thì `P waive --by producer` chạy. Dự án thật để `false`.
 - **`disk_warn_gb`** (D29): ngưỡng dung lượng của `production/`, tính bằng GB.
+- **`texture_default`** (D34.2): chế độ texture mặc định nằm ở đây, không viết cứng trong code.
+- **`dispatch`, `watch`** (D33): chế độ giao việc và ngưỡng kẹt. Mục 6.6.
 
 ## 5. Xem kết quả
 
@@ -209,7 +219,7 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 
 ### 6.3 Meshy (D20.14, D21.2, D24.2, D24.3)
 
-**Chế độ mặc định** (D30.11, sửa D10): có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Ledger ghi chế độ đã chọn và lý do. Mới có 1 mẫu (Run 5); đo lại sau 3–5 asset.
+**Chế độ mặc định** (D30.11, sửa D10): có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Ledger ghi chế độ đã chọn và lý do. Mới có 1 mẫu (Run 5); đo lại sau 3–5 asset. Chế độ này nằm trong `policy.yaml` (`texture_default`), kèm nguồn gốc (D34.2).
 
 **Anh chọn chế độ trước bước texture:** `P texture-mode <id> auto|meshy|paint [--by "<lời anh>"]`. Script lưu vào `status.json` (`texture_choice`), không ghi vào thẻ asset. Ledger ghi giá trị, ai đổi (mặc định người dùng) và lúc đổi. Anh chọn trước khi duyệt model: lúc duyệt model, script sinh brief texture và giao worker luôn (D30.5). Chọn sau đó thì áp dụng từ brief texture tiếp theo.
 - `auto` (mặc định): Meshy SỬA khi có key và budget, như trên.
@@ -274,6 +284,18 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 - Ngoài đường dự phòng, tin nhắn trả về vẫn chỉ gồm `VERDICT` và `COUNTS` (D22.6).
 - Code hiện tại (`170aadc`) bắt reviewer luôn trả report bằng chữ và Producer luôn lưu hộ. Code phải đổi theo mục này. Hai dòng đánh dấu và cách `ingest` đọc chúng (`170aadc`, `39c8ebf`) giữ cho đường dự phòng.
 
+### 6.6 Không có thời gian chết (D33)
+
+Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên đĩa.
+- Worker và reviewer không chạy lệnh nền. Lệnh dài (Blender, `codex exec`, `meshy_call.py`) đi qua tool của Producer, mỗi tool có timeout riêng. Bash timeout mặc định 10 phút trong `settings.snippet.json`; `P preflight` báo khi chưa đặt.
+- Meshy chưa xong sau khoảng 8 phút → `pending`; `meshy_call.py --resume` chờ tiếp đúng task, không tạo task mới. Hạn tổng 30 phút → `BLOCKED`.
+- Tool ghi `vN/heartbeat.log` khi bắt đầu, khi xong, và khoảng 30 giây một lần khi tiến trình con còn dùng CPU hoặc còn ra output. File output (`worker-out.md`, `review-out.md`) là tín hiệu xong việc.
+- Hook `SubagentStop` gọi `P on-stop`: script ghi trạng thái lần giao xuống đĩa, kể cả khi Producer không nhận thông báo.
+- Mỗi lần giao có hạn chót trong ledger. Kẹt (quá `stall_min` không có nhịp tim, hoặc quá hạn chót) → nudge → giao lại cho agent mới cùng brief → `waiting_human`.
+- `dispatch: foreground` (mặc định, pilot): giao subagent chế độ thường; song song thì giao nhiều agent trong cùng một lượt. `dispatch: background` (lô): giao chạy nền và một `P wait` duy nhất (file khóa).
+- `P next` hiện mỗi việc đang chạy một dòng (bước, version, vai trò, thời gian, nhịp tim gần nhất, hạn chót, trạng thái). `P stats` đếm kẹt, nudge, giao lại. Trang duyệt gắn nhãn "kẹt".
+- Người dùng thoát bằng Esc rồi `P retry`; trạng thái không mất.
+
 ## 7. Vòng sửa (D11, D21.1, D21.4, bằng script)
 
 0. **Mục "Hiện hành" của `feedback.md`** (D27.4): `P feedback --action redo` ghi vào Log **và** thêm dòng đó vào "Hiện hành". Văn bản nhiều dòng được nối thành một dòng ở "Hiện hành"; Log giữ nguyên văn. Khi bước đó được duyệt (anh hoặc reviewer duyệt), script xóa các dòng redo của bước khỏi "Hiện hành". Dòng Producer gộp tay thì giữ. Ghi chú chỉ vào Log, vì ghi chú không phải quyết định. Reviewer không báo finding vì "Hiện hành" trống. Run 4: mọi reviewer texture đều báo mục này. Code: `dfba2eb`, `c7a904e`.
@@ -325,7 +347,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
   - `P keep <id>` hủy lệnh xóa. `P purge <id> --by "<nguyên văn>"` xóa ngay. `--zip <file>` (ở `P purge` và ở `P feedback ... --action approve` của DUYỆT 2) nén phần sắp xóa ra chỗ khác.
   - Producer tự duyệt (`--by producer`, chỉ khi `test_mode: true`) thì không mở lệnh xóa. Sau khi xóa, `redo` bị từ chối.
   - A/B: thư mục `production-<runtime>/` không xóa trước khi cặp có `ab prefer` hoặc đủ hai lần `ab judge` (D29.11).
-  - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Mọi thứ khác xóa thật, không vào Thùng rác, kể cả code của asset: `custom_parts.py` và mọi bản `parts_lib.py` (D33). Script ghi manifest.
+  - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Giữ cả `custom_parts.py` của asset, như file nguồn text (D32.3). Mọi thứ khác xóa thật, không vào Thùng rác, kể cả file JSON lưới tạm do `custom_parts.py` sinh ra. Script ghi manifest.
   - `P disk`: dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb`.
   - Sau đó `P archive`.
 - **Agent chỉ đọc và ghi đường dẫn trong brief.** Mọi file agent có dòng: "Chỉ đọc file và thư mục brief chỉ định. Chỉ ghi trong thư mục version brief giao. Không quét thư mục asset."
@@ -337,8 +359,8 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 - **Kiểm:** `asset-card.yaml` hợp lệ (`check_card.py`: trường bắt buộc, giá trị hợp lệ, `type` có rubric); đủ file bắt buộc (albedo, có bóng, thẻ, material handoff); profile hợp lệ (`check_profile.py`).
 - **Concept brief = `asset-card.yaml`** (D22.3). Phần khuất (`hidden_sides`), đối xứng (`symmetric`), ghi chú real/texture_only (`real_texture_only_notes`) nằm trong thẻ. Không có file brief riêng. Khi spec agent nói "concept brief", nghĩa là thẻ này.
 - **MAP-LAYOUT:** nếu profile có `has_map: true`, intake bắt buộc có `<id>.layout.md`. Nếu `has_map: false`, thẻ bắt buộc có `size_m: {w, d, h}` (mét); `check_card.py` kiểm trường này. Blockout lấy W×D×H từ `size_m` (D20.9).
-- **`views`** (D32): `none | back | full | full_top`. Quyết định bước views gen những ảnh nào; `none` bỏ bước views. Giá trị lạ → `check_card.py` fail.
-- **`counts`** (D30.6, D33): tùy chọn, 6 khóa (`body_board_rows`, `lid_board_rows`, `doors`, `windows`, `pillars`, `steps`), giá trị số nguyên ≥ 0. Khóa khác hoặc giá trị sai → `check_card.py` fail. Part graph cần một param cùng tên trong `fixed_params`; gate blockout và model so giá trị param đó với thẻ. Không có param cùng tên → gate fail.
+- **`views`** (D35): `none | back | full | full_top`. Quyết định bước views gen những ảnh nào; `none` bỏ bước views. Giá trị lạ → `check_card.py` fail.
+- **`counts`** (D30.6, D32.5, D34.3): tùy chọn, giá trị số nguyên ≥ 0; giá trị sai → `check_card.py` fail. Danh sách khóa là `counts_keys` của profile dự án (khóa và nghĩa); khóa ngoài danh sách → `check_card.py` cảnh báo. Gate blockout và model so số của thẻ với param cùng tên trong `fixed_params`, hoặc với số part có `tag: <khóa>`. Lệch → gate fail. Skill không viết cứng khóa nào.
 - Thiếu hoặc sai → không đăng ký. Producer báo anh theo nhóm lỗi.
 - Loại asset lấy từ `type` trong thẻ (`building`, `prop`, `tree`, `rock`). Loại `character`, `creature`: báo v1 chưa hỗ trợ (D9).
 - **Ước lượng và báo giá theo lô** (D25.I): `P intake` in ước lượng thời gian và credit cho lô, dùng `estimate.py` của kit (dữ liệu của chính project trong `<project>/.zps-art/estimates.jsonl`; dưới 3 bản ghi thì dùng mặc định của kit). Tổng credit Meshy dự kiến của cả lô được đưa anh duyệt một lần. Mỗi asset xong, script ghi `estimate.py log` (phương pháp, số phút, credit, tris).
@@ -502,7 +524,8 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 | `P ab board`, `P compare`, cột `runtime` trong ledger | mới | ~150 dòng |
 | Intake: `check_card`, file bắt buộc, `type` từ thẻ, `check_profile` | `scan_approved`, `cmd_intake`, `create_asset` | ~60 dòng |
 | Tên `zps-3dp-producer`, adapter, đường dẫn | `SKILL.md`, `setup.md`, `adapters/` | — |
-| v0.7.0 (D28.1, D29, D30, D31, D32): thứ tự và test của từng đơn vị | `docs/intents/v0.7.0-plan.md` | — |
+| v0.7.0 (D28.1, D29, D30, D31, D35): thứ tự và test của từng đơn vị | `docs/intents/v0.7.0-plan.md` | — |
+| v0.7.1 (D32, D33, D34, D30.16–22): thứ tự, phân loại và test của từng đơn vị | `docs/intents/v0.7.1-plan.md` | — |
 
 ## 18. Thứ tự code (D22.18)
 

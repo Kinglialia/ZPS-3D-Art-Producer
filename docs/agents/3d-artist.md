@@ -178,7 +178,7 @@ Không còn là việc của 3D Artist (D22.11). Bước này do script `assembl
 
 ## 11. Tool
 
-Part `custom` gọi hàm chung trong `custom_lib.py` của skill, hoặc hàm riêng trong `custom_parts.py` của asset (D27.13, D33, `docs/agents/blockout.md` §9). 3D Artist được thêm hàm mới tên khác vào file của asset; không sửa thư viện chung.
+Part `custom` gọi hàm chung trong `custom_lib.py` của skill, hoặc hàm riêng trong `custom_parts.py` của asset (D27.13, D32, `docs/agents/blockout.md` §9). 3D Artist được thêm hàm mới tên khác vào file của asset; không sửa thư viện chung.
 
 Chép từ kit v0.10.4 (khóa, không sửa): `self_build/` (giống Blockout), `asset_checks/` (`mesh_check`, `uv_check`, `export_check`, `screen_tris_check`, `render_rig`), `optimize/bake.py` (chỉ phần unwrap UV, cần xác nhận khi viết code), `finalize.py`, `report.py`.
 

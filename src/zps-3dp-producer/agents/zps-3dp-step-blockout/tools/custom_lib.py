@@ -1,4 +1,4 @@
-"""Shared `custom` part functions: generic and parametrized, usable for many kinds of object (D33).
+"""Shared `custom` part functions: generic and parametrized, usable for many kinds of object (D32).
 A function that only one asset needs goes into that project's production/assets/<id>/custom_parts.py instead.
 Profiles lie in the Y-Z plane and extrude along X. FUNCTIONS is the set of shared names a `custom` part may use.
 bmesh loads inside Blender or with the bpy module; without it this file still imports, so check_schema.py can read FUNCTIONS."""

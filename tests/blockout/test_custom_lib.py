@@ -1,4 +1,4 @@
-"""`custom` part functions (D33): the shared custom_lib.py holds only generic functions, and the asset's own functions
+"""`custom` part functions (D32): the shared custom_lib.py holds only generic functions, and the asset's own functions
 live in <PRODUCER_ROOT>/assets/<id>/custom_parts.py. build_parts.py runs only these two files, never code an agent
 wrote into <work>/parts_lib.py, and it runs the asset file only after its static check passes."""
 import json

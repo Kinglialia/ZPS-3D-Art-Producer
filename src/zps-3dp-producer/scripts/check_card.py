@@ -23,7 +23,7 @@ CARD = "asset-card.yaml"
 SIDES = ("back", "left", "right", "top")
 VIEWS = ("front", "34", "game_camera")
 BEVELS = ("none", "toon")
-# D32: `views` -> the side views views_rest makes; views_front always makes front unless `none`. No field = full.
+# D35: `views` -> the side views views_rest makes; views_front always makes front unless `none`. No field = full.
 VIEW_SETS = {"none": (), "back": ("back",), "full": ("back", "left", "right"), "full_top": ("back", "left", "right", "top")}
 DEFAULT_VIEWS = "full"
 IMAGES = ("concept_albedo.png", "concept_shadow.png")
@@ -37,7 +37,7 @@ def required_files(aid: str, has_map: bool | None) -> list[str]:
 
 
 def views_of(card) -> str:
-    """The card's `views` mode; no field or null = full (D32). A wrong value is check()'s error, not this function's."""
+    """The card's `views` mode; no field or null = full (D35). A wrong value is check()'s error, not this function's."""
     v = card.get("views") if isinstance(card, dict) else None
     return DEFAULT_VIEWS if v is None else str(v)
 
