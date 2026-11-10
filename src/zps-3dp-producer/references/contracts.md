@@ -114,7 +114,7 @@ RESOLVED_NOTES: <bước> vN F<k>, ...  ghi chú còn mở của bước trướ
 ACCEPTED_FAIL: <file JSON> — <lý do có số>; ...   check fail không sửa được (D31.3), hoặc none
 ```
 
-`ACCEPTED_FAIL`: một dòng, các mục cách nhau bằng `; `; lý do không chứa `;`. `<file JSON>` là đường dẫn trong `final/review/{gates,checks}/`. `ingest` từ chối mục cho check không có `acceptable: true` trong config, và mọi gate cứng (hash, schema, `export_check`, topology Meshy). Mục bị từ chối → vẫn là vòng sửa. Worker ghi cả vào NGOẠI LỆ của README (plan D31.3; README nào cho `blockout`, `model`, `texture`: chốt khi code L6). Ledger đếm mỗi mục theo bước và theo check.
+`ACCEPTED_FAIL`: một dòng, các mục cách nhau bằng `; `; lý do không chứa `;`. `<file JSON>` là đường dẫn trong `final/review/{gates,checks}/`. `ingest` từ chối mục cho JSON không có trong `acceptable` của bước (`pipeline.toml`), mọi gate cứng (`HARD_GATES` trong code: `inputs.json`, `package.json` là hash; `schema.json`; `qa_export_check.json`; `meshy.json` là topology Meshy; `load_cfg` từ chối `acceptable` có gate cứng), lý do không có số, và mục chưa ghi vào mục `NGOẠI LỆ` của `final/README.md` của chính version đó (mọi bước; `assemble.py` chép các mục này vào Ngoại lệ của README gói cuối). Mục bị từ chối → vẫn là vòng sửa; ledger ghi `ACCEPTED_FAIL từ chối`. Ledger đếm mỗi mục hợp lệ theo bước và theo check (`accepted_fail` trong status.json). Vòng trả thẳng: `fix_base` giữ nguyên (findings của reviewer), `direct` = version check fail (brief sửa từ bản đó); review đầu tiên sau các vòng trả thẳng không có base nên không bị dừng vì "không tiến bộ".
 
 Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`meshy_regen`), hoặc blocked khi bước này không có Meshy.
 

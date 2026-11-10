@@ -42,6 +42,8 @@ PORT = 8765
 FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 GATES = {"review", "review_human", "checks_human"}
+# D31.3: hash, schema, export_check and Meshy topology results never take an ACCEPTED_FAIL, whatever pipeline.toml says.
+HARD_GATES = ("inputs.json", "package.json", "schema.json", "qa_export_check.json", "meshy.json")
 
 STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", "evidence_running", "waiting_human",
           "blocked", "done", "done_enabled"}
@@ -139,6 +141,9 @@ def load_cfg() -> dict:
         s.setdefault("pilot", False)
         s.setdefault("script", None)
         s.setdefault("review_concept", None)
+        s.setdefault("acceptable", [])
+        if bad := [x for x in s["acceptable"] if x in HARD_GATES]:
+            die(f"step {s['id']}: acceptable có gate cứng {', '.join(bad)} (D31.3: không bao giờ được ACCEPTED_FAIL)")
         if bad := [x for x in s["inputs"] if x not in ids[:i]]:
             die(f"step {s['id']}: inputs {', '.join(bad)} không phải bước trước nó")
         if bad := [x for x in s["issues"] if x not in s["inputs"]]:

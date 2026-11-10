@@ -16,7 +16,8 @@ RUBRIC_VALUES = ("pass", "fail", "unclear")
 PICKS = ("a", "b", "c")
 BLOCKS = {"FINDINGS", "PRIOR"}
 REVIEW_KEYS = {"VERDICT", "RUBRIC", "COUNTS", "TOP_FIX", "EVIDENCE_OPENED", "COMPARE", "PICK", "RESOLVED_CONFIRMED"} | BLOCKS
-WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", "UNFIXABLE", "RESOLVED_NOTES"}
+WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", "UNFIXABLE", "RESOLVED_NOTES",
+               "ACCEPTED_FAIL"}
 NONE = {"", "-", "—", "none"}
 
 KEY = re.compile(r"^\s*([A-Z_]+):\s*(.*)$")
@@ -71,10 +72,23 @@ def note_ids(c: dict, key: str, errs: list[str]) -> list[str]:
     return ids
 
 
+def accepted_fails(s: str, errs: list[str]) -> list[tuple[str, str]]:
+    """D31.3 `ACCEPTED_FAIL: <file JSON> — <lý do có số>; ...`, or none."""
+    out = []
+    for item in ([] if s.lower() in NONE else [x.strip() for x in s.split(";") if x.strip()]):
+        f, sep, why = (x.strip() for x in item.partition(" — "))
+        if sep and f and why:
+            out.append((f, why))
+        else:
+            errs.append(f"ACCEPTED_FAIL: '{item[:60]}' phải là <file JSON> — <lý do có số>")
+    return out
+
+
 def parse_worker(text: str) -> tuple[dict, list[str]]:
     c = parse_contract(text, WORKER_KEYS)
     errs = []
     c["RESOLVED_NOTES"] = note_ids(c, "RESOLVED_NOTES", errs)
+    c["ACCEPTED_FAIL"] = accepted_fails(c.get("ACCEPTED_FAIL", ""), errs)
     if c.get("STATUS") not in WORKER_STATUS:
         errs.append(f"STATUS phải là {'|'.join(sorted(WORKER_STATUS))}")
     if not c.get("PROFILE_HASH"):

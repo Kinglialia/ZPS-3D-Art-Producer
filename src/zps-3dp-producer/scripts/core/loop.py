@@ -5,10 +5,11 @@ import hashlib
 import re
 import shutil
 from argparse import Namespace
+from pathlib import PurePosixPath
 
 from . import annotate, findings, hashes, policy, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
-from .state import (ASSETS, DELIVER, FINISHED, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
+from .state import (ASSETS, DELIVER, FINISHED, HARD_GATES, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
                     stamp, step_of, vdir)
 
 NOT_PASSED = "chưa đạt"
@@ -23,6 +24,7 @@ MOVES = {
     ("review", "dispatch"): "reviewing", ("reviewing", "dispatch"): "reviewing",
     ("evidence", "dispatch"): "evidence_running", ("evidence_running", "dispatch"): "evidence_running",
     ("running", "worker_done"): "review", ("running", "checks_done"): "waiting_human", ("running", "stuck"): "blocked",
+    ("running", "checks_failed"): "fix",
     ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
     ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence", ("reviewing", "reopen"): "fix",
     ("reviewing", "stuck"): "blocked",
@@ -39,7 +41,7 @@ MOVES = {
 
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0,
-            "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None}
+            "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -189,8 +191,67 @@ def script_findings(st, sid: str, n: int, rep):
     findings.save(st["id"], sid, doc)
 
 
+def readme_exceptions(d) -> str:
+    """Text under the NGOẠI LỆ heading of final/README.md, up to the next heading."""
+    p = d / "final" / "README.md"
+    m = re.search(r"^#+[^\n]*NGOẠI LỆ[^\n]*\n(.*?)(?=^#|\Z)", p.read_text(encoding="utf-8"), re.M | re.S | re.I) \
+        if p.is_file() else None
+    return m.group(1) if m else ""
+
+
+def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -> tuple[dict, list[str]]:
+    """D31.3: which failed JSON the worker may leave failed. Returns ({failed path: (name, why)}, refusals)."""
+    ok, refused, notes = {}, [], readme_exceptions(d)
+    for f, why in claims:
+        hit = next((b for b in bad if b == f or b.endswith("/" + f.removeprefix("./"))), None)
+        name = PurePosixPath(hit or f).name
+        if hit is None:
+            refused.append(f"{f}: không phải JSON fail trong final/review/{{gates,checks}}/")
+        elif name in HARD_GATES:
+            refused.append(f"{name}: gate cứng, không bao giờ được ACCEPTED_FAIL")
+        elif name not in step["acceptable"]:
+            refused.append(f"{name}: không có trong acceptable của bước {step['id']}")
+        elif not re.search(r"\d", why):
+            refused.append(f"{name}: lý do phải có số")
+        elif name not in notes:
+            refused.append(f"{name}: chưa ghi vào mục NGOẠI LỆ của final/README.md")
+        else:
+            ok[hit] = (name, why)
+    return ok, refused
+
+
+def checks_failed(cfg, st, step, d, n, c) -> bool:
+    """D31.3: a failed gate or check JSON the worker did not validly accept goes straight back to the worker, no
+    reviewer. The round counts toward max_fix_rounds."""
+    from .briefs import failed_checks
+    if step["gate"] == "checks_human" or not (bad := failed_checks(d)):
+        return False
+    sid, r = step["id"], cfg["review"]
+    ok, refused = accept_fails(step, d, bad, c["ACCEPTED_FAIL"])
+    for name, why in ok.values():
+        k = st.setdefault("accepted_fail", {}).setdefault(sid, {})
+        k[name] = k.get(name, 0) + 1
+        ledger(f"{st['id']} · {sid} v{n} · ACCEPTED_FAIL {name} · lần {k[name]} · {why}")
+    for x in refused:
+        ledger(f"{st['id']} · {sid} v{n} · ACCEPTED_FAIL từ chối · {x}")
+    st["accepted"] = {"v": n, "items": [f"{name} — {why}" for name, why in ok.values()]} if ok else None
+    if not (left := [b for b in bad if b not in ok]):
+        return False
+    names = ", ".join(PurePosixPath(b).name for b in left) + (f" (từ chối: {'; '.join(refused)})" if refused else "")
+    if st.get("fix_round", 0) >= r["max_fix_rounds"]:
+        move(st, "ask_human")
+        best = findings.best_version([findings.load(st["id"], sid, v) for v in st.get("round_versions", [])]) or n
+        offer(st, sid, best, note=f"hết {r['max_fix_rounds']} vòng sửa; check fail ở v{n}: {names}", label=NOT_PASSED)
+    else:
+        move(st, "checks_failed")
+        st["fix_round"] = st.get("fix_round", 0) + 1
+        st |= {"direct": n, "note": f"vòng sửa {st['fix_round']}/{r['max_fix_rounds']}: check fail {names}"}
+    return True
+
+
 def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
     script = not step.get("agent")
+    st["direct"] = None
     rep = d / ("report-script.md" if script else "worker-out.md")
     c = worker_report(st, rep, a.agent_id, step["id"], n)
     st["last_rubric"] = c.get("RUBRIC", "")
@@ -213,6 +274,8 @@ def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
     elif step["gate"] == "checks_human":
         move(st, "checks_done")
         offer(st, step["id"], n, note=f"duyệt {step['id']} v{n}")
+    elif checks_failed(cfg, st, step, d, n, c):
+        return f"worker {c['STATUS']} (check fail)", st["note"]
     else:
         move(st, "worker_done")
         st["note"] = ""
@@ -285,7 +348,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     base = findings.load(aid, sid, st.get("fix_base"))
     kind = (rv["top_fix"] or {}).get("kind")
     event, reason = review_event(rv["verdict"], kind, who != "human", st.get("fix_round", 0), r["max_fix_rounds"],
-                                 bool(base) and findings.progress(base, doc), st.get("evidence_used", 0),
+                                 not base or findings.progress(base, doc), st.get("evidence_used", 0),
                                  reopened_of(st).get(kind, 0))
     st["evidence"] = None
     st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())

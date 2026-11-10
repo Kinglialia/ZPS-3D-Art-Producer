@@ -60,9 +60,12 @@ class Flow:
         if failing:
             (vd / "final/review/checks").mkdir(parents=True)
             (vd / "final/review/checks/measure.json").write_text(json.dumps({"tool": "views/measure", "overall": "fail"}))
+            (vd / "final/README.md").write_text("## NGOẠI LỆ\n- measure.json — IoU front 0.81 < 0.85 do bóng đổ\n",
+                                                encoding="utf-8")
         ph = re.search(r"^PROFILE_HASH: (\w+)$", self.cp[name + " brief"]["text"], re.M).group(1)
-        (self.root / out["report"]).write_text(f"STATUS: DONE\nRUBRIC: style=pass\nISSUES: none\nPROFILE_HASH: {ph}\n",
-                                               encoding="utf-8")
+        accepted = "ACCEPTED_FAIL: measure.json — IoU front 0.81 < 0.85 do bóng đổ\n" if failing else ""
+        (self.root / out["report"]).write_text(f"STATUS: DONE\nRUBRIC: style=pass\nISSUES: none\nPROFILE_HASH: {ph}\n"
+                                               + accepted, encoding="utf-8")
         self.cp[name + " worker"] = {"out": self.p("ingest", AID, "--agent-id", f"w-{name}"), "st": self.st()}
 
     def review(self, name, **kw):
@@ -256,7 +259,9 @@ def test_a_blockout_redo_after_the_set_keeps_the_old_views_as_prior_so_the_next_
 def test_the_ledger_records_the_reopen_with_the_carried_id(flow):
     def rnd(step, n, review, aid="pilot-house", by_reviewer=False):
         agent = "blockout" if step == "blockout" else "views"
+        accepted = [f"{aid} · views_front v1 · ACCEPTED_FAIL measure.json · lần 1 · IoU front 0.81 < 0.85 do bóng đổ"]
         return [f"{aid} · {step} v{n} · giao worker (zps-3dp-step-{agent}, opus)",
+                *(accepted if (step, n) == ("views_front", 1) else []),
                 f"{aid} · {step} v{n} · worker DONE · style=pass",
                 f"{aid} · {step} v{n} · giao reviewer (zps-3dp-check-{agent}, opus)",
                 *([f"{aid} · {step} v{n} · duyệt bởi reviewer"] if by_reviewer else []),

@@ -132,6 +132,17 @@ def waived(st: dict, by: str, tag: str = "") -> list[str]:
     return rows
 
 
+def exceptions(st: dict) -> list[str]:
+    """README "Ngoại lệ": views_rest exceptions and texture notes, blockout decisions, user waives (D30.1), and the
+    NGOẠI LỆ section of every other step's README, where a worker writes its ACCEPTED_FAIL (D31.3)."""
+    return [*section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "NGOẠI LỆ"),
+            *section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "TEXTURE NOTE"),
+            *section(vdir(st["id"], "blockout", st["approved"].get("blockout", 0)) / "final" / "blockout.md", "Blockout tự quyết"),
+            *waived(st, "user", "người dùng waive: "),
+            *(f"- {sid}: {x.lstrip('- ')}" for sid in ("blockout", "views_front", "model", "texture")
+              for x in section(vdir(st["id"], sid, st["approved"].get(sid, 0)) / "final" / "README.md", "NGOẠI LỆ"))]
+
+
 def meshy_spend(st: dict) -> tuple[int, float]:
     price = st.get("meshy_price") or 10
     used = sum(json.loads(p.read_text(encoding="utf-8"))["used_credits"]
@@ -144,10 +155,7 @@ def readme(st, mv, tv, mf, tf, res, qa, data) -> str:
     calls, credits = meshy_spend(st)
     small = next((c.get("value") for c in qa.get("screen_tris_check", {}).get("checks", [])
                   if c.get("check") == "screen.small_tri_ratio"), None)
-    exc = [*section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "NGOẠI LỆ"),
-           *section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "TEXTURE NOTE"),
-           *section(vdir(st["id"], "blockout", st["approved"].get("blockout", 0)) / "final" / "blockout.md", "Blockout tự quyết"),
-           *waived(st, "user", "người dùng waive: ")]
+    exc = exceptions(st)
     work = open_work(st)
     cam = json.loads((mf / "spec.json").read_text(encoding="utf-8")).get("camera") or {}
     return "\n".join([

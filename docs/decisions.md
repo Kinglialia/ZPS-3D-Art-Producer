@@ -389,7 +389,7 @@ Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
    - **Chỉ PASS khi lần review gần nhất là `full`.** Vòng `fix` hết lỗi mở, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
 3. **R3 — Check fail trả thẳng về worker.** Worker xong mà có JSON `fail` hoặc `error` trong `final/review/{gates,checks}/` → vòng sửa của worker luôn, không gọi reviewer. Brief vòng đó kèm danh sách JSON fail. Vòng trả thẳng tính vào `max_fix_rounds`. Hết vòng → `waiting_human`.
    - Lối ra: worker ghi `ACCEPTED_FAIL: <file> — <lý do có số>` trong `worker-out.md` và mục NGOẠI LỆ của README. Asset sang reviewer; reviewer chấm lý do đó.
-   - Chỉ check có `acceptable: true` trong config mới được khai `ACCEPTED_FAIL`.
+   - Chỉ check có tên trong danh sách `acceptable` của bước trong `pipeline.toml` mới được khai `ACCEPTED_FAIL` (mặc định: `measure.json` ở `views_front`, `views_rest`; `qa_screen_tris_check.json` ở `model`). Danh sách nằm trong config, không viết cứng trong code. README: `final/README.md` của version, mục NGOẠI LỆ (Producer chốt 2026-11-10).
    - Gate cứng không bao giờ được khai: hash, schema, `export_check`, topology Meshy (D30.3). Khai cho gate cứng → script từ chối, vẫn là vòng sửa.
    - Ledger đếm mỗi lần khai, theo bước và theo check.
 4. **R4 — `P stats` tách theo loại vòng.** Thời gian và token reviewer tách thành: vòng đầu, vòng sửa, vòng chấm cuối (`full`).

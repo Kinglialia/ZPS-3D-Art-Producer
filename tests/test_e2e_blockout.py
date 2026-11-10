@@ -79,10 +79,13 @@ class Pilot:
             (vd / "final/review/checks/layout.json").write_text(json.dumps({
                 "tool": "blockout/check_layout", "overall": "fail",
                 "checks": [{"check": "layout.bbox", "status": "fail"}]}), encoding="utf-8")
+            (vd / "final/README.md").write_text("## NGOẠI LỆ\n- layout.json — bbox lệch 8% do mái chìa 0.3 m\n",
+                                                encoding="utf-8")
         ph = re.search(r"^PROFILE_HASH: (\w+)$", text, re.M).group(1)
         rep = [f"STATUS: {status}", f"OUTPUT: {vd.relative_to(self.root)}/final/",
                "RUBRIC: concept_match=pass; scale=pass", "ISSUES: layout.bbox lệch 8%" if failing else "ISSUES: none",
-               f"PROFILE_HASH: {ph}", *([f"FIXED: {ids(*fixed)}"] if fixed else [])]
+               f"PROFILE_HASH: {ph}", *([f"FIXED: {ids(*fixed)}"] if fixed else []),
+               *(["ACCEPTED_FAIL: final/review/checks/layout.json — bbox lệch 8% do mái chìa 0.3 m"] if failing else [])]
         (self.root / out["report"]).write_text("\n".join(rep) + "\n", encoding="utf-8")
         self.save(name + " worker", self.p("ingest", AID, "--agent-id", "w1"))
 
@@ -98,6 +101,10 @@ def flow(tmp_path_factory):
     f = Pilot(root)
     pilot_project(root)
     blockout_only(root)
+    p = root / "production/pipeline.toml"  # D31.3: this flow lets the blockout worker accept a failed layout check
+    p.write_text(p.read_text(encoding="utf-8").replace('top_fix = ["structure", "param"]\n',
+                                                         'top_fix = ["structure", "param"]\nacceptable = ["layout.json"]\n', 1),
+                 encoding="utf-8")
     f.save("intake list", f.p("intake"))
     f.save("intake", f.p("intake", AID))
     f.save("ready", f.p("ready", AID))
@@ -327,7 +334,9 @@ def test_cleanup_and_archive_accept_done_enabled_and_keep_the_approved_work(flow
 
 def test_the_ledger_records_every_dispatch_report_and_decision_in_order(flow):
     def rnd(n, review, worker="DONE"):
+        accepted = ["pilot-house · blockout v1 · ACCEPTED_FAIL layout.json · lần 1 · bbox lệch 8% do mái chìa 0.3 m"]
         return [f"pilot-house · blockout v{n} · giao worker (zps-3dp-step-blockout, opus)",
+                *(accepted if n == 1 else []),
                 f"pilot-house · blockout v{n} · worker {worker} · concept_match=pass; scale=pass",
                 f"pilot-house · blockout v{n} · giao reviewer (zps-3dp-check-blockout, opus)",
                 f"pilot-house · blockout v{n} · review {review}"]
@@ -399,12 +408,10 @@ def real_build(tmp_path_factory):
     ph = re.search(r"^PROFILE_HASH: (\w+)$", (root / out["brief"]).read_text(encoding="utf-8"), re.M).group(1)
     (root / out["report"]).write_text(f"STATUS: DONE_WITH_CONCERNS\nRUBRIC: scale=fail\nISSUES: layout.bbox\n"
                                       f"PROFILE_HASH: {ph}\n", encoding="utf-8")
-    run(root, "ingest", AID, "--agent-id", "w1")
-    rv = json.loads(run(root, "brief", AID))
-    (root / rv["report"]).write_text(report(findings=[finding("F1", "major", "structure")]), encoding="utf-8")
-    run(root, "ingest", AID)
-    fix = json.loads(run(root, "brief", AID))
-    return {"rc": rc, "review": f / "review", "fix": (root / fix["brief"]).read_text(encoding="utf-8")}
+    ingest = run(root, "ingest", AID, "--agent-id", "w1").splitlines()
+    fix = json.loads(ingest[-1])
+    return {"rc": rc, "review": f / "review", "fix": (root / fix["brief"]).read_text(encoding="utf-8"),
+            "ingest": ingest[0], "role": fix["role"]}
 
 
 @pytest.mark.blender
@@ -422,6 +429,10 @@ def test_real_tools_write_gates_and_checks_under_final_review_where_the_fix_brie
 @pytest.mark.blender
 @needs_tools
 def test_a_failing_real_check_is_the_only_script_error_named_in_the_next_fix_brief(real_build):
+    """D31.3: the failed layout check goes back to the worker at once; no reviewer judges a version that fails a check."""
+    assert (real_build["ingest"], real_build["role"]) == (
+        "pilot-house: worker DONE_WITH_CONCERNS (check fail) → blockout/fix. Tiếp: giao worker → `brief pilot-house`",
+        "worker")
     assert f"\n8. Đọc trước nguyên văn lỗi script của bản gốc: `{V}1/final/review/checks/layout.json`.\n" in real_build["fix"]
 
 

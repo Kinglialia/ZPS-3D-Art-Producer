@@ -35,13 +35,16 @@ class Flow:
     def text(self, out):
         return (self.root / out["brief"]).read_text(encoding="utf-8")
 
-    def work(self, status="DONE", out=None):
+    def work(self, status="DONE", out=None, extra="", checks=None):
+        """checks: {name: overall} of result JSON the worker leaves in final/review/checks/."""
         out = out or self.brief()
         rep = self.root / out["report"]
         if rep.parent.name.startswith("v"):
             for o in OUTPUTS:
                 (rep.parent / "final" / o).write_text("x", encoding="utf-8")
-        rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n", encoding="utf-8")
+            for name, overall in (checks or {}).items():
+                write_json(rep.parent / "final/review/checks" / name, {"overall": overall})
+        rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n" + extra, encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
 
     def review(self, out=None, **kw):
@@ -788,3 +791,101 @@ def test_no_worker_or_reviewer_brief_tells_the_agent_to_write_its_report_through
     texts.append(flow.text(flow.brief()))
     assert [t.splitlines()[0][:16] for t in texts] == ["# Brief — House ", "# Review brief —", "# Brief — House "]
     assert [l for t in texts for l in t.splitlines() if shell.search(l)] == []
+
+
+
+def acceptable(root, *names):
+    p = root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('top_fix = ["structure", "param"]\n',
+                                                       f'top_fix = ["structure", "param"]\nacceptable = {list(names)!r}\n'.replace(
+                                                           "'", '"'), 1), encoding="utf-8")
+
+
+def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_counts_as_a_round_d31_3(flow):
+    """Run 5: reviewers spent tokens judging versions a script had already failed; the fix needs the script's words."""
+    head, line = flow.work(checks={"join.json": "fail", "layout.json": "pass"}).splitlines()
+    assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    out = json.loads(line)
+    assert (out["role"], out["brief"], out["resume"]) == ("worker", f"production/assets/{AID}/blockout/v2/brief-worker.md",
+                                                          "w1")
+    assert (flow.st["fix_round"], flow.st.get("fix_base"), flow.st["direct"]) == (1, None, 1)
+    assert not (flow.v(1) / "brief-review.md").exists()
+    text = flow.text(out)
+    assert (f"Bản gốc: `production/assets/{AID}/blockout/v1/` (bản vừa dựng, check fail; final/ + work/)" in text,
+            f"Đọc trước nguyên văn lỗi script của bản gốc: `production/assets/{AID}/blockout/v1/final/review/checks/join.json`."
+            in text, "Đây là vòng sửa 1." in text) == (True, True, True)
+    assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail join.json" in flow.ledger()
+
+
+def test_accepted_fail_for_a_hard_gate_is_refused_and_the_round_stays_a_fix_d31_3(flow):
+    acceptable(flow.root, "layout.json")
+    (flow.v(1) / "final").mkdir(parents=True, exist_ok=True)
+    head = flow.work(checks={"schema.json": "fail"}, extra="ACCEPTED_FAIL: schema.json — 2 part thiếu attach\n"
+                     ).splitlines()[0]
+    assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert ("house-a · blockout v1 · ACCEPTED_FAIL từ chối · schema.json: gate cứng, không bao giờ được ACCEPTED_FAIL"
+            in flow.ledger(), flow.st.get("accepted_fail")) == (True, None)
+
+
+def test_accepted_fail_for_an_acceptable_check_with_its_readme_exception_goes_to_the_reviewer_and_is_counted_d31_3(flow):
+    acceptable(flow.root, "layout.json")
+    out = flow.brief()
+    assert "ACCEPTED_FAIL: <file JSON> — <lý do có số>; ... | none   (chỉ layout.json)" in flow.text(out).splitlines()
+    (flow.v(1) / "final/README.md").write_text("## NGOẠI LỆ\n- layout.json — bbox lệch 6% do diềm 0.2 m\n", encoding="utf-8")
+    line = flow.work(out=out, checks={"layout.json": "fail"},
+                     extra="ACCEPTED_FAIL: final/review/checks/layout.json — bbox lệch 6% do diềm 0.2 m\n").splitlines()[-1]
+    assert (json.loads(line)["role"], flow.st["accepted_fail"]) == ("reviewer", {"blockout": {"layout.json": 1}})
+    assert "house-a · blockout v1 · ACCEPTED_FAIL layout.json · lần 1 · bbox lệch 6% do diềm 0.2 m" in flow.ledger()
+    assert ("- Worker khai ACCEPTED_FAIL (check fail không sửa được): layout.json — bbox lệch 6% do diềm 0.2 m. Chấm lý do: "
+            "lý do không đứng được thì ghi finding.") in flow.text(json.loads(line)).splitlines()
+
+
+@pytest.mark.parametrize("readme, why, refusal", [
+    (None, "bbox lệch 6% do diềm 0.2 m", "layout.json: chưa ghi vào mục NGOẠI LỆ của final/README.md"),
+    ("## NGOẠI LỆ\n- layout.json — lệch\n", "bbox lệch do diềm", "layout.json: lý do phải có số"),
+])
+def test_accepted_fail_without_the_readme_entry_or_a_number_is_refused_d31_3(flow, readme, why, refusal):
+    acceptable(flow.root, "layout.json")
+    out = flow.brief()
+    if readme:
+        (flow.v(1) / "final/README.md").write_text(readme, encoding="utf-8")
+    flow.work(out=out, checks={"layout.json": "fail"}, extra=f"ACCEPTED_FAIL: layout.json — {why}\n")
+    assert (flow.st["state"], f"house-a · blockout v1 · ACCEPTED_FAIL từ chối · {refusal}" in flow.ledger()) == (
+        "running", True)
+
+
+def test_a_failed_check_after_the_last_fix_round_goes_to_the_human_d31_3(flow):
+    out = flow.brief()
+    st = flow.st
+    st["fix_round"] = 3
+    save_st(st)
+    assert flow.work(out=out, checks={"join.json": "fail"}) == (
+        "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: hết 3 vòng sửa; check fail ở "
+        "v1: join.json (review page)\n")
+    assert (flow.st["offer"], flow.st["label"]) == (1, "chưa đạt")
+
+
+def test_the_first_review_after_two_direct_returns_is_not_stopped_for_no_progress_because_it_has_no_base_d31_3(flow):
+    for _ in range(2):
+        flow.work(checks={"join.json": "fail"})
+    flow.work()
+    assert flow.st["fix_round"] == 2
+    assert flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")]).splitlines()[0] == (
+        "house-a: review FIX (major=1) → blockout/fix. Tiếp: giao worker → `brief house-a`")
+
+
+def test_a_hard_gate_in_the_acceptable_list_of_pipeline_toml_is_refused_at_load_d31_3(flow):
+    acceptable(flow.root, "qa_export_check.json")
+    with pytest.raises(ProducerError) as e:
+        load_cfg()
+    assert str(e.value) == ("step blockout: acceptable có gate cứng qa_export_check.json (D31.3: không bao giờ được "
+                            "ACCEPTED_FAIL)")
+
+
+def test_an_accepted_fail_in_a_step_readme_reaches_the_exceptions_of_the_duyet_2_readme_d31_3(flow):
+    import assemble
+    (flow.v(1) / "final").mkdir(parents=True, exist_ok=True)
+    (flow.v(1) / "final/README.md").write_text("# Blockout\n## NGOẠI LỆ\n- layout.json — bbox lệch 6% do diềm 0.2 m\n## Khác\n- x\n",
+                                               encoding="utf-8")
+    assert assemble.exceptions(flow.st | {"approved": {"blockout": 1}}) == [
+        "- blockout: layout.json — bbox lệch 6% do diềm 0.2 m"]

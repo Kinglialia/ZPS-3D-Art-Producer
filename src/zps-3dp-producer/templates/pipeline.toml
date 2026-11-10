@@ -10,6 +10,8 @@
 # issues: bước trong inputs mà brief chép dòng ISSUES của report worker bản đã duyệt (D20.3).
 # pilot: brief ghi PILOT: deliver/<pilot_asset>/ để tool so với pilot (D21.7, D22.10).
 # script: bước không có agent; `P brief` in lệnh chạy script (scripts/<script>), script ghi report-script.md.
+# acceptable: tên JSON trong final/review/{gates,checks}/ mà worker được khai ACCEPTED_FAIL khi fail (D31.3); JSON fail
+#   khác trả thẳng về worker, không gọi reviewer. Gate cứng không bao giờ được: inputs, package, schema, qa_export_check, meshy.
 
 [project]
 name = "{{PROJECT}}"
@@ -46,6 +48,7 @@ model = "opus"
 gate = "review"
 uses = ["blender", "codex_image"]
 top_fix = ["regen"]
+acceptable = ["measure.json"]
 inputs = ["blockout"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
 outputs = ["final/front.png", "final/guides/views.json", "final/concept_colors.json", "final/bg_color.json",
@@ -59,6 +62,7 @@ model = "opus"
 gate = "review_human"
 uses = ["codex_image"]
 top_fix = ["regen", "regen_front", "note_exception", "note_texture"]
+acceptable = ["measure.json"]
 inputs = ["blockout", "views_front"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
 regions = ["back", "left", "right", "top"]
@@ -77,6 +81,7 @@ inputs = ["blockout", "views_front", "views_rest"]
 review_inputs = ["blockout"]
 concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
 pilot = true
+acceptable = ["qa_screen_tris_check.json"]
 lock = "final/{id}-untextured.glb"
 outputs = ["final/{id}-untextured.glb", "final/{id}.blend", "final/part_graph.json", "final/parts_lib.py",
            "final/spec.json", "final/model.md", "final/review/model_sheet.png", "final/review/renders/renders.json"]

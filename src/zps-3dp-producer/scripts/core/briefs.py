@@ -127,10 +127,11 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
                      "Giữ phần có đầu vào không đổi, theo file agent.")
         k += 1
     m = st.get("fix_base")
-    if fix and m:
-        pd = vdir(aid, step["id"], m)
+    src = st.get("direct") or m
+    if fix and src:
+        pd = vdir(aid, step["id"], src)
         bad = failed_checks(pd)
-        doc = findings.load(aid, step["id"], m) or {}
+        doc = (findings.load(aid, step["id"], m) if m else None) or {}
         tf = doc.get("top_fix")
         if tf and not (tf := {**tf, "ids": [i for i in tf["ids"] if i not in findings.waived_of(doc)]})["ids"]:
             tf = None
@@ -143,12 +144,15 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         why = (f"Sửa đúng `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}`; repair, preserve, acceptance của từng id trong "
                f"{fp}. Rồi tới feedback mới nhất của người dùng trong feedback.md."
                if tf else "Lý do phải sửa: feedback mới nhất của người dùng trong feedback.md." + (f" {outside}" if outside else ""))
+        if st.get("direct"):
+            why = "Lý do phải sửa trước tiên: các JSON check fail ở trên; reviewer chưa chấm bản này. " + why
         if human:
             why = (f"Ưu tiên 1, feedback của người dùng: sửa {', '.join(f'`{i}`' for i in human)} (nguyên văn trong "
                    f"`acceptance` của {fp} và feedback.md). Đối chiếu từng ý với concept; không bỏ ý nào. "
                    + (f"Sau đó: `TOP_FIX: {tf['kind']}: {', '.join(tf['ids'])}` của reviewer." if tf else outside))
         lines += [
-            f"{k}. Bản gốc: `{rel(pd)}/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
+            f"{k}. Bản gốc: `{rel(pd)}/` ({'bản vừa dựng, check fail' if st.get('direct') else 'bản tốt nhất'}; "
+            "final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
             *([f"{k + 1}. Đọc trước nguyên văn lỗi script của bản gốc: {', '.join(f'`{b}`' for b in bad)}."] if bad else []),
             f"{k + 1 + bool(bad)}. {why}",
             *(f"   - Vùng người dùng khoanh: {x}" for x in findings.mark_lines(doc)),
@@ -184,7 +188,12 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "PROFILE_HASH: <chép dòng PROFILE_HASH ở đầu brief này>",
         *(["FIXED: F<n>, ...   (id bạn cho là đã sửa; reviewer quyết)"] if fix else []),
         *([f"RESOLVED_NOTES: <ghi chú bạn đã làm, trong: {', '.join(notes)}> | none"] if notes else []),
+        *([f"ACCEPTED_FAIL: <file JSON> — <lý do có số>; ... | none   (chỉ {', '.join(step['acceptable'])})"]
+          if step["acceptable"] else []),
         "```",
+        *(["JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không qua reviewer. Không sửa được check "
+           "trong ACCEPTED_FAIL: ghi cùng dòng vào mục `## NGOẠI LỆ` của `final/README.md` (tạo mục nếu chưa có)."]
+          if step["acceptable"] else []),
         "Tin nhắn trả về cho Producer: chỉ dòng STATUS.",
         "",
         "## Ràng buộc",
@@ -237,6 +246,8 @@ def review_brief(cfg, st, step, n) -> str:
           if m == n else
           [f"- Bản gốc v{m}: ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`; finding đủ trường "
            f"`{rel(findings.path(aid, sid, m))}`."] if base else []),
+        *([f"- Worker khai ACCEPTED_FAIL (check fail không sửa được): {'; '.join(st['accepted']['items'])}. Chấm lý do: "
+           "lý do không đứng được thì ghi finding."] if (st.get("accepted") or {}).get("v") == n else []),
         *([f"- Đã waive (người dùng chấp nhận là ngoại lệ): {', '.join(waived)}. Không mở lại, không ghi PRIOR, "
            "không ghi lại thành finding mới."] if waived else []),
         *([f"- Phương án param: `{rel(d / 'variants')}/<a|b|c>/`; a là `final/`. Nhãn ảnh trong EVIDENCE_OPENED: "

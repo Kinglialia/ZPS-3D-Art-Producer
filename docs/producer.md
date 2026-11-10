@@ -194,7 +194,7 @@ Giữ như skill nền: `STATUS / OUTPUT / RUBRIC / ISSUES`. Thêm:
 - `PROFILE_HASH: <hash>`: **chép từ brief**. Script tính hash khi sinh brief (mục 10); `ingest` so với hash trong brief. Lệch → báo lỗi, không chuyển trạng thái.
 - `FIXED: F<n>, ...` (vòng sửa): finding worker cho là đã sửa. Chỉ để đối chiếu; reviewer quyết.
 - Texture Artist: `UNFIXABLE: yes|no`.
-- `ACCEPTED_FAIL: <file> — <lý do có số>` (D31.3): check fail mà worker không sửa được. Worker ghi cả vào mục NGOẠI LỆ của README. Chỉ check có `acceptable: true` trong config mới được khai. Gate cứng (hash, schema, `export_check`, topology Meshy) không bao giờ được khai.
+- `ACCEPTED_FAIL: <file> — <lý do có số>` (D31.3): check fail mà worker không sửa được. Worker ghi cả vào mục NGOẠI LỆ của README. Chỉ check có tên trong danh sách `acceptable` của bước trong `pipeline.toml` mới được khai `ACCEPTED_FAIL` (mặc định: `measure.json` ở `views_front`, `views_rest`; `qa_screen_tris_check.json` ở `model`). Worker ghi vào mục `## NGOẠI LỆ` của `final/README.md`. Gate cứng (hash, schema, `export_check`, topology Meshy) không bao giờ được khai.
 - `RESOLVED_NOTES: <mục>, ...` (D27.8): ghi chú của bước trước (TEXTURE NOTE, `note_texture`, ghi chú trong `ISSUES`) mà worker bước này đã làm. Reviewer của bước này xác nhận từng mục trong report. Chỉ mục được xác nhận mới rời khỏi "Việc còn mở" của README (mục 6.4).
 
 Worker tự ghi file report như reviewer (D27.5, mục 6.5). Lời giao việc chỉ gồm file role và brief, không gợi ý ghi file bằng shell (D30.8).

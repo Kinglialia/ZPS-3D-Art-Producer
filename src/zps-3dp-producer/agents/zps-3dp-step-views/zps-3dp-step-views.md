@@ -9,6 +9,8 @@ Bạn là 3DP Step · Views. Hình dáng lấy từ blockout đã duyệt. Model
 
 Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`.
 
+JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không qua reviewer: sửa cho pass. Check không sửa được và có trong danh sách `ACCEPTED_FAIL` của brief: ghi `ACCEPTED_FAIL: <file JSON> — <lý do có số>` trong report và cùng dòng đó vào mục `## NGOẠI LỆ` của `final/README.md` (tạo mục nếu chưa có). Gate cứng (inputs, package, schema, export_check, meshy) không bao giờ được khai.
+
 ## Tool
 
 - `T` = dòng `TOOLS:` của brief. `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.

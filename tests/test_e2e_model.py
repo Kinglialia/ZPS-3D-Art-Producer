@@ -72,12 +72,15 @@ class Flow:
                 (vd / sub / o).write_text(f"{o} {name} phương án {tag}\n", encoding="utf-8")
         if failing:
             (vd / "final/review/checks").mkdir(parents=True)
-            (vd / "final/review/checks/qa_mesh.json").write_text(json.dumps({"tool": "asset_checks/mesh_check",
-                                                                             "overall": "fail"}), encoding="utf-8")
+            (vd / "final/review/checks/qa_screen_tris_check.json").write_text(json.dumps({
+                "tool": "asset_checks/screen_tris_check", "overall": "fail"}), encoding="utf-8")
             (vd / "final/review/checks/detail.json").write_text(json.dumps({"overall": "pass"}), encoding="utf-8")
+            (vd / "final/README.md").write_text("## NGOẠI LỆ\n- qa_screen_tris_check.json — 6% tam giác nhỏ ở mép mái\n",
+                                                encoding="utf-8")
         ph = re.search(r"^PROFILE_HASH: (\w+)$", self.cp[name + " brief"]["text"], re.M).group(1)
+        accepted = "ACCEPTED_FAIL: qa_screen_tris_check.json — 6% tam giác nhỏ ở mép mái\n" if failing else ""
         (self.root / out["report"]).write_text(
-            f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: {issues}\nPROFILE_HASH: {ph}\n", encoding="utf-8")
+            f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: {issues}\nPROFILE_HASH: {ph}\n" + accepted, encoding="utf-8")
         self.keep(name + " worker", self.p("ingest", AID, "--agent-id", f"w-{name}"))
 
     def review(self, name, **kw):
@@ -221,7 +224,7 @@ def test_a_structure_fix_resumes_the_worker_from_the_best_version_and_reads_the_
     assert b["out"]["resume"] == "w-m1"
     assert missing(b["text"],
                    f"10. Bản gốc: `{A}/model/v1/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
-                   f"11. Đọc trước nguyên văn lỗi script của bản gốc: `{A}/model/v1/final/review/checks/qa_mesh.json`.") == []
+                   f"11. Đọc trước nguyên văn lỗi script của bản gốc: `{A}/model/v1/final/review/checks/qa_screen_tris_check.json`.") == []
     assert "`TOP_FIX: structure: F1`" in b["text"]
 
 
