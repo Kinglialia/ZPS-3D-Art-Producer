@@ -1,5 +1,6 @@
 """`custom` part functions the user approved (D27.13). Source: run 4 wooden-chest, model v2 parts_lib.py, without arch_band.
 arch_cap_pointed: approved by the user on 2026-11-10 (run 5 wooden-chest, model F1).
+`seam` of plank_vault and arch_cap_pointed: approved by the user on 2026-11-10 (run 6 wooden-chest, blockout F1).
 Profiles lie in the Y-Z plane and extrude along X. FUNCTIONS is the only set of names a `custom` part may use.
 bmesh loads inside Blender or with the bpy module; without it this file still imports, so check_schema.py can read FUNCTIONS."""
 import math
@@ -86,10 +87,11 @@ def arch_cap(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks
 
 
 def arch_cap_pointed(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks=0.0, r=0.0, bseg=2,
-                     point=0.5):
+                     point=0.5, seam=0.0):
     """arch_cap with a pointed inner arch: the rim meets at a peak on the centre line, at the same apex height.
-    point 0 gives the round arch of arch_cap, 1 gives two straight sides. Use an even seg so a vertex sits on the peak."""
-    return _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point)
+    point 0 gives the round arch of arch_cap, 1 gives two straight sides. Use an even seg so a vertex sits on the peak.
+    seam: as plank_vault, so the cap lips meet the lid grooves."""
+    return _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point, seam)
 
 
 def _point_inner(inner, point):
@@ -109,14 +111,14 @@ def _point_inner(inner, point):
     return out
 
 
-def _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point):
+def _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point, seam=0.0):
     """Lid end cap: arch rim of width `band` and depth w, with a recessed end panel `panel` thick on the lid side.
     side +1: the lid is toward +X; side -1: toward -X. Open at the bottom like arch_band.
     gap, depth, planks: the lid's plank grooves (plank_vault). The cap profile then has the same lips, and the
     lid-side face closes each groove end with its own face, so the join keeps it while the rest is hidden.
     r > 0: round the outer and inner arch edges of the outer face (x_out)."""
     if gap > 0 and planks >= 2:
-        pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks)
+        pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks, seam)
     else:
         (pts, norms, h), lips = _profile(d, h, arch_h, seg), []
     inner = [(y - band * ny, z - band * nz) for (y, z), (ny, nz) in zip(pts, norms)]
@@ -182,12 +184,21 @@ def _toward(p, o, dist):
     return (p[0] + dy / L * dist, p[1] + dz / L * dist)
 
 
-def _plank_profile(d, h, arch_h, seg, gap, planks):
-    """_profile with each plank-seam vertex (arc split into `planks` equal parts) replaced by two lips `gap` apart.
+def _seam_steps(seg, planks, seam):
+    """Arc steps (1..seg-1, counted from the front edge) of the plank seams. seam 0: `planks` equal parts.
+    seam in (0, 1): the first seam at that fraction of the arc from the front, the others split the rest equally."""
+    if seam <= 0:
+        return [seg * j // planks for j in range(1, planks)]
+    fr = [seam + (1.0 - seam) * (j - 1) / (planks - 1) for j in range(1, planks)]
+    return sorted({min(seg - 1, max(1, round(seg * f))) for f in fr})
+
+
+def _plank_profile(d, h, arch_h, seg, gap, planks, seam=0.0):
+    """_profile with each plank-seam vertex (see _seam_steps) replaced by two lips `gap` apart.
     Returns pts, norms, h and the index of the first lip of each pair."""
     pts, norms, h = _profile(d, h, arch_h, seg)
     seg, planks = int(seg), int(planks)
-    cut = {seg * j // planks + 1 for j in range(1, planks)}
+    cut = {i + 1 for i in _seam_steps(seg, planks, seam)}
     out, outn, lips = [], [], []
     for k, (p, n) in enumerate(zip(pts, norms)):
         if k not in cut:
@@ -205,10 +216,11 @@ def _plank_profile(d, h, arch_h, seg, gap, planks):
     return out, outn, h, lips
 
 
-def plank_vault(w, d, h, arch_h, seg, gap, depth, planks, r=0.0, bseg=2):
+def plank_vault(w, d, h, arch_h, seg, gap, depth, planks, r=0.0, bseg=2, seam=0.0):
     """Lid like vault, with grooves along X between the lip pairs of _plank_profile, `depth` deep.
-    r > 0: round the two long bottom edges (front and back lower lid edges); groove edges stay sharp."""
-    pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks)
+    r > 0: round the two long bottom edges (front and back lower lid edges); groove edges stay sharp.
+    seam: arc fraction (0..1, from the front lower edge) of the first seam; 0 keeps equal planks."""
+    pts, norms, h, lips = _plank_profile(d, h, arch_h, seg, gap, planks, seam)
     out = []
     for k, p in enumerate(pts):
         out.append(p)

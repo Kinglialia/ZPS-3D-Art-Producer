@@ -13,7 +13,7 @@ VPY = TOOLS / ".deps/venv/bin/python"
 BLENDER = shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/Blender"
 needs_venv = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh")
 RUN4 = ["arch_cap", "bevel_box", "grooved_box", "lock_plate", "plank_vault", "strap_band", "vault"]
-USER_APPROVED = ["arch_cap_pointed"]  # run 5 wooden-chest, model F1, 2026-11-10
+USER_APPROVED = ["arch_cap_pointed"]  # run 5 wooden-chest, model F1, 2026-11-10 (seam: run 6 blockout F1)
 
 
 def agent_lib(work, sentinel, body=""):
@@ -139,3 +139,38 @@ def test_arch_cap_pointed_only_lowers_the_inner_rim_toward_a_peak_and_keeps_the_
                        capture_output=True, text=True)
     out = json.loads(next(l for l in r.stdout.splitlines() if l.startswith("{")))
     assert out == {"same_at_0": True, "counts": [108, 108], "open_edges": 0, "moved": 44, "lower": True, "top": True}
+
+
+SEAM = """
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("lib", sys.argv[-1]); lib = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(lib)
+def verts(bm): return sorted(tuple(round(c, 6) for c in v.co) for v in bm.verts)
+lid = (1.0, 0.66, 0.30, 0.22, 24, 0.012, 0.006, 2)
+cap = (0.065, 0.66, 0.30, 0.22, 0.05, 0.015, 1, 24, 0.012, 0.006, 2)
+same = verts(lib.plank_vault(*lid)) == verts(lib.plank_vault(*lid, seam=0.0)) and \
+       verts(lib.arch_cap_pointed(*cap)) == verts(lib.arch_cap_pointed(*cap, seam=0.0))
+pts, norms, h, lips = lib._plank_profile(0.66, 0.30, 0.22, 24, 0.012, 2, 0.3)
+p0, _, _, lips0 = lib._plank_profile(0.66, 0.30, 0.22, 24, 0.012, 2)
+y, z = [(pts[k][0] + pts[k + 1][0]) / 2 for k in lips], [(pts[k][1] + pts[k + 1][1]) / 2 for k in lips]
+lid_bm, cap_bm = lib.plank_vault(*lid, seam=0.3), lib.arch_cap_pointed(*cap, seam=0.3)
+print(json.dumps({"same_at_0": same, "seams": len(lips), "front": y[0] < -0.05, "below_apex": z[0] < h - 0.03,
+                  "apex_default": abs((p0[lips0[0]][0] + p0[lips0[0] + 1][0]) / 2) < 1e-9,
+                  "steps": lib._seam_steps(24, 2, 0.3), "default_steps": lib._seam_steps(24, 2, 0.0),
+                  "open_edges": sum(not e.is_manifold for e in lid_bm.edges) + sum(not e.is_manifold for e in cap_bm.edges)}))
+"""
+
+
+@pytest.mark.blender
+@pytest.mark.skipif(not os.access(BLENDER, os.X_OK), reason="needs Blender")
+def test_seam_moves_the_lid_plank_seam_off_the_apex_and_keeps_equal_planks_by_default(tmp_path):
+    """Run 6 wooden-chest: with 2 planks the one lid seam sat on the apex, but the concept puts it on the front
+    slope. seam moves it there for both the lid and its end caps, so the cap lips still meet the lid groove;
+    seam 0 must give the old equal split exactly, or every approved graph changes."""
+    script = tmp_path / "seam.py"
+    script.write_text(SEAM, encoding="utf-8")
+    r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python", str(script), "--", str(TOOLS / "custom_lib.py")],
+                       capture_output=True, text=True)
+    out = json.loads(next(l for l in r.stdout.splitlines() if l.startswith("{")))
+    assert out == {"same_at_0": True, "seams": 1, "front": True, "below_apex": True, "apex_default": True,
+                   "steps": [7], "default_steps": [12], "open_edges": 0}
