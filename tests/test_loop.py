@@ -825,6 +825,24 @@ def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_
     assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail join.json" in flow.ledger()
 
 
+@pytest.mark.parametrize("name", ["join.json", "unwrap.json"])
+def test_a_failed_join_or_unwrap_json_in_final_review_goes_straight_back_to_the_worker_d31_3(flow, name):
+    """join_mesh.py and unwrap.py write to final/review/, not checks/; Run 5 model v1 had join.json fail
+    (removed_faces_seen = 9) and a scan of {gates,checks}/ alone sent it to the reviewer."""
+    out = flow.brief()
+    write_json(flow.v(1) / "final/review" / name, {"overall": "fail"})
+    head = flow.work(out=out).splitlines()[0]
+    assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert (flow.st["direct"], (flow.v(1) / "brief-review.md").exists()) == (1, False)
+    assert f"house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail {name}" in flow.ledger()
+
+
+def test_an_info_unwrap_json_in_final_review_does_not_stop_the_review_d31_3(flow):
+    out = flow.brief()
+    write_json(flow.v(1) / "final/review/unwrap.json", {"overall": "info"})
+    assert json.loads(flow.work(out=out).splitlines()[-1])["role"] == "reviewer"
+
+
 def test_accepted_fail_for_a_hard_gate_is_refused_and_the_round_stays_a_fix_d31_3(flow):
     acceptable(flow.root, "layout.json")
     (flow.v(1) / "final").mkdir(parents=True, exist_ok=True)

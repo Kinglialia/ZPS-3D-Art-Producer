@@ -42,10 +42,15 @@ def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra:
     return out + [""] if out else []
 
 
+REVIEW_RESULTS = ("join.json", "unwrap.json")  # model tools write these to final/review/, not to checks/
+
+
 def failed_checks(vd) -> list[str]:
-    """D26.4: kit result JSON in final/review/{gates,checks}/ whose overall is fail or error."""
+    """D26.4: kit result JSON in final/review/{gates,checks}/ and REVIEW_RESULTS whose overall is fail or error."""
     out = []
-    for p in sorted(p for sub in ("gates", "checks") for p in (vd / "final" / "review" / sub).glob("*.json")):
+    rv = vd / "final" / "review"
+    for p in sorted([p for sub in ("gates", "checks") for p in (rv / sub).glob("*.json")]
+                    + [rv / n for n in REVIEW_RESULTS if (rv / n).is_file()]):
         try:
             r = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):

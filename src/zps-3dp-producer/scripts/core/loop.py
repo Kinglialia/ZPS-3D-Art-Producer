@@ -207,7 +207,7 @@ def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -
         hit = next((b for b in bad if b == f or b.endswith("/" + f.removeprefix("./"))), None)
         name = PurePosixPath(hit or f).name
         if hit is None:
-            refused.append(f"{f}: không phải JSON fail trong final/review/{{gates,checks}}/")
+            refused.append(f"{f}: không phải JSON fail trong final/review/{{gates,checks}}/, join.json, unwrap.json")
         elif name in HARD_GATES:
             refused.append(f"{name}: gate cứng, không bao giờ được ACCEPTED_FAIL")
         elif name not in step["acceptable"]:
