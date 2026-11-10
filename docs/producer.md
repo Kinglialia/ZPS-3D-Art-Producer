@@ -325,7 +325,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
   - `P keep <id>` hủy lệnh xóa. `P purge <id> --by "<nguyên văn>"` xóa ngay. `--zip <file>` (ở `P purge` và ở `P feedback ... --action approve` của DUYỆT 2) nén phần sắp xóa ra chỗ khác.
   - Producer tự duyệt (`--by producer`, chỉ khi `test_mode: true`) thì không mở lệnh xóa. Sau khi xóa, `redo` bị từ chối.
   - A/B: thư mục `production-<runtime>/` không xóa trước khi cặp có `ab prefer` hoặc đủ hai lần `ab judge` (D29.11).
-  - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Mọi thứ khác xóa thật, không vào Thùng rác. Script ghi manifest.
+  - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Mọi thứ khác xóa thật, không vào Thùng rác, kể cả code của asset: `custom_parts.py` và mọi bản `parts_lib.py` (D33). Script ghi manifest.
   - `P disk`: dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb`.
   - Sau đó `P archive`.
 - **Agent chỉ đọc và ghi đường dẫn trong brief.** Mọi file agent có dòng: "Chỉ đọc file và thư mục brief chỉ định. Chỉ ghi trong thư mục version brief giao. Không quét thư mục asset."
@@ -338,7 +338,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 - **Concept brief = `asset-card.yaml`** (D22.3). Phần khuất (`hidden_sides`), đối xứng (`symmetric`), ghi chú real/texture_only (`real_texture_only_notes`) nằm trong thẻ. Không có file brief riêng. Khi spec agent nói "concept brief", nghĩa là thẻ này.
 - **MAP-LAYOUT:** nếu profile có `has_map: true`, intake bắt buộc có `<id>.layout.md`. Nếu `has_map: false`, thẻ bắt buộc có `size_m: {w, d, h}` (mét); `check_card.py` kiểm trường này. Blockout lấy W×D×H từ `size_m` (D20.9).
 - **`views`** (D32): `none | back | full | full_top`. Quyết định bước views gen những ảnh nào; `none` bỏ bước views. Giá trị lạ → `check_card.py` fail.
-- **`counts`** (D30.6): tùy chọn, 6 khóa (`body_board_rows`, `lid_board_rows`, `doors`, `windows`, `pillars`, `steps`). Gate blockout và model so với param trong `fixed_params` theo bảng ánh xạ trong config theo loại asset. Khóa chưa có ánh xạ → `check_card.py` cảnh báo.
+- **`counts`** (D30.6, D33): tùy chọn, 6 khóa (`body_board_rows`, `lid_board_rows`, `doors`, `windows`, `pillars`, `steps`), giá trị số nguyên ≥ 0. Khóa khác hoặc giá trị sai → `check_card.py` fail. Part graph cần một param cùng tên trong `fixed_params`; gate blockout và model so giá trị param đó với thẻ. Không có param cùng tên → gate fail.
 - Thiếu hoặc sai → không đăng ký. Producer báo anh theo nhóm lỗi.
 - Loại asset lấy từ `type` trong thẻ (`building`, `prop`, `tree`, `rock`). Loại `character`, `creature`: báo v1 chưa hỗ trợ (D9).
 - **Ước lượng và báo giá theo lô** (D25.I): `P intake` in ước lượng thời gian và credit cho lô, dùng `estimate.py` của kit (dữ liệu của chính project trong `<project>/.zps-art/estimates.jsonl`; dưới 3 bản ghi thì dùng mặc định của kit). Tổng credit Meshy dự kiến của cả lô được đưa anh duyệt một lần. Mỗi asset xong, script ghi `estimate.py log` (phương pháp, số phút, credit, tris).
@@ -431,7 +431,7 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - Claude Code: subagent qua Task; resume qua SendMessage; hook SessionStart; gửi file qua `SendUserFile`; Review Board `local+remote` dùng được (đã thử 2026-11-08).
 - Codex: gọi agent qua `collaboration.spawn_agent`, resume qua `collaboration.send_message` (cần thử, `docs/coding-checklist.md`). Quyền mạng cấp ở phiên gốc. Review Board chỉ `local`.
 - **Blender trong bản Codex** (D25.D): trên macOS Blender bị crash bên trong sandbox của Codex. Theo `installer/codex_rules.py` của kit, bản Codex có installer ghi file rules chỉ cho phép đúng các lệnh `<Blender> -b --python <script đã cài>.py …` của Producer và kit chạy ngoài sandbox. Mọi lệnh khác vẫn chạy trong sandbox. Thư mục skill chỉ đọc trong sandbox, nên agent không sửa được danh sách script được phép. Chạy lại installer sau mỗi lần nâng cấp.
-- **Eval kích hoạt** (D25.E, theo `evals/triggers.json` của kit): mỗi skill và agent có bộ câu mẫu kèm kết quả mong đợi (kích hoạt hay không), gồm các câu âm trùng với kit, ví dụ "ZPS - 3D Artist dựng model cái rương" không được kích hoạt `zps-3dp-step-model`. Build chạy bộ eval này.
+- **Eval kích hoạt** (D25.E, theo `evals/triggers.json` của kit): mỗi skill và agent có bộ câu mẫu kèm kết quả mong đợi (kích hoạt hay không), gồm các câu âm trùng với kit, ví dụ "ZPS - 3D Artist dựng model cái thùng" không được kích hoạt `zps-3dp-step-model`. Build chạy bộ eval này.
 - Sửa prompt agent chỉ sửa một chỗ. Adapter không được chứa quy tắc nghiệp vụ.
 - Thứ tự làm giữ như D6.4: bản Claude, chạy thử, rồi bản Codex. Chạy A/B khi cả hai bản đã qua một asset trọn vẹn.
 

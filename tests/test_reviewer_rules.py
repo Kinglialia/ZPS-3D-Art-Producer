@@ -1,12 +1,12 @@
-"""D27.11: rules every step reviewer carries in its agent file. Run 4: `back.png` had 2 board rows for 3 and passed as a
+"""D27.11: rules every step reviewer carries in its agent file. Pilot run: `back.png` had 2 board rows for 3 and passed as a
 `note_texture`; a texture fix of F6 erased the lid-gap ink line that `preserve` did not name."""
 from pathlib import Path
 
 import pytest
 
 AGENTS = Path(__file__).resolve().parents[1] / "src/zps-3dp-producer/agents"
-PRESERVE = ('- `preserve` nêu tên các chi tiết nằm cạnh vùng sửa có thể bị đụng tới (ví dụ "nét mực khe nắp", '
-            '"bản lề trái"), không ghi chung chung "giữ phần còn lại".')
+PRESERVE = ('- `preserve` nêu tên các chi tiết nằm cạnh vùng sửa có thể bị đụng tới (ví dụ "nét mực mép mái", '
+            '"khung cửa trái"), không ghi chung chung "giữ phần còn lại".')
 COUNT = {
     "blockout": "- Sai số lượng thành phần so với concept (số hàng ván, số cửa, số trụ): luôn là `structure`, "
                 "không bao giờ là ghi chú.",

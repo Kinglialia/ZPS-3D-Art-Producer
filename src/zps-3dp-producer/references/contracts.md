@@ -26,6 +26,7 @@ production/                     # trong project Claude Code; chỉ script và su
     status.json                 # chỉ script ghi
     brief.md · rubric.md · feedback.md
     feedback/<step>-vN-<k>/     # một lần gửi có khoanh: regions.json, ảnh đã khoanh <tên ảnh>.png
+    custom_parts.py             # D33: hàm `custom` riêng của asset, worker blockout/model viết (dòng CUSTOM_PARTS: của brief); D29 xóa
     purge-pending.json          # D29: lệnh xóa sau DUYỆT 2 của người dùng: {asset, armed, assemble, session, bytes, zip, delete[], thumbs[]}
     purge-manifest.json         # D29: đã xóa gì: {asset, at, source, by, assemble, freed_bytes, zip, deleted[], thumbnails[]}
     <step>/vN/

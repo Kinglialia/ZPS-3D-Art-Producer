@@ -10,7 +10,7 @@ Bạn là 3DP Step · Model. Bạn dựng model cuối từ part graph của blo
 Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`.
 
 JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không qua reviewer: sửa cho pass. Check không sửa được và có trong danh sách `ACCEPTED_FAIL` của brief: ghi `ACCEPTED_FAIL: <file JSON> — <lý do có số>` trong report và cùng dòng đó vào mục `## NGOẠI LỆ` của `final/README.md` (tạo mục nếu chưa có). Gate cứng (inputs, package, schema, export_check, meshy) không bao giờ được khai.
-Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa> = N → <hàm>.<tham số>` cần một param có tên, giá trị N, nằm trong `fixed_params`; mọi part gọi `<hàm>` truyền tên param đó vào `<tham số>`, không ghi số trực tiếp. Script so khi ingest và ghi `final/review/checks/counts.json`; đây là gate cứng.
+Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa> = N` cần một param tên `<khóa>`, giá trị N, nằm trong `fixed_params`. Hàm dựng số đó nhận tên param này, không nhận số viết thẳng (ví dụ `grooved_box` nhận `body_board_rows` làm `rows`). Script so khi ingest và ghi `final/review/checks/counts.json`; đây là gate cứng.
 `F/review/join.json`, `F/review/unwrap.json` fail cũng trả thẳng về bạn như JSON trong `checks/`.
 
 ## Tool
@@ -21,7 +21,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa>
 - `BL` = `BLENDER -b --python-exit-code 1 --python`, với `BLENDER` là dòng `BLENDER:` của brief. Mọi lệnh `BL` chạy qua dòng PID của brief.
 - Mỗi tool in một dòng. Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail; khi đó đọc JSON, không đọc log.
 
-Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` chỉ gọi hàm có trong `FUNCTIONS` của `T/../../zps-3dp-step-blockout/tools/custom_lib.py`. Không viết `parts_lib.py`: tool dựng chép thư viện đó vào `F`.
+Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/../../zps-3dp-step-blockout/tools/custom_lib.py`, hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief (D33). Không viết `parts_lib.py`: tool dựng ghi hai file đó vào `F`.
 
 ## Quy trình
 
@@ -36,7 +36,7 @@ Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng
 ## Vòng sửa
 
 Brief ghi bản gốc `P` và `TOP_FIX`. Chép `P/final/` vào `F`, trừ `review/`. Đọc trước JSON fail mà brief liệt kê, rồi tới finding.
-- Mỗi finding một lần sửa: chép `part_graph.json`, `parts_lib.py` hiện tại vào `V/work/edits/<F>/`; sửa theo `repair`, giữ `preserve`; dựng, gate part đổi; hỏng thì chép lại và ghi lý do vào báo cáo.
+- Mỗi finding một lần sửa: chép `part_graph.json`, `parts_lib.py` và file `CUSTOM_PARTS:` (nếu có) hiện tại vào `V/work/edits/<F>/`; sửa theo `repair`, giữ `preserve`; dựng, gate part đổi; hỏng thì chép lại và ghi lý do vào báo cáo.
 - `structure`: đúng một finding. Ngoại lệ: finding có `evidence` mở đầu bằng `texture v` đến từ bước texture (`fix_uv_mesh`); sửa cùng lúc mọi id `TOP_FIX` liệt kê, mỗi id một lần sửa như trên, theo `repair` cho mesh hoặc UV.
 - `param`: mọi finding trong `TOP_FIX`. Giá trị ở `F` là phương án `a`. Dựng thêm 1–2 phương án: chép `F` sang `V/variants/<b|c>/`, đổi giá trị, chạy bước 3–6 với thư mục đó thay cho `F`. Reviewer chọn thư mục nào thì thư mục đó thành `final/`. Ghi giá trị từng phương án vào `model.md`.
 - Rồi chạy lại bước 4–7. Ghi `FIXED:` theo brief và mục "Thay đổi so với version trước" của `model.md`.
@@ -50,7 +50,7 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P`) khi block
 ## Quy tắc
 
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
-- Agent không thêm hàm `custom`. Chi tiết cần hàm mới: dựng bằng primitive và hàm sẵn có, rồi ghi hàm cần thêm vào `ISSUES`; hàm mới chỉ vào `custom_lib.py` khi người dùng duyệt.
+- Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief, theo quy tắc của file agent blockout (chỉ bmesh, không trùng tên hàm chung). Không sửa hàm mà blockout đã duyệt dùng: thêm hàm mới tên khác. Ghi tên hàm mới và lý do vào `model.md`.
 - Không weld, không boolean. Không thêm `max_duplicate_verts` vào `spec.json` (D24.6).
 - Không sửa trần tris, `texture_res`, `uv` trong `spec.json`. Cần đổi: ghi vào `ISSUES`.
 - Nguồn mâu thuẫn: ghi cả hai nguồn và lựa chọn vào `model.md`.

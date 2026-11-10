@@ -359,7 +359,7 @@ def review_brief(cfg, st, step, n) -> str:
         "- Sai số thành phần (hàng ván, cửa, trụ) so với concept hoặc `blockout.md`: luôn "
         f"`{next(k for k in step['top_fix'] if k not in findings.NOTE)}`"
         + (f", không phải {', '.join(f'`{k}`' for k in notes)}." if notes else "."),
-        "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực khe nắp\"), không ghi \"giữ phần còn lại\".",
+        "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực mép mái\"), không ghi \"giữ phần còn lại\".",
         *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`; "
            + "; ".join(f"`{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
                        if k in findings.REOPEN) + "."] if step["regions"] else []),

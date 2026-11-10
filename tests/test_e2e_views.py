@@ -189,7 +189,7 @@ def test_the_set_reviewer_is_told_a_wrong_part_count_is_a_regen_and_preserve_nam
     assert lines(flow["vr1 review brief"]["text"],
                  "- Sai số thành phần (hàng ván, cửa, trụ) so với concept hoặc `blockout.md`: luôn `regen`, không phải "
                  "`note_exception`, `note_texture`.",
-                 "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực khe nắp\"), không ghi \"giữ phần còn lại\".") == []
+                 "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực mép mái\"), không ghi \"giữ phần còn lại\".") == []
 
 
 def test_regen_front_reopens_the_approved_front_with_a_fresh_worker_and_carries_the_finding_as_its_top_fix(flow):

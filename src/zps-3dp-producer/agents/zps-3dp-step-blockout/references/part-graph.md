@@ -15,7 +15,7 @@
 ```
 
 - Mọi kích thước là tên trong `params`. Part không ghi số trực tiếp trong `dims`. Số thực ghi `1.0`, không ghi `1` (số nguyên là số segment).
-- `fixed_params`: danh sách tên. Kích thước lấy từ MAP-LAYOUT hoặc `size_m`, `door_h`, `character_h` nằm ở đây. Số đếm của thẻ (`counts`, dòng `COUNTS:` của brief) cũng là một param có tên ở đây. Ghi lý do vào `_fixed_reason`. `param_fit.py` không đổi các param này; `check_fix.py` báo fail nếu một vòng sửa đổi chúng.
+- `fixed_params`: danh sách tên. Kích thước lấy từ MAP-LAYOUT hoặc `size_m`, `door_h`, `character_h` nằm ở đây. Mỗi số đếm của thẻ (`counts`, dòng `COUNTS:` của brief) là một param cùng tên với khóa ở đây, ví dụ `"doors": 1`; gate so giá trị này với thẻ. Ghi lý do vào `_fixed_reason`. `param_fit.py` không đổi các param này; `check_fix.py` báo fail nếu một vòng sửa đổi chúng.
 
 ## Mỗi part
 
@@ -23,7 +23,7 @@
 |---|---|---|
 | `name` | có | duy nhất |
 | `primitive` | có (trừ `mirror_of`) | `box` (dims w,d,h), `wedge` (dims w,d,h; dốc lên về +Y), `cylinder` (dims radius,height), `custom` |
-| `dims` / `fn` + `args` | có | `custom`: tên một hàm trong `FUNCTIONS` của `tools/custom_lib.py` (`check_schema` kiểm), trả `bmesh` đặt tâm tại bbox; 3 arg đầu là w,d,h hoặc ghi thêm `dims` |
+| `dims` / `fn` + `args` | có | `custom`: tên một hàm trong `FUNCTIONS` của `tools/custom_lib.py`, hoặc một hàm của `custom_parts.py` của asset (`check_schema` kiểm); trả `bmesh` đặt tâm tại bbox; 3 arg đầu là w,d,h hoặc ghi thêm `dims`. Mỗi arg là một số hoặc tên một param |
 | `attach` | có | `null` chỉ cho part đầu tiên (gốc) |
 | `material` | có | mã trong `sources.json` `materials` |
 | `role` | có | `mass` (khối chính) hoặc `marker` (mốc đo, nhô ≥ 2 cm) |
@@ -58,6 +58,16 @@ Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material
 - `has_map: true`: `files.layout` là `_approved/<id>/<id>.layout.md`.
 - `has_map: false`: `files.layout` là `_approved/<id>/asset-card.yaml`; `layout.w/d/h` bằng `size_m`; `character_h` từ `scale_refs` của profile; `door_h` từ `scale_overrides` của thẻ, hoặc đo trên concept với `character_h` làm thước, cách đo ghi vào `door_h_source`. Asset không có cửa (prop): `door_h: null`, `door_h_source` ghi lý do, ví dụ "không có cửa".
 - Hàm `custom` nhận mọi param dạng số thực: ép `int(...)` cho số đoạn, số cạnh.
+
+## Hàm `custom` (D33)
+
+- Hàm chung trong `tools/custom_lib.py` (đọc docstring để biết tham số):
+  - `vault(w, d, h, arch_h, seg, planks=1, gap=0, depth=0, r=0, bseg=2)`: khối vòm theo X (mái vòm, nắp, đường hầm); `planks` ≥ 2 chia vòm thành dải bằng rãnh.
+  - `grooved_box(w, d, h, gap, depth, rows, z0=0, pitch=0)`: hộp có `rows - 1` rãnh ngang quanh 4 mặt (tường ván, hàng đá); `pitch` 0 chia đều.
+  - `bevel_box(w, d, h, r, seg, mask)`: hộp bo các cạnh chọn theo `mask`.
+- Hàm riêng của asset: file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Chỉ import `math`, `bmesh`, `mathutils`; không `open`, `exec`, `eval`, `os`, `subprocess`, `sys`, module mạng, tên `__…__`. Tên không trùng hàm chung. `build_parts.py` từ chối file sai trước khi chạy.
+- `build_parts.py` ghi `parts_lib.py` = `custom_lib.py` + dòng `# ---- custom_parts.py …` + `custom_parts.py`. Đó là code đã chạy, và reviewer đọc nó.
+- File của asset giữ tới DUYỆT 2 (bước model và mọi `redo` dựng lại từ part graph), rồi D29 xóa nó cùng các bản `parts_lib.py`.
 - Hai mặt trùng khít tuyệt đối làm gate union lỗi: để lệch 1 mm khi acceptance cho phép.
 - `includes_base: false`: `check_layout.py` bỏ các part `tag: base` khi đo bbox.
 

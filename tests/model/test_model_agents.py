@@ -62,8 +62,8 @@ def test_without_a_pilot_density_passes_as_not_checked_and_never_unclear_d21_7()
 
 def test_reviewer_checks_aligned_edges_and_details_across_seams_the_run_2_reviewers_missed():
     _, body = front(REVIEWER)
-    assert ("Mép các khối chồng nhau (nắp và thân, tầng và tầng) thẳng hàng như concept; chi tiết vắt qua khe ghép "
-            "(khóa, đai, bản lề) đúng phía như concept.") in body
+    assert ("Mép các khối chồng nhau (mái và tường, tầng và tầng) thẳng hàng như concept; chi tiết vắt qua khe ghép "
+            "(khung cửa, dầm, ống máng) đúng phía như concept.") in body
 
 
 def reviewer_keys():
