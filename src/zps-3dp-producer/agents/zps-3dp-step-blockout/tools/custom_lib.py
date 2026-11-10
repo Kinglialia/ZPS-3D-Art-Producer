@@ -1,4 +1,5 @@
 """`custom` part functions the user approved (D27.13). Source: run 4 wooden-chest, model v2 parts_lib.py, without arch_band.
+arch_cap_pointed: approved by the user on 2026-11-10 (run 5 wooden-chest, model F1).
 Profiles lie in the Y-Z plane and extrude along X. FUNCTIONS is the only set of names a `custom` part may use.
 bmesh loads inside Blender or with the bpy module; without it this file still imports, so check_schema.py can read FUNCTIONS."""
 import math
@@ -81,6 +82,34 @@ def vault(w, d, h, arch_h, seg):
 
 
 def arch_cap(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks=0.0, r=0.0, bseg=2):
+    return _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, 0.0)
+
+
+def arch_cap_pointed(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks=0.0, r=0.0, bseg=2,
+                     point=0.5):
+    """arch_cap with a pointed inner arch: the rim meets at a peak on the centre line, at the same apex height.
+    point 0 gives the round arch of arch_cap, 1 gives two straight sides. Use an even seg so a vertex sits on the peak."""
+    return _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point)
+
+
+def _point_inner(inner, point):
+    """Lower the inner arch points toward two lines that meet at the apex; the springing points stay."""
+    if point <= 0:
+        return inner
+    zs = inner[1][1]
+    ai = (inner[-2][0] - inner[1][0]) / 2.0
+    yc = (inner[-2][0] + inner[1][0]) / 2.0
+    top = max(z for _, z in inner[2:-2]) - zs
+    out = list(inner)
+    for k in range(2, len(inner) - 2):
+        y, z = inner[k]
+        u = min(abs(y - yc) / ai, 1.0)
+        f = (1.0 - point) * math.sqrt(max(0.0, 1.0 - u * u)) + point * (1.0 - u)
+        out[k] = (y, min(z, zs + top * f))
+    return out
+
+
+def _arch_cap(w, d, h, arch_h, band, panel, side, seg, gap, depth, planks, r, bseg, point):
     """Lid end cap: arch rim of width `band` and depth w, with a recessed end panel `panel` thick on the lid side.
     side +1: the lid is toward +X; side -1: toward -X. Open at the bottom like arch_band.
     gap, depth, planks: the lid's plank grooves (plank_vault). The cap profile then has the same lips, and the
@@ -93,6 +122,7 @@ def arch_cap(w, d, h, arch_h, band, panel, side, seg, gap=0.0, depth=0.0, planks
     inner = [(y - band * ny, z - band * nz) for (y, z), (ny, nz) in zip(pts, norms)]
     inner[0] = (pts[0][0] + band, 0.0)
     inner[-1] = (pts[-1][0] - band, 0.0)
+    inner = _point_inner(inner, point)
     s = 1.0 if side > 0 else -1.0
     x_in, x_out = s * w / 2.0, -s * w / 2.0
     x_mid = x_in - s * panel
@@ -269,4 +299,4 @@ def lock_plate(w, d, h, chamfer, key_r, key_z, key_drop, key_tail, key_depth, r=
     return bm
 
 
-FUNCTIONS = {f.__name__: f for f in (vault, arch_cap, grooved_box, plank_vault, bevel_box, strap_band, lock_plate)}
+FUNCTIONS = {f.__name__: f for f in (vault, arch_cap, arch_cap_pointed, grooved_box, plank_vault, bevel_box, strap_band, lock_plate)}

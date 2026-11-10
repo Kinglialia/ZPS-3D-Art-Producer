@@ -13,6 +13,7 @@ VPY = TOOLS / ".deps/venv/bin/python"
 BLENDER = shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/Blender"
 needs_venv = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh")
 RUN4 = ["arch_cap", "bevel_box", "grooved_box", "lock_plate", "plank_vault", "strap_band", "vault"]
+USER_APPROVED = ["arch_cap_pointed"]  # run 5 wooden-chest, model F1, 2026-11-10
 
 
 def agent_lib(work, sentinel, body=""):
@@ -31,11 +32,11 @@ def read(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_the_library_holds_exactly_the_functions_the_approved_run4_graphs_used():
+def test_the_library_holds_exactly_the_run4_functions_plus_the_ones_the_user_approved():
     import ast
     tree = ast.parse((TOOLS / "custom_lib.py").read_text(encoding="utf-8"))
     public = sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_"))
-    assert public == RUN4
+    assert public == sorted(RUN4 + USER_APPROVED)
 
 
 def test_schema_refuses_a_custom_part_whose_fn_is_not_in_the_library(tmp_path, run_check):
@@ -110,3 +111,31 @@ def test_a_custom_part_builds_from_the_library_function_even_when_parts_lib_defi
     roof = next(p for p in asm["data"]["parts"] if p["name"] == "roof")
     assert (asm["overall"], sentinel.exists(), asm["data"]["union"]["extents"], roof["bbox_max"]) == (
         "pass", False, [4.0, 4.0, 3.7], [1.5, 1.5, 3.7])
+
+
+POINTED = """
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("lib", sys.argv[-1]); lib = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(lib)
+a = (0.065, 0.66, 0.30, 0.22, 0.05, 0.015, 1, 24)
+def verts(bm): return sorted(tuple(round(c, 6) for c in v.co) for v in bm.verts)
+r, p0, p = lib.arch_cap(*a), lib.arch_cap_pointed(*a, point=0.0), lib.arch_cap_pointed(*a)
+moved = sorted(set(verts(p)) - set(verts(r)))
+print(json.dumps({"same_at_0": verts(p0) == verts(r), "counts": [len(r.verts), len(p.verts)],
+                  "open_edges": sum(not e.is_manifold for e in p.edges), "moved": len(moved),
+                  "lower": all(z <= max(q[2] for q in verts(r) if abs(q[1] - y) < 1e-6) for _, y, z in moved),
+                  "top": max(v[2] for v in verts(p)) == max(v[2] for v in verts(r))}))
+"""
+
+
+@pytest.mark.blender
+@pytest.mark.skipif(not os.access(BLENDER, os.X_OK), reason="needs Blender")
+def test_arch_cap_pointed_only_lowers_the_inner_rim_toward_a_peak_and_keeps_the_cap_closed(tmp_path):
+    """The concept's lid end has a pointed inner arch. The outer curve, the height and the vertex count must not
+    change, or the cap no longer meets the lid; point 0 must give back arch_cap exactly."""
+    script = tmp_path / "pointed.py"
+    script.write_text(POINTED, encoding="utf-8")
+    r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python", str(script), "--", str(TOOLS / "custom_lib.py")],
+                       capture_output=True, text=True)
+    out = json.loads(next(l for l in r.stdout.splitlines() if l.startswith("{")))
+    assert out == {"same_at_0": True, "counts": [108, 108], "open_edges": 0, "moved": 44, "lower": True, "top": True}
