@@ -50,7 +50,7 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P`) khi block
 ## Quy tắc
 
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
-- Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief, theo quy tắc của file agent blockout (chỉ bmesh, không trùng tên hàm chung). Không sửa hàm mà blockout đã duyệt dùng: thêm hàm mới tên khác. Ghi tên hàm mới và lý do vào `model.md`.
+- Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief, theo quy tắc của file agent blockout (chỉ bmesh, không trùng tên hàm chung). Chỉ thêm hàm: không sửa, không xóa hàm mà một version đã dùng (bản cũ dựng lại từ graph của nó). Ghi tên hàm mới và lý do vào `model.md`.
 - Không weld, không boolean. Không thêm `max_duplicate_verts` vào `spec.json` (D24.6).
 - Không sửa trần tris, `texture_res`, `uv` trong `spec.json`. Cần đổi: ghi vào `ISSUES`.
 - Nguồn mâu thuẫn: ghi cả hai nguồn và lựa chọn vào `model.md`.

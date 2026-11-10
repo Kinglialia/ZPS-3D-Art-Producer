@@ -67,5 +67,6 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 - Dáng cần hàm mới: dùng `box`, `wedge`, `cylinder` và hàm chung trước. Không đủ thì viết hàm vào file `CUSTOM_PARTS:` của brief (D33). File này là file duy nhất ngoài `V` được ghi.
   - Mỗi hàm trả `bmesh` kín, tâm tại bbox; 3 tham số đầu là w, d, h. Chỉ import `math`, `bmesh`, `mathutils`. `build_parts.py` từ chối file có `open`, `exec`, `eval`, `os`, `subprocess`, `sys`, module mạng hoặc tên `__…__`.
   - Không đặt tên trùng hàm của `T/custom_lib.py`. Không sửa `T/custom_lib.py`.
+  - Chỉ thêm hàm. Không sửa, không xóa hàm mà một version đã dùng: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó. Cần dáng khác: thêm hàm tên mới.
   - Ghi tên từng hàm mới và lý do vào `blockout.md`. Reviewer đọc code này.
 - `fit_view.py`, `PY T/build_parts.py param_fit` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`. Không dùng `fit_camera.py` của kit: nó chỉ dò azimuth 0..90° và chọn theo IoU, nên chọn sai phía.

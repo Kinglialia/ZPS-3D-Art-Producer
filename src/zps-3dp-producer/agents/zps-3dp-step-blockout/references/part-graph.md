@@ -65,7 +65,7 @@ Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material
   - `vault(w, d, h, arch_h, seg, planks=1, gap=0, depth=0, r=0, bseg=2)`: khối vòm theo X (mái vòm, nắp, đường hầm); `planks` ≥ 2 chia vòm thành dải bằng rãnh.
   - `grooved_box(w, d, h, gap, depth, rows, z0=0, pitch=0)`: hộp có `rows - 1` rãnh ngang quanh 4 mặt (tường ván, hàng đá); `pitch` 0 chia đều.
   - `bevel_box(w, d, h, r, seg, mask)`: hộp bo các cạnh chọn theo `mask`.
-- Hàm riêng của asset: file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Chỉ import `math`, `bmesh`, `mathutils`; không `open`, `exec`, `eval`, `os`, `subprocess`, `sys`, module mạng, tên `__…__`. Tên không trùng hàm chung. `build_parts.py` từ chối file sai trước khi chạy.
+- Hàm riêng của asset: file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Chỉ import `math`, `bmesh`, `mathutils`; không `open`, `exec`, `eval`, `os`, `subprocess`, `sys`, module mạng, tên `__…__`. Tên không trùng hàm chung. Chỉ thêm hàm, không sửa hàm một version đã dùng. `build_parts.py` từ chối file sai trước khi chạy.
 - `build_parts.py` ghi `parts_lib.py` = `custom_lib.py` + dòng `# ---- custom_parts.py …` + `custom_parts.py`. Đó là code đã chạy, và reviewer đọc nó.
 - File của asset giữ tới DUYỆT 2 (bước model và mọi `redo` dựng lại từ part graph), rồi D29 xóa nó cùng các bản `parts_lib.py`.
 - Hai mặt trùng khít tuyệt đối làm gate union lỗi: để lệch 1 mm khi acceptance cho phép.

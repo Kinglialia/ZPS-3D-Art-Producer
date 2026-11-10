@@ -29,6 +29,13 @@ def _profile(d, h, arch_h, seg):
     return pts, norms, h
 
 
+def _whole(n, what):
+    """A count from the part graph arrives as a float; a fraction means the args are in the wrong order."""
+    if n != int(n) or n < 1:
+        raise ValueError(f"{what} must be a whole number >= 1, got {n}")
+    return int(n)
+
+
 def _toward(p, o, dist):
     dy, dz = o[0] - p[0], o[1] - p[1]
     L = math.hypot(dy, dz)
@@ -40,7 +47,7 @@ def _plank_profile(d, h, arch_h, seg, gap, planks, depth):
     gap apart. Seams split the seg arc steps into `planks` equal parts. Returns pts, norms, h and the index of the
     first lip of each pair."""
     pts, norms, h = _profile(d, h, arch_h, seg)
-    seg, planks = int(seg), int(planks)
+    seg, planks = int(seg), _whole(planks, "planks")
     if planks < 2 or gap <= 0 or depth <= 0:
         return pts, norms, h, []
     cut = {seg * j // planks + 1 for j in range(1, planks)}
@@ -126,7 +133,7 @@ def vault(w, d, h, arch_h, seg, planks=1, gap=0.0, depth=0.0, r=0.0, bseg=2):
 def _groove_centres(h, gap, rows, z0=0.0, pitch=0.0):
     """Heights of the rows - 1 groove centres from the bottom. pitch <= 0: rows equal bands over h.
     pitch > 0: the first centre at z0, then one every pitch. Grooves must not touch each other or the ends."""
-    rows = int(rows)
+    rows = _whole(rows, "rows")
     if pitch <= 0:
         zs = [h * j / rows for j in range(1, rows)]
     else:

@@ -242,10 +242,13 @@ out = {"vault": info(lib.vault(2.0, 1.0, 0.6, 0.4, 12)),
        "box_rows_3": levels(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 3)),
        "box_pitch": levels(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 3, 0.2, 0.3)),
        "box_open": info(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 3))[1]}
-try:
-    lib.grooved_box(1.0, 0.8, 0.9, 0.2, 0.01, 6)
-except ValueError as e:
-    out["overlap"] = str(e)
+for k, call in (("overlap", lambda: lib.grooved_box(1.0, 0.8, 0.9, 0.2, 0.01, 6)),
+                ("old_args", lambda: lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 0.25, 0.6)),
+                ("half_plank", lambda: lib.vault(2.0, 1.0, 0.6, 0.4, 12, 2.5, 0.02, 0.01))):
+    try:
+        call()
+    except ValueError as e:
+        out[k] = str(e)
 print(json.dumps(out))
 """
 
@@ -255,7 +258,8 @@ print(json.dumps(out))
 def test_vault_and_grooved_box_take_any_number_of_strips_and_stay_closed(tmp_path):
     """One function serves a lid of 2 boards, a roof of 5 tiles or a wall of 7 stone courses: the count is a param,
     so the counts gate can compare it (D30.6). planks 1 must give the plain vault, or graphs without grooves change.
-    Every result is closed (0 open edges), because the gates take the union of the parts."""
+    Every result is closed (0 open edges), because the gates take the union of the parts. A fractional count stops
+    the build: a graph written for the old grooved_box(w, d, h, gap, depth, z1, z2) would pass z1 as rows."""
     script = tmp_path / "shapes.py"
     script.write_text(SHAPES, encoding="utf-8")
     r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python", str(script), "--", str(TOOLS / "custom_lib.py")],
@@ -264,4 +268,6 @@ def test_vault_and_grooved_box_take_any_number_of_strips_and_stay_closed(tmp_pat
     assert out == {"vault": [30, 0, [2.0, 1.0, 0.6]], "vault_planks_1": True, "vault_planks_3": [42, 0, [2.0, 1.0, 0.6]],
                    "box_rows_1": [8, 0, [1.0, 0.8, 0.9]], "box_rows_3": [-0.45, -0.16, -0.14, 0.14, 0.16, 0.45],
                    "box_pitch": [-0.45, -0.26, -0.24, 0.04, 0.06, 0.45], "box_open": 0,
-                   "overlap": "grooves [0.15, 0.3, 0.45, 0.6, 0.75] of gap 0.2 do not fit apart inside h 0.9"}
+                   "overlap": "grooves [0.15, 0.3, 0.45, 0.6, 0.75] of gap 0.2 do not fit apart inside h 0.9",
+                   "old_args": "rows must be a whole number >= 1, got 0.25",
+                   "half_plank": "planks must be a whole number >= 1, got 2.5"}

@@ -425,6 +425,7 @@ Lý do: hàm, fixture và dữ liệu của một asset (wooden-chest) đã vào
 2. **Một hàm vào thư viện chung chỉ khi có tham số và dùng được cho nhiều loại vật.** Xuất hiện ở hai asset chưa đủ.
 3. **Asset cần hàm riêng:** agent của bước viết hàm vào `production/assets/<id>/custom_parts.py`, dùng hàm đó, và file bị xóa sau đó.
    - Chỉ bmesh. `build_parts.py` kiểm tĩnh trước khi chạy (D27.13).
+   - Chỉ thêm hàm, không sửa hay xóa hàm một version đã dùng. Lý do: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó.
    - Giữ tới DUYỆT 2, vì bước model và mọi lần `redo` dựng lại từ part graph.
    - D29 xóa file này và các bản `parts_lib.py` chứa nó.
    - Không cần anh duyệt từng hàm. Reviewer đọc code trong `final/parts_lib.py` như một phần bằng chứng.
