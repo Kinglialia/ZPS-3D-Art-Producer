@@ -322,6 +322,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
   - Xóa ở đầu phiên sau: hook SessionStart gọi `P next --session`; script chỉ xóa khi `source` của hook là `startup` hoặc `clear` (không xóa khi `resume`, `compact`, hay `P next` gõ tay). Không xóa trong cùng phiên đã duyệt. Bản Codex không tự xóa.
   - `P keep <id>` hủy lệnh xóa. `P purge <id> --by "<nguyên văn>"` xóa ngay. `--zip <file>` (ở `P purge` và ở `P feedback ... --action approve` của DUYỆT 2) nén phần sắp xóa ra chỗ khác.
   - Producer tự duyệt (`--by producer`, chỉ khi `test_mode: true`) thì không mở lệnh xóa. Sau khi xóa, `redo` bị từ chối.
+  - A/B: thư mục `production-<runtime>/` không xóa trước khi cặp có `ab prefer` hoặc đủ hai lần `ab judge` (D29.11).
   - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Mọi thứ khác xóa thật, không vào Thùng rác. Script ghi manifest.
   - `P disk`: dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb`.
   - Sau đó `P archive`.

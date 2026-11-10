@@ -208,19 +208,28 @@ def test_board_links_and_feedback_marks_still_resolve_after_a_purge(proj, monkey
     assert (proj / A / MARK).is_file()
 
 
-def test_both_ab_folders_purge_and_the_codex_edition_never_deletes_by_itself(proj):
-    """D29.11: each runtime purges its own folder; Codex has no SessionStart hook, so it only reminds."""
+def test_ab_folders_keep_every_file_until_the_pair_is_judged_then_follow_the_normal_rules(proj):
+    """D29.11 (Producer 2026-11-10): the blind pair board must never show one side purged, so neither root deletes,
+    by hook or by `P purge`, before `ab prefer` or both `ab judge` asks. After it, Claude deletes on startup and Codex
+    only reminds (no hook)."""
     for rt in ("claude", "codex"):
         shutil.copytree(proj / "production", proj / f"production-{rt}")
     env = {"claude": {"PRODUCER_ROOT": "production-claude", "PRODUCER_RUNTIME": "claude"},
            "codex": {"PRODUCER_ROOT": "production-codex", "PRODUCER_RUNTIME": "codex"}}
     for rt in ("claude", "codex"):
         assert "Lệnh xóa D29: 10 file" in approve(proj, env=env[rt])
+    wait = (f"cặp A/B {AID} chưa có kết quả so (chưa `ab prefer {AID} <A|B|tie>` và chưa đủ hai lần `ab judge`): "
+            "giữ mọi file tới khi có")
+    assert wait in hook(proj, "startup", env=env["claude"])
+    for rt in ("claude", "codex"):
+        assert p(proj, "purge", AID, "--by", "xóa", env=env[rt], ok=False) == f"LỖI: {AID}: không xóa: {wait}\n"
+        assert all((proj / f"production-{rt}/assets" / AID / r).exists() for r in DELETED)
+    p(proj, "ab", "prefer", AID, "A", "--by", "bản A đẹp hơn", env=env["claude"])
     assert "đã xóa 10 file" in hook(proj, "startup", env=env["claude"])
-    out = hook(proj, "startup", env=env["codex"])
-    assert (f"[{AID}] chờ xóa" in out and "bản Codex không tự xóa" in out)
-    assert all((proj / "production-codex/assets" / AID / r).exists() for r in DELETED)
     assert not any((proj / "production-claude/assets" / AID / r).exists() for r in DELETED)
+    out = hook(proj, "startup", env=env["codex"])
+    assert f"[{AID}] chờ xóa" in out and "bản Codex không tự xóa" in out
+    assert all((proj / "production-codex/assets" / AID / r).exists() for r in DELETED)
     assert "đã xóa 10 file" in p(proj, "purge", AID, "--by", "xóa", env=env["codex"])
 
 

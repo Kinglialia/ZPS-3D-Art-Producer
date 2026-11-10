@@ -115,6 +115,18 @@ def arm(cfg: dict, st: dict, zip_path: str | None) -> str:
                       f"Danh sách: {rel(ASSETS / aid / PENDING)}", *groups(p)])
 
 
+def ab_wait(aid: str) -> str | None:
+    """Producer decision 2026-11-10: an A/B root keeps every file until the pair has a preference (`ab prefer`) or both
+    judge asks (`ab judge`), so the blind pair board never shows one side purged."""
+    if not re.fullmatch(r"production-(claude|codex)", ROOT.name):
+        return None
+    from . import ab
+    if aid in ab.prefs() or ab.pair_result(aid) is not None:
+        return None
+    return (f"cặp A/B {aid} chưa có kết quả so (chưa `ab prefer {aid} <A|B|tie>` và chưa đủ hai lần `ab judge`): "
+            "giữ mọi file tới khi có")
+
+
 def blocked(st: dict, doc: dict | None) -> str | None:
     """Checked again at delete time: a redo since the arm, a new DUYỆT 2, or no delivered package keeps every file."""
     if st.get("purged"):
@@ -185,6 +197,9 @@ def on_next(a) -> list[str]:
         aid = p.parent.name
         try:
             doc = json.loads(p.read_text(encoding="utf-8"))
+            if wait := ab_wait(aid):
+                out.append(f"[{aid}] chờ xóa {size(doc.get('bytes') or 0)} sau DUYỆT 2: {wait}")
+                continue
             if not auto or (doc.get("session") and doc["session"] == getattr(a, "session_id", None)):
                 how = ("bản Codex không tự xóa: `purge " + aid + " --by \"<nguyên văn>\"` khi người dùng muốn"
                        if RUNTIME == "codex" else "xóa ở đầu phiên sau")
@@ -229,7 +244,7 @@ def keep(a):
 
 def purge(a):
     st = load_st(a.id)
-    if why := blocked(st, None):
+    if why := ab_wait(a.id) or blocked(st, None):
         die(f"{a.id}: không xóa: {why}")
     print(execute(load_cfg(), st, "purge", a.by, a.zip))
 

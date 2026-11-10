@@ -357,7 +357,7 @@ Lý do: agent sinh rất nhiều file trung gian. Sau khi anh duyệt kết qu�
 8. **Script ghi manifest** những gì đã xóa và dung lượng (`assets/<id>/purge-manifest.json`; lệnh đang chờ: `purge-pending.json`). Đường dẫn trong ledger và trang duyệt không gãy: giữ report, findings, `feedback/` (ảnh khoanh), và mọi ảnh trang duyệt trỏ tới, thu cạnh dài về 1024 px tại chỗ, cùng tên. Giữ mọi file text ngoài `work/` (cả `parts_lib.py`, kết quả check JSON). GLB của các bước giữa bị xóa; thẻ trên trang duyệt không còn nút GLB; `deliver/<id>/` giữ GLB.
 9. **`--zip`** nén phần sắp xóa ra chỗ khác, khi anh muốn giữ.
 10. **`P disk`** in dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb` của `policy.yaml`.
-11. Áp cho cả hai thư mục khi chạy A/B.
+11. Áp cho cả hai thư mục khi chạy A/B. **Thêm (Producer chốt 2026-11-10):** trong `production-<runtime>/`, không xóa (hook hay `P purge`) trước khi cặp có kết quả so: `ab prefer` hoặc đủ hai lần `ab judge`. Tới lúc đó `P next` chỉ nhắc; `P purge` từ chối và nêu kết quả còn thiếu. Lý do: trang so cặp mù không được có một bên đã xóa GLB và thu nhỏ ảnh. Có kết quả rồi thì theo quy tắc thường: bên Claude xóa khi `startup` hoặc `clear`, bên Codex chỉ nhắc.
 12. Thay `P cleanup` của D22.2 (chỉ xóa `work/` của version bị loại, phải gọi tay).
 
 ## D30 — Sửa sau Run 5 (wooden-chest) (2026-11-10)
