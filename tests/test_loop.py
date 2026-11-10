@@ -759,3 +759,20 @@ def test_a_feedback_that_changes_no_state_prints_no_dispatch_d30_5(flow):
     out = cli(flow, "feedback", AID, "mái đẹp", "--action", "approve").splitlines()
     assert out == ["house-a: đã ghi feedback; house-a không chờ duyệt blockout (state=reviewing). Tiếp: đang chờ subagent "
                    "(mất kết nối thì `brief house-a` để giao lại)"]
+
+
+def test_compare_for_ids_outside_top_fix_is_ignored_with_a_ledger_warning_and_prior_sets_their_status_d30_4(flow):
+    """Run 5 model v2: the reviewer compared F2 and F3 too; ingest refused the whole report and the Producer edited it."""
+    flow.work()
+    flow.review(counts=counts(major=2, minor=1), top_fix="structure: F1",
+                findings=[finding("F1", "major", "structure"), finding("F2", "major", "param"),
+                          finding("F3", "minor", "param")])
+    flow.work()
+    out = flow.review(counts=counts(major=1), top_fix="param: F2", compare="F1=better; F2=same; F3=better",
+                      prior=["- F1: resolved | evidence: clay_front", "- F2: open", "- F3: resolved | evidence: clay_front"])
+    assert out.splitlines()[0] == "house-a: review FIX (major=1) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    doc = findings.load(AID, "blockout", 2)
+    assert {i: f["status"] for i, f in doc["findings"].items()} == {"F1": "resolved", "F2": "open", "F3": "resolved"}
+    warn = [l.split(" · ", 2)[2] for l in flow.ledger().splitlines() if "cảnh báo report reviewer" in l]
+    assert warn == [f"{AID} · blockout v2 · cảnh báo report reviewer · COMPARE {i}={c} bỏ qua: không có trong TOP_FIX vòng "
+                    "trước hay feedback của người dùng" for i, c in (("F2", "same"), ("F3", "better"))]

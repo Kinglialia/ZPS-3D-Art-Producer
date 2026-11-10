@@ -257,7 +257,10 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     claimed = parse_worker(read_report(wr))[0]["RESOLVED_NOTES"] if wr.exists() else []
     if extra := [x for x in rv["confirmed"] if x not in claimed]:
         die(f"{rel(rep)} sai contract: RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
-    doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv, step, n))
+    warns = []
+    doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv, step, n, warns))
+    for w in warns:
+        ledger(f"{aid} · {sid} v{n} · cảnh báo report reviewer · {w}")
     st["rereview"] = None
     if pend := (st.get("waive_pending") or {}).pop(sid, None):
         findings.waive(aid, sid, st["versions"][sid], pend, doc)

@@ -151,7 +151,8 @@ def compare_ids(base: dict | None) -> list[str]:
     return ids + [i for i in open_of(base) if i.startswith("H") and i not in ids]
 
 
-def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[str]]:
+def apply(base: dict | None, rv: dict, step: dict, n: int, warns: list[str] | None = None) -> tuple[dict, list[str]]:
+    """warns collects COMPARE ids outside the TOP_FIX of the base: D30.4 ignores them, their status comes from PRIOR."""
     errs = []
     fs = {i: dict(f) for i, f in (base or {}).get("findings", {}).items()}
     was = list(open_of(base))
@@ -169,7 +170,8 @@ def apply(base: dict | None, rv: dict, step: dict, n: int) -> tuple[dict, list[s
         errs.append("COMPARE thiếu " + ", ".join(miss))
     for i, c in rv["compare"].items():
         if i not in need:
-            errs.append(f"COMPARE {i}: không có trong TOP_FIX vòng trước hay feedback của người dùng")
+            if warns is not None:
+                warns.append(f"COMPARE {i}={c} bỏ qua: không có trong TOP_FIX vòng trước hay feedback của người dùng")
         elif prior.get(i) == "resolved" and c != "better":
             errs.append(f"{i}: resolved cần COMPARE better")
         elif c == "worse" and prior.get(i) != "regressed":
