@@ -76,6 +76,17 @@ def test_producer_tokens_count_each_main_session_message_once_and_skip_subagent_
     assert session.main_usage([str(ok), str(tmp_path / "gone.jsonl")]) is None
 
 
+def test_a_transcript_without_any_usage_line_or_a_step_without_messages_shows_no_number_never_zero(tmp_path, monkeypatch):
+    """D27.3: a missing number is never written as 0; a step with dispatches always had Producer turns."""
+    junk = tmp_path / "junk.jsonl"
+    junk.write_text("{not json\n" + json.dumps({"type": "user"}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(session, "OUT", tmp_path / "session.json")
+    (tmp_path / "session.json").write_text(json.dumps({"transcripts": [str(junk)]}), encoding="utf-8")
+    assert stats.producer_usage() == "không có số"
+    rows = stats.table(CFG, ST, [(t("2026-11-10 13:30:00"), 40)])
+    assert [r.split(" | ")[-2] for r in rows[2:]] == ["không có số", "40", "40"]
+
+
 def test_an_unreadable_transcript_shows_no_number_and_the_codex_edition_says_not_supported(tmp_path, monkeypatch):
     monkeypatch.setattr(session, "OUT", tmp_path / "session.json")
     (tmp_path / "session.json").write_text(json.dumps({"transcripts": [str(tmp_path / "gone.jsonl")]}), encoding="utf-8")

@@ -81,9 +81,11 @@ def user_wait(st: dict, sid: str) -> float | None:
 
 
 def producer_tokens(usage, start: dt.datetime, end: dt.datetime | None) -> str:
+    """A step with dispatches had Producer turns: no message in its window means the transcripts miss them."""
     if isinstance(usage, str):
         return usage
-    return str(sum(n for t, n in usage if t >= start and (end is None or t <= end)))
+    ns = [n for t, n in usage if t >= start and (end is None or t <= end)]
+    return str(sum(ns)) if ns else NO_NUMBER
 
 
 def producer_usage() -> list[tuple[dt.datetime, int]] | str:
@@ -92,7 +94,7 @@ def producer_usage() -> list[tuple[dt.datetime, int]] | str:
         return NOT_SUPPORTED
     paths = (session.load() or {}).get("transcripts") or []
     usage = session.main_usage(paths) if paths else None
-    return NO_NUMBER if usage is None else usage
+    return usage or NO_NUMBER
 
 
 def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:

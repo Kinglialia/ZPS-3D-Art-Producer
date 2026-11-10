@@ -55,9 +55,10 @@ def cmd_ack(a):
 
 def cmd_next(a):
     from core.limits import show_next
+    a.source = None
     if a.session:
         from core import session
-        session.from_stdin()
+        a.source = (session.from_stdin() or {}).get("source")
     show_next(a)
 
 
