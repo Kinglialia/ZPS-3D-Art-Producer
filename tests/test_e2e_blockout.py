@@ -134,8 +134,6 @@ def flow(tmp_path_factory):
     f.review("v4 full", verdict="PASS", counts=counts(0), top_fix=None, rubric="concept_match=pass; scale=pass")
     f.save("approve", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("approve again", f.p("feedback", AID, "đạt", "--action", "approve"))
-    f.save("cleanup dry-run", f.p("cleanup", AID))
-    f.save("cleanup", f.p("cleanup", AID, "--yes"))
     f.cp["ledger"] = [re.sub(TIMING, "", l.split(" · ", 2)[2]) for l in (root / "production/ledger.md").read_text(encoding="utf-8")
                       .splitlines() if l.startswith("- ")]
     f.cp["findings"] = {n: f.findings(n) for n in (1, 2, 3, 4)}
@@ -333,10 +331,7 @@ def test_a_second_approve_of_the_same_version_is_ignored_and_changes_nothing(flo
     assert flow["approve again"]["st"] == flow["approve"]["st"]
 
 
-def test_cleanup_and_archive_accept_done_enabled_and_keep_the_approved_work(flow):
-    assert flow["cleanup dry-run"]["out"] == ("DRY-RUN — sẽ xoá (thêm --yes sau khi người dùng đồng ý):\n"
-                                              + "".join(f"  {V}{n}/work\n" for n in (1, 2, 3)))
-    assert flow["cleanup"]["out"] == "Đã xoá 3 thư mục work/.\n"
+def test_archive_accepts_done_enabled(flow):
     assert flow["archive"] == {"out": "Đã chuyển pilot-house vào production/archive/\n", "moved": True}
 
 
@@ -358,8 +353,7 @@ def test_the_ledger_records_every_dispatch_report_and_decision_in_order(flow):
                 "worker"),
         "pilot-house · blockout v4 · giao reviewer (zps-3dp-check-blockout, opus)",
         "pilot-house · blockout v4 · review PASS (0 mở) · concept_match=pass; scale=pass",
-        "pilot-house · blockout v4 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt",
-        "pilot-house · cleanup 3 thư mục work/"]
+        "pilot-house · blockout v4 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt"]
 
 
 def test_every_brief_stays_under_the_token_budget_without_the_install_and_project_paths(flow):

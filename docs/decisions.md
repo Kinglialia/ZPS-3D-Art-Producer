@@ -345,14 +345,16 @@ Lý do: agent sinh rất nhiều file trung gian. Sau khi anh duyệt kết qu�
 1. **Trước DUYỆT 2: giữ hết**, để anh so các bản khi duyệt.
 2. **Chỉ DUYỆT 2 do anh duyệt (`by: user`) mới mở lệnh xóa.** Producer tự duyệt (test run) thì không xóa. Finding do Producer waive (D30.1) không mở lệnh xóa.
 3. **DUYỆT 2 in danh sách xóa và tổng dung lượng sẽ giải phóng.** Không xóa trong cùng phiên đã duyệt.
-4. **Xóa ở đầu phiên sau, chỉ khi `source = startup`.** Hook SessionStart gọi `P next --session`; script đọc `source` trong JSON mà hook nhận qua stdin. `resume` và `compact` không xóa. Lý do: hai giá trị này tiếp tục phiên cũ, không phải phiên mới.
-5. **`P keep <id>`** hủy lệnh xóa trước lúc đó. **`P purge <id>`** xóa ngay khi anh muốn.
+4. **Xóa ở đầu phiên sau, chỉ khi `source` là `startup` hoặc `clear`** (sửa 2026-11-10: `/clear` cũng mở phiên mới). Hook SessionStart gọi `P next --session`; script đọc `source` trong JSON mà hook nhận qua stdin. `resume` và `compact` không xóa. Lý do: hai giá trị này tiếp tục phiên cũ, không phải phiên mới. `P next` gõ tay (không có JSON của hook) không xóa. Phiên có `session_id` bằng phiên đã duyệt không xóa. Bản Codex không có hook: không bao giờ tự xóa; `P next` nhắc, anh chạy `P purge`.
+5. **`P keep <id>`** hủy lệnh xóa trước lúc đó. **`P purge <id> --by "<nguyên văn>"`** xóa ngay khi anh muốn. Lúc xóa, script kiểm lại: asset vẫn `done`, bản `assemble` đã duyệt vẫn là bản lúc lập lệnh, có `deliver/<id>/`. Sai một điều thì hủy lệnh, không xóa (ví dụ anh `redo` sau DUYỆT 2).
+   - Producer tự duyệt bằng `P feedback ... --action approve --by producer`, chỉ khi `policy.yaml` có `test_mode: true` (như D30.1).
+   - Sau khi xóa, `redo` mọi bước bị từ chối, kèm đường dẫn manifest: `final/` chỉ còn file text.
 6. **Sau khi xóa chỉ còn:**
    - `deliver/<id>/` (GLB, albedo, `.blend`, ảnh review, README).
    - Hồ sơ text: `status.json`, ledger, findings, report, feedback.
    - File nguồn dạng text của từng bước: `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json` (vài KB, để sửa lại không phải làm từ đầu).
 7. **Mọi thứ khác xóa thật**, không chuyển vào Thùng rác: version bị loại, version được duyệt của bước giữa, phương án `param` không chọn, ảnh evidence, ảnh gen không dùng, `work/`, `.blend` trung gian, file tải Meshy.
-8. **Script ghi manifest** những gì đã xóa và dung lượng. Đường dẫn trong ledger và trang duyệt không gãy: giữ report, findings, ảnh thu nhỏ.
+8. **Script ghi manifest** những gì đã xóa và dung lượng (`assets/<id>/purge-manifest.json`; lệnh đang chờ: `purge-pending.json`). Đường dẫn trong ledger và trang duyệt không gãy: giữ report, findings, `feedback/` (ảnh khoanh), và mọi ảnh trang duyệt trỏ tới, thu cạnh dài về 1024 px tại chỗ, cùng tên. Giữ mọi file text ngoài `work/` (cả `parts_lib.py`, kết quả check JSON). GLB của các bước giữa bị xóa; thẻ trên trang duyệt không còn nút GLB; `deliver/<id>/` giữ GLB.
 9. **`--zip`** nén phần sắp xóa ra chỗ khác, khi anh muốn giữ.
 10. **`P disk`** in dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb` của `policy.yaml`.
 11. Áp cho cả hai thư mục khi chạy A/B.

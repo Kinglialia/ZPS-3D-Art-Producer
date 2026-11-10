@@ -7,7 +7,7 @@ import shutil
 from argparse import Namespace
 from pathlib import PurePosixPath
 
-from . import annotate, findings, hashes, policy, texture
+from . import annotate, findings, hashes, policy, purge, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
 from .state import (ASSETS, DELIVER, FINISHED, HARD_GATES, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
                     stamp, step_of, vdir)
@@ -616,11 +616,12 @@ def human_action(*args, **kw) -> str:
 
 
 def act(aid: str, action: str, text: str, step_id: str | None = None, regions=None,
-        offer: str | None = None) -> tuple[bool, str]:
+        offer: str | None = None, by: str = "user", zip_path: str | None = None) -> tuple[bool, str]:
     """One decision per offer (D22.8), from the CLI, the local board or a remote row. `offer` is the offer the page
     showed; `regions` are marks on images of the current card (review-board.md §4). Returns (applied, message):
     applied is False for a skipped call, so a page keeps the user's marks. Nothing reaches the disk before the
-    decision can no longer die."""
+    decision can no longer die. by: `producer` is the Producer's own approval (test_mode only); only `user` arms the
+    D29 deletion at DUYỆT 2."""
     from .board import build_outputs, view_images
     cfg = load_cfg()
     st = load_st(aid)
@@ -643,6 +644,12 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
                        f"(hiện tại: {st.get('offer_key') or 'không chờ duyệt'})")
     if action == "paint" and not answer:
         die(f"{aid}: không có câu hỏi Meshy đang chờ")
+    if by == "producer" and policy.load().get("test_mode") is not True:
+        die(f"{aid}: --by producer chỉ chạy khi production/policy.yaml có test_mode: true; dự án thật do người dùng duyệt")
+    if zip_path and not (action == "approve" and target == "assemble" and by == "user"):
+        die(f"{aid}: --zip chỉ dùng khi người dùng duyệt assemble (DUYỆT 2)")
+    if action == "redo" and st.get("purged"):
+        die(purge.refused(st))
     if action == "redo" and step["gate"] == "checks_human" and not step.get("agent"):
         die(f"{aid}: {target} không có vòng sửa: chọn bước sửa, `--step texture` (vẽ lại) hoặc `--step model` (mesh, UV)")
     if action == "redo" and (st.get("ask") or {}).get("kind") == "mesh_changed" and target == "texture":
@@ -673,18 +680,20 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         keep()
         return findings.add_human(aid, step, n, None, marks) if marks and waiting else []
 
-    ids, msg = [], "đã ghi feedback"
+    ids, msg, armed = [], "đã ghi feedback", ""
     if answer:
         decide()
         msg = texture.resolve(st, "call" if action == "approve" else "paint", policy.BY["human"])
         ids = settle()
     elif action == "approve" and waiting:
         decide()
-        approve(cfg, st, step, n, policy.BY["human"])
+        approve(cfg, st, step, n, policy.BY["human" if by == "user" else "producer"])
         ids = settle()
         if not step.get("reviewer"):
             findings.close_human(aid, target, n)
         msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
+        if target == "assemble" and by == "user":
+            armed = "\n" + purge.arm(cfg, st, zip_path)
     elif action == "redo" and st["state"] in REDO_FROM:
         decide()
         st.pop("ask", None)
@@ -703,6 +712,6 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         msg += (f"; khoanh {len(marks)} vùng → {', '.join(ids)}" if ids else
                 f"; khoanh {len(marks)} vùng lưu ở {rel(folder)}, chưa thành finding (state={st['state']})")
     save_st(st)
-    ledger(f"{aid} · người dùng {action} {target} · {text[:80]}")
+    ledger(f"{aid} · {'người dùng' if by == 'user' else 'Producer'} {action} {target} · {text[:80]}")
     build_outputs(cfg)
-    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}"
+    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}{armed}"

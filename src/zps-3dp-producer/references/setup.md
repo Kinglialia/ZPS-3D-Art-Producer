@@ -64,4 +64,9 @@ Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline
 
 ## Dọn file
 
-`P cleanup <id>` chỉ chạy khi asset đã done; mặc định dry-run, `--yes` để xoá work/ của phiên bản không được duyệt, `--all` để xoá cả work/ của bản đã duyệt. Xong hẳn: `P archive <id>`.
+- Người dùng DUYỆT 2 (`assemble`) thì script lập lệnh xóa: in danh sách, tổng dung lượng, ghi `production/assets/<id>/purge-pending.json`. Không xóa trong phiên đó.
+- Phiên sau mở bằng hook SessionStart (`startup` hoặc `clear`): `P next --session` xóa. `resume`, `compact` và `P next` gõ tay không xóa. Bản Codex không có hook: không tự xóa, `P next` nhắc.
+- `P keep <id>`: hủy lệnh xóa. `P purge <id> --by "<nguyên văn>" [--zip <file>]`: xóa ngay. `--zip` cũng dùng được ở `P feedback <id> "<nguyên văn>" --action approve` của DUYỆT 2.
+- Còn lại: `deliver/<id>/`; mọi file text ngoài `work/` (status, findings, report, brief, `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); `feedback/`; ảnh trang duyệt trỏ tới, thu về cạnh dài 1024 px. Mọi thứ khác xóa thật. Manifest: `production/assets/<id>/purge-manifest.json`. Sau đó `redo` bị từ chối.
+- `P disk`: dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb` của `policy.yaml`.
+- Xong hẳn: `P archive <id>`.

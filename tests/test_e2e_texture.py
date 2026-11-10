@@ -202,7 +202,9 @@ def test_with_the_budget_spent_the_fix_brief_says_no_meshy_call_is_left(flow):
 
 
 def test_duyet_2_copies_the_package_to_deliver_and_logs_the_estimate_record(flow):
-    assert flow["approve a2"]["out"] == "pilot-house: đã duyệt assemble v3 → assemble/done. Tiếp: xong\n"
+    out = flow["approve a2"]["out"].splitlines()
+    assert out[0] == "pilot-house: đã duyệt assemble v3 → assemble/done. Tiếp: xong"
+    assert out[1].startswith("Lệnh xóa D29: ")  # D29.3: the user's DUYỆT 2 arms the deletion; tests/test_purge.py
     assert pick(flow["approve a2"]["st"], "approved", "rejected")["rejected"]["assemble"] == [1, 2]
     assert flow["deliver before"] is False
     assert flow["deliver"] == ["README.md", "model/pilot-house.blend", "model/pilot-house.glb", "review/compare.json",

@@ -6,7 +6,7 @@ Cần Python 3.11+ (dùng tomllib).
 
 Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · waive · meshy
              texture-mode · approvals · delegate · rule · ledger · stats · dashboard · serve · show · board · validate
-             cleanup · archive · texture-stats · ab · compare
+             keep · purge · disk · archive · texture-stats · ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 
-UNLOCKED = {"next", "ledger", "stats", "validate", "serve", "texture-stats", "ab", "compare"}
+UNLOCKED = {"next", "ledger", "stats", "validate", "serve", "texture-stats", "ab", "compare", "disk"}
 
 
 def cmd_init(a):
@@ -55,10 +55,11 @@ def cmd_ack(a):
 
 def cmd_next(a):
     from core.limits import show_next
-    a.source = None
+    a.source = a.session_id = None
     if a.session:
         from core import session
-        a.source = (session.from_stdin() or {}).get("source")
+        doc = session.from_stdin() or {}
+        a.source, a.session_id = doc.get("source"), doc.get("session_id")
     show_next(a)
 
 
@@ -89,7 +90,7 @@ def cmd_feedback(a):
     regions = json.loads(Path(a.regions).read_text(encoding="utf-8")) if a.regions else None
     st = load_st(a.id)
     before = (st["stage"], st["state"], len(st.get("decisions", {})))
-    print(human_action(a.id, a.action, a.text, a.step, regions, a.offer))
+    print(human_action(a.id, a.action, a.text, a.step, regions, a.offer, by=a.by, zip_path=a.zip))
     after_feedback(a.id, before)
 
 
@@ -172,9 +173,19 @@ def cmd_validate(a):
     validate(a)
 
 
-def cmd_cleanup(a):
-    from core.state import cleanup
-    cleanup(a)
+def cmd_keep(a):
+    from core.purge import keep
+    keep(a)
+
+
+def cmd_purge(a):
+    from core.purge import purge
+    purge(a)
+
+
+def cmd_disk(a):
+    from core.purge import disk
+    disk(a)
 
 
 def cmd_archive(a):
@@ -217,6 +228,9 @@ def main(argv: list[str] | None = None):
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
     x.add_argument("--regions", help="JSON vùng khoanh [{n, image, shape, coords, note}] trên ảnh của thẻ đang chờ")
     x.add_argument("--offer", help="khóa lần đưa duyệt mà người dùng đã thấy; khóa cũ thì bỏ qua")
+    x.add_argument("--by", default="user", choices=["user", "producer"],
+                   help="producer: Producer tự duyệt, chỉ khi policy.yaml có test_mode: true; không mở lệnh xóa D29")
+    x.add_argument("--zip", help="DUYỆT 2: nén phần sẽ xóa vào file zip này trước (D29.9)")
     x = sub.add_parser("waive", help="chấp nhận một finding là ngoại lệ (D30.1): ở mọi state, finding thành waived")
     x.add_argument("id"); x.add_argument("fid", help="id finding, vd F2"); x.add_argument("why", help="lý do")
     x.add_argument("--by", default="user", choices=["user", "producer"],
@@ -257,8 +271,12 @@ def main(argv: list[str] | None = None):
     sub.add_parser("compare", help="tổng hợp A/B theo asset; --reveal mở nhãn khi lô đã duyệt hết").add_argument(
         "--reveal", action="store_true")
     sub.add_parser("validate", help="kiểm tra cấu hình và status")
-    x = sub.add_parser("cleanup", help="xoá work/ của phiên bản không được duyệt (mặc định dry-run)")
-    x.add_argument("id"); x.add_argument("--yes", action="store_true"); x.add_argument("--all", action="store_true")
+    x = sub.add_parser("keep", help="hủy lệnh xóa đang chờ sau DUYỆT 2 (D29.5)")
+    x.add_argument("id"); x.add_argument("--by", default="", help="nguyên văn lời người dùng")
+    x = sub.add_parser("purge", help="xóa ngay file trung gian của asset đã DUYỆT 2 (D29.5), chỉ khi người dùng muốn")
+    x.add_argument("id"); x.add_argument("--by", required=True, help="nguyên văn lời người dùng")
+    x.add_argument("--zip", help="nén phần sẽ xóa vào file zip này trước")
+    sub.add_parser("disk", help="dung lượng production/ theo asset, bước, loại file (D29.10)")
     x = sub.add_parser("archive", help="chuyển asset đã xong vào archive/")
     x.add_argument("id"); x.add_argument("--force", action="store_true")
     a = p.parse_args(argv)

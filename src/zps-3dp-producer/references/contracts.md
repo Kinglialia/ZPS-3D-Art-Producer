@@ -26,6 +26,8 @@ production/                     # trong project Claude Code; chỉ script và su
     status.json                 # chỉ script ghi
     brief.md · rubric.md · feedback.md
     feedback/<step>-vN-<k>/     # một lần gửi có khoanh: regions.json, ảnh đã khoanh <tên ảnh>.png
+    purge-pending.json          # D29: lệnh xóa sau DUYỆT 2 của người dùng: {asset, armed, assemble, session, bytes, zip, delete[], thumbs[]}
+    purge-manifest.json         # D29: đã xóa gì: {asset, at, source, by, assemble, freed_bytes, zip, deleted[], thumbnails[]}
     <step>/vN/
       brief-worker.md · worker-out.md · brief-review.md · review-out.md · findings.json
       final/ · work/ · review/evidence-<k>/
@@ -54,6 +56,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `meshy_price`: giá một lần retexture, đọc từ `gen_api.py texture --dry-run` khi sinh brief.
 - `texture_choice`: chế độ người dùng chọn bằng `P texture-mode` (D30.11): `{mode: auto|meshy|paint, by, at}`. Không có = `auto`. `gate()` của bước texture đọc trường này.
 - `texture_mode`: chế độ texture script chọn lần cuối (D30.11): `{mode, reason, mesh}`, `mode` là `Meshy SỬA` hoặc `VẼ MỚI`, `mesh` là 12 ký tự đầu hash mesh. Ledger ghi một dòng khi giá trị này đổi.
+- `purged`: `{at, manifest, freed_bytes, zip}` sau khi xóa file trung gian (D29). Có trường này thì `redo` bị từ chối.
 - `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.
 - `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên; `at` tính tới giây. `brief` gọi lại khi subagent chưa trả về thì không thêm lần giao. `ingest` đóng lần giao cùng bước, version và vai trò: `ingested` (giờ ingest), `tokens` (`--tokens N`), `duration_ms` (`--duration-ms M`), `after` (state sau ingest); không có số thì `null`, ledger ghi "không có số". `P stats` tính khoảng chờ Producer từ `ingested` của lần trước tới `at` của lần sau, khi `after` là `todo`, `review`, `fix` hoặc `evidence`. Lần giao reviewer có thêm `scope` (`full` | `fix`, D31.2), để `P stats` tách vòng đầu, vòng sửa, vòng chấm cuối (D31.4). Không có `scope` (lần giao cũ): reviewer đầu tiên của bước là vòng đầu, các lần sau là vòng sửa. Thời gian bước: `at` của worker đầu tiên tới `approved_at`, chỉ khi bước đang được duyệt. Chờ anh: `offer_log` từ `at` tới `decided`.
 - `session.json`: `source` là của lần mở phiên gần nhất (`startup`, `resume`, `clear`, `compact`). `transcripts` gom mọi transcript của phiên chính, không trùng. `P stats` cộng `usage` của từng message một lần (theo `message.id`): `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`. Bỏ dòng `isSidechain` và dòng hỏng. Token Producer của bước là các message có `timestamp` trong khoảng thời gian bước. Hai asset chạy cùng lúc thì khoảng chồng nhau, nên một message được tính cho cả hai.

@@ -6,7 +6,7 @@ from .state import ROOT, TEMPLATES, die, ledger, now, rel, write_atomic
 KEYS = ("blockout", "views_rest", "model")
 WHO = ("human", "reviewer")
 BOARDS = ("local", "local+remote")
-BY = {"human": "người dùng", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
+BY = {"human": "người dùng", "producer": "Producer (test_mode)", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
 HEAD = "# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
 
 
@@ -24,6 +24,9 @@ def check(pol: dict) -> list[str]:
         errs.append(f"review_board: phải là {'|'.join(BOARDS)}")
     if not isinstance(pol.get("test_mode", False), bool):
         errs.append("test_mode: phải là true|false")
+    w = pol.get("disk_warn_gb", 20)
+    if isinstance(w, bool) or not isinstance(w, int | float) or w <= 0:
+        errs.append("disk_warn_gb: phải là số GB lớn hơn 0")
     return errs
 
 

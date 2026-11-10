@@ -24,6 +24,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 ## Hook mở phiên
 
 - Không có hook SessionStart. Chạy `P next --session` khi mở phiên.
+- Không tự xóa file sau DUYỆT 2 (D29): `P next` nhắc lệnh xóa đang chờ; người dùng muốn xóa thì `P purge <id> --by "<nguyên văn>"`.
 
 ## Gửi file
 

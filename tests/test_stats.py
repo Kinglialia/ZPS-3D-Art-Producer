@@ -112,7 +112,7 @@ def saved(root):
 
 
 def test_the_session_start_hook_records_its_source_and_every_main_transcript_so_stats_and_d29_can_read_them(tmp_path):
-    """D29.4 deletes only on `startup`: the hook's `source` must reach the file. `/clear` starts a new transcript, and
+    """D29.4 deletes only on `startup` or `clear`: the hook's `source` must reach the file. `/clear` starts a new transcript, and
     the Producer tokens of a run are the sum over all of them."""
     subprocess.run([sys.executable, str(P), "init", "--project", "Pilot", "--concepts", "concepts"], cwd=tmp_path,
                    check=True, capture_output=True)

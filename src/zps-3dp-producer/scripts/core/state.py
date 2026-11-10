@@ -259,29 +259,6 @@ def ledger_tail(a):
     print("\n".join(lines[-a.tail:] if a.tail > 0 else []) or "(trống)")
 
 
-def cleanup(a):
-    st = load_st(a.id)
-    if st["state"] not in FINISHED:
-        die(f"{a.id} chưa done (state={st['state']}): vòng sửa sau còn cần work/ của bản trước")
-    targets = []
-    for vd in sorted((ASSETS / a.id).glob("*/v*/work")):
-        step, n = vd.parent.parent.name, int(vd.parent.name[1:])
-        if not a.all and st["approved"].get(step) == n:
-            continue
-        targets.append(vd)
-    if not targets:
-        print("Không có gì để dọn.")
-        return
-    if not a.yes:
-        print("DRY-RUN — sẽ xoá (thêm --yes sau khi người dùng đồng ý):")
-        print("\n".join(f"  {rel(t)}" for t in targets))
-        return
-    for t in targets:
-        shutil.rmtree(t)
-    ledger(f"{a.id} · cleanup {len(targets)} thư mục work/")
-    print(f"Đã xoá {len(targets)} thư mục work/.")
-
-
 def archive(a):
     from .board import build_outputs
     st = load_st(a.id)

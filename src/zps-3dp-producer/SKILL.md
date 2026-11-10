@@ -66,7 +66,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 - `blocked` vì thiếu key: người dùng thêm key vào file `env_file` của profile, rồi `P retry <id>`.
 Người dùng hỏi về ngưỡng chọn chế độ texture: `P texture-stats` (một dòng).
 
-**Bước assemble** (DUYỆT 2): script kiểm hash mesh, xuất GLB unlit, chạy QA và `finalize.py` của kit, so pixel GLB với render bước texture. Fail → `blocked`: báo người dùng điểm fail trong ghi chú; sửa môi trường xong thì `P retry <id>` (chạy lại thành version mới). Pass → `waiting_human`. Cần sửa ở `assemble` phải chọn bước: `P feedback <id> "<nguyên văn>" --action redo --step texture` (vẽ lại) hoặc `--step model` (mesh, UV). Duyệt thì script chép gói sang `deliver/<id>/`.
+**Bước assemble** (DUYỆT 2): script kiểm hash mesh, xuất GLB unlit, chạy QA và `finalize.py` của kit, so pixel GLB với render bước texture. Fail → `blocked`: báo người dùng điểm fail trong ghi chú; sửa môi trường xong thì `P retry <id>` (chạy lại thành version mới). Pass → `waiting_human`. Cần sửa ở `assemble` phải chọn bước: `P feedback <id> "<nguyên văn>" --action redo --step texture` (vẽ lại) hoặc `--step model` (mesh, UV). Duyệt thì script chép gói sang `deliver/<id>/` và in lệnh xóa file trung gian (D29): báo người dùng danh sách và dung lượng; phiên sau script tự xóa. Bạn tự duyệt trong test run thì thêm `--by producer` (chỉ khi `test_mode: true`); lệnh đó không xóa gì. `P next` báo `production/` vượt `disk_warn_gb` thì chạy `P disk` và báo người dùng.
 
 **Báo cáo sai hash:** `ingest` báo `PROFILE_HASH ... khác brief` thì yêu cầu worker chép đúng dòng `PROFILE_HASH` ở đầu brief. `ingest` hoặc `brief` báo "final/ đã duyệt bị sửa" thì hỏi người dùng làm lại bước đó hay không.
 
@@ -127,7 +127,7 @@ Session sau chỉ biết những gì nằm trong file. Mọi quyết định ng�
 Tự quyết, ghi lại rồi làm tiếp: brief mâu thuẫn với rubric, reviewer chấm sai rõ ràng, cần giả định để không bị kẹt. Ghi bằng
 `P rule "<id>: <quyết định> — <lý do> — <cái giá nếu sai>"`.
 
-Chỉ dừng lại hỏi người dùng khi: chọn thẩm mỹ cuối cùng; duyệt rubric; xoá file (`P cleanup` luôn chạy dry-run trước, chỉ thêm `--yes` khi người dùng đồng ý); asset vượt số vòng sửa tối đa; mọi hướng đi đều là đoán.
+Chỉ dừng lại hỏi người dùng khi: chọn thẩm mỹ cuối cùng; duyệt rubric; xoá file ngay (`P purge <id> --by "<nguyên văn>"` chỉ khi người dùng muốn; lệnh xóa sau DUYỆT 2 tự chạy ở phiên sau, người dùng muốn giữ thì `P keep <id>`); asset vượt số vòng sửa tối đa; mọi hướng đi đều là đoán.
 
 ## Giữ context nhỏ
 

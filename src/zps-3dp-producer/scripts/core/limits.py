@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 
-from . import preflight
+from . import preflight, purge
 from .board import build_outputs
 from .hashes import schedule_soon, warnings_for
 from .loop import next_action
@@ -44,6 +44,10 @@ def show_next(a):
     if a.session:
         print("[producer] Dùng skill zps-3dp-producer cho mọi việc về asset, feedback, tiến độ. Trạng thái hiện tại:")
     print(f"{len(active)} asset đang chạy · {len(sts) - len(active)} done · review page: `serve` → http://127.0.0.1:{PORT}")
+    for line in purge.on_next(a):
+        print(line)
+    if w := purge.disk_warning():
+        print(w)
     pf = preflight.load()
     if pf is None:
         print(f"Chưa có {rel(preflight.OUT)} → chạy `preflight` một lần mỗi phiên")
