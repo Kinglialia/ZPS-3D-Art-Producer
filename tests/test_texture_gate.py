@@ -233,7 +233,7 @@ def test_a_spent_budget_keeps_meshy_sua_on_the_paid_layer_and_a_rebrief_adds_no_
     f.meshy("t1", (tmp_path / out["report"]).parent, "")
     f.brief("t1 again brief")
     f.brief("t1 third brief")
-    why = "hết lần gọi Meshy: sửa tiếp trên lớp Meshy đã qua topology của mesh này"
+    why = "hết lần gọi: sửa trên lớp Meshy qua topology"
     assert mode_lines(f, "t1 third brief") == [f"MODE: Meshy SỬA ({why})"]
     assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: mặc định D30.11: có key và budget",
                                       f"chế độ Meshy SỬA: {why}"]
@@ -247,4 +247,17 @@ def test_a_spent_budget_whose_only_layer_failed_topology_paints_because_that_lay
     assert f.cp["t1 meshy"]["rc"] == 4
     f.brief("t1 again brief")
     assert mode_lines(f, "t1 again brief") == [
-        "MODE: VẼ MỚI (hết lần gọi Meshy và không có lớp Meshy qua topology cho mesh này)"]
+        "MODE: VẼ MỚI (hết lần gọi, không có lớp Meshy qua topology)"]
+
+
+def test_a_redo_with_the_budget_spent_names_the_passed_layer_of_v1_so_meshy_sua_has_a_layer_to_fix(tmp_path):
+    f = to_texture(tmp_path)
+    f.work("t1", meshy="")
+    f.review("t1", verdict="ESCALATE", counts=counts(), top_fix=None)
+    f.human("redo texture", "mái tối", "--action", "redo")
+    f.brief("t2")
+    t = f.cp["t2"]["text"].splitlines()
+    assert mode_lines(f, "t2") == ["MODE: Meshy SỬA (hết lần gọi: sửa trên lớp Meshy qua topology)"]
+    assert [l for l in t if l.startswith("MESHY")] == [
+        "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
+        f"MESHY_DONE: `{A}/texture/v1/work/meshy/call-1` topology pass: dùng `base_color.png`, không gọi Meshy"]

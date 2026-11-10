@@ -63,12 +63,15 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
     run = [f"MESHY: {MESHY_CALL}", f"MESHY_ARGS: --asset {aid} --pid-file {rel(ROOT / 'pids' / 'meshy' / f'{aid}.pid')}"]
     done, resume = paid_calls(st)
     if left <= 0:
+        layer = usable_layer(aid, sha)
         if resume:
-            m = mode(st, MESHY, "task Meshy đã trả credit, chưa tải xong: chạy lại lệnh Meshy trên thư mục đó")
-        elif usable_layer(aid, sha):
-            m = mode(st, MESHY, "hết lần gọi Meshy: sửa tiếp trên lớp Meshy đã qua topology của mesh này")
+            m = mode(st, MESHY, "task Meshy đã trả credit, chưa tải xong")
+        elif layer:
+            m = mode(st, MESHY, "hết lần gọi: sửa trên lớp Meshy qua topology")
+            if not any("topology pass" in line for line in done):
+                done.append(f"MESHY_DONE: `{rel(layer)}` topology pass: dùng `base_color.png`, không gọi Meshy")
         else:
-            m = mode(st, PAINT, "hết lần gọi Meshy và không có lớp Meshy qua topology cho mesh này")
+            m = mode(st, PAINT, "hết lần gọi, không có lớp Meshy qua topology")
         return [m, f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy", *done,
                 *(run if resume else [])]
     return [mode(st, MESHY, "mặc định D30.11: có key và budget"), *run,
@@ -84,14 +87,15 @@ def mode(st: dict, which: str, why: str) -> str:
     return f"MODE: {which} ({why})"
 
 
-def usable_layer(aid: str, sha: str) -> bool:
-    """A paid Meshy call of any texture version of this asset whose topology gate passed on this mesh."""
+def usable_layer(aid: str, sha: str) -> Path | None:
+    """The newest paid Meshy call of any texture version of this asset whose topology gate passed on this mesh."""
     import meshy_call
+    found = []
     for c in (ASSETS / aid / STEP).glob("v*/work/meshy/call-*"):
         t = meshy_call.topology(c)
         if t.get("overall") == "pass" and (t.get("data") or {}).get("locked_sha256") == sha:
-            return True
-    return False
+            found.append((int(c.parents[2].name[1:]), c.name, c))
+    return max(found)[2] if found else None
 
 
 def paid_calls(st: dict) -> tuple[list[str], bool]:
