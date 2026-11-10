@@ -122,4 +122,4 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 | 116 | Blockout, 3D Artist | Wrapper quanh `check_schema.py` nhận `fn` có trong `custom_lib.py` và từ chối hàm khác, trên cả bản Claude và bản Codex; `check_schema.py` không đổi | EDITIONS.md, blockout.md §9, D27.13 | |
 | 117 | Mọi reviewer và worker | Tên file subagent ghi không khớp `^(report\|summary\|findings\|analysis).*\.md$` (không phân biệt hoa thường; harness Claude Code chặn Write của subagent theo mẫu này, https://github.com/anthropics/claude-code/issues/44657). Chạy thật một worker và một reviewer: Write thành công, ledger không có `report_fallback`. Ghi version Claude Code đã kiểm vào dòng dưới bảng | producer.md §6.5, D27.5 | |
 
-Claude Code version checked: <TBD>
+Claude Code version checked: 2.1.317 (desktop app subagent, 2026-11-10): `review-out.md` and `worker-out.md` write OK; `report-review.md` and `report-worker.md` are blocked. CLI on the same machine: 2.1.318.
