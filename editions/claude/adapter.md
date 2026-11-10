@@ -22,7 +22,8 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 ## Hook mở phiên
 
-- Gộp `templates/settings.snippet.json` vào `.claude/settings.json`: hook SessionStart in `P next --session`; allow rule cho `P`, `codex exec` và lệnh ghi file dưới `production/`, `production-*/` (report của subagent), để subagent chạy nền không chờ xin quyền. Rule không ăn thì thêm bằng `/permissions`.
+- `install.py` gộp `templates/settings.snippet.json` vào `.claude/settings.json`: hook SessionStart chạy `P next --session`; allow rule cho `P`, Blender, `meshy_call.py`, `codex exec` và lệnh ghi file dưới `production/`, `production-*/` (report của subagent), để subagent chạy nền không chờ xin quyền. Installer chỉ thêm, không đổi giá trị có sẵn, in diff trước khi ghi. `P preflight` báo khi thiếu. Rule không ăn thì thêm bằng `/permissions`.
+- Hook nhận JSON qua stdin. `P next --session` ghi `source`, `session_id` và đường dẫn transcript vào `production/session.json`.
 
 ## Gửi file
 

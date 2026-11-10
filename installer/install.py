@@ -3,8 +3,11 @@
 
 Usage: python3 install.py --project <project folder> [--dry-run]
 A skill folder that exists is replaced except its .deps/ folders (venvs), so an upgrade drops the files a new version
-removed and keeps the installed dependencies. Run setup_deps.sh after the first install."""
+removed and keeps the installed dependencies. Run setup_deps.sh after the first install.
+The Claude edition then merges templates/settings.snippet.json into <install_root>/../settings.json (D30.7): it prints
+the diff first, only appends, and a second run changes nothing. --dry-run prints the diff and writes nothing."""
 import argparse
+import importlib.util
 import json
 import shutil
 import sys
@@ -51,9 +54,22 @@ def main() -> int:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(src, dst)
     skill = proj / m["install_root"] / m["producer"]
+    rc = merge_settings(m, proj, skill, a.dry_run)
     print(f"Tiếp: bash {skill / 'scripts/setup_deps.sh'} và setup_deps.sh của từng agent trong {skill / 'agents'}"
           + ("; rồi python3 installer/codex_rules.py --write" if (HERE / "installer").is_dir() else ""))
-    return 0
+    return rc
+
+
+def merge_settings(m: dict, proj: Path, skill: Path, dry_run: bool) -> int:
+    """Only an edition that ships the snippet has runtime settings to merge."""
+    src = HERE / "skills" / m["producer"]
+    snippet = src / "templates" / "settings.snippet.json"
+    if not snippet.is_file():
+        return 0
+    spec = importlib.util.spec_from_file_location("settings_merge", src / "scripts" / "settings_merge.py")
+    sm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sm)
+    return sm.install(proj / Path(m["install_root"]).parent / "settings.json", snippet, skill, dry_run)
 
 
 if __name__ == "__main__":

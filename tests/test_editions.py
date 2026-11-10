@@ -336,3 +336,101 @@ def test_the_dispatch_is_the_role_file_and_the_brief_and_nothing_tells_an_agent_
     hits = [f"{p.relative_to(prod)}: {l.strip()[:80]}" for p in sorted(prod.rglob("*.md"))
             for l in p.read_text(encoding="utf-8").splitlines() if SHELL_WRITE.search(l) and l != DISPATCH_RULE]
     assert hits == []
+
+
+MINE = {"permissions": {"allow": ["Bash(git status:*)"], "deny": ["Bash(rm -rf:*)"]}, "model": "opus",
+        "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}
+
+
+def install(dist, project, *args, edition="claude"):
+    blender = project / "bin/Blender"
+    blender.parent.mkdir(exist_ok=True)
+    blender.write_text("#!/bin/sh\necho 'Blender 4.2.1 LTS'\n", encoding="utf-8")
+    blender.chmod(0o755)
+    env = {k: v for k, v in os.environ.items() if k not in ("PRODUCER_ROOT", "PRODUCER_RUNTIME")} | {"BLENDER": str(blender)}
+    return subprocess.run([sys.executable, str(tree(dist, edition) / "install.py"), "--project", str(project), *args],
+                          env=env, capture_output=True, text=True)
+
+
+def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_keeps_every_existing_key_d30_7(
+        dist, tmp_path):
+    """Without the rules every background subagent stops on a permission prompt; without the hook a new session does
+    not know the pipeline state. A user's own rules, deny list and hooks must survive the merge."""
+    s = tmp_path / ".claude/settings.json"
+    s.parent.mkdir()
+    s.write_text(json.dumps(MINE), encoding="utf-8")
+    r = install(dist, tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    sk, bl = tmp_path.resolve() / ".claude/skills/zps-3dp-producer", tmp_path / "bin/Blender"
+    p = ".claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py"
+    assert json.loads(s.read_text(encoding="utf-8")) == {
+        "permissions": {"allow": ["Bash(git status:*)", f"Bash({p}:*)", f"Bash({bl}:*)",
+                                  f"Bash({sk}/agents/zps-3dp-step-texture/tools/.deps/venv/bin/python "
+                                  f"{sk}/scripts/meshy_call.py:*)",
+                                  "Bash(codex exec:*)", "Edit(/production/**)", "Edit(/production-*/**)"],
+                        "deny": ["Bash(rm -rf:*)"]},
+        "model": "opus",
+        "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]},
+                                   {"hooks": [{"type": "command", "command": f"{p} next --session"}]}]}}
+    diff = r.stdout.split(f"+++ {s.resolve()}\n", 1)[1]
+    assert f'+      "Bash({bl}:*)",\n' in diff and f'+            "command": "{p} next --session"\n' in diff
+    before = s.read_bytes()
+    again = install(dist, tmp_path)
+    assert (again.returncode, s.read_bytes()) == (0, before)
+    assert f"{s.resolve()}: đã đủ rule và hook, không đổi\n" in again.stdout and "+++" not in again.stdout
+
+
+def test_the_meshy_and_blender_rules_match_the_command_lines_a_texture_brief_gives_the_worker(dist, tmp_path):
+    """A rule is a command prefix: it helps only if it is exactly what the worker runs, `PY "<MESHY>"` with PY under
+    the TOOLS line, and the BLENDER line, all absolute paths of the installed skill."""
+    assert install(dist, tmp_path).returncode == 0
+    sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
+    sys.path.insert(0, str(sk / "scripts"))
+    try:
+        env = os.environ | {"PRODUCER_ROOT": str(tmp_path / "production")}
+        out = subprocess.run([sys.executable, "-c", (
+            "import json, sys; sys.path.insert(0, sys.argv[1]); from core import briefs, texture;"
+            "print(json.dumps([briefs.tools_line({'id': 'a'}, {'agent': 'step-texture', 'uses': []}, None, None),"
+            " str(texture.MESHY_CALL)]))"), str(sk / "scripts")], env=env, capture_output=True, text=True, check=True)
+    finally:
+        sys.path.remove(str(sk / "scripts"))
+    tools, meshy = json.loads(out.stdout)
+    allow = json.loads((tmp_path / ".claude/settings.json").read_text(encoding="utf-8"))["permissions"]["allow"]
+    assert f"Bash({tools[0].removeprefix('TOOLS: ')}/.deps/venv/bin/python {meshy}:*)" in allow
+
+
+def test_dry_run_prints_the_diff_and_an_unparsable_settings_file_is_never_touched(dist, tmp_path):
+    r = install(dist, tmp_path, "--dry-run")
+    assert (r.returncode, (tmp_path / ".claude/settings.json").exists()) == (0, False)
+    assert "(thử) không ghi" in r.stdout and '+      "Bash(codex exec:*)",\n' in r.stdout
+    s = tmp_path / ".claude/settings.json"
+    s.parent.mkdir(exist_ok=True)
+    s.write_text("{ my settings, half typed", encoding="utf-8")
+    r = install(dist, tmp_path)
+    assert (r.returncode, s.read_text(encoding="utf-8")) == (2, "{ my settings, half typed")
+
+
+def test_the_codex_edition_merges_no_claude_settings(dist, tmp_path):
+    assert install(dist, tmp_path, edition="codex").returncode == 0
+    assert [p.name for p in tmp_path.rglob("settings*.json")] == []
+
+
+def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_them_d30_7(dist, tmp_path):
+    assert install(dist, tmp_path).returncode == 0
+    s = tmp_path / ".claude/settings.json"
+    merged = s.read_text(encoding="utf-8")
+    s.write_text(json.dumps(MINE), encoding="utf-8")
+    py = tmp_path / ".claude/skills/zps-3dp-producer/scripts/producer.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PRODUCER_ROOT", "PRODUCER_RUNTIME", "PRODUCER_KIT")} | {
+        "BLENDER": str(tmp_path / "bin/Blender")}
+
+    def preflight():
+        r = subprocess.run([sys.executable, str(py), "preflight"], cwd=tmp_path, env=env, capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
+    out, gap = preflight()
+    assert ".claude/settings.json thiếu 6 allow rule, hook SessionStart → chạy lại install.py của bản cài" in out
+    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (6, ["SessionStart"])
+    s.write_text(merged, encoding="utf-8")
+    out, gap = preflight()
+    assert ("thiếu" in out, gap["missing"]) == (False, {"allow": [], "hooks": {}})

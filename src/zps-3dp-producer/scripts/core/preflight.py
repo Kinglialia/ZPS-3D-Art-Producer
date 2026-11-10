@@ -9,11 +9,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .state import ROOT, SKILL_DIR, SUFFIX, now, rel, write_atomic
+import settings_merge
+
+from .state import EDITION, ROOT, SKILL_DIR, SUFFIX, now, rel, write_atomic
 
 OUT = ROOT / "preflight.json"
 KIT_SIBLING = SKILL_DIR.parent / f"zps-3d-artist{SUFFIX}" / "tools" / "preflight.py"
-MAC_BLENDER = Path("/Applications/Blender.app/Contents/MacOS/Blender")
+SNIPPET = SKILL_DIR / "templates" / "settings.snippet.json"
 
 
 def run(cmd: list[str], timeout: int) -> tuple[int | None, str]:
@@ -25,9 +27,8 @@ def run(cmd: list[str], timeout: int) -> tuple[int | None, str]:
 
 
 def blender() -> dict | None:
-    env = os.environ.get("BLENDER")
-    exe = env if env is not None else str(MAC_BLENDER) if MAC_BLENDER.is_file() else shutil.which("blender")
-    if not exe or not os.access(exe, os.X_OK):
+    exe = settings_merge.blender_exe()
+    if exe is None:
         return None
     rc, out = run([exe, "--version"], 120)
     m = re.search(r"Blender\s+(\d[\d.]*)", out)
@@ -68,17 +69,41 @@ def kit(path: Path) -> dict:
     return {"path": str(path), "overall": r.get("overall"), "features": (r.get("data") or {}).get("features") or {}}
 
 
+def settings_gap(b: dict | None) -> dict | None:
+    """D30.7, only in an installed edition that ships the snippet: what the project settings (settings.json and
+    settings.local.json beside the skills folder) still lack. None when there is nothing to check."""
+    if not EDITION or not SNIPPET.is_file():
+        return None
+    d = SKILL_DIR.parents[1]
+    have = {"permissions": {"allow": []}, "hooks": {}}
+    for f in (d / "settings.json", d / "settings.local.json"):
+        try:
+            doc = settings_merge.read(f)
+        except (OSError, ValueError):
+            continue
+        have["permissions"]["allow"] += (doc.get("permissions") or {}).get("allow") or []
+        for ev, groups in (doc.get("hooks") or {}).items():
+            have["hooks"].setdefault(ev, []).extend(groups if isinstance(groups, list) else [])
+    want = settings_merge.wanted(SNIPPET, SKILL_DIR, b["path"] if b else None)
+    return {"file": rel(d / "settings.json"), "missing": settings_merge.missing(have, want)}
+
+
 def run_preflight(a):
     ROOT.mkdir(parents=True, exist_ok=True)
     b, ef = blender(), env_file()
     codex = shutil.which("codex")
     k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
     feats = {"blender": b is not None, "codex_image": codex is not None, "meshy": has_meshy_key(ef)}
-    write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "env_file": ef, "kit": k},
-                                 ensure_ascii=False, indent=2))
+    gap = settings_gap(b)
+    write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "env_file": ef, "kit": k}
+                                 | ({"settings": gap} if gap else {}), ensure_ascii=False, indent=2))
     on, down = [f for f, v in feats.items() if v], [f for f, v in feats.items() if not v]
     parts = ([f"bật {', '.join(on)}"] if on else []) + ([f"tắt {', '.join(down)}"] if down else [])
     parts.append(f"kit {k['overall']}" if "overall" in k else "không có kit preflight.py")
+    if gap and (gap["missing"]["allow"] or gap["missing"]["hooks"]):
+        lack = ([f"{len(gap['missing']['allow'])} allow rule"] if gap["missing"]["allow"] else []) + [
+            f"hook {ev}" for ev in gap["missing"]["hooks"]]
+        parts.append(f"{gap['file']} thiếu {', '.join(lack)} → chạy lại install.py của bản cài")
     print(f"preflight: {'; '.join(parts)} → {rel(OUT)}")
 
 
