@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 
-from . import preflight, purge
+from . import asset_card, preflight, purge
 from .board import build_outputs
 from .hashes import schedule_soon, warnings_for
 from .loop import next_action
@@ -60,9 +60,9 @@ def show_next(a):
         print("Milestone ≤14 ngày: " + "; ".join(f"{d} {t}" for d, t in ms))
     steps = {s["id"]: s for s in cfg["steps"]}
     free = {r: lim - used(r) for r, lim in cfg["limits"].items()}
-    ids = list(steps)
     for s in sts:
-        i = ids.index(s["stage"]) if s.get("state") == "done_enabled" and s.get("stage") in steps else -1
+        ids = [x["id"] for x in asset_card.steps(cfg, s)] if s.get("state") == "done_enabled" else []
+        i = ids.index(s["stage"]) if s.get("stage") in ids else -1
         if 0 <= i < len(ids) - 1 and steps[ids[i + 1]]["enabled"]:
             print(f"[{s['id']}] {s['stage']}/done_enabled → bước {ids[i + 1]} đã bật → `retry {s['id']}`")
     for s in active:

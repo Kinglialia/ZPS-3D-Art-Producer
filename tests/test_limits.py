@@ -76,3 +76,39 @@ def test_done_enabled_counts_as_finished_in_next(proj, capsys):
         save_st(st)
     limits.show_next(Namespace(session=False))
     assert capsys.readouterr().out.splitlines()[0].startswith("0 asset đang chạy · 2 done · ")
+
+
+def views_none_parked_at_blockout(root, model_on):
+    """A `views: none` card skips views_front and views_rest (D32), so the step after blockout is model."""
+    card = root / "concepts/a-hut"
+    card.mkdir(parents=True)
+    (card / "asset-card.yaml").write_text("views: none\n", encoding="utf-8")
+    st = load_st("a-hut")
+    st |= {"concept_dir": str(card), "stage": "blockout", "state": "done_enabled"}
+    save_st(st)
+    if not model_on:
+        p = root / "production/pipeline.toml"
+        p.write_text(p.read_text(encoding="utf-8").replace('id = "model"\n', 'id = "model"\nenabled = false\n', 1),
+                     encoding="utf-8")
+
+
+def test_next_tells_a_views_none_asset_to_retry_once_model_is_enabled(proj, capsys):
+    views_none_parked_at_blockout(proj, model_on=True)
+    assert "[a-hut] blockout/done_enabled → bước model đã bật → `retry a-hut`" in next_lines(capsys)
+
+
+def test_next_does_not_offer_a_retry_for_a_skipped_views_step_while_model_is_still_off(proj, capsys):
+    """views_front is enabled, but this asset never runs it: `retry` would only park it again."""
+    views_none_parked_at_blockout(proj, model_on=False)
+    assert not [l for l in next_lines(capsys) if "đã bật" in l]
+
+
+def test_next_reads_no_card_of_an_asset_that_is_not_parked_at_done_enabled(proj, capsys):
+    """Only the retry hint needs the card; a finished asset with a broken card must not stop `P next`."""
+    card = proj / "concepts/a-hut"
+    card.mkdir(parents=True)
+    (card / "asset-card.yaml").write_text("views: [unclosed\n", encoding="utf-8")
+    st = load_st("a-hut")
+    st |= {"concept_dir": str(card), "state": "done"}
+    save_st(st)
+    assert next_lines(capsys) == ["[b-barn] blockout/todo → giao worker → `brief b-barn`"]
