@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from shared import P, finding, fixed_line, model_only, pilot_project, report, run
 
@@ -27,6 +28,9 @@ OUTPUTS = {
 ISSUES = "mái chìa 0.35 m đo trên concept_shadow, thẻ không ghi"
 SEEN = "clay_front.png, clay_lit_34.png, detail.json"
 BRIEF_MAX = 4096
+# D31.1: real PNGs, so the reviewer briefs of these steps carry the sheet paths (largest briefs: PICK, COMPARE, base sheet).
+SHEET_RENDERS = {"blockout": ["review/game_cam.png", "review/renders/clay_front.png"],
+                 "model": ["review/lit_34_front.png", "review/thumb.png", "review/renders/clay_front.png"]}
 
 
 def counts(major=0):
@@ -70,6 +74,10 @@ class Flow:
             for o in OUTPUTS[step]:
                 (vd / sub / o).parent.mkdir(parents=True, exist_ok=True)
                 (vd / sub / o).write_text(f"{o} {name} phương án {tag}\n", encoding="utf-8")
+            if step in SHEET_RENDERS:
+                for r in SHEET_RENDERS[step]:
+                    (vd / sub / r).parent.mkdir(parents=True, exist_ok=True)
+                    Image.new("RGB", (64, 48), (120, 80, 40)).save(vd / sub / r)
         if failing:
             (vd / "final/review/checks").mkdir(parents=True)
             (vd / "final/review/checks/qa_screen_tris_check.json").write_text(json.dumps({
@@ -234,8 +242,15 @@ def test_a_param_fix_offers_variants_and_the_picked_variant_becomes_final(flow):
     assert (b["out"]["resume"], pick(flow["m2 review"]["st"], "fix_round", "fix_base")) == (
         "w-m2", {"fix_round": 2, "fix_base": 2})
     assert "`TOP_FIX: param: F2`" in b["text"]
-    assert missing(rv, "PICK: a|b|c", f"- Phương án param: `{A}/model/v3/variants/<a|b|c>/`; a là `final/`. Nhãn ảnh trong "
-                   "EVIDENCE_OPENED: `v3a/<ảnh>`, `v3b/<ảnh>`, `v3c/<ảnh>`; ảnh bản gốc: `v2/<ảnh>`.") == []
+    assert missing(rv, "PICK: a|b|c", f"- Phương án param: `{A}/model/v3/variants/<a|b|c>/`; a là `final/`; sheet "
+                   "`review/sheet-<b|c>.png` cạnh sheet trên. Nhãn ảnh trong EVIDENCE_OPENED: `v3a/<ảnh>`, `v3b/<ảnh>`, "
+                   "`v3c/<ảnh>`; ảnh bản gốc: `v2/<ảnh>`.",
+                   f"- Sheet: `{A}/model/v3/review/sheet.png` (nhãn ô = tên ảnh; ảnh lẻ qua need_evidence). Số liệu: JSON "
+                   "trong `final/`, `work/` của v3.",
+                   f"- Bản gốc v2: sheet `{A}/model/v2/review/sheet.png`; finding đủ trường `{A}/model/v2/findings.json`.") == []
+    # D31.1: one sheet per variant, from the same render list as final/.
+    assert [sorted(json.loads((Path(flow["root"]) / A / f"model/v3/review/sheet-{x}.json").read_text(encoding="utf-8")))
+            for x in "bc"] == [["clay_front", "lit_34_front", "thumb"]] * 2
     files = flow["m3 files"]
     assert (files[f"final/{AID}-untextured.glb"], files[f"variants/a/{AID}-untextured.glb"]) == (glb("m3", "b"), glb("m3"))
 

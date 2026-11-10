@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 from argparse import Namespace
@@ -27,6 +28,7 @@ MOVES = {
     ("running", "checks_failed"): "fix",
     ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
     ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence", ("reviewing", "reopen"): "fix",
+    ("reviewing", "served"): "review",
     ("reviewing", "stuck"): "blocked",
     ("reviewing", "await_approval"): "waiting_human", ("reviewing", "ask_human"): "waiting_human",
     ("reviewing", "approve"): NEXT, ("waiting_human", "approve"): NEXT, ("done_enabled", "resume"): NEXT,
@@ -41,7 +43,7 @@ MOVES = {
 
 
 def fresh() -> dict:
-    return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0,
+    return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0, "evidence_served": 0,
             "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None}
 
 
@@ -360,6 +362,10 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
                                  reopened_of(st).get(kind, 0))
     st["evidence"] = None
     st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
+    asks = evidence_on_disk(d, doc, rv["top_fix"]["ids"]) if kind == "need_evidence" and event in (
+        "need_evidence", "ask_human") and st.get("evidence_served", 0) < r.get("served_evidence", 2) else None
+    if asks:
+        event, reason = "served", None
     best = findings.best_version([findings.load(aid, sid, v) for v in rvs])
     if event in ("approve", "await_approval") and scope == "fix":
         event, reason = "full_again", f"PASS ở vòng fix → reviewer chấm full lại v{n}, không gọi worker"
@@ -387,6 +393,14 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         ids = ", ".join(findings.open_of(findings.load(aid, sid, best)))
         offer(st, sid, n if q else best, rv["verdict"], note=q or reason + (f"; còn mở: {ids}" if ids else ""),
               label=NOT_PASSED)
+    elif event == "served":
+        move(st, event)
+        k = 1 + sum(1 for _ in (d / "review").glob("evidence-*"))
+        names = serve(d, asks, k)
+        st["evidence_served"] = st.get("evidence_served", 0) + 1
+        st |= {"evidence": {"version": n, "k": k, "hash": hashes.tree_hash(d / "final"), "served": True},
+               "note": f"ảnh trên đĩa cho {', '.join(rv['top_fix']['ids'])}: {', '.join(names)}"}
+        reason = f"script lấy ảnh có sẵn, không giao worker: {', '.join(names)}"
     elif event == "fix":
         move(st, event)
         st["fix_round"] = st.get("fix_round", 0) + 1
@@ -398,6 +412,45 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         st |= {"evidence": {"version": n, "k": k, "hash": hashes.tree_hash(d / "final")},
                "note": "xin bằng chứng: " + ", ".join(rv["top_fix"]["ids"])}
     return f"review {rv['verdict']} ({findings.short(findings.open_counts(doc))})", reason or ""
+
+
+EVIDENCE_ASK = re.compile(r"xin ảnh\s+([^\s,;|]+?)(?:\.png)?(?:\s+box\s+([\d.]+),([\d.]+),([\d.]+),([\d.]+))?(?=[\s,;|]|$)")
+
+
+def evidence_on_disk(d, doc: dict, ids: list[str]) -> list[tuple[str, str, tuple | None]] | None:
+    """D31.1: what a need_evidence asks, when every id names a tile of vN/review/sheet.json in its viewing_condition
+    (`xin ảnh <nhãn>[ box x0,y0,x1,y1]`, box in 0–1 of the image). None when one id asks for an image not on disk or a
+    box outside 0–1 (a pixel box): the worker round handles those."""
+    sj = d / "review" / "sheet.json"
+    tiles = json.loads(sj.read_text(encoding="utf-8")) if sj.is_file() else {}
+    out = []
+    for i in ids:
+        asks = EVIDENCE_ASK.findall(doc["findings"][i].get("viewing_condition", ""))
+        if not asks or any(label not in tiles for label, *_ in asks):
+            return None
+        for label, *box in asks:
+            b = tuple(float(x) for x in box) if box[0] else None
+            if b and not (0 <= b[0] < b[2] <= 1 and 0 <= b[1] < b[3] <= 1):
+                return None
+            out.append((label, tiles[label], b))
+    return out
+
+
+def serve(d, asks, k: int) -> list[str]:
+    """Copy each asked image, or its box at full resolution, to review/evidence-<k>/; returns the file names."""
+    from PIL import Image
+    ed = d / "review" / f"evidence-{k}"
+    ed.mkdir(parents=True, exist_ok=True)
+    names = []
+    for j, (label, src, box) in enumerate(asks, 1):
+        name = label.replace("/", "_") + (f"-crop{j}" if box else "") + ".png"
+        with Image.open(d / src) as im:
+            if box:
+                x0, y0, x1, y1 = box
+                im = im.crop((round(x0 * im.width), round(y0 * im.height), round(x1 * im.width), round(y1 * im.height)))
+            im.save(ed / name)
+        names.append(name)
+    return names
 
 
 HANDLERS = {"running": on_worker, "evidence_running": on_evidence, "reviewing": on_review}

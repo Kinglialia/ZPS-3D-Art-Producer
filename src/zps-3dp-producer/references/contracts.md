@@ -30,6 +30,7 @@ production/                     # trong project Claude Code; chỉ script và su
     purge-manifest.json         # D29: đã xóa gì: {asset, at, source, by, assemble, freed_bytes, zip, deleted[], thumbnails[]}
     <step>/vN/
       brief-worker.md · worker-out.md · brief-review.md · review-out.md · findings.json
+      review/sheet.png, sheet.json (sheet review, D31.1; sheet-<b|c>.png cho phương án param)
       final/ · work/ · review/evidence-<k>/
   archive/<id>/
 ```
@@ -44,7 +45,8 @@ production/                     # trong project Claude Code; chỉ script và su
 - `sources`: hash concept (theo nội dung, trừ thẻ), thẻ, profile lúc giao việc đầu tiên. Khác hiện tại → cảnh báo "concept/thẻ/profile đổi sau khi bắt đầu".
 - `started`, `ad_ack`: so với ngày trong `## Thay đổi` của README art direction → cảnh báo "art direction đổi". `ack` đặt lại `sources` và `ad_ack`.
 - `fix_round`, `fix_base`, `round_versions`: vòng sửa của đợt feedback, bản gốc (bản tốt nhất), các version đã chấm trong đợt.
-- `evidence`, `evidence_used`: vòng bằng chứng đang chạy (`version`, `k`, `hash` của `final/`) và số lần đã xin trong đợt.
+- `evidence`, `evidence_used`: vòng bằng chứng đang chạy (`version`, `k`, `hash` của `final/`; `served: true` khi script tự lấy ảnh) và số lần đã xin trong đợt.
+- `evidence_served` (D31.1): số lần script tự lấy ảnh có trên đĩa cho `need_evidence` trong đợt, không giao worker, không tính vào `evidence_used`. Tối đa `[review] served_evidence` của `pipeline.toml`; quá thì sang vòng worker như cũ. Reviewer xin bằng `viewing_condition: xin ảnh <nhãn ô>[ box x0,y0,x1,y1]` (tỉ lệ 0–1); nhãn ô lấy từ `vN/review/sheet.json` của `review_sheet.py`.
 - `offer`, `label`: version đưa người dùng duyệt và nhãn ("chưa đạt" khi chưa qua).
 - `offer_key`, `offers`: khóa của lần đưa duyệt đang chờ (`<step>-vN-<số lần đưa>`) và bộ đếm. Trang gửi khóa nó đã hiện; khóa khác khóa hiện tại thì script bỏ qua quyết định (và ghi chú có khoanh).
 - `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận, kèm `offer`; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt khi lệnh không nêu khóa. Quyết định nêu đúng khóa đã có quyết định luôn bị bỏ qua, dù tới từ trang local hay remote. Script xóa khóa này mỗi lần đưa vN cho người dùng duyệt, nên một lần đưa nhận một quyết định.

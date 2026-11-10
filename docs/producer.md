@@ -135,6 +135,8 @@ PRIOR:
 - Vòng `fix`: reviewer chỉ chấm id trong `TOP_FIX` (kèm `COMPARE`), các vùng `preserve`, và nhìn nhanh toàn sheet để bắt lỗi mới. Mục rubric không chấm ghi `not_checked`. `ingest` từ chối `not_checked` ở vòng `full`.
 - **Chỉ PASS khi lần review gần nhất là `full`.** Vòng `fix` hết lỗi mở, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
 - **Sheet review** (D31.1): brief reviewer của `blockout`, `model`, `texture` chỉ đưa sheet của `review_sheet.py` (cạnh dài khoảng 2048 px, có nhãn) và concept. Ảnh lẻ xin qua `need_evidence`. Bước views dùng `views_sheet.py`.
+  - `P brief` dựng sheet vào `vN/review/sheet.png` (ngoài `final/`, nên hash duyệt không đổi), từ glob `sheet` của bước trong `pipeline.toml`. Vòng sửa có thêm sheet bản gốc; phương án param có `sheet-<b|c>.png`.
+  - Reviewer xin ảnh có trên đĩa (`viewing_condition: xin ảnh <nhãn ô>[ box x0,y0,x1,y1]`): script chép ảnh gốc hoặc crop vào `review/evidence-<k>/`, giao lại reviewer, không giao worker, không tính vào vòng bằng chứng của §7.6. Tối đa `[review] served_evidence` lần mỗi đợt feedback, quá thì sang vòng worker.
 - Không resume reviewer qua các vòng (D31.7): mỗi lần chấm là một reviewer mới.
 
 **Bộ trường finding lấy từ `issue-fields.json` của kit** (D25.A), dùng chung với AD critique. Finding của reviewer, finding `H<n>` của anh và nhận xét của AD agent cùng một format, chuyển qua lại được. `ingest` kiểm đủ trường.

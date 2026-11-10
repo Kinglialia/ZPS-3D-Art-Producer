@@ -234,6 +234,27 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     return "\n".join(lines) + "\n"
 
 
+def sheet_of(st, step, n: int, variant: str | None = None) -> Path | None:
+    """D31.1: vN/review/sheet[-<variant>].png of the step's `sheet` globs, built at each reviewer brief.
+    Outside final/, so the approval hash and the evidence-round hash stay the same. No image, or an unreadable one
+    (ledgered): None, and the
+    brief points at final/ as before."""
+    if not step.get("sheet"):
+        return None
+    from review_sheet import make
+    vd = vdir(st["id"], step["id"], n)
+    out = vd / "review" / (f"sheet-{variant}.png" if variant else "sheet.png")
+    globs = [g.replace("final/", f"variants/{variant}/", 1) for g in step["sheet"]] if variant else step["sheet"]
+    try:
+        make(vd, out, globs)
+    except ValueError:
+        return None
+    except OSError as ex:
+        ledger(f"{st['id']} · {step['id']} v{n} · không dựng được sheet review, brief trỏ final/ · {ex}")
+        return None
+    return out
+
+
 def review_scope(st, sid: str, n: int) -> str:
     """D31.2: `full` for a review with no reviewed base, for the same version judged again, and for a version whose
     worker reports DONE with every open finding of the base in FIXED; `fix` otherwise. An evidence round keeps the scope
@@ -268,6 +289,8 @@ def review_brief(cfg, st, step, n) -> str:
     wr = d / "worker-out.md"
     claimed = parse_worker(wr.read_text(encoding="utf-8"))[0]["RESOLVED_NOTES"] if wr.exists() else []
     scope = st.get("review_scope") or "full"
+    sheet = sheet_of(st, step, n)
+    msheet = sheet_of(st, step, m) if sheet and base and m != n else None
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
         "",
@@ -277,6 +300,8 @@ def review_brief(cfg, st, step, n) -> str:
         "",
         *views_line(st, step),
         "## Chấm cái gì",
+        f"- Sheet: `{rel(sheet)}` (nhãn ô = tên ảnh; ảnh lẻ qua need_evidence). Số liệu: JSON trong `final/`, "
+        f"`work/` của v{n}." if sheet else
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
         f"- Báo cáo tự check của worker: `{rel(d / 'worker-out.md')}` — tham khảo, không tin thay bằng chứng.",
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
@@ -294,14 +319,18 @@ def review_brief(cfg, st, step, n) -> str:
            f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n and st.get("evidence") else
           [f"- Chấm lại toàn bộ v{n}, không có bản mới; finding đủ trường `{rel(findings.path(aid, sid, n))}`."]
           if m == n else
-          [f"- Bản gốc v{m}: ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`; finding đủ trường "
+          [f"- Bản gốc v{m}: " + (f"sheet `{rel(msheet)}`" if msheet else f"ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`")
+           + "; finding đủ trường "
            f"`{rel(findings.path(aid, sid, m))}`."] if base else []),
         *([f"- Worker khai ACCEPTED_FAIL (check fail không sửa được): {'; '.join(st['accepted']['items'])}. Chấm lý do: "
            "lý do không đứng được thì ghi finding."] if (st.get("accepted") or {}).get("v") == n else []),
         *([f"- Đã waive (người dùng chấp nhận là ngoại lệ): {', '.join(waived)}. Không mở lại, không ghi PRIOR, "
            "không ghi lại thành finding mới."] if waived else []),
-        *([f"- Phương án param: `{rel(d / 'variants')}/<a|b|c>/`; a là `final/`. Nhãn ảnh trong EVIDENCE_OPENED: "
-           f"`v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."] if pick else []),
+        *([f"- Phương án param: `{rel(d / 'variants')}/<a|b|c>/`; a là `final/`"
+           + ("; sheet `review/sheet-<b|c>.png` cạnh sheet trên" if sheet and all(
+               sheet_of(st, step, n, x) for x in "bc" if (d / "variants" / x).is_dir()) else "")
+           + f". Nhãn ảnh trong EVIDENCE_OPENED: `v{n}a/<ảnh>`, `v{n}b/<ảnh>`, `v{n}c/<ảnh>`; ảnh bản gốc: `v{m}/<ảnh>`."]
+          if pick else []),
         "",
         "## Báo cáo",
         f"Ghi report vào `{rel(d / 'review-out.md')}`. Report mở đầu đúng format, mỗi khóa một dòng:",
