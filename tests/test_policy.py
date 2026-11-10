@@ -8,7 +8,7 @@ from core import policy
 from core.state import ProducerError
 
 TEMPLATE = {"approvals": {"blockout": "human", "views_rest": "human", "model": "human"}, "review_board": "local",
-            "delegations": []}
+            "delegations": [], "test_mode": False, "disk_warn_gb": 20}
 
 
 @pytest.fixture
@@ -25,6 +25,10 @@ def setp(step, who, by="anh nói", confirm=False):
 
 def test_missing_policy_file_means_template_defaults_so_a_new_project_asks_the_human(prod):
     assert policy.load() == TEMPLATE
+
+
+def test_a_new_project_starts_outside_test_mode_so_the_producer_cannot_waive_findings_for_the_human(prod):
+    assert policy.load()["test_mode"] is False
 
 
 @pytest.mark.parametrize("key", ["views", "views_front", "assemble", "texture"])

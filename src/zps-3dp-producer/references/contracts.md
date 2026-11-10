@@ -16,6 +16,7 @@ production/                     # trong project Claude Code; chỉ script và su
   pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; gen_image_codex.py ghi <id>-<pid>.pid mỗi lần chạy; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: `- <giờ> · <runtime> · <sự kiện>` + RULING
+  session.json                  # hook SessionStart ghi đường dẫn transcript của phiên chính (D30.10)
   .lock                         # mỗi lệnh ghi và mỗi nút trên review page giữ flock file này
   schedule.md                   # `- YYYY-MM-DD · milestone`
   dashboard.md                  # tự sinh
@@ -52,7 +53,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `paint_for`: 12 ký tự đầu hash mesh mà người dùng chọn VẼ MỚI; brief `texture` của mesh đó ghi `MODE: VẼ MỚI`.
 - `meshy_price`: giá một lần retexture, đọc từ `gen_api.py texture --dry-run` khi sinh brief.
 - `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.
-- `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên; `at` tính tới giây. `brief` gọi lại khi subagent chưa trả về thì không thêm lần giao. `ingest` đóng lần giao cùng bước, version và vai trò: `ingested` (giờ ingest), `tokens` (`--tokens N`), `duration_ms` (`--duration-ms M`), `after` (state sau ingest); không có số thì `null`, ledger ghi "không có số". `P stats` tính khoảng chờ Producer từ `ingested` của lần trước tới `at` của lần sau, khi `after` là `todo`, `review`, `fix` hoặc `evidence`.
+- `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên; `at` tính tới giây. `brief` gọi lại khi subagent chưa trả về thì không thêm lần giao. `ingest` đóng lần giao cùng bước, version và vai trò: `ingested` (giờ ingest), `tokens` (`--tokens N`), `duration_ms` (`--duration-ms M`), `after` (state sau ingest); không có số thì `null`, ledger ghi "không có số". `P stats` tính khoảng chờ Producer từ `ingested` của lần trước tới `at` của lần sau, khi `after` là `todo`, `review`, `fix` hoặc `evidence`. Lần giao reviewer có thêm `scope` (`full` | `fix`, D31.2), để `P stats` tách vòng đầu, vòng sửa, vòng chấm cuối (D31.4).
 - `offer_log`: mỗi lần đưa người dùng duyệt hoặc hỏi `{key, step, v, why, verdict, at}`; quyết định Duyệt / Cần sửa / VẼ MỚI của người dùng thêm `decision`, `decided`. Ghi chú không phải quyết định. `P compare` đọc trường này.
 - `approved_at[<bước>]`: lúc bước được duyệt.
 
@@ -80,9 +81,9 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 |---|---|---|
 | draft | rubric loại chưa duyệt | `ready` → todo |
 | todo | bước chưa bắt đầu | `brief` → running (tạo vN mới) |
-| running | worker đang làm | `ingest` → review / waiting_human / blocked / bước sau |
+| running | worker đang làm | `ingest` → review / waiting_human / blocked / bước sau · có JSON `fail`/`error` trong `final/review/{gates,checks}/` mà không có `ACCEPTED_FAIL` hợp lệ → fix (không giao reviewer, D31.3); hết `max_fix_rounds` → waiting_human |
 | review | worker xong, chờ giao reviewer | `brief` → reviewing; `ingest` của worker tự giao (in dòng JSON của `brief`) |
-| reviewing | reviewer đang chấm | `ingest`: PASS → bước sau · FIX → fix · `regen_front` → fix của `views_front` · `fix_uv_mesh` → fix của `model` · ESCALATE → waiting_human |
+| reviewing | reviewer đang chấm | `ingest`: PASS ở `REVIEW_SCOPE: full` → bước sau · PASS ở `fix` → review (reviewer `full` trên cùng version, không gọi worker, D31.2) · FIX → fix · `regen_front` → fix của `views_front` · `fix_uv_mesh` → fix của `model` · ESCALATE → waiting_human |
 | fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate); `ingest` của reviewer tự giao, trừ khi tài nguyên của bước hết slot |
 | evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
@@ -92,7 +93,8 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | done | xong | `archive` |
 
 Brief `texture` ở todo/fix có thể đổi state trước khi tạo version: thiếu key → blocked; mesh đổi → waiting_human với `ask`.
-FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.
+`waive <id> F<n>` (D30.1) chạy ở mọi state và không tự đổi state, trừ khi finding đó là finding chặn cuối cùng: khi đó → review (reviewer `full` trên version đó). Mọi lần chuyển state in dòng JSON giao việc tiếp theo (D30.5).
+FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. Vòng trả thẳng của D31.3 tính vào `max_fix_rounds`. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.
 
 ## Contract báo cáo
 
@@ -109,7 +111,10 @@ ISSUES: <tối đa 2 vấn đề hoặc none>
 PROFILE_HASH: <chép từ brief>        bắt buộc; khác giá trị trong brief → ingest báo lỗi
 FIXED: F<n>, ...                     vòng sửa; chỉ để reviewer đối chiếu
 RESOLVED_NOTES: <bước> vN F<k>, ...  ghi chú còn mở của bước trước mà worker đã làm (brief liệt kê), hoặc none
+ACCEPTED_FAIL: <file JSON> — <lý do có số>; ...   check fail không sửa được (D31.3), hoặc none
 ```
+
+`ACCEPTED_FAIL`: một dòng, các mục cách nhau bằng `; `; lý do không chứa `;`. `<file JSON>` là đường dẫn trong `final/review/{gates,checks}/`. `ingest` từ chối mục cho check không có `acceptable: true` trong config, và mọi gate cứng (hash, schema, `export_check`, topology Meshy). Mục bị từ chối → vẫn là vòng sửa. Worker ghi cả vào NGOẠI LỆ của README (plan D31.3; README nào cho `blockout`, `model`, `texture`: chốt khi code L6). Ledger đếm mỗi mục theo bước và theo check.
 
 Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`meshy_regen`), hoặc blocked khi bước này không có Meshy.
 
@@ -118,7 +123,7 @@ Script (`report-script.md`, bước có `script` trong `pipeline.toml`, ví dụ
 Reviewer (`review-out.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
 ```
 VERDICT: PASS | FIX | ESCALATE
-RUBRIC: <key>=pass|fail|unclear; ...
+RUBRIC: <key>=pass|fail|unclear|not_checked; ...   not_checked chỉ khi brief ghi REVIEW_SCOPE: fix
 COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N
 TOP_FIX: <loại>: F<n>[, F<m>]        chỉ khi FIX
 EVIDENCE_OPENED: <nhãn ảnh, file đã mở>
@@ -138,11 +143,13 @@ PRIOR:                               đúng mọi finding đang mở của bản
 - Finding đủ 8 trường của kit `issue-fields.json` (`region` … `acceptance`). Một trường không được chứa ` | <tên trường>:`.
 - `evidence` của finding mới và của `PRIOR … resolved` chứa ít nhất một nhãn trong `EVIDENCE_OPENED` (so chuỗi con, không phân biệt hoa thường, nhãn có hoặc không có đuôi file).
 - `PRIOR` có đúng các id đang mở (`open`, `regressed`) của bản gốc. Id mới không trùng id cũ.
-- `COMPARE` đủ id; `resolved` cần `better`; `worse` cần `regressed`.
+- `REVIEW_SCOPE` (D31.2) nằm trong brief reviewer và trong `scope` của lần giao; report không chép lại. `full`: lần review đầu, và bản worker báo `DONE` với mọi finding đang mở đều có trong `FIXED`. `fix`: các vòng còn lại.
+- `not_checked` trong `RUBRIC`: nhận ở vòng `fix`, từ chối ở vòng `full`.
+- `COMPARE` đủ id trong `TOP_FIX` của bản gốc; `resolved` cần `better`; `worse` cần `regressed`. Id ngoài `TOP_FIX`: bỏ qua và ghi cảnh báo vào ledger, không báo lỗi (D30.4).
 - `RESOLVED_NOTES`, `RESOLVED_CONFIRMED`: mỗi mục dạng `<bước> vN F<k>`. `RESOLVED_CONFIRMED` chỉ gồm mục có trong `RESOLVED_NOTES` của report worker cùng version (D27.8).
 - `COUNTS` bằng số finding đang mở sau khi áp `PRIOR`.
 - Số key `unclear` trong `RUBRIC` ≤ số finding `unclear` đang mở.
-- VERDICT: `PASS` khi không còn `blocker`, `major`, `unclear` đang mở (`preference`, `minor` không chặn). `FIX` khi còn.
+- VERDICT: `PASS` khi không còn `blocker`, `major`, `unclear` đang mở (`preference`, `minor` không chặn). `FIX` khi còn. `PASS` ở vòng `fix` chưa cho bước qua: script giao reviewer `full` trên cùng version (D31.2).
 - `TOP_FIX`: loại nằm trong `top_fix` của bước (trừ loại `note*`) hoặc `need_evidence`; là loại của finding nặng nhất, cùng mức thì `structure`, `fix_uv_mesh` trước. `structure` đúng một id. Loại khác: đủ mọi finding `blocker|major|minor` đang mở của loại đó. `need_evidence`: đủ mọi finding `unclear` đang mở, chỉ khi không còn `blocker`, `major`.
 
 Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa ghi). Brief reviewer điền sẵn `PRIOR`, `COMPARE` với `?` để reviewer thay.
@@ -153,7 +160,7 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
 {"version": N, "base": M|null, "top_fix": {"kind": k, "ids": [..]}|null, "pick": "a"|null, "next_id": K,
  "findings": {"F1": {"priority", "kind", "status", "first_v", "last_v", "region", …, "acceptance"}}}
 ```
-`resolved_notes` (chỉ khi có): ghi chú của bước trước mà reviewer xác nhận (`RESOLVED_CONFIRMED`), cộng các mục của bản gốc. `assemble.py` bỏ các mục này khỏi "Việc còn mở" của README khi version đó được duyệt. Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`.
+`resolved_notes` (chỉ khi có): ghi chú của bước trước mà reviewer xác nhận (`RESOLVED_CONFIRMED`), cộng các mục của bản gốc. `assemble.py` bỏ các mục này khỏi "Việc còn mở" của README khi version đó được duyệt. Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`, `waived`. Finding `waived` (D30.1) có thêm `waived: {by: user|producer, why, at}`; không tính vào `COUNTS`, không cần dòng `PRIOR`, brief sau bỏ qua, reviewer không mở lại.
 
 `TOP_FIX: regen_front: F<n>` ở `views_rest` (D22.4): script chép F<n> sang `findings.json` của bản `views_front` đã duyệt với id mới của bản đó, loại `regen`, và đặt `top_fix` của bản đó là id mới. Rồi `views_front` vào vòng sửa từ bản đó, như `redo`. Front duyệt lại thì `views_rest` dựng lại từ đầu. Finding mới ở bước có `regions` (`pipeline.toml`) mở đầu `region` bằng một tên trong đó; loại `regen_front` thì không. Loại `note*` chỉ ở mức `minor`.
 

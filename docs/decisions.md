@@ -94,7 +94,7 @@ Spec đã duyệt: `docs/agents/3d-artist.md`.
 
 ## D10 — Asset texture đơn giản không qua Meshy (2026-11-08)
 
-- `texture_complexity.py` đo 5 chỉ số. Asset **đơn giản** (vật liệu ≤ 2; cụm màu ≤ 6; không hoa văn, chữ, biển; không phải hero) thì **[Thay bằng D14.2]** ~~3D Artist gọi thẳng Texture Artist~~ Texture Artist vẽ mới. Asset phức tạp thì Meshy trước (D7.2).
+- `texture_complexity.py` đo 5 chỉ số. Asset **đơn giản** (vật liệu ≤ 2; cụm màu ≤ 6; không hoa văn, chữ, biển; không phải hero) thì **[Thay bằng D14.2]** ~~3D Artist gọi thẳng Texture Artist~~ Texture Artist vẽ mới. Asset phức tạp thì Meshy trước (D7.2). **[Sửa theo D30.11: có key Meshy và budget thì Meshy SỬA là chế độ mặc định, không xét độ phức tạp. VẼ MỚI chỉ khi không có key hoặc anh chỉ định. Ledger ghi chế độ đã chọn và lý do.]**
 - Ngưỡng nằm trong profile. Ca giáp ranh do 3D Artist quyết và ghi lý do. Anh hoặc Producer được ghi đè.
 - Ghi kết quả từng asset vào sổ dự án để xem lại ngưỡng. **[Sửa theo D21.5: script ghi `texture-log.jsonl` khi duyệt bước texture; agent không ghi ra ngoài thư mục version]**
 - Đã ghi vào `docs/agents/texture-artist.md` (mục 2.1).
@@ -242,7 +242,7 @@ Nguồn: review spec ngày 2026-11-08/09 (mục 1–14), phản biện của anh
 Nguồn: review lần 3, ba câu trả lời của anh (agent chỉ chạy qua Producer; bộ view chỉ pipeline đọc; README gói cuối do script ghép).
 
 1. **Finding lưu theo version** (`<bước>/vN/findings.json`). Vòng sửa lấy danh sách của bản gốc (bản tốt nhất). Khi anh `redo`, finding còn mở được chép sang đợt mới, cộng finding của anh. Lý do: một file chung cho cả bước sai khi vòng sửa quay về bản cũ.
-2. **Không di chuyển version bị loại** (thay D14.9). Đánh dấu `rejected` trong status; `cleanup` xóa `work/` của chúng khi asset xong. Lý do: brief, `inputs`, ảnh khoanh, evidence, `ab/mapping.json` đều trỏ tới đường dẫn version. Bớt code.
+2. **Không di chuyển version bị loại** (thay D14.9). Đánh dấu `rejected` trong status; **[Thay bằng D29]** ~~`cleanup` xóa `work/` của chúng khi asset xong~~. Lý do: brief, `inputs`, ảnh khoanh, evidence, `ab/mapping.json` đều trỏ tới đường dẫn version. Bớt code.
 3. **Concept brief = `asset-card.yaml`.** Không có file brief riêng. Sửa `out-of-scope-changes.md` theo `_approved/<id>/` và `<id>.layout.md`; quy ước tỉ lệ chung nằm trong `scale_refs` của profile.
 4. **`regen_front`** ở `views_rest`: front sai so với bộ → `redo --step views_front`. Lý do: trước đây không có đường quay lại.
 5. **Vòng evidence không được sửa `final/`.** Script so hash trước và sau. Vòng này không tính vào `resume_rounds`.
@@ -310,26 +310,103 @@ Nguồn: GPTEval3D (CVPR 2024, 3DTopia/GPTEval3D), BlenderAlchemy (ECCV 2024), P
 1. **So theo cặp** (GPTEval3D). Reviewer vòng sửa ghi `COMPARE` (tốt hơn / như cũ / xấu hơn) so với bản gốc cho từng finding trong `TOP_FIX` vòng trước; `PRIOR` phải nhất quán với `COMPARE`. `P compare` so cặp A/B hỏi hai lần đổi thứ tự, tính Elo trên lô pilot, đặt cạnh lựa chọn của anh. check-texture thêm tiêu chí texture khớp hình học.
 2. **Phương án cho lỗi `param`** (BlenderAlchemy). Worker dựng 2–3 giá trị, render cùng góc; reviewer chọn bằng `PICK`; vẫn tính một vòng. Không áp cho `structure` và bước gen ảnh.
 3. **Kiểm liên thông part graph** (Procedura): mọi part nối về gốc qua chuỗi `attach`; `check_schema.py` kiểm.
-4. **Brief vòng sửa kèm file JSON gate/check fail** (3DCodeBench: phản hồi thực thi xác định là yếu tố chính giúp vòng sửa hội tụ).
+4. **Brief vòng sửa kèm file JSON gate/check fail** (3DCodeBench: phản hồi thực thi xác định là yếu tố chính giúp vòng sửa hội tụ). **[Mở rộng theo D31.3: check fail trả thẳng về worker, không gọi reviewer]**
 5. **Meshy:** giá mặc định retexture 10 credit; so payload của `gen_api.py` với `reference.md` của skill Meshy chính thức trước lần gọi thật đầu tiên. Skill chính thức cũng chỉ đọc key từ `.env` ở thư mục làm việc, khớp D24.3.
 
 ## D27 — Sửa sau Run 4 (wooden-chest, 6 bước, 2h51m, ~3,4M token) và các mục còn chờ (2026-11-09, chốt 2026-11-10)
 
 Nguồn: `RUN4-REPORT.md`; câu hỏi của anh về việc ai gọi reviewer; guideline Concept Artist (`GUIDELINE-concept-artist.md`).
 
-1. **Bản tốt nhất khi hòa** (sửa D11.3): ít `blocker` + `major` đang mở nhất. Hòa thì chọn version giải quyết được nhiều `blocker` + `major` hơn. Vẫn hòa thì chọn version cũ hơn. Code: `bf10d36`.
-2. **`P ingest` in luôn lệnh giao việc tiếp theo.** Producer giao trong cùng lượt.
+1. **Bản tốt nhất khi hòa** (sửa D11.3): ít `blocker` + `major` đang mở nhất. Hòa thì chọn version giải quyết được nhiều `blocker` + `major` hơn. Vẫn hòa thì chọn version cũ hơn. Code: `bf10d36`. **[Sửa theo D30.2: thêm một bậc hòa, và bậc cuối chọn version mới hơn]**
+2. **`P ingest` in luôn lệnh giao việc tiếp theo.** Producer giao trong cùng lượt. **[Mở rộng theo D30.5: mọi lần chuyển state]**
 3. **Giữ Producer gọi reviewer, không để worker tự gọi.** Lý do: reviewer độc lập (worker không chọn được ảnh và cách đặt vấn đề); vòng sửa nằm trong script (trần vòng, finding, bản tốt nhất, chuyển lên anh); giữ D1 và D21.5. Phần chậm hơn ước lượng dưới 5% thời gian bước. Ledger ghi thời gian và token theo vai trò (worker, reviewer, script, khoảng chờ Producer). `P stats` in bảng. Producer truyền token và thời lượng của subagent vào `P ingest` qua tham số mới. Runtime không báo số thì ledger ghi "không có số", không ghi 0. Nếu chờ Producer > 15% thời gian bước thì xem lại.
 4. **Mục "Hiện hành" của `feedback.md`:** mỗi lần anh `redo`, script thêm dòng redo vào "Hiện hành" (văn bản nhiều dòng nối thành một dòng). Khi bước đó được duyệt, script xóa các dòng redo của bước khỏi "Hiện hành". Ghi chú chỉ vào Log. Reviewer không báo "Hiện hành trống". Code: `dfba2eb`, `c7a904e`.
 5. **Agent tự ghi file report.** Reviewer và worker ghi report vào đúng đường dẫn trong brief. Lệnh ghi bị chặn thì agent trả cả report giữa dòng `--- report ---` và dòng `--- end ---`, và Producer lưu file. Đây là đường dự phòng, phải hiếm. Script ghi mỗi lần dự phòng vào ledger: sự kiện `report_fallback`, kèm vai trò và bước. Settings thêm rule allow cho lệnh ghi dưới `production/`, để bớt lần bị chặn. D22.6 giữ nguyên: tin nhắn trả về chỉ gồm `VERDICT` và `COUNTS`; ngoại lệ duy nhất là đường dự phòng. File agent của 4 reviewer ghi hai quy tắc contract: finding loại `note` luôn `minor`; trích dẫn trong `PRIOR` dùng đúng nguyên văn nhãn ở `EVIDENCE_OPENED`. Code `170aadc` bắt reviewer luôn trả report bằng chữ: phải đổi theo mục này. Hai quy tắc contract và cách đọc phần giữa hai dòng đánh dấu (`170aadc`, `39c8ebf`) giữ lại. **[Sửa: nguyên nhân gốc]** Quyền ghi không phải nguyên nhân gốc. Harness Claude Code chặn lệnh Write của subagent khi tên file khớp `^(report|summary|findings|analysis).*\.md$`, không phân biệt hoa thường. Lỗi in ra là "Subagents should return findings as text" (https://github.com/anthropics/claude-code/issues/44657). Tên cũ `report-worker.md`, `report-review.md` và `report.md` của A/B khớp mẫu này, nên mọi lần ghi của worker và reviewer bị chặn. Tên mới `worker-out.md`, `review-out.md`, `judge-out.md` không khớp mẫu, nên sửa được lỗi. Mọi file brief giao cho subagent ghi không được có tên khớp mẫu này. Đường dự phòng bằng tin nhắn và sự kiện `report_fallback` giữ lại cho lần bị chặn hiếm. Lệnh ghi bị chặn thì agent không ghi vòng qua Bash (`cat`, heredoc, `tee`, python): agent dùng đường dự phòng.
 6. **Thẻ asset và ảnh concept** (guideline Concept Artist): thêm trường `view` (`front | 34 | game_camera`); `hidden_sides` bắt buộc đủ 4 mặt, chưa biết ghi "chưa biết"; hai ảnh concept trùng khung, nền phẳng một màu, cạnh dài ≥ 1024 px. `check_card.py` kiểm.
-7. **`assemble.py` chỉ chạy từ gốc project.** Thư mục đang đứng không có `production/assets/<id>/status.json` thì script thoát mã 2 và không ghi gì. Code: `9711540`.
+7. **`assemble.py` chỉ chạy từ gốc project.** Thư mục đang đứng không có `production/assets/<id>/status.json` thì script thoát mã 2 và không ghi gì. Code: `9711540`. **[Mở rộng theo D30.12: mọi tool ghi file]**
 8. **"Việc còn mở" của README** chỉ lấy finding còn mở của version được duyệt. Worker bước sau ghi `RESOLVED_NOTES: <mục>` khi đã làm một ghi chú của bước trước. Reviewer của bước đó xác nhận các mục này trong report. README chỉ bỏ mục đã được reviewer xác nhận. Code hiện tại (`1620c40`) mới làm một trường hợp: bỏ finding `note_texture` khi review texture đã duyệt có `texture_note=pass`.
 9. **Đo bóng bỏ mặt khe rãnh.** `light.shaded_share` bỏ các mặt nằm trong khe rãnh và hốc lõm. `tex_measure.py` nhận ra các mặt này bằng phép thử che tia. Không lọc nét mực theo màu. Không có cờ `style.line_art`. Code: `852e217`.
 10. **Bevel chỉ đọc từ trường riêng:** `bevel` (thẻ), `style.bevel` (profile). Giá trị: `none | toon`. Số đo chỉ nằm trong preset (`toon`: bán kính 9 mm, 2 segment). Tool không suy ra bevel từ ghi chú chữ. `check_card.py` chỉ cảnh báo khi một ghi chú có "bo cạnh" mà trường `bevel` trống. Code hiện tại (`e2ff049`, `a83f9b1`) còn bật bevel theo bảng cụm từ: phải đổi sang chỉ đọc trường.
 11. **Hai lỗi review lọt qua:** sai số lượng thành phần so với concept luôn là `regen`; `preserve` phải nêu tên chi tiết cạnh vùng sửa.
 12. **Font có dấu tiếng Việt** (Noto Sans, giấy phép OFL) đi kèm skill cho mọi sheet. Code hiện tại (`e78c6a7`) còn chọn font hệ thống: phải đổi sang font đi kèm.
 13. **Part `custom` chỉ gọi hàm đã duyệt** (cả hai bản). Skill Producer kèm `custom_lib.py`, chứa `arch_cap` và các hàm `custom` đã dùng ở các lần chạy thật. Một wrapper quanh `check_schema.py` chỉ nhận `fn` có trong `custom_lib.py` và từ chối mọi hàm khác. Không sửa `check_schema.py`. Agent không được thêm hàm vào thư viện. Hàm mới cần anh duyệt rồi mới commit. Hàm đã duyệt thêm: `arch_cap_pointed` (vòm trong nhọn, anh duyệt 2026-11-10, Run 5 model F1). Bản Claude và bản Codex giống nhau, để so A/B. Sau này thư viện chuyển vào kit. Lý do: part `custom` chạy Python do agent viết. Trên Codex, lệnh Blender của `self_build/assembly.py`, `param_fit.py`, `apply_edit.py` vẫn chờ duyệt từng lần, cho tới khi wrapper chạy bên trong lệnh mà rule cho phép (`30e7de2`, `docs/EDITIONS.md`).
+
+## D28 — Model ảnh: ghi vào ledger trước, cấu hình sau (2026-11-10)
+
+Lý do: model ảnh đổi theo thời gian (Images 2.6 ra 4/11/2026). Đổi model không được phải sửa code.
+
+1. **Ledger ghi model ảnh** (v0.7.0). `gen_image_codex.py` ghi model đã yêu cầu và model thực tế đã dùng vào ledger. Mỗi version ghi model ảnh vào `inputs`. Không biết model thực tế thì ghi "không có số".
+2. **Để sau:** chọn model ảnh bằng cấu hình (`[image.aliases]`, `[image.<bước>]` trong `pipeline.toml`). Cần kiểm trước: `codex exec` có cho chọn model ảnh không.
+
+## D29 — Dọn dung lượng khi DUYỆT 2 (2026-11-10, thay phần `cleanup` của D22.2)
+
+Lý do: agent sinh rất nhiều file trung gian. Sau khi anh duyệt kết quả cuối, không còn lý do giữ.
+
+1. **Trước DUYỆT 2: giữ hết**, để anh so các bản khi duyệt.
+2. **Chỉ DUYỆT 2 do anh duyệt (`by: user`) mới mở lệnh xóa.** Producer tự duyệt (test run) thì không xóa. Finding do Producer waive (D30.1) không mở lệnh xóa.
+3. **DUYỆT 2 in danh sách xóa và tổng dung lượng sẽ giải phóng.** Không xóa trong cùng phiên đã duyệt.
+4. **Xóa ở đầu phiên sau, chỉ khi `source = startup`.** Hook SessionStart gọi `P next --session`; script đọc `source` trong JSON mà hook nhận qua stdin. `resume` và `compact` không xóa. Lý do: hai giá trị này tiếp tục phiên cũ, không phải phiên mới.
+5. **`P keep <id>`** hủy lệnh xóa trước lúc đó. **`P purge <id>`** xóa ngay khi anh muốn.
+6. **Sau khi xóa chỉ còn:**
+   - `deliver/<id>/` (GLB, albedo, `.blend`, ảnh review, README).
+   - Hồ sơ text: `status.json`, ledger, findings, report, feedback.
+   - File nguồn dạng text của từng bước: `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json` (vài KB, để sửa lại không phải làm từ đầu).
+7. **Mọi thứ khác xóa thật**, không chuyển vào Thùng rác: version bị loại, version được duyệt của bước giữa, phương án `param` không chọn, ảnh evidence, ảnh gen không dùng, `work/`, `.blend` trung gian, file tải Meshy.
+8. **Script ghi manifest** những gì đã xóa và dung lượng. Đường dẫn trong ledger và trang duyệt không gãy: giữ report, findings, ảnh thu nhỏ.
+9. **`--zip`** nén phần sắp xóa ra chỗ khác, khi anh muốn giữ.
+10. **`P disk`** in dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb` của `policy.yaml`.
+11. Áp cho cả hai thư mục khi chạy A/B.
+12. Thay `P cleanup` của D22.2 (chỉ xóa `work/` của version bị loại, phải gọi tay).
+
+## D30 — Sửa sau Run 5 (wooden-chest) (2026-11-10)
+
+Nguồn: Run 5, `NEXT-VERSION-BACKLOG.md` mục 4d, `docs/intents/v0.7.0-plan.md`.
+
+1. **`P waive <id> F<n> "lý do"`.** Anh chấp nhận một finding là ngoại lệ ở mọi state, kể cả đang FIX. Finding chuyển `waived`. Brief sau bỏ qua finding đó. Reviewer không mở lại finding đó. Ledger ghi ai waive và lý do. Mặc định `by: user`. `--by producer` chỉ chạy khi `policy.yaml` có `test_mode: true`; không có cờ thì script từ chối, state không đổi. Sheet DUYỆT 2 có mục riêng "Producer đã waive". Lý do (Run 5): F2 model mất 4 version vì không có đường này; `feedback --action approve` chỉ chạy khi `waiting_human`.
+2. **Quy tắc hòa của bản tốt nhất** (sửa D27.1). Theo thứ tự: ít `blocker` + `major` đang mở nhất → giải quyết nhiều `blocker` + `major` hơn → giải quyết nhiều finding hơn ở mọi mức và không có `regressed` → version mới hơn. Lý do (Run 5): brief model v3 chọn v1, dù v2 = v1 + F3 đã sửa.
+3. **Meshy: albedo lấy từ `texture_urls[].base_color`.** API retexture không có tham số tắt chuẩn hóa GLB (scale ×2, dời tâm z). GLB Meshy chỉ dùng để so topology với mesh đã khóa. So số tam giác. So tập hợp bộ ba UV của tam giác: mỗi bộ ba sắp xếp, cả tập sắp xếp, so có dung sai. Không so theo thứ tự tam giác. Không phụ thuộc scale và vị trí. Kích thước ảnh `base_color` phải bằng `texture_res`. Lệch một điều trên thì fail. Bỏ khớp bbox và ngưỡng 1e-5. Worker không tự viết script cho việc này. Test dùng GLB Meshy thật của Run 5.
+4. **`ingest` bỏ qua `COMPARE` cho id ngoài `TOP_FIX`** và ghi cảnh báo vào ledger, không báo lỗi. Producer không bao giờ sửa report của reviewer hay worker. Report sai contract thì giao lại cho chính agent đó.
+5. **Mọi lần chuyển state in JSON giao việc tiếp theo** (mở rộng D27.2): gồm `feedback --action approve|redo`, `waive`, `retry`.
+6. **`counts` trong thẻ asset.** Trường tùy chọn, chỉ có 6 khóa: `body_board_rows`, `lid_board_rows`, `doors`, `windows`, `pillars`, `steps`. Mỗi khóa ánh xạ tới một param có tên trong `fixed_params` của part graph (ví dụ `body_board_rows` ↔ `planks`). Lý do: số hàng ván là tham số hàm, không phải số part. Bảng ánh xạ nằm trong config theo loại asset, không viết cứng trong code. Gate blockout và model so hai số; sai thì fail. Khóa chưa có ánh xạ thì `check_card` cảnh báo, không fail. Lý do: lỗi đếm đã lọt hai lần (Run 4 view, Run 5 blockout).
+7. **Installer gộp `settings.snippet.json`** vào settings của project: allow rule (Blender, `meshy_call`, `codex exec`, ghi `production/`) và hook SessionStart chạy `P next`. Không ghi đè rule có sẵn. In diff trước khi ghi. Chạy hai lần không nhân đôi. `P preflight` báo khi chưa có.
+8. **Lời giao việc chỉ gồm file role và brief.** Lời giao việc không bao giờ gợi ý ghi file bằng shell (heredoc, `cat >`, `tee`, python). Worker ghi `worker-out.md` bằng Write. Mẫu brief đã đúng; lỗi Run 5 nằm ở lời giao việc.
+9. **Hàm `custom` được duyệt vào repo ngay**, kèm test. Không để mỗi run giữ một bản thư viện riêng. `arch_cap_pointed` đã vào `custom_lib.py` (`26549c6`).
+10. **Token của Producer trong `P stats`.** Hook SessionStart ghi đường dẫn transcript vào `production/session.json`. Script đọc `usage` trong transcript JSONL của phiên chính, bỏ dòng `isSidechain`. Parse chịu lỗi: không đọc được thì ghi "không có số". Bản Codex ghi "chưa hỗ trợ".
+11. **Meshy SỬA là chế độ texture mặc định** (sửa D10). Có key Meshy và budget → Meshy SỬA. Không có key, hoặc anh chỉ định → VẼ MỚI. Giữ budget gate. Ledger ghi chế độ đã chọn và lý do. Lý do (Run 5): Meshy SỬA 15m32s, 2 version, 10 credit; VẼ MỚI ở Run 4: 38m25s, 4 version. Mới có 1 mẫu; đo lại sau 3–5 asset.
+12. **Mọi tool ghi file từ chối chạy ngoài project root** (mở rộng D27.7). Một helper `require_root()` dùng chung. Thư mục đang đứng sai thì tool thoát mã lỗi và không tạo file nào. Lý do (Run 5): một check của bước texture ghi `production/` vào gốc repo vì chạy từ sai cwd.
+13. **`.env` chỉ trỏ đường dẫn.** Guideline và `setup.md` chỉ nêu đường dẫn `.env`. Không bao giờ đính kèm file `.env` vào chat. Lý do (Run 5): file `.env` đính kèm làm lộ mọi key trong đó.
+14. **Version lên 0.7.0**, để bản cài V6 khác tên với v0.6.0.
+15. **Cách làm v0.7.0:** worktree `./.worktrees/feat-v0.7.0`, chạy toàn bộ test, merge fast-forward vào `main`.
+
+## D31 — Giảm chi phí review (2026-11-10)
+
+Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
+
+1. **R1 — Sheet review.** `review_sheet.py` ghép các góc của bước thành một ảnh PNG, cạnh dài khoảng 2048 px, có nhãn tên ảnh. Brief reviewer chỉ đưa sheet và concept. Reviewer cần ảnh lẻ thì xin qua `need_evidence` (crop hoặc ảnh gốc). Áp cho `blockout`, `model`, `texture`. Bước views dùng `views_sheet.py` sẵn có.
+2. **R2 — Phạm vi chấm theo loại vòng.** Brief reviewer có `REVIEW_SCOPE: full | fix`.
+   - `full`: lần review đầu, và bản mà worker báo `DONE` với mọi finding đang mở đều có trong `FIXED` (bản sắp PASS).
+   - `fix`: các vòng còn lại. Reviewer chỉ chấm id trong `TOP_FIX` (kèm `COMPARE`), các vùng `preserve`, và một lượt nhìn nhanh toàn sheet để bắt lỗi mới. Mục rubric không chấm ghi `not_checked`.
+   - **Chỉ PASS khi lần review gần nhất là `full`.** Vòng `fix` hết lỗi mở, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
+3. **R3 — Check fail trả thẳng về worker.** Worker xong mà có JSON `fail` hoặc `error` trong `final/review/{gates,checks}/` → vòng sửa của worker luôn, không gọi reviewer. Brief vòng đó kèm danh sách JSON fail. Vòng trả thẳng tính vào `max_fix_rounds`. Hết vòng → `waiting_human`.
+   - Lối ra: worker ghi `ACCEPTED_FAIL: <file> — <lý do có số>` trong `worker-out.md` và mục NGOẠI LỆ của README. Asset sang reviewer; reviewer chấm lý do đó.
+   - Chỉ check có `acceptable: true` trong config mới được khai `ACCEPTED_FAIL`.
+   - Gate cứng không bao giờ được khai: hash, schema, `export_check`, topology Meshy (D30.3). Khai cho gate cứng → script từ chối, vẫn là vòng sửa.
+   - Ledger đếm mỗi lần khai, theo bước và theo check.
+4. **R4 — `P stats` tách theo loại vòng.** Thời gian và token reviewer tách thành: vòng đầu, vòng sửa, vòng chấm cuối (`full`).
+5. **Để sau pilot:** hạ check-views, check-blockout xuống Sonnet khi ledger cho thấy reviewer chấm khớp với anh (D16.3).
+6. **Để sau V6:** bỏ reviewer ở bước có gate người duyệt ngay sau, nếu V6 xác nhận `views: none` dùng được cho phần lớn asset.
+7. **Không làm:** resume cùng một reviewer qua nhiều vòng. Lý do: reviewer bị neo vào nhận xét cũ, mất tính độc lập.
+
+## D32 — Trường `views` trong thẻ asset (2026-11-10, thay ý "bỏ view top")
+
+Một trường duy nhất: `views: none | back | full | full_top`. Không thêm `views_top`. Trường này khác trường `view` của D27.6 (góc của ảnh concept).
+
+1. **`none`:** không có bước views. Mặt khuất lấy từ `hidden_sides` và blockout. TEXTURE NOTE và NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và file material. Brief model và brief texture chạy được khi không có bộ view. check-clay bỏ tiêu chí so với view.
+2. **`back`:** chỉ gen back. Bước `views_front` vẫn chạy, vì front là tham chiếu màu.
+3. **`full`:** back và left; right lật từ left khi đối xứng. Không có top.
+4. **`full_top`:** `full` cộng top. Chỉ dùng khi mái có thiết kế riêng, không suy ra được từ concept.
+5. **Lý do bỏ top:** không bước nào sau views cần ảnh top. Hình mái do blockout quyết. Màu mái thấy trên concept 3/4. VẼ MỚI tự gen paint view. Meshy không dùng top.
+6. Giá trị lạ → `check_card` fail. V6 chọn giá trị mặc định.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.

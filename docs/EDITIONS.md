@@ -21,7 +21,7 @@ Hai bản build từ cùng `src/` (D6.4, D24.5). Bảng dưới là mọi khác 
 
 ```sh
 python3 build.py                      # cả hai bản → dist/zps-3dp-<bản>-v<VERSION>/
-python3 dist/zps-3dp-claude-v0.6.0/install.py --project <thư mục project>
+python3 dist/zps-3dp-claude-v0.7.0/install.py --project <thư mục project>
 ```
 
 Build dừng với mã 1 khi một kiểm sai:
@@ -48,8 +48,8 @@ Build dừng với mã 1 khi một kiểm sai:
 Sau khi cài bản Codex, từ gốc project:
 
 ```sh
-python3 dist/zps-3dp-codex-v0.6.0/installer/codex_rules.py           # xem trước và tự kiểm bằng `codex execpolicy check`
-python3 dist/zps-3dp-codex-v0.6.0/installer/codex_rules.py --write   # ghi file rules
+python3 dist/zps-3dp-codex-v0.7.0/installer/codex_rules.py           # xem trước và tự kiểm bằng `codex execpolicy check`
+python3 dist/zps-3dp-codex-v0.7.0/installer/codex_rules.py --write   # ghi file rules
 ```
 
 Rule chỉ cho phép `<Blender> -b --python <script đã cài>.py -- …`, `<Blender> -b --python-exit-code 1 --python <script đã cài>.py -- …`, `assemble.py --blender <Blender> -- …` và `producer.py preflight` bằng python venv của skill. Codex chỉ so phần đầu lệnh, nên mỗi rule dừng ở chỗ chương trình thôi đọc option: Blender chuyển phần sau `--` cho script, `assemble.py` chỉ đọc tham số vị trí sau `--`, `preflight` không có option (kit ở chỗ khác: biến `PRODUCER_KIT`). `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py` không bao giờ khớp. `self_build/assembly.py`, `param_fit.py`, `apply_edit.py` chạy `parts_lib.py` trong thư mục làm việc, mà agent ghi được file này, nên cũng không khớp. Lệnh Blender của chúng (part `custom`) vẫn chờ người dùng duyệt từng lần, cho tới khi wrapper của D27.13 chạy bên trong lệnh mà rule cho phép. Chạy lại sau mỗi lần nâng cấp, rồi khởi động lại Codex.

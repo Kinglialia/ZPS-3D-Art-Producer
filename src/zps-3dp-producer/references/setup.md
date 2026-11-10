@@ -35,6 +35,8 @@ Lệnh này tạo (không ghi đè file đã có):
 - Trong thư mục concept: `_approved/` và `GUIDELINE.md` đã điền tên project, đường dẫn và lệnh `check_card.py`.
 - `.env` trong `.gitignore` của project, để key Meshy không bị commit.
 
+Key Meshy nằm trong `.env` của project, dòng `MESHY_API_KEY=...`. Đường dẫn ghi ở `paths.env_file` của profile (mặc định `.env`). Chỉ nêu đường dẫn file khi nói với Producer. Không đính kèm file `.env` vào chat: nội dung file vào context và lộ mọi key trong đó (D30.13). Script tự đọc file; brief không chứa key hay đường dẫn `.env`.
+
 Lệnh này không tạo `production/PROJECT-PROFILE.yaml`. Skill `zps-3dp-project-setup` tạo file này cùng người dùng, theo mẫu `templates/PROJECT-PROFILE.yaml`. Chưa có profile hợp lệ thì `P intake` từ chối. Kiểm profile bằng `scripts/check_profile.py production/PROJECT-PROFILE.yaml` (cùng python của venv). Profile nêu `preset` thì file `presets/<preset>.yaml` trong bộ skill phải có.
 
 Sau đó:
