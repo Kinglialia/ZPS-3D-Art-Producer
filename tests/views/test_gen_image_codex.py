@@ -227,3 +227,19 @@ def test_without_a_model_line_from_codex_the_actual_model_is_no_number_never_the
     rec, inp, led = gen_in_version(tmp_path)
     assert (rec["model_actual"], inp["image_model_actual"]) == ("không có số", "không có số")
     assert led[0].endswith(" · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế không có số")
+
+
+def test_a_broken_status_json_only_warns_because_the_image_is_already_paid_for(tmp_path):
+    path = fake_codex.install(tmp_path / "bin")
+    out = tmp_path / "production/assets/hut/views_front/v1/work/gen/front-1.png"
+    out.parent.mkdir(parents=True)
+    (tmp_path / "production/assets/hut/status.json").write_text("{broken", encoding="utf-8")
+    ref = tmp_path / "ref.png"
+    Image.new("RGB", (64, 64)).save(ref)
+    (tmp_path / "front.md").write_text(REQUEST, encoding="utf-8")
+    env = {**os.environ, "FAKE_CODEX_LOG": str(tmp_path / "calls.jsonl"), "PATH": path,
+           "FAKE_CODEX_PID_FILE": str(tmp_path / "hut.pid"), "CODEX_HOME": str(tmp_path / "codex-home")}
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file",
+                        str(tmp_path / "hut.pid"), "--prompt", str(tmp_path / "front.md"), f"--image={ref}", "--out",
+                        str(out)], capture_output=True, text=True, env=env, cwd=tmp_path)
+    assert (p.returncode, out.is_file(), "không ghi được model" in p.stderr) == (0, True, True)

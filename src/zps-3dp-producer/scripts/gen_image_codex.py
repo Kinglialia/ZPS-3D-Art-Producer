@@ -75,14 +75,15 @@ def version_of(out: Path) -> tuple[Path, str, str, int] | None:
 
 
 def record_models(out: Path, requested: str, actual: str):
-    """Several gens of one asset run at once: status.json is written under the Producer lock."""
+    """Several gens of one asset run at once: status.json is written under the Producer lock. The image is paid for
+    already, so a failure here (no status.json, an old Python in the agent venv) only warns."""
     if not (where := version_of(out)):
         return
     root, aid, sid, n = where
     os.environ["PRODUCER_ROOT"] = str(root)
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from core.state import ProducerError, ledger, load_st, locked, save_st
     try:
+        from core.state import ledger, load_st, locked, save_st
         with locked():
             st = load_st(aid)
             inp = st.setdefault("inputs", {}).setdefault(sid, {}).setdefault(f"v{n}", {})
@@ -91,7 +92,7 @@ def record_models(out: Path, requested: str, actual: str):
                 inp[k] = ", ".join(seen + [v] if v not in seen else seen)
             save_st(st)
             ledger(f"{aid} · {sid} v{n} · gen ảnh {out.name}: model yêu cầu {requested} · model thực tế {actual}")
-    except (ProducerError, OSError) as ex:
+    except (Exception, SystemExit) as ex:
         print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
 
 
