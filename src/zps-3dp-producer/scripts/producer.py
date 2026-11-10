@@ -55,6 +55,9 @@ def cmd_ack(a):
 
 def cmd_next(a):
     from core.limits import show_next
+    if a.session:
+        from core import session
+        session.from_stdin()
     show_next(a)
 
 
@@ -198,7 +201,8 @@ def main(argv: list[str] | None = None):
     x.add_argument("--deadline", help="YYYY-MM-DD")
     sub.add_parser("ready", help="người dùng đã duyệt rubric: draft → todo").add_argument("ids", nargs="+")
     x = sub.add_parser("next", help="việc tiếp theo của mọi asset")
-    x.add_argument("--session", action="store_true", help="dùng cho hook SessionStart")
+    x.add_argument("--session", action="store_true",
+                   help="dùng cho hook SessionStart: JSON của hook trên stdin → production/session.json")
     sub.add_parser("brief", help="sinh brief cho worker/reviewer, in JSON để giao việc").add_argument("id")
     x = sub.add_parser("ingest", help="đọc báo cáo, chuyển state")
     x.add_argument("id"); x.add_argument("--agent-id", help="id subagent worker, để resume vòng sửa")
@@ -232,7 +236,8 @@ def main(argv: list[str] | None = None):
     sub.add_parser("rule", help="ghi quyết định Producer tự đưa ra").add_argument("text")
     x = sub.add_parser("ledger", help="xem cuối ledger")
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
-    sub.add_parser("stats", help="bảng theo bước: thời gian, token theo vai trò, chờ Producer").add_argument("id")
+    sub.add_parser("stats", help="bảng theo bước: thời gian bước, worker, reviewer theo vòng, chờ Producer, chờ anh; "
+                                 "token theo vai trò và Producer").add_argument("id")
     sub.add_parser("dashboard", help="sinh lại dashboard.md")
     sub.add_parser("serve", help="mở review page có nút feedback").add_argument("--port", type=int, default=PORT)
     x = sub.add_parser("show", help="xuất trang board của một asset thành file HTML tĩnh")
