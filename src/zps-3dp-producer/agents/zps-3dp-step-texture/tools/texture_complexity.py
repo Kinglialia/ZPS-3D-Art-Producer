@@ -26,6 +26,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 CLUSTER_SHARE = 0.03
 BG_DIST = 40.0
@@ -111,4 +113,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

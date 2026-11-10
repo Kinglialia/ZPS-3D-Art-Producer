@@ -22,6 +22,8 @@ sys.path[:0] = [os.path.join(HERE, "lib"), os.path.join(HERE, "self_build")]
 import common  # noqa: E402
 import graph as G  # noqa: E402
 import raster  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/fit_view"
 TOL = 0.05
@@ -118,4 +120,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

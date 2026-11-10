@@ -10,6 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import common  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/check_materials"
 
@@ -40,4 +42,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

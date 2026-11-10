@@ -26,6 +26,8 @@ import bootstrap  # noqa: E402,F401
 import numpy as np  # noqa: E402
 
 import tex  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 SUN = {"azimuth_deg": 45.0, "elevation_deg": 50.0}
 VIEWS = {"34_front": (45, 30), "close_front": (0, 10), "34_back": (225, 30)}
@@ -236,4 +238,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

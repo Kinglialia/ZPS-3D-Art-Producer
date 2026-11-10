@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import findings  # noqa: E402
 from core.contract import unwrap  # noqa: E402
 from core.state import ROOT, SKILL_DIR, load_st, now, texture_res, vdir  # noqa: E402
+from root_guard import require_root  # noqa: E402
 
 SCRIPTS = SKILL_DIR / "scripts"
 MODEL_TOOLS = SKILL_DIR / "agents" / "zps-3dp-step-model" / "tools"
@@ -317,4 +318,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

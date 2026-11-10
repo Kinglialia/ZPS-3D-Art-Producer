@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
+from root_guard import require_root  # noqa: E402
 
 UNLOCKED = {"next", "ledger", "stats", "validate", "serve", "texture-stats", "ab", "compare", "disk"}
 
@@ -280,6 +281,8 @@ def main(argv: list[str] | None = None):
     x = sub.add_parser("archive", help="chuyển asset đã xong vào archive/")
     x.add_argument("id"); x.add_argument("--force", action="store_true")
     a = p.parse_args(argv)
+    if a.cmd not in ("init", "preflight", "ab", "compare"):  # preflight may run before init; ab/compare run above both A/B roots
+        require_root()
     try:
         with locked(create=a.cmd in ("init", "preflight")) if a.cmd not in UNLOCKED else contextlib.nullcontext():
             globals()[f"cmd_{a.cmd.replace('-', '_')}"](a)

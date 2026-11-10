@@ -12,6 +12,8 @@ import sys
 import unicodedata
 from pathlib import Path
 
+from root_guard import require_root
+
 LONG_EDGE = 2048
 PAD, HEAD = 8, 22
 FONT = Path(__file__).resolve().parents[1] / "fonts" / "NotoSans-Regular.ttf"
@@ -83,4 +85,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

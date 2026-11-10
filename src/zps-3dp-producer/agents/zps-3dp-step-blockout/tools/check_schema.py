@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 import custom_lib  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/check_schema"
 HEADER = {"schema": "blockout-1", "units": "m", "up": "+Z", "front": "-Y"}
@@ -168,4 +170,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

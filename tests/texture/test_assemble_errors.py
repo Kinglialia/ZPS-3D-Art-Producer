@@ -29,6 +29,7 @@ def project(t: Path) -> Path:
           "versions": {"model": 1, "texture": 1, "assemble": 1}, "approved": {"model": 1, "texture": 1},
           "locked": {"model": hashlib.sha256(glb.read_bytes()).hexdigest()}, "created": "2026-11-09 08:00"}
     (a / "status.json").write_text(json.dumps(st), encoding="utf-8")
+    (t / "production/pipeline.toml").touch()
     return a / "assemble/v1/report-script.md"
 
 
@@ -78,8 +79,17 @@ def test_run_from_outside_the_project_it_refuses_before_it_writes_anything(tmp_p
     r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--", AID, "1",
                         "abc123"], cwd=other, capture_output=True, text=True)
     assert (r.returncode, r.stderr.splitlines()[-1]) == (
-        2, f"assemble.py: error: không thấy production/assets/{AID}/status.json: chạy lệnh từ gốc project")
+        2, "LỖI: không thấy production/pipeline.toml: chạy lệnh từ gốc project")
     assert list(other.iterdir()) == []
+
+
+def test_an_asset_the_project_does_not_have_is_refused_before_assemble_writes_anything(tmp_path):
+    project(tmp_path)
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--", "ghost",
+                        "1", "abc123"], cwd=tmp_path, capture_output=True, text=True)
+    assert (r.returncode, r.stderr.splitlines()[-1]) == (
+        2, "assemble.py: error: không thấy production/assets/ghost/status.json: chạy lệnh từ gốc project")
+    assert not (tmp_path / "production/assets/ghost").exists()
 
 
 def finding_doc(t: Path, step: str, n: int, notes=(), **fs):

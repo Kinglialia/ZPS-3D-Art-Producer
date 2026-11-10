@@ -31,6 +31,8 @@ import numpy as np  # noqa: E402
 
 import id_map  # noqa: E402
 import tex  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 LIMITS = {"side_spread_L": 3.0, "top_tol_L": 3.0, "shade_L": 8.0, "shaded_share": 0.02, "dE_concept": 3.0,
           "seam_p90": 4.0, "unpainted": 0.001, "padding_empty": 0.01, "groove_occluded": 0.55}
@@ -145,4 +147,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

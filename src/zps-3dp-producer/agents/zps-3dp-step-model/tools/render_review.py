@@ -26,6 +26,8 @@ import numpy as np  # noqa: E402
 import common  # noqa: E402
 import raster  # noqa: E402
 import render_views as RV  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "model/render_review"
 SUN = {"azimuth_deg": 45.0, "elevation_deg": 50.0}
@@ -201,4 +203,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

@@ -18,6 +18,8 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import palette_report  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 CANDIDATES = ("#E8E8E8", "#2B2B2B", "#3A5FCD", "#2E8B57", "#C71585", "#FF8C00")
 MIN_DIST = 100.0
@@ -81,4 +83,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

@@ -26,6 +26,8 @@ import bootstrap  # noqa: E402,F401
 import numpy as np  # noqa: E402
 
 import common  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "model/join_mesh"
 SHARP_DEG = 20.0
@@ -158,4 +160,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

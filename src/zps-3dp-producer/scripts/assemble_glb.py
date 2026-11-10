@@ -12,6 +12,8 @@ import sys
 MODEL_TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents", "zps-3dp-step-model", "tools")
 for sub in ("optimize", "lib"):
     sys.path.insert(0, os.path.abspath(os.path.join(MODEL_TOOLS, sub)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from root_guard import require_root  # noqa: E402
 
 
 def main():
@@ -44,6 +46,7 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     try:
         main()
     except Exception as e:  # noqa: BLE001

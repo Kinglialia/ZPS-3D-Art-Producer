@@ -19,6 +19,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import common  # noqa: E402
 from views_sheet import card_set  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "views/check_package"
 POINTER = ("Thông số, mốc chiều cao, phần khuất, Blockout tự quyết, ghi chú real/texture_only: xem `blockout.md` "
@@ -96,4 +98,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

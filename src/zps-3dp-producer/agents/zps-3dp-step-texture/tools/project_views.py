@@ -25,6 +25,8 @@ import numpy as np  # noqa: E402
 
 import id_map  # noqa: E402
 import tex  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 MIN_COS = 0.2
 DEPTH_EPS = 0.004
@@ -153,4 +155,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

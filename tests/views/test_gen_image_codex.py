@@ -87,6 +87,8 @@ def test_an_image_with_a_long_side_of_1040_px_or_less_is_a_technical_failure(gen
 
 def test_relative_reference_paths_reach_codex_as_absolute_ones_because_codex_runs_in_the_out_folder(gen, monkeypatch):
     monkeypatch.chdir(gen.tmp)
+    (gen.tmp / "production").mkdir()
+    (gen.tmp / "production/pipeline.toml").touch()
     rel = [r.name for r in gen.refs]
     p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
                         "--prompt", "front.md", *[f"--image={r}" for r in rel], "--out", "work/gen/front-1.png"],
@@ -193,6 +195,7 @@ def gen_in_version(tmp_path, model=None):
     root = tmp_path / "production"
     st = {"id": "hut", "inputs": {"views_front": {"v2": {"profile": "786cfc66bdd2"}}}}
     (root / "assets/hut").mkdir(parents=True)
+    (root / "pipeline.toml").touch()
     (root / "assets/hut/status.json").write_text(json.dumps(st), encoding="utf-8")
     out = root / "assets/hut/views_front/v2/work/gen/front-1.png"
     out.parent.mkdir(parents=True)
@@ -233,6 +236,7 @@ def test_a_broken_status_json_only_warns_because_the_image_is_already_paid_for(t
     path = fake_codex.install(tmp_path / "bin")
     out = tmp_path / "production/assets/hut/views_front/v1/work/gen/front-1.png"
     out.parent.mkdir(parents=True)
+    (tmp_path / "production/pipeline.toml").touch()
     (tmp_path / "production/assets/hut/status.json").write_text("{broken", encoding="utf-8")
     ref = tmp_path / "ref.png"
     Image.new("RGB", (64, 64)).save(ref)

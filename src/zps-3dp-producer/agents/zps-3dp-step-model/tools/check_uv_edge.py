@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 import cli  # noqa: E402
 import common  # noqa: E402
 import glbread  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "model/check_uv_edge"
 ISLAND_MIN_SHARE = 0.005
@@ -77,4 +79,5 @@ def check(a):
 
 
 if __name__ == "__main__":
+    require_root()
     cli.run(TOOL, "uv_edge", __doc__, lambda p: None, check)

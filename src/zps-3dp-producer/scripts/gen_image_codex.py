@@ -28,6 +28,8 @@ import sys
 import time
 from pathlib import Path
 
+from root_guard import require_root
+
 TRIES = 3
 MIN_LONG = 1041
 IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
@@ -180,4 +182,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

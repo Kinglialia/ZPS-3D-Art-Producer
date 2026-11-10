@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib
 import cli  # noqa: E402
 import common  # noqa: E402
 import glbread  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "model/check_mesh"
 COS_MAX = np.cos(np.radians(0.8))
@@ -76,4 +78,5 @@ def check(a):
 
 
 if __name__ == "__main__":
+    require_root()
     cli.run(TOOL, "mesh", __doc__, lambda p: None, check)

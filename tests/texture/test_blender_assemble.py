@@ -82,6 +82,7 @@ def base(tmp_path_factory):
           "versions": {"model": 1, "texture": 1, "assemble": 1}, "approved": {"model": 1, "texture": 1},
           "locked": {"model": hashlib.sha256(glb.read_bytes()).hexdigest()}, "created": "2026-11-09 08:00"}
     (a / "status.json").write_text(json.dumps(st), encoding="utf-8")
+    (t / "production/pipeline.toml").touch()
     return t
 
 

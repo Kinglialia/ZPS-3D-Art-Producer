@@ -22,6 +22,8 @@ sys.path[:0] = [KIT, os.path.join(HERE, "lib"), HERE]
 import bootstrap  # noqa: E402,F401
 import common  # noqa: E402
 import graph as G  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TARGETS = ("assembly", "param_fit")
 LIB = os.path.join(HERE, "custom_lib.py")
@@ -56,4 +58,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

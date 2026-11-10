@@ -13,6 +13,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import common  # noqa: E402
 from check_layout import bbox_check, cli  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/check_fix"
 
@@ -31,4 +33,5 @@ def run(a, graph, rows, sources):
 
 
 if __name__ == "__main__":
+    require_root()
     cli(TOOL, lambda a: f"fix_{a.finding}.json", run, extra=("--old", "--finding"))

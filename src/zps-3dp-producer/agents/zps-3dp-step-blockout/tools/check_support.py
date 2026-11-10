@@ -14,6 +14,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import common  # noqa: E402
 from check_layout import cli, tags  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/check_support"
 TOUCH = 0.01
@@ -39,4 +41,5 @@ def run(a, graph, rows, sources):
 
 
 if __name__ == "__main__":
+    require_root()
     cli(TOOL, "support", run)

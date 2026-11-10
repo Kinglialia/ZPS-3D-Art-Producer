@@ -15,6 +15,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import render_texture as R  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 ELEVATIONS = (30, -30)
 
@@ -46,6 +48,7 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     try:
         main()
     except Exception as e:  # noqa: BLE001

@@ -19,6 +19,8 @@ for sub in ("lib", "optimize"):
 import bootstrap  # noqa: E402,F401
 
 import common  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "model/unwrap"
 
@@ -68,4 +70,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

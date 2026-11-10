@@ -35,6 +35,7 @@ def budget_for(tmp, model, max_credits=10):
 @pytest.fixture
 def meshy(tmp_path):
     (tmp_path / "production").mkdir()
+    (tmp_path / "production/pipeline.toml").touch()
     prof = {"project": "T", "paths": {"env_file": ".env"}}
     (tmp_path / "production/PROJECT-PROFILE.yaml").write_text(yaml.safe_dump(prof), encoding="utf-8")
     (tmp_path / ".env").write_text(f"MESHY_API_KEY={PROJECT_KEY}\n", encoding="utf-8")

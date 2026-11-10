@@ -1,8 +1,10 @@
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts"
@@ -105,6 +107,21 @@ def report(verdict="FIX", counts="blocker=0; major=1; minor=0; preference=0; unc
     if prior:
         lines += ["PRIOR:", *prior]
     return "\n".join(lines) + "\n" + extra
+
+
+@pytest.fixture(scope="session", autouse=True)
+def project_cwd(tmp_path_factory):
+    """D30.12: a tool that writes runs only from a project root, so a test that runs one without `cwd=` runs it from
+    an empty project, not from the repo. Session scope: module fixtures run their tools before function fixtures."""
+    d = tmp_path_factory.mktemp("cwd")
+    (d / "production").mkdir()
+    (d / "production/pipeline.toml").touch()
+    old, root = os.getcwd(), os.environ.pop("PRODUCER_ROOT", None)
+    os.chdir(d)
+    yield d
+    os.chdir(old)
+    if root is not None:
+        os.environ["PRODUCER_ROOT"] = root
 
 
 sys.modules["shared"] = sys.modules[__name__]  # tests/blockout/conftest.py also claims the module name `conftest`

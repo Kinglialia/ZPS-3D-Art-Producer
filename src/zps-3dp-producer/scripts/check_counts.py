@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+from root_guard import require_root
+
 SKILL = Path(__file__).resolve().parents[1]
 MAP = SKILL / "templates" / "counts.yaml"
 CUSTOM_LIB = next(SKILL.glob("agents/zps-3dp-step-blockout*/tools/custom_lib.py"), SKILL / "agents/x/tools/x").parent  # Codex: -codex
@@ -114,4 +116,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

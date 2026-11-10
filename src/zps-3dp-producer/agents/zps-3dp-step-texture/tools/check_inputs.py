@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
 import tex  # noqa: E402
+from root_guard import require_root  # noqa: E402
 
 
 def wanted(a):
@@ -45,4 +46,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

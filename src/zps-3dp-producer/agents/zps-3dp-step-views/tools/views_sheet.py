@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 CELL, PAD, HEAD = 320, 12, 22
 FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "fonts", "NotoSans-Regular.ttf")
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 
 def card_set(card):
@@ -139,4 +140,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

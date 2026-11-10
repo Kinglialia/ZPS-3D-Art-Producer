@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(HERE, "lib"))
 sys.path.append(os.path.join(HERE, "..", "..", "..", "scripts"))
 import cli  # noqa: E402
 import common  # noqa: E402
+from root_guard import require_root  # noqa: E402
 
 TOOL = "model/check_inputs"
 BLOCKOUT = ("part_graph.json", "parts_lib.py", "sources.json", "blockout.md", "assembly.json")
@@ -46,4 +47,5 @@ def check(a):
 
 
 if __name__ == "__main__":
+    require_root()
     cli.run(TOOL, "inputs", __doc__, args, check)

@@ -24,6 +24,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "lib")]
 import common  # noqa: E402
 import measure_views as mv  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 TOOL = "views/measure"
 mv.flood_background = lambda bgish: bgish
@@ -94,4 +96,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

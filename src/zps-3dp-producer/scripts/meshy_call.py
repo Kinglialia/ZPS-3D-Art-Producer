@@ -54,6 +54,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import ASSETS, ROOT, ledger, texture_res  # noqa: E402
+from root_guard import require_root  # noqa: E402
 
 GEN_API = Path(__file__).resolve().parent / "kit" / "tools" / "gen" / "gen_api.py"
 TRIES = 3
@@ -517,4 +518,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()

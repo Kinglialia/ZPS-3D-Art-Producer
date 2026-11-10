@@ -23,6 +23,8 @@ import numpy as np  # noqa: E402
 import id_map  # noqa: E402
 import seam_fix  # noqa: E402
 import tex  # noqa: E402
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+from root_guard import require_root  # noqa: E402
 
 SIDE_TOL = 1.0
 SHADE_TOL = 4.0
@@ -103,4 +105,5 @@ def main():
 
 
 if __name__ == "__main__":
+    require_root()
     main()
