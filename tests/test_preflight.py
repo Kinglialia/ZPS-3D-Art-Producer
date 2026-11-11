@@ -2,10 +2,14 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
 from shared import P, write_profile
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "views"))
+import fake_codex  # noqa: E402
 
 KEY = "msy-SECRET-0123456789"
 KIT = """import argparse, json, pathlib
@@ -53,7 +57,7 @@ def proj(tmp_path):
 
 def test_preflight_records_each_feature_in_one_line_and_never_prints_the_meshy_key(proj):
     proj.tool("blender", "Blender 4.2.1 LTS")
-    proj.tool("codex", "codex-cli 0.50.0")
+    fake_codex.install(proj.bin)
     (proj.root / ".env").write_text(f"MESHY_API_KEY={KEY}\n", encoding="utf-8")
     proj.env["PRODUCER_KIT"] = str(proj.kit)
     r = proj.run("preflight")
@@ -61,10 +65,23 @@ def test_preflight_records_each_feature_in_one_line_and_never_prints_the_meshy_k
     assert proj.result() == {
         "features": {"blender": True, "codex_image": True, "meshy": True},
         "blender": {"path": str(proj.bin / "blender"), "version": "4.2.1"},
-        "codex": str(proj.bin / "codex"), "env_file": ".env",
+        "codex": str(proj.bin / "codex"), "codex_cli": {"version": "0.164.0", "missing_flags": []}, "env_file": ".env",
         "kit": {"path": str(proj.kit), "overall": "pass", "features": {"xatlas_unwrap": False}}}
     text = (proj.root / "production/preflight.json").read_text(encoding="utf-8")
     assert (KEY in r.stdout + r.stderr, KEY in text) == (False, False)
+
+
+def test_a_codex_cli_whose_exec_help_lacks_a_flag_the_gen_uses_turns_codex_image_off_with_a_clear_line_d30_19(proj):
+    """Every gen passes -s and --image; a codex-cli without one of them exits 2 on each call. Preflight says so once,
+    with the version, instead of letting the views step fail three tries per image."""
+    fake_codex.install(proj.bin)
+    proj.env |= {"FAKE_CODEX_VERSION": "codex-cli 0.170.0", "FAKE_CODEX_HELP_DROP": "-s,--image"}
+    (proj.root / ".env").write_text("MESHY_API_KEY=\n", encoding="utf-8")
+    assert proj.run("preflight").stdout == (
+        "preflight: tắt blender, codex_image, meshy; codex-cli 0.170.0 thiếu flag -s, --image của `codex exec` "
+        "→ cài codex-cli đã test (0.164.0) rồi chạy lại `preflight`; không có kit preflight.py → production/preflight.json\n")
+    res = proj.result()
+    assert (res["features"]["codex_image"], res["codex_cli"]) == (False, {"version": "0.170.0", "missing_flags": ["-s", "--image"]})
 
 
 def test_feature_off_blocks_dispatch_of_the_step_that_needs_it(proj):
@@ -72,8 +89,8 @@ def test_feature_off_blocks_dispatch_of_the_step_that_needs_it(proj):
     assert proj.run("preflight").stdout == (
         "preflight: tắt blender, codex_image, meshy; không có kit preflight.py → production/preflight.json\n")
     res = proj.result()
-    assert (res["features"], res["blender"], res["codex"], res["kit"]["present"]) == (
-        {"blender": False, "codex_image": False, "meshy": False}, None, None, False)
+    assert (res["features"], res["blender"], res["codex"], res["codex_cli"], res["kit"]["present"]) == (
+        {"blender": False, "codex_image": False, "meshy": False}, None, None, None, False)
     assert "[house-a] blockout/todo → không giao: tắt blender (preflight)" in proj.run("next").stdout.splitlines()
     assert proj.run("brief", "house-a", ok=False).stderr == (
         "LỖI: house-a: bước blockout cần blender đang tắt (preflight) → sửa môi trường rồi chạy lại `preflight`\n")

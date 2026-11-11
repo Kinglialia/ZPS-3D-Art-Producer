@@ -14,7 +14,9 @@ The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset
 3 failed tries in a row: exit 1 (D8.3). Writes <dir/name>.json, prints one line.
 D28.1: the record keeps the requested model (--model) and the actual one, the `model:` line of the header that
 `codex exec` prints on stderr ("không có số" without it). When --out lies in <root>/assets/<id>/<step>/vN/, both also go
-to the ledger and to `inputs[<step>]["vN"]` of status.json.
+to the ledger and to `inputs[<step>]["vN"]` of status.json. D30.19: the record and the ledger line also keep the version
+that `codex --version` prints (tested with codex-cli 0.164.0). FLAGS lists every `codex exec` flag the command uses;
+`P preflight` checks that `codex exec --help` lists each one.
 """
 from __future__ import annotations
 
@@ -35,6 +37,7 @@ MIN_LONG = 1041
 IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
 CODEX_KEYS = {"OPENAI_API_KEY", "CODEX_API_KEY"}
 NO_NUMBER = "không có số"
+FLAGS = ("-m", "-c", "-C", "-s", "--skip-git-repo-check", "--image")
 FRAME = """You are one step of an art build pipeline. Do only this:
 1. Use your image generation tool once to make the image that REQUEST describes. Give the tool the attached images.
 2. Save the image as PNG at OUTPUT_PATH, SIZE pixels.
@@ -63,6 +66,19 @@ def codex_error(result: Path) -> str | None:
         return None
 
 
+def cli_version() -> str:
+    try:
+        p = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return NO_NUMBER
+    m = re.search(r"codex-cli\s+(\S+)", p.stdout + p.stderr)
+    return m[1] if m else NO_NUMBER
+
+
+def missing_flags(help_text: str) -> list[str]:
+    return [f for f in FLAGS if not re.search(rf"(?<![\w-]){re.escape(f)}(?![\w-])", help_text)]
+
+
 def actual_model(stderr: str | None) -> str | None:
     m = re.search(r"^model: *(\S+)\s*$", stderr or "", re.M)
     return m[1] if m else None
@@ -76,7 +92,7 @@ def version_of(out: Path) -> tuple[Path, str, str, int] | None:
     return None
 
 
-def record_models(out: Path, requested: str, actual: str):
+def record_models(out: Path, requested: str, actual: str, cli: str):
     """Several gens of one asset run at once: status.json is written under the Producer lock. The image is paid for
     already, so a failure here (no status.json, an old Python in the agent venv) only warns."""
     if not (where := version_of(out)):
@@ -93,7 +109,8 @@ def record_models(out: Path, requested: str, actual: str):
                 seen = inp[k].split(", ") if inp.get(k) else []
                 inp[k] = ", ".join(seen + [v] if v not in seen else seen)
             save_st(st)
-            ledger(f"{aid} · {sid} v{n} · gen ảnh {out.name}: model yêu cầu {requested} · model thực tế {actual}")
+            ledger(f"{aid} · {sid} v{n} · gen ảnh {out.name}: model yêu cầu {requested} · model thực tế {actual} "
+                   f"· codex-cli {cli}")
     except (Exception, SystemExit) as ex:
         print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
 
@@ -150,11 +167,12 @@ def main():
     result, rec_path = out.with_name(out.stem + ".result.json"), out.with_suffix(".json")
     prompt = FRAME.format(out=out, result=result, size=a.size, request=a.prompt.read_text(encoding="utf-8").strip())
     a.actual = None
-    rec = {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model, "model_actual": NO_NUMBER, "reasoning": a.reasoning, "prompt": str(a.prompt),
-           "images": a.image, "size": None, "fallback": False, "errors": []}
+    rec = {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model, "model_actual": NO_NUMBER,
+           "codex_cli": NO_NUMBER, "reasoning": a.reasoning, "prompt": str(a.prompt), "images": a.image, "size": None, "fallback": False, "errors": []}
     if shutil.which("codex") is None:
         rec["errors"].append("không thấy codex trên PATH")
     else:
+        rec["codex_cli"] = cli_version()
         pid_file = a.pid_file.with_name(f"{a.pid_file.stem}-{os.getpid()}{a.pid_file.suffix}")
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(os.getpid()), encoding="utf-8")
@@ -173,7 +191,7 @@ def main():
         out.unlink(missing_ok=True)
     rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
     if rec["attempts"]:
-        record_models(out, rec["model_requested"], rec["model_actual"])
+        record_models(out, rec["model_requested"], rec["model_actual"], rec["codex_cli"])
     if rec["status"] == "ok":
         print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
         return

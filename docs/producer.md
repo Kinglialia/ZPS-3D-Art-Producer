@@ -424,7 +424,7 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 ## 14. Khởi tạo và phiên mới (D13)
 
 1. Anh gọi Producer. Producer chạy `check_profile.py`.
-1b. **`P preflight`** (D25.C): kiểm môi trường một lần mỗi phiên, gọi `preflight.py` của kit và kiểm thêm codex CLI, `gen_api.py keys` (Meshy), bản Blender. Kết quả ghi `production/preflight.json` gồm bảng tính năng bật/tắt. Bước nào cần tính năng đang tắt thì `P next` báo ngay và không giao việc bước đó. Chạy lại khi đổi tool hoặc cấu hình, không chạy lại cho từng asset.
+1b. **`P preflight`** (D25.C): kiểm môi trường một lần mỗi phiên, gọi `preflight.py` của kit và kiểm thêm codex CLI (phiên bản `codex --version` và mọi flag skill dùng trong `codex exec --help`, D30.19; thiếu flag thì tắt `codex_image`), `gen_api.py keys` (Meshy), bản Blender. Kết quả ghi `production/preflight.json` gồm bảng tính năng bật/tắt. Bước nào cần tính năng đang tắt thì `P next` báo ngay và không giao việc bước đó. Chạy lại khi đổi tool hoặc cấu hình, không chạy lại cho từng asset.
 2. Thiếu profile → nạp skill Project Setup, làm cùng anh (gồm cả `policy.yaml`).
 3. Xong → **Producer nhắc anh gõ lệnh xóa context và mở phiên mới**, đúng câu lệnh của runtime (Claude Code: `/clear`; Codex: `/new`).
 4. Producer cũng nhắc mở phiên mới sau khi cập nhật nội dung profile, và khi context đã dài sau một lô.
@@ -477,7 +477,7 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - `P stats <id>` in bảng theo bước: thời gian worker, reviewer, chờ Producer, chờ anh; token worker, reviewer, Producer. Thời gian bước tính từ lần giao worker đầu tới lúc bước được duyệt.
 - **Tách reviewer theo loại vòng** (D31.4): vòng đầu, vòng sửa, vòng chấm cuối (`full`). Lần giao ghi `REVIEW_SCOPE` để script tách được.
 - **Token Producer** (D30.10): hook SessionStart ghi đường dẫn transcript vào `production/session.json`. Script đọc `usage` trong JSONL, bỏ dòng `isSidechain`. Lỗi → "không có số". Bản Codex ghi "chưa hỗ trợ".
-- **Model ảnh** (D28.1): `gen_image_codex.py` ghi model đã yêu cầu và model thực tế vào ledger và `inputs` của version. Không biết model thực tế → "không có số".
+- **Model ảnh** (D28.1): `gen_image_codex.py` ghi model đã yêu cầu và model thực tế vào ledger và `inputs` của version. Ledger ghi thêm phiên bản codex-cli của mỗi lần gen (D30.19). Không biết model thực tế → "không có số".
 - Run 4 chỉ có token gộp theo bước, nên chưa biết phần nào phình. Nếu chờ Producer > 15% thời gian bước, xem lại cách điều phối (lý do giữ Producer gọi reviewer: `docs/decisions.md` D27.3).
 
 **`P compare`** tổng hợp từ ledger của hai bên (script ghi `runtime` vào mọi dòng ledger). Theo nguyên tắc Art Learning của kit (D25.J): đếm theo asset, không theo số lần gọi (thử lại trên cùng asset không phải bằng chứng độc lập); ghi cả lần thử bị loại; im lặng không tính là anh duyệt. Cùng nguyên tắc dùng cho việc hạ model sau pilot (D16.3):

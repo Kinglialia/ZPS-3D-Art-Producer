@@ -3,7 +3,9 @@ ok | small | home | home_two | none | fail:<n> (first n calls report an error, t
 hang_after_image (saves under CODEX_HOME, never returns) | error_with_bystander (reports an error; another asset's image
 sits under CODEX_HOME) | ok_but_error (valid image, result.json also carries an error) | truncated (cut-off PNG).
 Logs each call to FAKE_CODEX_LOG.
-FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr."""
+FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr.
+`codex --version` prints FAKE_CODEX_VERSION (default codex-cli 0.164.0). `codex exec --help` prints the option lines of
+the real codex-cli 0.164.0 help, without the flags in FAKE_CODEX_HELP_DROP (comma-separated). Neither call is logged."""
 import io
 import json
 import os
@@ -12,6 +14,24 @@ import shlex
 import sys
 import time
 from pathlib import Path
+
+HELP = """Run Codex non-interactively
+
+Usage: codex exec [OPTIONS] [PROMPT]
+
+Options:
+  -c, --config <key=value>
+  -i, --image <FILE>...
+  -m, --model <MODEL>
+  -s, --sandbox <SANDBOX_MODE>
+          [possible values: read-only, workspace-write, danger-full-access]
+      --approve-for-me
+      --dangerously-bypass-approvals-and-sandbox
+  -C, --cd <DIR>
+      --skip-git-repo-check
+  -h, --help
+  -V, --version
+"""
 
 
 def install(bin_dir: Path) -> str:
@@ -24,6 +44,14 @@ def install(bin_dir: Path) -> str:
 
 
 def main():
+    if sys.argv[1:] == ["--version"]:
+        print(os.environ.get("FAKE_CODEX_VERSION", "codex-cli 0.164.0"))
+        return
+    if sys.argv[1:] == ["exec", "--help"]:
+        drop = [f for f in os.environ.get("FAKE_CODEX_HELP_DROP", "").split(",") if f]
+        print("\n".join(l for l in HELP.splitlines() if not any(re.search(rf"(?<![\w-]){re.escape(f)}(?![\w-])", l)
+                                                            for f in drop)))
+        return
     from PIL import Image
     prompt = sys.stdin.read()
     log = Path(os.environ["FAKE_CODEX_LOG"])

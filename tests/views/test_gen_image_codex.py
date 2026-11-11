@@ -189,7 +189,7 @@ def test_a_truncated_png_is_a_broken_image_because_pillow_reads_only_the_header_
     assert r["record"]["errors"] == ["file ảnh hỏng"] * 3
 
 
-def gen_in_version(tmp_path, model=None):
+def gen_in_version(tmp_path, model=None, version=None):
     """A gen whose --out lies in a version folder of a Producer root, as the views and texture briefs give it."""
     path = fake_codex.install(tmp_path / "bin")
     root = tmp_path / "production"
@@ -204,7 +204,7 @@ def gen_in_version(tmp_path, model=None):
     (tmp_path / "front.md").write_text(REQUEST, encoding="utf-8")
     env = {**os.environ, "FAKE_CODEX_LOG": str(tmp_path / "calls.jsonl"), "PATH": path,
            "FAKE_CODEX_PID_FILE": str(root / "pids/codex_image/hut.pid"), "CODEX_HOME": str(tmp_path / "codex-home"),
-           **({"FAKE_CODEX_MODEL": model} if model else {})}
+           **({"FAKE_CODEX_MODEL": model} if model else {}), **({"FAKE_CODEX_VERSION": version} if version else {})}
     env.pop("PRODUCER_ROOT", None)
     p = subprocess.run([sys.executable, str(GEN), "--model", "gpt-6-astra", "--reasoning", "medium", "--pid-file",
                         str(root / "pids/codex_image/hut.pid"), "--prompt", str(tmp_path / "front.md"),
@@ -223,13 +223,30 @@ def test_the_ledger_and_the_version_inputs_keep_the_requested_and_the_actual_ima
     assert inp == {"profile": "786cfc66bdd2", "image_model_requested": "gpt-6-astra",
                    "image_model_actual": "gpt-6-astra-2026-11"}
     assert [l.split(" · ", 2)[2] for l in led] == [
-        "hut · views_front v2 · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế gpt-6-astra-2026-11"]
+        "hut · views_front v2 · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế gpt-6-astra-2026-11"
+        " · codex-cli 0.164.0"]
 
 
 def test_without_a_model_line_from_codex_the_actual_model_is_no_number_never_the_requested_one(tmp_path):
     rec, inp, led = gen_in_version(tmp_path)
     assert (rec["model_actual"], inp["image_model_actual"]) == ("không có số", "không có số")
-    assert led[0].endswith(" · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế không có số")
+    assert led[0].endswith(" · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế không có số · codex-cli 0.164.0")
+
+
+def test_each_gen_keeps_the_codex_cli_version_in_its_record_and_the_ledger_d30_19(tmp_path):
+    """codex-cli changes flags between versions (0.164.0 dropped --full-auto): a gen that broke after an upgrade must
+    show which version made it."""
+    rec, inp, led = gen_in_version(tmp_path, version="codex-cli 0.171.2")
+    assert (rec["codex_cli"], led[0].rsplit(" · ", 1)[1]) == ("0.171.2", "codex-cli 0.171.2")
+    assert "codex_cli" not in inp
+
+
+def test_every_flag_of_the_gen_command_is_one_that_preflight_checks_in_codex_exec_help(gen):
+    """P preflight checks gen_image_codex.FLAGS against `codex exec --help`; a flag outside that list would pass
+    preflight and still fail every gen on a codex-cli without it."""
+    import gen_image_codex
+    argv = gen()["calls"][0]["argv"]
+    assert sorted({x.split("=", 1)[0] for x in argv if x.startswith("-") and x != "-"}) == sorted(gen_image_codex.FLAGS)
 
 
 def test_a_broken_status_json_only_warns_because_the_image_is_already_paid_for(tmp_path):

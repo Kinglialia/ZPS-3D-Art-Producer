@@ -35,6 +35,16 @@ def blender() -> dict | None:
     return {"path": exe, "version": m.group(1)} if rc == 0 and m else None
 
 
+def codex_cli(path: str | None) -> dict | None:
+    """D30.19: the codex-cli version and the `codex exec` flags of gen_image_codex.FLAGS that its help does not list.
+    A missing flag makes every gen exit 2, so it turns codex_image off like a missing codex."""
+    if path is None:
+        return None
+    import gen_image_codex
+    _, help_text = run([path, "exec", "--help"], 60)
+    return {"version": gen_image_codex.cli_version(), "missing_flags": gen_image_codex.missing_flags(help_text)}
+
+
 def env_file() -> str:
     from check_profile import load_yaml
     try:
@@ -92,13 +102,17 @@ def run_preflight(a):
     ROOT.mkdir(parents=True, exist_ok=True)
     b, ef = blender(), env_file()
     codex = shutil.which("codex")
+    cli = codex_cli(codex)
     k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
-    feats = {"blender": b is not None, "codex_image": codex is not None, "meshy": has_meshy_key(ef)}
+    feats = {"blender": b is not None, "codex_image": cli is not None and not cli["missing_flags"], "meshy": has_meshy_key(ef)}
     gap = settings_gap(b)
-    write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "env_file": ef, "kit": k}
+    write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "codex_cli": cli, "env_file": ef, "kit": k}
                                  | ({"settings": gap} if gap else {}), ensure_ascii=False, indent=2))
     on, down = [f for f, v in feats.items() if v], [f for f, v in feats.items() if not v]
     parts = ([f"bật {', '.join(on)}"] if on else []) + ([f"tắt {', '.join(down)}"] if down else [])
+    if cli and cli["missing_flags"]:
+        parts.append(f"codex-cli {cli['version']} thiếu flag {', '.join(cli['missing_flags'])} của `codex exec` "
+                     "→ cài codex-cli đã test (0.164.0) rồi chạy lại `preflight`")
     parts.append(f"kit {k['overall']}" if "overall" in k else "không có kit preflight.py")
     if gap and (gap["missing"]["allow"] or gap["missing"]["hooks"]):
         lack = ([f"{len(gap['missing']['allow'])} allow rule"] if gap["missing"]["allow"] else []) + [
