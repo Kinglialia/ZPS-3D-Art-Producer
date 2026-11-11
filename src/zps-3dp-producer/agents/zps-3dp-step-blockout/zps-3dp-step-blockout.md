@@ -57,6 +57,8 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 
 ## Quy tắc
 
+- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`) (D33.2).
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu concept, hoặc thiếu `<id>.layout.md` khi `has_map: true`: `STATUS: NEEDS_CONTEXT`. Vùng không có mã vật liệu: báo, không đoán mã.
 - Mô tả không có phần khuất hoặc kích thước: tự quyết theo quy tắc mặc định của dự án (`hidden_side_rules`), ghi từng chỗ vào "Blockout tự quyết".
 - Kích thước trong MAP-LAYOUT hoặc `size_m` có vấn đề: chỉ báo trong `ISSUES`, không sửa (D3.2).

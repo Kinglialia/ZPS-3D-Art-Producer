@@ -49,6 +49,8 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P`) khi block
 
 ## Quy tắc
 
+- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`) (D33.2).
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
 - Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief, theo quy tắc của file agent blockout (chỉ bmesh, không trùng tên hàm chung). Chỉ thêm hàm: không sửa, không xóa hàm mà một version đã dùng (bản cũ dựng lại từ graph của nó). Ghi tên hàm mới và lý do vào `model.md`.
 - Không weld, không boolean. Không thêm `max_duplicate_verts` vào `spec.json` (D24.6).
