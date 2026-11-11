@@ -298,13 +298,11 @@ def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written
     assert {s: decision(s) for s in (
         "zps-3dp-step-model-codex/tools/self_build/assembly.py", "zps-3dp-step-blockout-codex/tools/self_build/assembly.py",
         "zps-3dp-step-blockout-codex/tools/self_build/param_fit.py",
-        "zps-3dp-step-blockout-codex/tools/self_build/apply_edit.py",
         "zps-3dp-step-model-codex/tools/self_build/gates.py", "zps-3dp-step-blockout-codex/tools/build_parts.py",
         "zps-3dp-step-blockout-codex/tools/custom_mesh.py")} == {
         "zps-3dp-step-model-codex/tools/self_build/assembly.py": None,
         "zps-3dp-step-blockout-codex/tools/self_build/assembly.py": None,
         "zps-3dp-step-blockout-codex/tools/self_build/param_fit.py": None,
-        "zps-3dp-step-blockout-codex/tools/self_build/apply_edit.py": None,
         "zps-3dp-step-model-codex/tools/self_build/gates.py": "allow",
         "zps-3dp-step-blockout-codex/tools/build_parts.py": "allow",
         "zps-3dp-step-blockout-codex/tools/custom_mesh.py": None}

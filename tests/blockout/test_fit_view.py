@@ -1,4 +1,4 @@
-"""fit_view.py finds a 3/4 concept camera on the -X side, where the kit fit_camera.py cannot look."""
+"""fit_view.py finds a 3/4 concept camera on the -X side (negative azimuth), left of the footprint."""
 import json
 import subprocess
 
@@ -39,15 +39,13 @@ def fitted(script, tmp_path, spec, *args):
     return r.returncode, json.loads(out.read_text(encoding="utf-8"))
 
 
-def test_a_concept_drawn_from_the_minus_x_side_gets_a_negative_azimuth_the_kit_cannot_return(tmp_path):
+def test_a_concept_drawn_from_the_minus_x_side_gets_a_negative_azimuth_and_the_left_side(tmp_path):
     spec = concept(tmp_path, 1.0, 0.6, True, -35, 20)
     rc, res = fitted("fit_view.py", tmp_path, spec, "--write-spec")
     cam = res["data"]["cameras"]["34"]
     assert rc == 0 and -40 <= cam["azimuth_deg"] <= -30 and 15 <= cam["elevation_deg"] <= 25, res["checks"]
     assert res["data"]["views"]["34"]["side"] == "left"
     assert json.loads(spec.read_text(encoding="utf-8"))["concept"]["cameras"]["34"] == cam
-    _, kit = fitted("self_build/fit_camera.py", tmp_path, spec)
-    assert kit["data"]["cameras"]["34"]["azimuth_deg"] >= -4
 
 
 def test_side_decides_a_square_footprint_that_looks_the_same_from_both_sides(tmp_path):

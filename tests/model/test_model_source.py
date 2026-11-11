@@ -24,7 +24,7 @@ OWN = {"setup_deps.sh", "check_inputs.py", "make_spec.py", "join_mesh.py", "unwr
 def test_source_lists_every_kit_file_in_tools_and_nothing_else():
     tools = [str(p.relative_to(AGENT)) for p in (AGENT / "tools").rglob("*")
              if p.is_file() and ".deps" not in p.parts and "__pycache__" not in p.parts and p.name not in OWN]
-    assert sorted(d for d, _, _ in COPIED) == sorted(tools + ["references/bpy_cookbook.md"])
+    assert sorted(d for d, _, _ in COPIED) == sorted(tools)
 
 
 @pytest.mark.parametrize("dst,src,digest", COPIED)

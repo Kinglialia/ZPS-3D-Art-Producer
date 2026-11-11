@@ -16,8 +16,8 @@ def sha(p):
 
 
 def test_source_lists_every_copied_file():
-    assert len(ROWS) == 12
-    assert {d for d, _, _ in ROWS} >= {"tools/self_build/graph.py", "tools/lib/bootstrap.py", "tools/render_blockout_views.py"}
+    assert len(ROWS) == 8
+    assert {d for d, _, _ in ROWS} >= {"tools/self_build/graph.py", "tools/lib/bootstrap.py"}
 
 
 @pytest.mark.parametrize("dst,src,digest", ROWS)

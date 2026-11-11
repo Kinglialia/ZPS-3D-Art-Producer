@@ -33,7 +33,7 @@ FILE = "zps-3dp-producer.rules"
 MAC_BLENDER = "/Applications/Blender.app/Contents/MacOS/Blender"
 PRODUCER = "zps-3dp-producer-codex"
 NETWORK_SCRIPTS = ("gen_api.py", "generate_image.py", "meshy_call.py", "gen_image_codex.py")
-AGENT_CODE = ("self_build/assembly.py", "self_build/param_fit.py", "self_build/apply_edit.py", "tools/custom_mesh.py")
+AGENT_CODE = ("self_build/assembly.py", "self_build/param_fit.py", "tools/custom_mesh.py")
 SPAWNERS = ("scripts/assemble.py",)
 
 

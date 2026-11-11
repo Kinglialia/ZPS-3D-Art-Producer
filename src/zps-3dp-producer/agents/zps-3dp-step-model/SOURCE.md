@@ -23,7 +23,6 @@ Không sửa file chép nguyên. `tests/model/test_model_source.py` so sha256 v�
 | `tools/asset_checks/export_check.py` | `zps-3d-artist/tools/asset_checks/export_check.py` | `e7adc725358772032cc89e4e83fdad0410d19bb27d5f52685ec3f10176157cf0` |
 | `tools/asset_checks/screen_tris_check.py` | `zps-3d-artist/tools/asset_checks/screen_tris_check.py` | `68f07c9ab1b6e82f99218125d7f637abd43eeaf004bbd1be5911be3bdd53eea0` |
 | `tools/asset_checks/gltf_validate.mjs` | `zps-3d-artist/tools/asset_checks/gltf_validate.mjs` | `3f0a411cc25b975b57a783a4353355c6cfdd51f30dac2e3b37a8d1c580024ab9` |
-| `references/bpy_cookbook.md` | `zps-3d-artist/references/bpy_cookbook.md` | `c42f45f4a6c12e34b3425b4619f13fb04b5b87f8d716be1c9d81f8766370abe3` |
 
 `unwrap.py` gọi `xatlas_unwrap()`, `set_uv_layer()`, `uv_occupancy()` của `bake.py`, không gọi `main()` (D24.4). `bake.py` import `optlib`, `optbpy`, `lib/` ngay đầu file, nên ba file đó đi cùng.
 
@@ -32,6 +31,7 @@ Không sửa file chép nguyên. `tests/model/test_model_source.py` so sha256 v�
 - `finalize.py`, `report.py`: chỉ `assemble.py` của Producer dùng (GĐ 4).
 - `asset_checks/render_rig.py`: `render_review.py` làm ảnh camera game và thumbnail; không ai đọc `sheet.png` của render_rig.
 - `self_build/apply_edit.py`, `fit_camera.py`, `param_fit.py`: worker model không dùng (xem spec notes GĐ 1, T6).
+- `references/bpy_cookbook.md`: không file agent nào trỏ tới.
 
 ## Rút từ kit (không chép nguyên)
 

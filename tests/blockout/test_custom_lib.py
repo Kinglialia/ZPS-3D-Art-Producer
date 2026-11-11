@@ -300,7 +300,7 @@ def test_param_fit_leaves_alone_the_params_that_feed_an_asset_function(tmp_path)
 
 
 def test_build_parts_refuses_a_kit_tool_other_than_assembly_or_param_fit(tmp_path):
-    r = subprocess.run([str(VPY if VPY.is_file() else "python3"), str(TOOLS / "build_parts.py"), "apply_edit"],
+    r = subprocess.run([str(VPY if VPY.is_file() else "python3"), str(TOOLS / "build_parts.py"), "gates"],
                        capture_output=True, text=True)
     assert (r.returncode, r.stdout) == (2, "[blockout/build_parts] error: first argument must be one of "
                                            "assembly, param_fit\n")

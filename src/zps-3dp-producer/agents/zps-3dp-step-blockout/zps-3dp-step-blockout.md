@@ -51,7 +51,6 @@ Brief ghi bản gốc và `TOP_FIX`. Chép `part_graph.json`, `parts_lib.py`, `s
   4. Fail: chép lại từ `V/work/edits/<F>/`, dựng lại, ghi lý do vào báo cáo. Không sửa `fixed_params`.
 - `structure`: đúng một finding.
 - `param`: mọi finding trong `TOP_FIX`. Giá trị ở `F` là phương án `a`. Dựng thêm 1–2 phương án (`b`, `c`): chép `F` sang `V/variants/<b|c>/`, đổi giá trị, dựng, chạy gate, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào `V/variants/<b|c>/review/`. Reviewer chọn phương án nào thì thư mục đó thành `final/`, nên mỗi phương án giữ JSON của chính nó. Ghi giá trị của từng phương án vào `blockout.md`.
-- Không dùng `apply_edit.py` của kit: nó gọi `assembly.py` qua Blender không có thư viện, và cần `diagnoses/`, `renders.json` mà Producer không sinh.
 - Sau đó chạy lại bước 7–8. Ghi `FIXED:` theo brief. Mục "Thay đổi so với version trước" của `blockout.md`: part nào, param nào đổi, vì sao.
 
 Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<k>/`. Không sửa `final/`.
@@ -72,4 +71,4 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
   - Không đặt tên trùng hàm của `T/custom_lib.py`. Không sửa `T/custom_lib.py`.
   - Chỉ thêm hàm. Không sửa, không xóa hàm mà một version đã dùng: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó. Cần dáng khác: thêm hàm tên mới.
   - Ghi tên từng hàm mới và lý do vào `blockout.md`. Reviewer đọc code này.
-- `fit_view.py`, `PY T/build_parts.py param_fit` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`. Không dùng `fit_camera.py` của kit: nó chỉ dò azimuth 0..90° và chọn theo IoU, nên chọn sai phía.
+- `fit_view.py`, `PY T/build_parts.py param_fit` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`.
