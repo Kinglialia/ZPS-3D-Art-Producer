@@ -295,6 +295,7 @@ Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên
 - `dispatch: foreground` (mặc định, pilot): giao subagent chế độ thường; song song thì giao nhiều agent trong cùng một lượt. `dispatch: background` (lô): giao chạy nền và một `P wait` duy nhất (file khóa).
 - `P next` hiện mỗi việc đang chạy một dòng (bước, version, vai trò, thời gian, nhịp tim gần nhất, hạn chót, trạng thái). `P stats` đếm kẹt, nudge, giao lại. Trang duyệt gắn nhãn "kẹt".
 - Người dùng thoát bằng Esc rồi `P retry`; trạng thái không mất.
+- Bản đã làm (G4): Bash timeout default 600000, max 3600000 (`env` của snippet); `P stall <id> [--agent-id]`, `P wait`, `P on-stop`; `usual_min` trong `pipeline.toml`; Meshy thoát 5 `pending`, `--resume`. Chi tiết: `decisions.md` D33 mục "Đã làm ở G4".
 
 ## 7. Vòng sửa (D11, D21.1, D21.4, bằng script)
 

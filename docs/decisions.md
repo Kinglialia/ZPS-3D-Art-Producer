@@ -520,6 +520,14 @@ Kết quả mục 1: 5 lần đứng im, 4h13m trên 5h58m không làm gì. Mỗ
 22. `P ingest` chạy được khi không có `--tokens` và `--duration-ms`. Producer không bao giờ chờ các số này. Script lấy token và thời lượng của lần giao đó từ transcript của subagent: thư mục `subagents/` cạnh transcript chính ghi trong `production/session.json`, tìm theo agent id, hoặc theo brief mà prompt nêu. Script chỉ đếm message trong khoảng từ lúc giao tới lúc ingest, mỗi message một lần. Đọc lỗi thì ghi "không có số". `P stats` sau đó đọc lại các số còn thiếu (chỉ in, không ghi).
 23. Quy tắc trong `SKILL.md`: subagent trả về thì ingest và giao việc tiếp trong cùng lượt. Không bao giờ kết thúc lượt để chờ một thông báo khi không có việc gì khác đang chạy.
 
+**Đã làm ở G4 (khác hoặc thêm so với các mục trên)**
+
+- Mục 4: Claude Code 2.1.318 đọc `BASH_DEFAULT_TIMEOUT_MS` (mặc định 120000) và `BASH_MAX_TIMEOUT_MS` (mặc định 600000). D30.20 giữ 900 giây mỗi lần gọi Codex, mâu thuẫn với "10 phút". Chọn: snippet đặt default 600000 và max 3600000; worker và Producer truyền `timeout: 3600000` cho lệnh dài; `gen_image_codex.py --wall-s 3300`; Blender của `assemble.py` 900 giây mỗi lần. Chữ "10 phút" ở mục 4 và `producer.md` chỉ đúng cho lệnh thường.
+- Mục 5: `meshy_call.py` thoát 5 (`pending`) sau `--timeout 480`; `--resume`; `blocked_total` sau `--total-s 1800`.
+- Mục 6: agent bị cắt ở `maxTurns` không ghi được BLOCKED. `P on-stop` ghi `no_report`, rồi quy tắc kẹt xử lý (nudge resume agent đó trước).
+- Mục 10–11: `usual_min` mỗi bước trong `pipeline.toml`. `P stall <id> [--agent-id]` chọn bậc; `status.json` có `stalls`, `stalled_from`; lần giao bị thay có `ended`; `P retry` giao lại sau `waiting_human` vì kẹt.
+- Mục 14: `P approvals set dispatch <foreground|background>`.
+
 - **Không làm:** để worker tự chạy vòng lặp shell canh file; đặt nhịp tim chỉ theo đồng hồ.
 
 ## D34 — Skill chạy cho mọi object, không lệch về một loại (2026-11-11, gộp D33 cũ)
