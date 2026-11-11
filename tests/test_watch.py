@@ -22,3 +22,13 @@ def test_every_worker_and_reviewer_role_file_forbids_background_commands_and_wri
         text = f.read_text(encoding="utf-8")
         assert "Không chạy lệnh nền" in text and "(D33.2)" in text, f.name
         assert "Ghi `<report>` là việc cuối cùng trước khi trả kết quả" in text and "(D33.8)" in text, f.name
+
+
+def test_every_agent_file_caps_its_turns_so_a_looping_agent_stops_instead_of_running_on_d33_6():
+    """`maxTurns` is an agent frontmatter key of Claude Code 2.1.318 ("Maximum number of agentic turns (API
+    round-trips) before stopping"). Run 5 used 45 turns for a blockout worker and 12 for its reviewer, so the caps are
+    about 8x those: a cap a normal run hits would stop good work. An agent cut by the cap writes no report; P on-stop
+    records that and the stall rule takes over (D33.9, D33.11)."""
+    import build
+    caps = {f.stem: build.frontmatter(f.read_text(encoding="utf-8")).get("maxTurns") for f in ROLES}
+    assert caps == {n: ("400" if n.startswith("zps-3dp-step") else "100") for n in caps}
