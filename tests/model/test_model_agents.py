@@ -90,7 +90,7 @@ def test_worker_points_only_at_references_and_tools_that_exist():
 def test_every_flag_the_worker_passes_is_one_its_tool_accepts():
     _, body = front(WORKER)
     calls = re.findall(r"`(?:PY|BL) T/([\w/<>.-]+\.py)([^`]*)`", body)
-    assert len(calls) == 12
+    assert len(calls) == 13  # 12 model tools + the blockout custom_mesh.py (D32.2)
     vpy = AGENT / "tools/.deps/venv/bin/python"
     for script, args in calls:
         flags = set(re.findall(r"(--[a-z][a-z-]*)", args))

@@ -11,7 +11,7 @@ Nguồn kỹ năng: ZPS Art Assets Kit v0.10.4, commit `905dc93` (zps-3d-artist,
 
 Blockout dựng khối hình học **để đo** cho từng công trình. Blockout là nguồn hình học duy nhất cho Concept Views và 3D Artist. Sau khi duyệt, `sources.json` là nguồn duy nhất cho số hình học ở mọi bước sau (D22.13).
 
-**Dùng cho:** công trình, props cứng, cây và đá low-poly (dùng part `custom`). Part `custom` gọi hàm chung trong `custom_lib.py` của skill, hoặc hàm riêng của asset trong `production/assets/<id>/custom_parts.py` (D27.13, D32). Cần hàm mới thì Blockout tự viết vào file của asset; không cần anh duyệt. Blockout không sửa thư viện chung.
+**Dùng cho:** công trình, props cứng, cây và đá low-poly (dùng part `custom`). Part `custom` gọi hàm chung trong `custom_lib.py` của skill, hoặc hàm riêng của asset trong `production/assets/<id>/custom_parts.py` (D27.13, D32). Hàm của asset là Python thuần, chỉ `math`; `custom_mesh.py` chạy nó ngoài Blender và ghi lưới JSON, Blender chỉ dựng từ JSON (D32.2). Cần hàm mới thì Blockout tự viết vào file của asset; không cần anh duyệt. Blockout không sửa thư viện chung.
 **Không dùng cho:** nhân vật, sinh vật (D9). Nếu gặp loại này, hoặc dáng quá phức tạp so với primitive, Blockout báo Producer.
 
 | Làm | Không làm |

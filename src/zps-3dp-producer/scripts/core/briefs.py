@@ -115,7 +115,8 @@ def counts_line(st, step) -> list[str]:
 
 
 def builds_parts(step) -> bool:
-    """D32: a step whose output holds parts_lib.py builds a part graph, so it may use the asset's own functions."""
+    """D32: a step whose output holds parts_lib.py builds a part graph, so it may use the asset's own functions, and
+    its reviewer reads them."""
     return "final/parts_lib.py" in step.get("outputs", [])
 
 
@@ -330,6 +331,8 @@ def review_brief(cfg, st, step, n) -> str:
         f"`work/` của v{n}." if sheet else
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
         f"- Báo cáo tự check của worker: `{rel(d / 'worker-out.md')}` — tham khảo, không tin thay bằng chứng.",
+        *([f"- Hàm `custom` riêng của asset (code, đọc như bằng chứng; nhãn `custom_parts.py`): `{rel(cp)}`."]
+          if builds_parts(step) and (cp := a / "custom_parts.py").is_file() else []),
         f"- Theo: `{rel(a / 'rubric.md')}` mục `## {sid}`, `{rel(a / 'brief.md')}`, mục \"Hiện hành\" trong `{rel(a / 'feedback.md')}`.",
         *([f"- Concept đã duyệt để đối chiếu, trong `{st['concept_dir']}`: chỉ "
            + ", ".join(f"`{x}`" for x in concept_files(st, step, review=True)) + "."] if st.get("concept_dir") else []),

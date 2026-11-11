@@ -42,6 +42,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 - `P preflight` và lệnh `command` của bước `assemble` chạy ngoài sandbox qua rule. Các lệnh khác chạy trong sandbox.
 - `meshy_call.py` và `gen_image_codex.py` cần mạng. Xin người dùng duyệt từng lần chạy. Rule không bao giờ cho phép hai script này.
 - `self_build/assembly.py`, `param_fit.py`, `apply_edit.py` chạy `parts_lib.py` do agent viết. Rule không cho phép ba script này. Lệnh Blender của chúng (part `custom`) chạy ngoài sandbox thì xin người dùng duyệt từng lần.
+- `build_parts.py` chỉ chạy `custom_lib.py` và dựng lưới từ JSON bằng `mesh_from_json.py`; không chạy `custom_parts.py` do agent viết (D32.2). Rule cho phép script này như trước `3a4f64b`. `custom_mesh.py` chạy `custom_parts.py` do agent viết bằng Python của tool, trong sandbox; chạy trong Blender thì script tự dừng. Rule không bao giờ cho phép `custom_mesh.py`.
 
 ## Phiên mới
 

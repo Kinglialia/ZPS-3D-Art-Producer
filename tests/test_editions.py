@@ -283,7 +283,8 @@ def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_option
 def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written_code(codex_project, dist):
     """graph.py loads `<work>/parts_lib.py`, which the agent writes; outside the sandbox that code would run unchecked.
     These commands still run, but only after the user approves each one. build_parts.py is allowed again (D32): Blender
-    builds only the mesh JSON that pure Python made from custom_parts.py, never the agent's code itself."""
+    builds only the mesh JSON that pure Python made from custom_parts.py, never the agent's code itself.
+    custom_mesh.py runs custom_parts.py, so it is agent code and never matches."""
     r = rules(codex_project, dist)
     assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
     preview = r.stdout.split("Preview only: ", 1)[1].splitlines()[0]
@@ -298,13 +299,15 @@ def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written
         "zps-3dp-step-model-codex/tools/self_build/assembly.py", "zps-3dp-step-blockout-codex/tools/self_build/assembly.py",
         "zps-3dp-step-blockout-codex/tools/self_build/param_fit.py",
         "zps-3dp-step-blockout-codex/tools/self_build/apply_edit.py",
-        "zps-3dp-step-model-codex/tools/self_build/gates.py", "zps-3dp-step-blockout-codex/tools/build_parts.py")} == {
+        "zps-3dp-step-model-codex/tools/self_build/gates.py", "zps-3dp-step-blockout-codex/tools/build_parts.py",
+        "zps-3dp-step-blockout-codex/tools/custom_mesh.py")} == {
         "zps-3dp-step-model-codex/tools/self_build/assembly.py": None,
         "zps-3dp-step-blockout-codex/tools/self_build/assembly.py": None,
         "zps-3dp-step-blockout-codex/tools/self_build/param_fit.py": None,
         "zps-3dp-step-blockout-codex/tools/self_build/apply_edit.py": None,
         "zps-3dp-step-model-codex/tools/self_build/gates.py": "allow",
-        "zps-3dp-step-blockout-codex/tools/build_parts.py": "allow"}
+        "zps-3dp-step-blockout-codex/tools/build_parts.py": "allow",
+        "zps-3dp-step-blockout-codex/tools/custom_mesh.py": None}
 
 
 def test_the_codex_rule_never_allows_the_codex_exec_image_call_because_each_one_spends_the_users_codex_usage(

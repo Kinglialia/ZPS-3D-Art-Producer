@@ -26,13 +26,14 @@ production/                     # trong project Claude Code; chỉ script và su
     status.json                 # chỉ script ghi
     brief.md · rubric.md · feedback.md
     feedback/<step>-vN-<k>/     # một lần gửi có khoanh: regions.json, ảnh đã khoanh <tên ảnh>.png
-    custom_parts.py             # D32: hàm `custom` riêng của asset, worker blockout/model viết (dòng CUSTOM_PARTS: của brief); D29 xóa
+    custom_parts.py             # D32: hàm `custom` riêng của asset (Python thuần, chỉ math), worker blockout/model viết (dòng CUSTOM_PARTS: của brief); D29 giữ (D32.3)
     purge-pending.json          # D29: lệnh xóa sau DUYỆT 2 của người dùng: {asset, armed, assemble, session, bytes, zip, delete[], thumbs[]}
     purge-manifest.json         # D29: đã xóa gì: {asset, at, source, by, assemble, freed_bytes, zip, deleted[], thumbnails[]}
     <step>/vN/
       brief-worker.md · worker-out.md · brief-review.md · review-out.md · findings.json
       review/sheet.png, sheet.json (sheet review, D31.1; sheet-<b|c>.png cho phương án param)
       final/ · work/ · review/evidence-<k>/
+      work/custom_mesh/<part>.json  # D32.2: lưới của hàm trong custom_parts.py, custom_mesh.py ghi; Blender dựng từ đây
   archive/<id>/
 ```
 

@@ -17,7 +17,7 @@ GUARDED = [
     "scripts/meshy_call.py", "scripts/producer.py", "scripts/review_sheet.py",
     *(f"agents/zps-3dp-step-blockout/tools/{n}.py" for n in (
         "build_parts", "check_base", "check_fix", "check_inputs", "check_layout", "check_markers", "check_materials",
-        "check_schema", "check_support", "concept_mask", "fit_view", "render_review")),
+        "check_schema", "check_support", "concept_mask", "custom_mesh", "fit_view", "render_review")),
     *(f"agents/zps-3dp-step-model/tools/{n}.py" for n in (
         "check_detail", "check_inputs", "check_mesh", "check_uv_edge", "join_mesh", "make_spec", "render_review",
         "unwrap")),
@@ -31,7 +31,7 @@ READ_ONLY = {"scripts/check_card.py", "scripts/check_profile.py"}
 # Imported, not run: the guard belongs to the tool that imports them. settings_merge runs from install.py before
 # `producer.py init` makes the marker.
 LIBRARIES = {"scripts/root_guard.py", "scripts/settings_merge.py", "agents/zps-3dp-step-blockout/tools/custom_lib.py",
-             "agents/zps-3dp-step-blockout/tools/project_parts.py",
+             "agents/zps-3dp-step-blockout/tools/project_parts.py", "agents/zps-3dp-step-blockout/tools/mesh_from_json.py",
              "agents/zps-3dp-step-model/tools/lib/cli.py", "agents/zps-3dp-step-model/tools/lib/glbread.py",
              "agents/zps-3dp-step-texture/tools/lib/tex.py"}
 
