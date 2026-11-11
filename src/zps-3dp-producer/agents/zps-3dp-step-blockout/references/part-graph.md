@@ -27,7 +27,7 @@
 | `attach` | có | `null` chỉ cho part đầu tiên (gốc) |
 | `material` | có | mã trong `sources.json` `materials` |
 | `role` | có | `mass` (khối chính) hoặc `marker` (mốc đo, nhô ≥ 2 cm) |
-| `tag` | không | `base` (nền), `roof` (mái) |
+| `tag` | không | `base` (nền), `roof` (mái), hoặc một khóa `counts` của thẻ (D30.6: số part có tag đó là số đếm) |
 | `segments` | không | 8–24 (số hoặc tên param nguyên) |
 | `axis` | không | `X`, `Y`, `Z` (cylinder, mặc định Z) |
 | `rotation_deg` | không | 0, 90, 180, 270 |

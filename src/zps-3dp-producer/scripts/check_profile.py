@@ -101,6 +101,12 @@ def check(path: Path, presets: Path = PRESETS) -> list[str]:
         for f in ("max_materials", "max_color_clusters"):
             if f in ts and not is_pos_int(ts[f]):
                 bad(f"texture_simple.{f}", "số nguyên > 0")
+    if p.get("counts_keys") is not None:
+        ck = p["counts_keys"]
+        if not (isinstance(ck, dict) and all(isinstance(k, str) and re.fullmatch(r"[a-z][a-z0-9_]*", k) and is_str(v)
+                                             for k, v in ck.items())):
+            bad("counts_keys", "map {khóa: nghĩa}, khóa là tên param (chữ thường, số, _; bắt đầu bằng chữ), nghĩa là "
+                "chuỗi")
     for k in ("detail_examples", "overrides"):
         if k in p and not isinstance(p[k], dict):
             bad(k, "map")

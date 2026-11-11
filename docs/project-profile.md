@@ -59,11 +59,17 @@ texture_simple:                              # ngưỡng D10
   max_materials: 2
   max_color_clusters: 6
 overrides: {}                                # chỉ khi cần đổi số của preset
+counts_keys:                                 # tùy chọn (D34.3): khóa `counts` mà thẻ asset của dự án dùng, kèm nghĩa
+  doors: số cửa ra vào                       # ví dụ; mỗi dự án tự đặt khóa theo vật của mình
+  trunks: số thân cây
+# shape_hints: ...                           # tùy chọn (D34.3): từ vựng dạng khối của dự án; chưa có code đọc
 ```
 
 - Mỗi giá trị có thể kèm `_source`: "anh chốt <ngày>", "từ pilot <mã>", "mặc định".
 - **Không có** `approvals` và `review_board`: hai mục này nằm trong `production/policy.yaml` (D21.3, `docs/producer.md` §4). Đổi người duyệt không phải đổi cách dựng asset, nên không được làm đổi hash profile.
 - **Hash profile** (D21.3): script tính trên nội dung đã chuẩn hóa, bỏ `paths` và mọi khóa bắt đầu bằng `_`. Script ghi hash vào brief; agent chép vào báo cáo (`PROFILE_HASH`); `ingest` so hai số. Khi profile đổi, script biết asset nào làm theo bản cũ (`docs/producer.md` §11).
+- **`counts_keys`** (D30.6, D32.5, D34.3): danh sách khóa `counts` của dự án, mỗi khóa một dòng nghĩa. AD hoặc anh duyệt. Skill không có bảng khóa cố định. `check_profile.py` kiểm: khóa là tên param (chữ thường, số, `_`, bắt đầu bằng chữ), nghĩa là chuỗi. Không ghi = dự án chưa có khóa nào: `check_card.py --profile` cảnh báo mọi khóa của thẻ. Khóa của thẻ ngoài danh sách chỉ bị cảnh báo; gate vẫn so số đó.
+- **`shape_hints`** (D34.3): từ vựng dạng khối của dự án (ví dụ tên các kiểu mái, kiểu tán cây), khi dự án cần. Chỉ là tài liệu cho agent và AD; script không đọc trường này.
 - **`pilot_asset: null`** (D21.7): chỉ đăng ký từng asset một (`docs/producer.md` §9). Các phép so với pilot (tris/m², dE vật liệu so với pilot) ghi `not_checked`. Khi pilot được duyệt, Project Setup đề xuất ghi mã vào đây.
 
 ## 4. Thẻ asset
@@ -84,11 +90,13 @@ symmetric: {left_right: true, front_back: true}
 size_m: null                   # {w, d, h} (mét); bắt buộc khi has_map: false; check_card.py kiểm
 hidden_sides: {back: ..., left: ..., right: ..., top: ...}   # bắt buộc đủ 4 mặt; chưa biết thì ghi đúng chữ "chưa biết" (D27.6)
 real_texture_only_notes: [...]
+counts: {doors: 1}             # tùy chọn; khóa lấy từ counts_keys của profile (D30.6, D34.3)
 ```
 
 - **Độ phân giải texture:** làm theo thẻ asset. Nếu thẻ không ghi, mặc định 2048. Muốn đổi cho một asset cụ thể, anh dùng một agent khác cập nhật sau. Bộ skill không tự thu nhỏ hay phóng to texture.
 - Thẻ asset thắng profile và preset.
 - **Quyết định style mà tool phải đọc có trường riêng** (D27.10), không nằm trong ghi chú chữ tự do. Bo cạnh chỉ đọc từ `bevel` của thẻ và `style.bevel` của profile. Tool không suy ra bevel từ ghi chú. `check_card.py` chỉ cảnh báo khi một ghi chú có "bo cạnh" mà trường `bevel` trống. Run 4: ghi chú "cạnh bo toon" trong thẻ không tới được spec của model (bevel mặc định tắt), mất một vòng model.
+- **`counts`** (D30.6, D32.5): mỗi khóa là một số nguyên ≥ 0. Gate blockout và model so số đó với part graph: param cùng tên trong `fixed_params`, hoặc số part có `tag: <khóa>` (không có part nào = 0). Sai thì gate fail và nêu param hoặc tag cần có. Brief dặn agent đặt tên param và tag theo khóa.
 - **Ảnh concept** (D27.6): `concept_albedo.png` và `concept_shadow.png` trùng khung tuyệt đối, nền phẳng một màu, cạnh dài ≥ 1024 px. `check_card.py` kiểm.
 
 ## 5. Skill Project Setup

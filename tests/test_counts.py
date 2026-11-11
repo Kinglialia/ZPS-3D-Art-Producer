@@ -1,6 +1,8 @@
-"""D30.6: each card `counts` key names a fixed param of the part graph, and the gate compares the two numbers.
-A count written as a literal in a part's args, or kept in a param the fix round may change, is how a wrong number of
-rows reached the reviewer, so only a fixed param of the same name passes."""
+"""D30.6, D32.5, D34.3: each card `counts` key is carried into the part graph by a fixed param of the same name, or by
+that many parts with `tag: <key>`, and the gate compares the numbers. A count written as a literal in a part's args, or
+kept in a param the fix round may change, is how a wrong number of parts reached the reviewer, so neither passes.
+The skill has no list of keys: the project's profile names them (`counts_keys`), so every key here is one this test
+makes up for a synthetic table, and check_card only warns about a key outside the profile's list."""
 import json
 import subprocess
 import sys
@@ -17,15 +19,19 @@ import check_counts
 from core import loop
 from core.state import load_st, save_st
 
-CARD = {"type": "building", "counts": {"body_board_rows": 3, "doors": 1}}
+# A synthetic project vocabulary: slats of a table top, and its legs.
+KEYS = {"top_slats": "số thanh mặt bàn", "legs": "số chân bàn"}
+CARD = {"type": "prop", "counts": {"top_slats": 3, "legs": 4}}
+HOW = "mỗi khóa: param cùng tên trong fixed_params, hoặc đúng N part có tag: <khóa>"
 
 
-def graph(rows=3, fixed=("base_w", "body_board_rows", "doors"), **params):
-    """A synthetic shed: a grooved wall box whose row count is the param body_board_rows, and one door."""
-    return {"params": {"base_w": 2.0, "body_board_rows": rows, "doors": 1, **params}, "fixed_params": list(fixed),
-            "parts": [{"name": "walls", "primitive": "custom", "fn": "grooved_box",
-                       "args": ["base_w", "base_w", "base_w", 0.02, 0.01, "body_board_rows"]},
-                      {"name": "door", "primitive": "box", "dims": ["base_w", "base_w", "base_w"]}]}
+def graph(slats=3, legs=4, fixed=("top_w", "top_slats")):
+    """A synthetic table: a grooved top whose slat count is the param top_slats, and `legs` parts tagged legs."""
+    return {"params": {"top_w": 1.2, "top_slats": slats}, "fixed_params": list(fixed),
+            "parts": [{"name": "top", "primitive": "custom", "fn": "grooved_box",
+                       "args": ["top_w", "top_w", "top_w", 0.01, 0.005, "top_slats"]},
+                      *({"name": f"leg_{i}", "primitive": "box", "dims": ["top_w"] * 3, "tag": "legs"}
+                        for i in range(legs))]}
 
 
 def counts_of(tmp_path, card, g):
@@ -38,31 +44,44 @@ def counts_of(tmp_path, card, g):
     return r["overall"], {c["check"]: (c["status"], c["value"]) for c in r["checks"]}
 
 
-def test_every_count_passes_when_a_fixed_param_of_the_same_name_holds_the_card_number(tmp_path):
-    assert counts_of(tmp_path, CARD, graph()) == ("pass", {"counts.body_board_rows": ("pass", []),
-                                                           "counts.doors": ("pass", [])})
+def test_a_count_passes_through_a_fixed_param_or_through_tagged_parts(tmp_path):
+    assert counts_of(tmp_path, CARD, graph()) == ("pass", {"counts.top_slats": ("pass", []),
+                                                           "counts.legs": ("pass", [])})
 
 
-@pytest.mark.parametrize("g, why", [
-    (graph(rows=2), "param body_board_rows = 2, thẻ body_board_rows = 3"),
-    (graph(fixed=("base_w", "doors")), "param body_board_rows không có trong fixed_params"),
-])
-def test_a_count_fails_when_its_param_differs_or_a_fix_round_may_change_it(tmp_path, g, why):
-    assert counts_of(tmp_path, CARD, g)[1]["counts.body_board_rows"] == ("fail", [why])
+def test_three_tagged_parts_carry_a_count_of_three_and_two_do_not(tmp_path):
+    card = {"counts": {"legs": 3}}
+    assert counts_of(tmp_path, card, graph(legs=3))[1] == {"counts.legs": ("pass", [])}
+    assert counts_of(tmp_path, card, graph(legs=2))[1] == {"counts.legs": ("fail", [
+        "2 part có tag: legs, thẻ legs = 3: đặt param legs = 3 vào params và fixed_params, hoặc gắn tag: legs cho đúng "
+        "3 part"])}
 
 
-def test_a_card_key_with_no_param_of_that_name_fails_and_says_what_to_add(tmp_path):
-    """A row count written as the literal 3 in the args leaves nothing for the gate to compare: that is a fail, not a
-    skip, so the count cannot slip through."""
-    g = graph()
-    del g["params"]["body_board_rows"]
-    g["fixed_params"].remove("body_board_rows")
+def test_a_fixed_param_that_differs_from_the_card_fails(tmp_path):
+    assert counts_of(tmp_path, CARD, graph(slats=2))[1]["counts.top_slats"] == (
+        "fail", ["param top_slats = 2, thẻ top_slats = 3"])
+
+
+def test_a_param_outside_fixed_params_does_not_carry_the_count_because_a_fix_round_may_change_it(tmp_path):
+    assert counts_of(tmp_path, CARD, graph(fixed=("top_w",)))[1]["counts.top_slats"] == ("fail", [
+        "0 part có tag: top_slats, thẻ top_slats = 3 (param top_slats có nhưng không nằm trong fixed_params): đặt "
+        "param top_slats = 3 vào params và fixed_params, hoặc gắn tag: top_slats cho đúng 3 part"])
+
+
+def test_a_count_written_as_a_literal_fails_and_says_both_ways_to_carry_it(tmp_path):
+    """A slat count written as the literal 3 in the args leaves nothing for the gate to compare: that is a fail, not
+    a skip, so the count cannot slip through."""
+    g = graph(fixed=("top_w",))
+    del g["params"]["top_slats"]
     g["parts"][0]["args"][-1] = 3
     assert counts_of(tmp_path, CARD, g) == ("fail", {
-        "counts.body_board_rows": ("fail", ["part graph không có param body_board_rows: đặt param body_board_rows = 3 "
-                                            "vào params và fixed_params, rồi truyền tên body_board_rows vào hàm dựng "
-                                            "số đó"]),
-        "counts.doors": ("pass", [])})
+        "counts.top_slats": ("fail", ["0 part có tag: top_slats, thẻ top_slats = 3: đặt param top_slats = 3 vào params "
+                                      "và fixed_params, hoặc gắn tag: top_slats cho đúng 3 part"]),
+        "counts.legs": ("pass", [])})
+
+
+def test_a_count_of_zero_passes_when_no_part_has_the_tag(tmp_path):
+    assert counts_of(tmp_path, {"counts": {"drawers": 0}}, graph())[1] == {"counts.drawers": ("pass", [])}
 
 
 def test_a_card_without_counts_writes_no_counts_json(tmp_path):
@@ -73,34 +92,54 @@ def test_a_card_without_counts_writes_no_counts_json(tmp_path):
         None, False)
 
 
-def test_the_brief_line_names_each_count_the_part_graph_must_carry():
-    assert check_counts.lines(CARD) == ["COUNTS: body_board_rows = 3; doors = 1", ""]
+def test_the_brief_line_names_each_count_and_how_the_part_graph_must_carry_it():
+    assert check_counts.lines(CARD) == [f"COUNTS: top_slats = 3; legs = 4 ({HOW})", ""]
 
 
-def card_cli(d):
-    r = subprocess.run([sys.executable, str(SCRIPTS / "check_card.py"), str(d)], capture_output=True, text=True)
+def card_cli(d, profile=None):
+    r = subprocess.run([sys.executable, str(SCRIPTS / "check_card.py"), str(d),
+                        *(["--profile", str(profile)] if profile else [])], capture_output=True, text=True)
     return r.returncode, r.stdout.splitlines()
 
 
-def test_a_card_with_the_six_keys_passes_check_card_without_a_warning(tmp_path):
-    counts = dict.fromkeys(check_counts.KEYS, 2)
-    assert card_cli(make_asset(tmp_path, card=mutated(counts=counts))) == (0, [])
+def profile_with(tmp_path, keys):
+    from test_intake import PROFILE
+    p = tmp_path / "PROJECT-PROFILE.yaml"
+    p.write_text(dump(PROFILE | ({"counts_keys": keys} if keys is not None else {})), encoding="utf-8")
+    return p
 
 
-@pytest.mark.parametrize("value", [{"doors": -1}, {"doors": "2"}, [2], {"doors": True}, {"chimneys": 2}])
-def test_a_counts_entry_outside_the_six_keys_or_not_a_whole_number_fails_check_card(tmp_path, value):
-    """The gate compares only the six keys; any other key would pass unchecked, so check_card refuses it."""
+def test_a_card_whose_keys_are_all_in_the_profile_counts_keys_passes_without_a_warning(tmp_path):
+    d = make_asset(tmp_path, card=mutated(counts=CARD["counts"]))
+    assert card_cli(d, profile_with(tmp_path, KEYS)) == (0, [])
+
+
+def test_a_card_key_outside_the_profile_counts_keys_is_a_warning_not_an_error(tmp_path):
+    """The key still goes to the gate; the warning tells the Concept Artist the project has not agreed on it."""
+    d = make_asset(tmp_path, card=mutated(counts={"legs": 4, "drawers": 2}))
+    assert card_cli(d, profile_with(tmp_path, KEYS)) == (0, [
+        "cảnh báo: thẻ: counts có khóa ngoài counts_keys của profile: drawers"])
+
+
+def test_a_profile_without_counts_keys_warns_about_every_card_key(tmp_path):
+    d = make_asset(tmp_path, card=mutated(counts={"legs": 4}))
+    assert card_cli(d, profile_with(tmp_path, None)) == (0, [
+        "cảnh báo: thẻ: counts có khóa ngoài counts_keys của profile: legs"])
+
+
+@pytest.mark.parametrize("value", [{"legs": -1}, {"legs": "2"}, [2], {"legs": True}, {"Legs": 2}, {"2legs": 1}])
+def test_a_counts_entry_that_is_not_a_param_name_and_a_whole_number_fails_check_card(tmp_path, value):
+    """The key becomes a param name and a tag in the part graph, so it must be a valid name."""
     from test_intake import messages
     assert messages(make_asset(tmp_path, card=mutated(counts=value))) == [
-        "thẻ: counts sai: cần map {khóa: số nguyên ≥ 0}, khóa là body_board_rows | lid_board_rows | doors | windows | "
-        "pillars | steps"]
+        "thẻ: counts sai: cần map {khóa: số nguyên ≥ 0}, khóa là tên param (chữ thường, số, _; bắt đầu bằng chữ)"]
 
 
 def counted_asset(flow, root):  # noqa: F811
     """The blockout-only flow, with a synthetic card that has counts as the asset's concept card."""
-    d = root / "concepts/_approved/shed"
+    d = root / "concepts/_approved/table"
     d.mkdir(parents=True)
-    (d / "asset-card.yaml").write_text(dump(mutated(asset="shed", views="none", counts=CARD["counts"])),
+    (d / "asset-card.yaml").write_text(dump(mutated(asset="table", views="none", counts=CARD["counts"])),
                                        encoding="utf-8")
     st = load_st(AID)
     st["concept_dir"] = str(d)
@@ -119,11 +158,13 @@ def worker_round(flow, g):  # noqa: F811
 
 def test_a_worker_that_never_ran_the_counts_check_still_goes_back_because_ingest_runs_it(flow):  # noqa: F811
     counted_asset(flow, flow.root)
-    out, said = worker_round(flow, graph(rows=2))
-    assert "COUNTS: body_board_rows = 3; doors = 1" in flow.text(out).splitlines()
+    out, said = worker_round(flow, graph(legs=3))
+    assert f"COUNTS: top_slats = 3; legs = 4 ({HOW})" in flow.text(out).splitlines()
     assert said.splitlines()[0] == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
     r = json.loads((flow.v(1) / "final/review/checks/counts.json").read_text(encoding="utf-8"))
-    assert (r["overall"], r["checks"][0]["value"]) == ("fail", ["param body_board_rows = 2, thẻ body_board_rows = 3"])
+    assert (r["overall"], r["checks"][1]["value"]) == ("fail", [
+        "3 part có tag: legs, thẻ legs = 4: đặt param legs = 4 vào params và fixed_params, hoặc gắn tag: legs cho đúng "
+        "4 part"])
     assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail counts.json" in flow.ledger()
 
 
@@ -132,7 +173,7 @@ def test_accepted_fail_for_counts_json_is_refused_because_it_is_a_hard_gate(flow
     assert "counts.json" in HARD_GATES
 
 
-def test_a_graph_with_every_count_as_a_fixed_param_goes_to_the_reviewer(flow):  # noqa: F811
+def test_a_graph_that_carries_every_count_goes_to_the_reviewer(flow):  # noqa: F811
     counted_asset(flow, flow.root)
     _, said = worker_round(flow, graph())
     assert json.loads(said.splitlines()[-1])["role"] == "reviewer"
@@ -142,5 +183,5 @@ def test_an_unreadable_part_graph_is_an_error_result_so_ingest_sends_it_back_ins
     final = tmp_path / "final"
     final.mkdir()
     (final / "part_graph.json").write_text("x", encoding="utf-8")
-    (tmp_path / "card.yaml").write_text("type: prop\ncounts: {doors: 1}\n", encoding="utf-8")
+    (tmp_path / "card.yaml").write_text("type: prop\ncounts: {legs: 1}\n", encoding="utf-8")
     assert check_counts.write(final, tmp_path / "card.yaml")["overall"] == "error"

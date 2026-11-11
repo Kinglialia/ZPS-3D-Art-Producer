@@ -397,6 +397,27 @@ def test_profile_style_bevel_takes_none_or_toon_so_the_project_default_reaches_3
     assert prof_errors(tmp_path, presets, p) == []
 
 
+COUNTS_WRONG = ("counts_keys sai: cần map {khóa: nghĩa}, khóa là tên param (chữ thường, số, _; bắt đầu bằng chữ), "
+                "nghĩa là chuỗi")
+
+
+@pytest.mark.parametrize("keys, expected", [
+    (None, []),
+    ({}, []),
+    ({"arches": "số vòm cổng", "branches": "số cành chính"}, []),
+    (["arches"], [COUNTS_WRONG]),
+    ({"Arches": "số vòm"}, [COUNTS_WRONG]),
+    ({"arches": ""}, [COUNTS_WRONG]),
+])
+def test_profile_counts_keys_is_optional_and_maps_each_project_key_to_its_meaning_d34_3(tmp_path, presets, keys,
+                                                                                        expected):
+    """The skill has no list of count keys: the project names its own, each with what it counts, so an AD can review
+    them. A key becomes a param name and a tag of the part graph, so it must be a valid name. A profile without the
+    list stays valid; check_card then warns about every card key."""
+    p = copy.deepcopy(PROFILE) | ({} if keys is None else {"counts_keys": keys})
+    assert prof_errors(tmp_path, presets, p) == expected
+
+
 def test_profile_that_is_not_a_map_or_not_yaml_gives_one_error(tmp_path, presets):
     f = tmp_path / "PROJECT-PROFILE.yaml"
     f.write_text("- a\n- b\n", encoding="utf-8")

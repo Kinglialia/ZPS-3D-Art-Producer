@@ -37,8 +37,8 @@ tris_max: null                 # null = theo hạng. Hoặc số nguyên
 bevel: null                    # null = theo profile. none | toon: bo cạnh riêng asset này
 views: full                    # không ghi = full. none (không gen view; mặt khuất theo hidden_sides) | back |
                                # full (back, left, right) | full_top (thêm top: chỉ khi mái có thiết kế riêng)
-counts: {}                     # tùy chọn. Số đếm gate so với part graph, chỉ 6 khóa: body_board_rows, lid_board_rows,
-                               # doors, windows, pillars, steps. Vd {doors: 1}. Part graph cần param cùng tên trong fixed_params
+counts: {}                     # tùy chọn. Số đếm gate so với part graph, vd {doors: 1}. Khóa lấy từ counts_keys trong
+                               # PROJECT-PROFILE.yaml của dự án; khóa khác thì check_card.py --profile cảnh báo
 scale_overrides:               # [] = dùng thước của profile. Ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
 symmetric: {left_right: true, front_back: true}   # bắt buộc

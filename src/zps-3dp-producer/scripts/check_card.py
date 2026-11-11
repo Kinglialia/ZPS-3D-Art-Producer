@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Kiểm thư mục `_approved/<id>/`: `check_card.py <dir> [--profile PROJECT-PROFILE.yaml]`.
-Mỗi lỗi một dòng, thoát 1 nếu có lỗi. Không có --profile thì không biết has_map: bỏ qua size_m bắt buộc và layout.md.
+Mỗi lỗi một dòng, thoát 1 nếu có lỗi. Không có --profile thì không biết has_map: bỏ qua size_m bắt buộc và layout.md;
+cũng không biết `counts_keys` của dự án: không cảnh báo khóa `counts` (D34.3).
 Cảnh báo in sau lỗi, mỗi dòng bắt đầu bằng "cảnh báo:", không đổi mã thoát."""
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import unicodedata
 from pathlib import Path
@@ -12,7 +14,6 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from check_counts import KEYS as COUNT_KEYS
 from check_profile import is_num, is_pos_int, is_str, load_yaml
 
 TYPES = ("building", "prop", "tree", "rock")
@@ -105,8 +106,8 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     if c.get("views") is not None and not (isinstance(c["views"], str) and c["views"] in VIEW_SETS):
         bad("views", f"'{c['views']}' ({' | '.join(VIEW_SETS)}; không ghi = {DEFAULT_VIEWS})")
     if c.get("counts") is not None and not (isinstance(c["counts"], dict) and all(
-            k in COUNT_KEYS and isinstance(v, int) and not isinstance(v, bool) and v >= 0 for k, v in c["counts"].items())):
-        bad("counts", f"cần map {{khóa: số nguyên ≥ 0}}, khóa là {' | '.join(COUNT_KEYS)}")
+            is_key(k) and isinstance(v, int) and not isinstance(v, bool) and v >= 0 for k, v in c["counts"].items())):
+        bad("counts", "cần map {khóa: số nguyên ≥ 0}, khóa là tên param (chữ thường, số, _; bắt đầu bằng chữ)")
     if c.get("bevel") is not None and c["bevel"] not in BEVELS:
         bad("bevel", f"'{c['bevel']}' (null | {' | '.join(BEVELS)})")
     for k in ("texture_res", "tris_max"):
@@ -149,7 +150,13 @@ def flat_background(f: Path) -> bool:
     return (np.abs(ring - np.median(ring, 0)).max(1) > BORDER_TOL).mean() <= BORDER_OFF_MAX
 
 
-def warnings(d: Path) -> list[str]:
+def is_key(k) -> bool:
+    """A `counts` key becomes a param name and a `tag` of the part graph (D30.6)."""
+    return isinstance(k, str) and re.fullmatch(r"[a-z][a-z0-9_]*", k) is not None
+
+
+def warnings(d: Path, counts_keys: dict | None = None) -> list[str]:
+    """counts_keys: the profile's `counts_keys` ({} when the profile has none); None when no profile was given."""
     out = []
     for name in IMAGES:
         try:
@@ -165,14 +172,19 @@ def warnings(d: Path) -> list[str]:
     if isinstance(notes, list) and c.get("bevel") is None and any(k in unicodedata.normalize("NFC", str(n)).lower() for n in notes for k in ("bo cạnh", "cạnh bo")):
         out.append("cảnh báo: thẻ: real_texture_only_notes có \"bo cạnh\" nhưng bevel trống; "
                    "ghi bevel: toon hoặc none (3D Artist chỉ đọc trường bevel)")
+    counts = c.get("counts") if isinstance(c, dict) else None
+    if counts_keys is not None and isinstance(counts, dict) and (extra := [k for k in counts if k not in counts_keys]):
+        out.append(f"cảnh báo: thẻ: counts có khóa ngoài counts_keys của profile: {', '.join(map(str, extra))}")
     return out
 
 
-def has_map_of(profile: Path) -> bool:
+def profile_of(profile: Path) -> tuple[bool, dict]:
+    """has_map and counts_keys ({} when absent) of the profile."""
     p = load_yaml(profile)
     if not isinstance(p, dict) or not isinstance(p.get("has_map"), bool):
         raise ValueError("thiếu has_map")
-    return p["has_map"]
+    keys = p.get("counts_keys") or {}
+    return p["has_map"], keys if isinstance(keys, dict) else {}
 
 
 def main():
@@ -180,16 +192,16 @@ def main():
     ap.add_argument("dir", type=Path)
     ap.add_argument("--profile", type=Path)
     a = ap.parse_args()
-    has_map = None
+    has_map, counts_keys = None, None
     if a.profile:
         try:
-            has_map = has_map_of(a.profile)
+            has_map, counts_keys = profile_of(a.profile)
         except (ValueError, FileNotFoundError):
             print(f"profile: không đọc được {a.profile}")
             sys.exit(1)
     d = a.dir.resolve()
     errs = check(d, has_map)
-    lines = [m for _, m in errs] + warnings(d)
+    lines = [m for _, m in errs] + warnings(d, counts_keys)
     if lines:
         print("\n".join(lines))
     if errs:

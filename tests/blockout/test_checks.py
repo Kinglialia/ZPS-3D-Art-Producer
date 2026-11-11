@@ -134,11 +134,19 @@ def test_schema_rejects_wrong_header_and_enums(tmp_path, run_check):
     g = hut()
     g["schema"], g["front"] = "blockout-0", "+Y"
     part(g, "door")["role"] = "detail"
-    part(g, "roof")["tag"] = "top"
+    part(g, "roof")["tag"] = "Roof"
     r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
     assert_fail(r)
     assert r.check("schema.header") == {"status": "fail", "value": ["front", "schema"]}
     assert r.check("schema.enums") == {"status": "fail", "value": ["door: role", "roof: tag"]}
+
+
+def test_schema_accepts_a_tag_named_after_a_counts_key(tmp_path, run_check):
+    """D30.6: a card count is carried by parts with `tag: <key>`, and the key is the project's word, not the skill's."""
+    g = hut()
+    part(g, "crate")["tag"] = "crates"
+    r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
+    assert r.check("schema.enums") == {"status": "pass", "value": []}
 
 
 # ---------------------------------------------------------------- check_materials
