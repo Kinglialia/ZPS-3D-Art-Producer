@@ -56,6 +56,8 @@ import sys
 import time
 from pathlib import Path
 
+import heartbeat
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core.state import ASSETS, ROOT, ledger, texture_res  # noqa: E402
@@ -123,8 +125,8 @@ def gen_api(args: list[str], ef: Path, timeout: int | None = None,
             texture_resolution: str | None = None) -> tuple[int | None, dict]:
     cmd = ([str(Path(__file__).resolve()), "_kit", texture_resolution] if texture_resolution else [str(GEN_API)])
     try:
-        r = subprocess.run([sys.executable, *cmd, *args], capture_output=True, text=True, env=child_env(ef),
-                           timeout=timeout)
+        r = heartbeat.run([sys.executable, *cmd, *args], tool="meshy gen_api", vd=heartbeat.vdir_of(*args), env=child_env(ef),
+                          timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, {"error": f"hết thời gian chờ {timeout} s"}
     text = scrub(r.stdout + r.stderr, secret(ef)).strip()
@@ -481,8 +483,8 @@ def paid_call(a, ef: Path, budget: Path, base: list[str]) -> tuple[int, dict, st
 
 def child(cmd: str, out: Path, ef: Path, timeout: int) -> tuple[int | None, dict]:
     try:
-        r = subprocess.run([sys.executable, str(Path(__file__).resolve()), cmd, "--out", str(out)],
-                           capture_output=True, text=True, env=child_env(ef), timeout=timeout)
+        r = heartbeat.run([sys.executable, str(Path(__file__).resolve()), cmd, "--out", str(out)], tool=f"meshy {cmd}",
+                          vd=heartbeat.vdir_of(out), env=child_env(ef), timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, {"error": f"hết thời gian chờ {timeout} s"}
     text = scrub((r.stdout + r.stderr).strip(), secret(ef))

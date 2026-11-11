@@ -41,6 +41,8 @@ import sys
 import time
 from pathlib import Path
 
+import heartbeat
+
 from root_guard import require_root
 
 TRIES = 3
@@ -161,7 +163,8 @@ def call(a, jobs: list[dict]):
     start = time.time() - 1
     try:
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY") or k in CODEX_KEYS}
-        p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=a.timeout, env=env)
+        p = heartbeat.run(cmd, tool="codex exec", vd=heartbeat.vdir_of(*(j["out"] for j in jobs)), input=prompt,
+                          timeout=a.timeout, env=env)
     except subprocess.TimeoutExpired:
         p = None
     if p is not None and (m := actual_model(p.stderr)):

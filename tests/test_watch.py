@@ -1,5 +1,6 @@
 """D33: no dead time between the Producer and its agents. Nobody waits on a notification; done or not is read from disk.
 D33.18b: every test here uses synthetic jobs (a long command, a hung command), never an object."""
+import sys
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1] / "src/zps-3dp-producer"
@@ -53,3 +54,48 @@ def test_the_merge_adds_a_missing_timeout_and_never_changes_one_the_user_set_d33
     assert M.merge(mine, want)["env"] == {"BASH_DEFAULT_TIMEOUT_MS": "900000", "OTHER": "1",
                                           "BASH_MAX_TIMEOUT_MS": "3600000"}
     assert M.missing(M.merge(mine, want), want)["env"] == {}
+
+
+def beats(tmp_path):
+    vd = tmp_path / "production/assets/a1/stepx/v1"
+    vd.mkdir(parents=True)
+    return vd, lambda: [r.split(" · ")[1:3] for r in (vd / "heartbeat.log").read_text(encoding="utf-8").splitlines()]
+
+
+def test_a_hung_child_writes_no_heartbeat_between_start_and_end_so_its_silence_shows_d33_7(tmp_path):
+    """A heartbeat by the clock alone would let a hung process look alive (D33.7). `sleep` uses no CPU and prints
+    nothing: only the start and the end lines."""
+    import heartbeat
+    vd, rows = beats(tmp_path)
+    r = heartbeat.run(["sleep", "2.5"], tool="hung", vd=vd, every=0.5)
+    assert r.returncode == 0 and rows() == [["hung", "start"], ["hung", "done"]]
+
+
+def test_a_busy_child_keeps_beating_on_cpu_alone_so_a_long_silent_render_is_not_taken_for_stuck_d33_7(tmp_path):
+    import heartbeat
+    vd, rows = beats(tmp_path)
+    busy = "import time\nt = time.time()\nwhile time.time() - t < 3:\n    pass\n"
+    heartbeat.run([sys.executable, "-c", busy], tool="busy", vd=vd, every=0.7)
+    got = rows()
+    assert got[0] == ["busy", "start"] and got[-1] == ["busy", "done"]
+    assert got[1:-1].count(["busy", "running"]) >= 2 and len(got) == got.count(["busy", "running"]) + 2
+
+
+def test_a_child_that_only_prints_keeps_beating_on_output_growth_and_its_output_is_returned_d33_7(tmp_path):
+    import heartbeat
+    vd, rows = beats(tmp_path)
+    r = heartbeat.run(["sh", "-c", "for i in 1 2 3 4 5 6; do echo line$i; sleep 0.4; done"], tool="talk", vd=vd,
+                      every=0.6)
+    assert r.stdout.split() == [f"line{i}" for i in range(1, 7)]
+    assert rows().count(["talk", "running"]) >= 2
+
+
+def test_a_timeout_kills_the_child_raises_as_subprocess_does_and_logs_it_d33_7(tmp_path):
+    import heartbeat
+    import pytest
+    import subprocess
+    vd, rows = beats(tmp_path)
+    with pytest.raises(subprocess.TimeoutExpired):
+        heartbeat.run(["sleep", "30"], tool="hang", vd=vd, timeout=1, every=0.5)
+    assert rows() == [["hang", "start"], ["hang", "timeout"]]
+    assert heartbeat.vdir_of(vd / "work/meshy/call-1") == vd and heartbeat.vdir_of(tmp_path / "x/v1") is None

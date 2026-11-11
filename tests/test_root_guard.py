@@ -30,7 +30,7 @@ GUARDED = [
 READ_ONLY = {"scripts/check_card.py", "scripts/check_profile.py"}
 # Imported, not run: the guard belongs to the tool that imports them. settings_merge runs from install.py before
 # `producer.py init` makes the marker.
-LIBRARIES = {"scripts/root_guard.py", "scripts/settings_merge.py", "agents/zps-3dp-step-blockout/tools/custom_lib.py",
+LIBRARIES = {"scripts/root_guard.py", "scripts/settings_merge.py", "scripts/heartbeat.py", "agents/zps-3dp-step-blockout/tools/custom_lib.py",
              "agents/zps-3dp-step-blockout/tools/project_parts.py", "agents/zps-3dp-step-blockout/tools/mesh_from_json.py",
              "agents/zps-3dp-step-model/tools/lib/cli.py", "agents/zps-3dp-step-model/tools/lib/glbread.py",
              "agents/zps-3dp-step-texture/tools/lib/tex.py"}

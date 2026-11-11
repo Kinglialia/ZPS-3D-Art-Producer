@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core import findings  # noqa: E402
 from core.contract import unwrap  # noqa: E402
+import heartbeat  # noqa: E402
 from core.state import ROOT, SKILL_DIR, load_st, now, texture_res, vdir  # noqa: E402
 from root_guard import require_root  # noqa: E402
 
@@ -60,8 +61,9 @@ BLENDER_TIMEOUT_S = 900  # D33.3: three Blender runs stay under BASH_MAX_TIMEOUT
 
 def blender(exe: str, script: Path, *args) -> tuple[int, str]:
     try:
-        r = subprocess.run([exe, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(script), "--",
-                            *map(str, args)], capture_output=True, text=True, timeout=BLENDER_TIMEOUT_S)
+        r = heartbeat.run([exe, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(script), "--",
+                           *map(str, args)], tool=f"blender {script.stem}", vd=heartbeat.vdir_of(*args),
+                          timeout=BLENDER_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         return 1, f"Blender quá {BLENDER_TIMEOUT_S} s: {script.name}"
     return r.returncode, r.stdout + r.stderr
