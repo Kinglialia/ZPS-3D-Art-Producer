@@ -61,6 +61,12 @@ Mọi thay đổi workflow nằm ở `production/pipeline.toml`:
 
 Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline mới ngay. Đổi `id` của bước mà asset đang đứng ở đó thì `validate` báo lỗi: sửa `stage` trong status.json của asset đó.
 
+## Pipeline đứng im (D33)
+
+- Thấy pipeline không chạy: bấm Esc, rồi bảo Producer chạy `P next`. Asset kẹt: `P stall <id>`; asset `blocked` hoặc `waiting_human` vì kẹt: `P retry <id>`. Trạng thái nằm trong file, nên không mất gì.
+- Hook `SubagentStop` (`P on-stop`) ghi xuống đĩa mỗi lần subagent dừng, kể cả khi Producer không nhận thông báo. `install.py` gộp hook này và biến `env` Bash timeout (`BASH_DEFAULT_TIMEOUT_MS` 600000, `BASH_MAX_TIMEOUT_MS` 3600000) vào settings của project; `P preflight` báo khi thiếu.
+- Ngưỡng kẹt và chế độ giao: `dispatch`, `watch` trong `policy.yaml`. Thời gian thường lệ mặc định mỗi bước: `usual_min` trong `pipeline.toml`.
+
 ## Review page
 
 `P serve` mở http://127.0.0.1:8765 (chỉ máy local). Trang `index.html` đọc `/api/board`. Nút Duyệt, Cần sửa, Ghi chú ghi thẳng vào feedback.md và status.json. `P ab board` mở trang so cặp A/B ở http://127.0.0.1:8766 (`SKILL.md`, mục So A/B).
