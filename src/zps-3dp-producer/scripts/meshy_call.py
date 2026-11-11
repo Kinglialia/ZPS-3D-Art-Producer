@@ -2,7 +2,7 @@
 """The only way to call Meshy retexture (docs/producer.md §6.3, D24.2, D24.3, D30.3). Runs the kit gen_api.py, unchanged.
 
   meshy_call.py texture --asset <id> --model <locked GLB> --style-image <png> --out <empty dir> --pid-file <f>
-                [--prompt TEXT] [--dry-run] [--timeout 1500]
+                [--prompt TEXT] [--dry-run] [--timeout 480] [--resume] [--total-s 1800]
   meshy_call.py keys | price --model <glb> --style-image <png>
 
 Key: `paths.env_file` of production/PROJECT-PROFILE.yaml, relative to the project folder. Every child process gets
@@ -36,8 +36,12 @@ Topology gate (hard, never ACCEPTED_FAIL): the Meshy GLB against --model, on tri
 An <out> of an earlier call is refused, unless its task has no GLB or no base_color yet: then the call gets them again
 from that task. A GLB counts only with the glTF magic and a header length equal to the file size; an image only when its
 PNG or JPEG end marker is there.
-Writes <out>/meshy_call.json and prints one line. Exit 0 ok, 1 after 3 failed tries (STATUS: BLOCKED), 3 refused,
-4 topology fail (the paid layer is not usable: no albedo).
+Pending (D33.5): --timeout is the wait of one run (default 480 s, under the Bash limit). When it runs out after the task
+exists, the run exits 5 with status `pending` (not an error, not a try); task_id stays in <out>/task.json. Run it again
+with --resume and the same --out: it waits on that task only, never sends a new task, never charges again. --resume
+without a task_id in <out>/task.json is refused. Past --total-s (default 1800) since the first run of <out>: BLOCKED.
+Writes <out>/meshy_call.json and prints one line. Exit 0 ok, 1 after 3 failed tries or past --total-s (STATUS:
+BLOCKED), 3 refused, 4 topology fail (the paid layer is not usable: no albedo), 5 pending.
 """
 from __future__ import annotations
 
@@ -49,6 +53,7 @@ import re
 import struct
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -58,7 +63,7 @@ from root_guard import require_root  # noqa: E402
 
 GEN_API = Path(__file__).resolve().parent / "kit" / "tools" / "gen" / "gen_api.py"
 TRIES = 3
-REFUSED, FAILED, TOPOLOGY = 3, 1, 4
+REFUSED, FAILED, TOPOLOGY, PENDING = 3, 1, 4, 5
 UV_TOL = 1e-4
 MESHY_RES = {"2k": 2048, "4k": 4096, "8k": 8192}
 
@@ -385,12 +390,27 @@ def call(a) -> tuple[int, dict, str]:
         lock.unlink(missing_ok=True)
 
 
+def earlier(out: Path) -> dict:
+    try:
+        return json.loads((out / "meshy_call.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def paid_call(a, ef: Path, budget: Path, base: list[str]) -> tuple[int, dict, str]:
     if (a.out / "meshy_call.json").exists() and not (task(a.out).get("task_id") and not complete(a.out)):
         raise Refused(f"{a.out} đã dùng cho một lần gọi trước: dùng thư mục mới")
+    if a.resume and not task(a.out).get("task_id"):
+        raise Refused(f"--resume: {a.out / 'task.json'} không có task_id; không tạo task mới khi resume")
     res = a.res
+    started = earlier(a.out).get("started") or time.time()
     rec = {"status": "fail", "model": str(a.model), "budget": budget.name, "task_id": None, "glb": None,
-           "albedo": None, "tries": []}
+           "albedo": None, "tries": [], "started": started}
+    if task(a.out).get("task_id") and time.time() - started > a.total_s:
+        rec |= {"task_id": task(a.out)["task_id"], "status": "blocked_total"}
+        rec["credits_charged"], rec["budget_after"] = 0, json.loads(budget.read_text(encoding="utf-8"))
+        return FAILED, rec, (f"BLOCKED: task {rec['task_id']} chưa xong sau {a.total_s} s tính từ lần chạy đầu; "
+                             "không chờ thêm, không gửi task mới")
     start = used(budget)
     glb = a.out / "glb.glb"
     while len(rec["tries"]) < TRIES:
@@ -403,6 +423,12 @@ def paid_call(a, ef: Path, budget: Path, base: list[str]) -> tuple[int, dict, st
             rc, out = gen_api(base + ["--out", str(a.out), "--budget-file", str(budget)], ef, a.timeout,
                               a.meshy_res)
         tid = rec["task_id"] = task(a.out).get("task_id")
+        if tid and rc is None and not complete(a.out):
+            rec["status"] = "pending"
+            rec["credits_charged"] = used(budget) - start
+            rec["budget_after"] = json.loads(budget.read_text(encoding="utf-8"))
+            return PENDING, rec, (f"pending: task {tid} chưa xong sau {a.timeout} s; chạy lại cùng lệnh với --resume "
+                                  "(không tạo task mới, không tốn thêm credit)")
         if tid and glb_ok(glb) and not image_ok(a.out / "base_color.png") and not out.get("error"):
             rc, out = child("_base_color", a.out, ef, a.timeout)
         if tid and complete(a.out):
@@ -479,7 +505,9 @@ def main():
     t.add_argument("--pid-file", type=Path)
     t.add_argument("--prompt")
     t.add_argument("--dry-run", action="store_true")
-    t.add_argument("--timeout", type=int, default=1500)
+    t.add_argument("--timeout", type=int, default=480)
+    t.add_argument("--resume", action="store_true")
+    t.add_argument("--total-s", type=int, default=1800)
     sub.add_parser("keys")
     pr = sub.add_parser("price")
     pr.add_argument("--model", required=True, type=Path)

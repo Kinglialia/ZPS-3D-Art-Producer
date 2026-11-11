@@ -494,3 +494,26 @@ def test_a_texture_res_above_8k_is_refused_before_any_charge_because_meshy_canno
     r = meshy()
     assert (r["rc"], r["calls"], r["budget"]["used_credits"]) == (3, [], 0)
     assert r["out"] == "[meshy_call] từ chối: texture_res 16384 lớn hơn 8k, mức lớn nhất của Meshy retexture: chọn VẼ MỚI\n"
+
+
+def test_a_slow_task_exits_pending_and_resume_waits_on_that_task_without_a_second_post_or_charge_d33_5(meshy):
+    """Run 5: one Meshy wait ran past what a Bash call holds. A slow task is not an error: the run ends with exit 5 and
+    the task id on disk, and --resume finishes that same paid task. A second POST would cost the user credits again."""
+    r = meshy("--timeout", "2", mode="running:100")
+    assert (r["rc"], kinds(r)[:2], r["record"]["status"]) == (5, ["post", "running"], "pending")
+    assert json.loads((meshy.tmp / "work/meshy/call-1/task.json").read_text())["task_id"] == "task-1"
+    assert r["budget"]["used_credits"] == 10 and "--resume" in r["out"]
+    r = meshy("--resume")
+    assert r["rc"] == 0, r["out"]
+    assert kinds(r).count("post") == 1 and r["record"]["task_id"] == "task-1"
+    assert (r["budget"]["used_credits"], r["record"]["credits_charged"]) == (10, 0)
+
+
+def test_resume_without_a_task_is_refused_and_past_the_total_wait_it_blocks_without_a_request_d33_5(meshy):
+    r = meshy("--resume")
+    assert (r["rc"], kinds(r)) == (3, [])
+    assert "không tạo task mới khi resume" in r["out"]
+    meshy("--timeout", "2", mode="running:100")
+    r = meshy("--resume", "--total-s", "0")
+    assert (r["rc"], r["record"]["status"], kinds(r).count("post")) == (1, "blocked_total", 1)
+    assert len(r["calls"]) == 2
