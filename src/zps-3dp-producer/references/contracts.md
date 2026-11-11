@@ -58,7 +58,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `ask`: câu hỏi Meshy đang chờ người dùng (`kind` = `meshy_regen` | `mesh_changed`, `budget` = tên file budget, `next` = `fix` | `todo`, `base`, `new_round`). Duyệt = gọi thêm một lần (`max_credits` + giá); `P meshy <id> paint` = VẼ MỚI. Trả lời xong thì xóa.
 - `paint_for`: 12 ký tự đầu hash mesh mà người dùng chọn VẼ MỚI; brief `texture` của mesh đó ghi `MODE: VẼ MỚI`.
 - `meshy_price`: giá một lần retexture, đọc từ `gen_api.py texture --dry-run` khi sinh brief.
-- `texture_choice`: chế độ người dùng chọn bằng `P texture-mode` (D30.11): `{mode: auto|meshy|paint, by, at}`. Không có = `auto`. `gate()` của bước texture đọc trường này.
+- `texture_choice`: chế độ người dùng chọn bằng `P texture-mode` (D30.11): `{mode: auto|meshy|paint, by, at}`. Không có = `auto`: chế độ `texture_default` của `policy.yaml` (`meshy | paint`, D34.2; thiếu khóa = giá trị của template). `gate()` của bước texture đọc trường này.
 - `texture_mode`: chế độ texture script chọn lần cuối (D30.11): `{mode, reason, mesh}`, `mode` là `Meshy SỬA` hoặc `VẼ MỚI`, `mesh` là 12 ký tự đầu hash mesh. Ledger ghi một dòng khi giá trị này đổi.
 - `purged`: `{at, manifest, freed_bytes, zip}` sau khi xóa file trung gian (D29). Có trường này thì `redo` bị từ chối.
 - `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.

@@ -43,3 +43,12 @@ def test_every_binary_under_tests_is_made_by_a_script_in_the_repo():
     assert binaries == sorted(MADE_BY)
     for out, script in MADE_BY.items():
         assert script in tracked("tests") and Path(out).name in (ROOT / script).read_text(encoding="utf-8")
+
+
+def test_the_toon_bevel_numbers_of_one_asset_live_only_in_the_preset_with_their_origin():
+    """D34.2: 9 mm / 2 segments came from one asset (Run 4). In code they would apply to every object unseen; in the
+    preset they sit beside a note that says to measure again."""
+    code = [p for p in tracked("src") if p.endswith(".py") and "0.009" in (ROOT / p).read_text(encoding="utf-8")]
+    preset = (ROOT / "src/zps-3dp-producer/presets/topdown-mobile-lowpoly.yaml").read_text(encoding="utf-8")
+    line = next(l for l in preset.splitlines() if l.strip().startswith("toon:"))
+    assert (code, "radius_m: 0.009" in line, "tạm, đo lại sau 3–5 asset khác loại" in line) == ([], True, True)

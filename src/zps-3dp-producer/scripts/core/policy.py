@@ -8,7 +8,9 @@ WHO = ("human", "reviewer")
 BOARDS = ("local", "local+remote")
 BY = {"human": "người dùng", "producer": "Producer (test_mode)", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
 DISK_WARN_GB = 20
-HEAD = "# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
+TEXTURE_DEFAULTS = ("meshy", "paint")
+HEAD = ("# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
+        "# texture_default meshy của template: Run 5, 1 asset (Meshy SỬA 15m32s / 2 version; VẼ MỚI Run 4 38m25s / 4 version); tạm, đo lại sau 3–5 asset khác loại (D34.2)\n")
 
 
 def path():
@@ -25,6 +27,8 @@ def check(pol: dict) -> list[str]:
         errs.append(f"review_board: phải là {'|'.join(BOARDS)}")
     if not isinstance(pol.get("test_mode", False), bool):
         errs.append("test_mode: phải là true|false")
+    if pol.get("texture_default") is not None and pol["texture_default"] not in TEXTURE_DEFAULTS:
+        errs.append(f"texture_default: phải là {'|'.join(TEXTURE_DEFAULTS)}")
     w = pol.get("disk_warn_gb", DISK_WARN_GB)
     if isinstance(w, bool) or not isinstance(w, int | float) or w <= 0:
         errs.append("disk_warn_gb: phải là số GB lớn hơn 0")
@@ -43,6 +47,13 @@ def load() -> dict:
     if errs := check(pol):
         die(f"{rel(p)}: " + "; ".join(errs))
     return pol
+
+
+def texture_default(pol: dict) -> str:
+    """D30.11, D34.2: the mode `texture-mode auto` takes. A policy.yaml older than the key takes the template's value."""
+    import yaml
+    return pol.get("texture_default") or yaml.safe_load((TEMPLATES / "policy.yaml").read_text(encoding="utf-8"))[
+        "texture_default"]
 
 
 def save(pol: dict):

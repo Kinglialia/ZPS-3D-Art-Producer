@@ -215,8 +215,8 @@ def ledger_modes(root):
 def test_a_meshy_key_and_budget_make_meshy_sua_the_default_and_the_ledger_says_why_d30_11(tmp_path):
     f = to_texture(tmp_path)
     f.brief("t1")
-    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (mặc định D30.11: có key và budget)"]
-    assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: mặc định D30.11: có key và budget"]
+    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (texture_default meshy: có key và budget)"]
+    assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: texture_default meshy: có key và budget"]
 
 
 def test_no_env_file_paints_and_the_ledger_records_that_choice_and_its_reason(tmp_path):
@@ -238,7 +238,7 @@ def test_a_spent_budget_keeps_meshy_sua_on_the_paid_layer_and_a_rebrief_adds_no_
     f.brief("t1 third brief")
     why = "hết lần gọi: sửa trên lớp Meshy qua topology"
     assert mode_lines(f, "t1 third brief") == [f"MODE: Meshy SỬA ({why})"]
-    assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: mặc định D30.11: có key và budget",
+    assert ledger_modes(tmp_path) == ["chế độ Meshy SỬA: texture_default meshy: có key và budget",
                                       f"chế độ Meshy SỬA: {why}"]
 
 
@@ -285,7 +285,7 @@ def test_texture_mode_records_who_chose_it_and_auto_returns_to_the_meshy_default
     assert f.st()["texture_choice"]["by"] == "anh Trung: vẽ tay"
     f.p("texture-mode", AID, "auto")
     f.brief("t1")
-    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (mặc định D30.11: có key và budget)"]
+    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (texture_default meshy: có key và budget)"]
 
 
 def test_texture_mode_meshy_with_a_key_says_the_user_forced_meshy(tmp_path):
@@ -318,3 +318,38 @@ def test_unfixable_under_texture_mode_paint_never_asks_for_another_paid_call(tmp
     f.p("texture-mode", AID, "paint")
     f.work("t1", unfixable=True, issues="hỏng")
     assert ("ask" in f.st(), f.st()["state"]) == (False, "blocked")
+
+
+def set_policy(root, **kw):
+    p = root / "production/policy.yaml"
+    pol = yaml.safe_load(p.read_text(encoding="utf-8"))
+    for k, v in kw.items():
+        if v is None:
+            pol.pop(k, None)
+        else:
+            pol[k] = v
+    p.write_text(yaml.safe_dump(pol, allow_unicode=True), encoding="utf-8")
+
+
+def test_texture_default_paint_in_policy_makes_auto_paint_without_a_key_check_or_a_budget_d34_2(tmp_path):
+    """The Meshy default comes from one asset (Run 5), so it is the project's number, not the skill's: changing
+    policy.yaml changes the mode, and painting never opens a budget, so no credit can be spent."""
+    f = to_texture(tmp_path, env_line="OTHER=1\n", prepare=lambda: set_policy(tmp_path, texture_default="paint"))
+    f.brief("t1")
+    t = f.cp["t1"]["text"].splitlines()
+    assert mode_lines(f, "t1") == ["MODE: VẼ MỚI (texture_default paint: không gọi Meshy)"]
+    assert (not any(l.startswith("MESHY") for l in t), budgets(tmp_path)) == (True, {})
+
+
+def test_a_policy_written_before_texture_default_takes_the_template_value(tmp_path):
+    f = to_texture(tmp_path, prepare=lambda: set_policy(tmp_path, texture_default=None))
+    f.brief("t1")
+    assert mode_lines(f, "t1") == ["MODE: Meshy SỬA (texture_default meshy: có key và budget)"]
+
+
+def test_the_template_policy_carries_the_meshy_default_with_its_origin():
+    from shared import SCRIPTS
+    text = (SCRIPTS.parent / "templates/policy.yaml").read_text(encoding="utf-8")
+    line = next(l for l in text.splitlines() if l.startswith("texture_default:"))
+    assert line.split("#")[0].split() == ["texture_default:", "meshy"]
+    assert "Run 5, 1 asset" in line and "tạm, đo lại sau 3–5 asset khác loại" in line

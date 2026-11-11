@@ -8,4 +8,4 @@ uv: {padding_px: 16, texel_min_px_per_m: 64}   # tính ở độ phân giải l�
 screen_tris_max_small_ratio: null              # null = chỉ cảnh báo (D7.7)
 image_gen: {codex_model: gpt-6-astra, reasoning: medium}   # D15.1: gen_image_codex.py --model, --reasoning
 bevel:                      # số của từng kiểu bevel (D27.10); kiểu lấy từ bevel của thẻ, không có thì style.bevel của profile
-  toon: {radius_m: 0.009, segments: 2}
+  toon: {radius_m: 0.009, segments: 2}   # nguồn: Run 4, 1 asset; tạm, đo lại sau 3–5 asset khác loại (D34.2)

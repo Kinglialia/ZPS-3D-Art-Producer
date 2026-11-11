@@ -8,7 +8,7 @@ from core import policy
 from core.state import ProducerError
 
 TEMPLATE = {"approvals": {"blockout": "human", "views_rest": "human", "model": "human"}, "review_board": "local",
-            "delegations": [], "test_mode": False, "disk_warn_gb": 20}
+            "delegations": [], "test_mode": False, "disk_warn_gb": 20, "texture_default": "meshy"}
 
 
 @pytest.fixture
@@ -128,3 +128,16 @@ def test_the_user_turns_test_mode_on_through_the_single_policy_writer_and_only_t
     with pytest.raises(ProducerError) as e:
         policy.load()
     assert str(e.value) == "production/policy.yaml: test_mode: phải là true|false"
+
+
+def test_texture_default_takes_only_meshy_or_paint_and_its_origin_survives_a_rewrite_d34_2(prod):
+    """policy.save drops YAML comments, so the origin of the Meshy default lives in the header save writes."""
+    (prod / "policy.yaml").write_text("texture_default: auto\n", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        policy.load()
+    assert str(e.value) == "production/policy.yaml: texture_default: phải là meshy|paint"
+    (prod / "policy.yaml").unlink()
+    setp("blockout", "reviewer")
+    head = (prod / "policy.yaml").read_text(encoding="utf-8").splitlines()[1]
+    assert head.startswith("# texture_default meshy của template: Run 5, 1 asset") and "đo lại sau 3–5 asset" in head
+    assert policy.texture_default(policy.load()) == "meshy"

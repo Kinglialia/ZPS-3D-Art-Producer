@@ -7,7 +7,7 @@ Nguồn: `docs/agents/texture-artist.md` §2–§9. Ký hiệu `T`, `F`, `V`, `G
 Script chọn chế độ và ghi vào brief một dòng `MODE:` (D30.11). Ledger ghi chế độ và lý do.
 
 - `MODE: Meshy SỬA`: có key Meshy và budget, hoặc mesh này đã có lớp Meshy qua topology. Meshy rồi SỬA, bất kể asset đơn giản hay phức tạp.
-- `MODE: VẼ MỚI`: profile không có `paths.env_file`, người dùng chỉ định, hoặc hết lần gọi mà không có lớp Meshy dùng được.
+- `MODE: VẼ MỚI`: profile không có `paths.env_file`, người dùng chỉ định, `policy.yaml` có `texture_default: paint` (D34.2), hoặc hết lần gọi mà không có lớp Meshy dùng được.
 - `texture_complexity.py --mode <meshy|paint>` ghi `scores`, `simple` và `proposed` (= chế độ của dòng `MODE:`) vào `F/texture_spec.json`. `simple` chỉ để tham khảo.
 - Ghi vào `F/texture_spec.json`: `"used": "meshy" | "paint"`, `"reason": "<một dòng>"`.
 - Đổi nhánh giữa chừng chỉ khi lớp Meshy không dùng được (topology fail, Meshy lần hai vẫn hỏng) và hết lần gọi → VẼ MỚI. Không đặt lại vòng sửa; ghi vào `notes.md`.

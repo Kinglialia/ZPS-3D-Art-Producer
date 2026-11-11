@@ -43,6 +43,8 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
     choice = choice_of(st)
     if choice == "paint":
         return [mode(st, PAINT, "người dùng chọn `texture-mode paint`: không gọi Meshy")]
+    if effective(st) == "paint":
+        return [mode(st, PAINT, "texture_default paint: không gọi Meshy")]
     if not env_file(prof):
         if choice == "meshy":
             return "stuck", "`texture-mode meshy` cần `paths.env_file` trong profile: thêm, hoặc `texture-mode auto|paint`"
@@ -82,7 +84,8 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
             m = mode(st, PAINT, "hết lần gọi, không có lớp Meshy qua topology")
         return [m, f"MESHY_CALLS: 0 (đã dùng {b['used_credits']}/{b['max_credits']} credit): không gọi Meshy", *done,
                 *(run if resume else [])]
-    why = "người dùng chọn `texture-mode meshy`" if choice == "meshy" else "mặc định D30.11: có key và budget"
+    why = "người dùng chọn `texture-mode meshy`" if choice == "meshy" else \
+        "texture_default meshy: có key và budget"
     return [mode(st, MESHY, why), *run,
             f"MESHY_CALLS: {left} (giá {price} credit một lần; `{rel(p)}` chỉ script ghi)", *done]
 
@@ -92,6 +95,13 @@ CHOICES = ("auto", "meshy", "paint")
 
 def choice_of(st: dict) -> str:
     return (st.get("texture_choice") or {}).get("mode", "auto")
+
+
+def effective(st: dict) -> str:
+    """meshy | paint: the user's choice, or for `auto` the project's `texture_default` of policy.yaml (D34.2)."""
+    from . import policy
+    c = choice_of(st)
+    return policy.texture_default(policy.load()) if c == "auto" else c
 
 
 def set_choice(a):
@@ -161,7 +171,7 @@ def ask(st: dict, kind: str, nxt: str, base: int | None = None, new_round: bool 
 
 def ask_regen(st: dict, n: int, from_review: bool, why: str) -> str | None:
     """`TOP_FIX: meshy_regen` or `UNFIXABLE: yes`: the note for waiting_human, or None when there is no Meshy budget."""
-    if not current_budget(st) or st.get("paint_for") == st["locked"]["model"][:12] or choice_of(st) == "paint":
+    if not current_budget(st) or st.get("paint_for") == st["locked"]["model"][:12] or effective(st) == "paint":
         return None
     if from_review:
         ask(st, "meshy_regen", "fix", base=n, new_round=True)

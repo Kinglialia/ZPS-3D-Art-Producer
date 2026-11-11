@@ -7,3 +7,4 @@ review_board: local
 delegations: []
 test_mode: false
 disk_warn_gb: 20
+texture_default: meshy           # meshy | paint: chế độ texture của `texture-mode auto` (D30.11). Nguồn: Run 5, 1 asset (Meshy SỬA 15m32s / 2 version; VẼ MỚI Run 4 38m25s / 4 version); tạm, đo lại sau 3–5 asset khác loại (D34.2)
