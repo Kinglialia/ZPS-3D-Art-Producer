@@ -3,7 +3,7 @@
 
 Usage: python3 gen_image_codex.py --model <m> --reasoning <r> --pid-file <f> --prompt <request.md>
            --image <ref> [--image <ref> ...] --out <dir/name.png> [--prompt <b.md> --out <dir/b.png> ...]
-           [--size 1536x1024] [--timeout 900]
+           [--size 1536x1024] [--timeout 900] [--approve-for-me "<why the last call was blocked>"]
 The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prompt holds only what to draw;
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
 Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin, in an env without any *_API_KEY other than
@@ -21,6 +21,9 @@ D28.1: the record keeps the requested model (--model) and the actual one, the `m
 to the ledger and to `inputs[<step>]["vN"]` of status.json. D30.19: the record and the ledger line also keep the version
 that `codex --version` prints (tested with codex-cli 0.164.0). FLAGS lists every `codex exec` flag the command uses;
 `P preflight` checks that `codex exec --help` lists each one.
+D30.21: codex `--approve-for-me` approves every permission request by itself, so it is never a default and never in the
+brief's GEN_ARGS. It is passed only with --approve-for-me "<reason>" after a call was really blocked; the record and
+the ledger line keep the reason.
 """
 from __future__ import annotations
 
@@ -97,7 +100,7 @@ def version_of(out: Path) -> tuple[Path, str, str, int] | None:
     return None
 
 
-def record_models(out: Path, requested: str, actual: str, cli: str):
+def record_models(out: Path, requested: str, actual: str, cli: str, approve: str | None):
     """Several gens of one asset run at once: status.json is written under the Producer lock. The image is paid for
     already, so a failure here (no status.json, an old Python in the agent venv) only warns."""
     if not (where := version_of(out)):
@@ -115,7 +118,7 @@ def record_models(out: Path, requested: str, actual: str, cli: str):
                 inp[k] = ", ".join(seen + [v] if v not in seen else seen)
             save_st(st)
             ledger(f"{aid} · {sid} v{n} · gen ảnh {out.name}: model yêu cầu {requested} · model thực tế {actual} "
-                   f"· codex-cli {cli}")
+                   f"· codex-cli {cli}" + (f" · --approve-for-me: {approve}" if approve else ""))
     except (Exception, SystemExit) as ex:
         print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
 
@@ -135,7 +138,8 @@ def call(a, jobs: list[dict]):
             p.unlink(missing_ok=True)
     prompt = FRAME.format(out=jobs[0]["out"], result=jobs[0]["result"], size=a.size, request=jobs[0]["request"])
     cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(jobs[0]["out"].parent),
-           "-s", "workspace-write", "--skip-git-repo-check", *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
+           "-s", "workspace-write", "--skip-git-repo-check", *(["--approve-for-me"] if a.approve_for_me else []),
+           *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
     start = time.time() - 1
     try:
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY") or k in CODEX_KEYS}
@@ -203,7 +207,10 @@ def main():
     ap.add_argument("--out", required=True, type=Path, action="append")
     ap.add_argument("--size", default="1536x1024")
     ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--approve-for-me", metavar="REASON")
     a = ap.parse_args()
+    if a.approve_for_me is not None and not a.approve_for_me.strip():
+        ap.error("--approve-for-me cần lý do: lần gọi trước bị chặn ở đâu")
     if len(a.prompt) != len(a.out):
         ap.error("mỗi --out cần đúng một --prompt, cùng thứ tự")
     a.actual, jobs = None, []
@@ -214,7 +221,8 @@ def main():
                      "request": prompt.read_text(encoding="utf-8").strip(),
                      "rec": {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model,
                              "model_actual": NO_NUMBER, "codex_cli": NO_NUMBER, "reasoning": a.reasoning,
-                             "prompt": str(prompt), "images": a.image, "size": None, "fallback": False, "errors": []}})
+                             "prompt": str(prompt), "images": a.image, "approve_for_me": a.approve_for_me, "size": None,
+                             "fallback": False, "errors": []}})
     if shutil.which("codex") is None:
         for j in jobs:
             j["rec"]["errors"].append("không thấy codex trên PATH")
@@ -236,7 +244,7 @@ def main():
             out.unlink(missing_ok=True)
         rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
         if rec["attempts"]:
-            record_models(out, rec["model_requested"], rec["model_actual"], rec["codex_cli"])
+            record_models(out, rec["model_requested"], rec["model_actual"], rec["codex_cli"], a.approve_for_me)
         if rec["status"] == "ok":
             print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
             continue

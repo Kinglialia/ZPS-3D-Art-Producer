@@ -20,6 +20,7 @@ JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không 
 - Mỗi tool in một dòng. Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail; khi đó đọc JSON, không đọc log.
 - Gen ảnh: `PY "<GEN_IMAGE>" <GEN_ARGS> --prompt V/work/prompts/<view>-<k>.md --image <ảnh 1> --image <ảnh 2> [...] --out V/work/gen/<view>-<k>.png [--size 1024x1536]`, với `GEN_IMAGE`, `GEN_ARGS` là hai dòng của brief. Mỗi lần gọi tốn lượt Codex. Ảnh đạt thì chép sang `F/<view>.png`.
 - `gen_image_codex.py` thoát 1 sau 3 lần lỗi kỹ thuật: dừng, `STATUS: BLOCKED`, chép dòng lỗi vào `ISSUES`. Không vẽ bằng cách khác (D15.2).
+- Không tự thêm `--approve-for-me` (flag này tự duyệt mọi yêu cầu quyền, D30.21). Codex bị chặn vì xin quyền: `STATUS: BLOCKED`, chép lỗi vào `ISSUES`. Người dùng quyết định chạy lại với `--approve-for-me "<lý do>"`; ledger ghi lý do.
 - Blender (chỉ `views_front`): `BLENDER` = dòng `BLENDER:` của brief. Chạy qua dòng PID của brief.
 
 Prompt, khi nào gen lại, `VIEWS.md`, `README.md`: `R/views.md`.

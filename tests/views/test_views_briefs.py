@@ -100,3 +100,11 @@ def test_a_gen_timeout_under_5_minutes_stops_the_brief_because_a_cut_off_call_st
     cfg, st, step, preset, _ = ctx("views_front")
     with pytest.raises(ProducerError, match=r"^pipeline.toml \[codex\] timeout_s = 299: cần số nguyên ≥ 300 giây \(D30.20\)$"):
         gen_args(cfg | {"codex": {"timeout_s": 299}}, st, step, preset)
+
+
+def test_the_brief_never_hands_the_worker_a_flag_that_approves_for_the_user_d30_21(ctx):
+    """GEN_ARGS goes into every gen the worker runs; --approve-for-me there would lift the approval of all of them."""
+    for stage in ("views_front", "views_rest", "texture"):
+        cfg, st, step, preset, _ = ctx(stage)
+        assert [f for f in ("--approve-for-me", "--full-auto", "--dangerously-bypass-approvals-and-sandbox")
+                if f in gen_args(cfg, st, step, preset)] == [], stage

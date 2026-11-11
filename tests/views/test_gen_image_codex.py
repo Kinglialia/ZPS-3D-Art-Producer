@@ -189,7 +189,7 @@ def test_a_truncated_png_is_a_broken_image_because_pillow_reads_only_the_header_
     assert r["record"]["errors"] == ["file ảnh hỏng"] * 3
 
 
-def gen_in_version(tmp_path, model=None, version=None):
+def gen_in_version(tmp_path, model=None, version=None, extra=()):
     """A gen whose --out lies in a version folder of a Producer root, as the views and texture briefs give it."""
     path = fake_codex.install(tmp_path / "bin")
     root = tmp_path / "production"
@@ -208,7 +208,7 @@ def gen_in_version(tmp_path, model=None, version=None):
     env.pop("PRODUCER_ROOT", None)
     p = subprocess.run([sys.executable, str(GEN), "--model", "gpt-6-astra", "--reasoning", "medium", "--pid-file",
                         str(root / "pids/codex_image/hut.pid"), "--prompt", str(tmp_path / "front.md"),
-                        f"--image={ref}", "--out", str(out)], capture_output=True, text=True, env=env, cwd=tmp_path)
+                        f"--image={ref}", "--out", str(out), *extra], capture_output=True, text=True, env=env, cwd=tmp_path)
     assert p.returncode == 0, p.stdout + p.stderr
     rec = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
     inp = json.loads((root / "assets/hut/status.json").read_text(encoding="utf-8"))["inputs"]["views_front"]["v2"]
@@ -275,6 +275,7 @@ def test_the_default_gen_command_has_no_flag_that_lifts_the_sandbox_or_approves_
     r = gen()
     assert r["rc"] == 0, r["out"]
     assert [f for f in FORBIDDEN for c in r["calls"] if f in c["argv"]] == []
+    assert r["record"]["approve_for_me"] is None
 
 
 def test_no_shipped_file_names_the_removed_full_auto_flag(tmp_path):
@@ -349,3 +350,26 @@ def test_each_prompt_needs_its_own_out_so_no_image_is_saved_under_the_wrong_name
                        capture_output=True, text=True, env={**os.environ, "PATH": fake_codex.install(gen.tmp / "bin")})
     assert (p.returncode, p.stderr.splitlines()[-1]) == (
         2, "gen_image_codex.py: error: mỗi --out cần đúng một --prompt, cùng thứ tự")
+
+
+BLOCKED = "codex xin quyền ghi ngoài workspace-write, không ai duyệt trong codex exec"
+
+
+def test_approve_for_me_reaches_codex_only_with_a_reason_and_the_ledger_keeps_that_reason_d30_21(tmp_path):
+    """--approve-for-me lets Codex approve its own permission requests. A later reader of the ledger must see each gen
+    that ran with it and why, or a lifted guard looks like a normal run."""
+    rec, inp, led = gen_in_version(tmp_path, extra=("--approve-for-me", BLOCKED))
+    argv = json.loads((tmp_path / "calls.jsonl").read_text(encoding="utf-8").splitlines()[0])["argv"]
+    assert argv[9:11] == ["--skip-git-repo-check", "--approve-for-me"]
+    assert rec["approve_for_me"] == BLOCKED
+    assert led[0].endswith(f" · codex-cli 0.164.0 · --approve-for-me: {BLOCKED}")
+
+
+@pytest.mark.parametrize("reason", ["", "   "])
+def test_approve_for_me_without_a_reason_is_refused_before_any_codex_call(gen, reason):
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                        "--prompt", str(gen.tmp / "front.md"), "--out", str(gen.out), "--approve-for-me", reason],
+                       capture_output=True, text=True, env={**os.environ, "PATH": fake_codex.install(gen.tmp / "bin"),
+                                                            "FAKE_CODEX_LOG": str(gen.tmp / "none.jsonl")})
+    assert (p.returncode, p.stderr.splitlines()[-1], (gen.tmp / "none.jsonl").exists()) == (
+        2, "gen_image_codex.py: error: --approve-for-me cần lý do: lần gọi trước bị chặn ở đâu", False)
