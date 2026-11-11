@@ -9,6 +9,8 @@ import statistics
 import sys
 import time
 
+from pathlib import Path
+
 import heartbeat
 
 from . import policy
@@ -60,7 +62,7 @@ def job(st: dict) -> dict | None:
 
 
 def report_of(rec: dict):
-    b = ROOT.parent / rec["brief"] if rec.get("brief") else None
+    b = Path(rec["brief"]) if rec.get("brief") else None  # relative to the project folder, where P runs
     return b.with_name(REPORT[b.name]) if b and b.name in REPORT else None
 
 
@@ -108,7 +110,8 @@ def stalled(st: dict) -> bool:
 
 def stall(a):
     """D33.11 `P stall <id>`: the next rung of the one stall rule. Nudge (max_nudges times, needs the agent id), then one
-    new agent with the same brief, then waiting_human. The script picks the rung and logs it; the Producer only sends."""
+    new agent with the same brief, then waiting_human. The script picks the rung and logs it; the Producer only sends.
+    --agent-id: the id of the stuck subagent, from its launch; on-stop also records it."""
     from .briefs import run
     from .loop import log_wait, move
     from .board import build_outputs
@@ -118,11 +121,14 @@ def stall(a):
     c = check(st, rec, w)
     c["stalled"] or die(f"{a.id}: không kẹt ({rec['step']} v{rec['v']} {rec['role']}, chạy {minutes(c['ran_s'])})")
     sid, n, role = rec["step"], rec["v"], rec["role"]
+    if getattr(a, "agent_id", None):
+        rec["agent_id"] = a.agent_id
     entry = {"step": sid, "v": n, "role": role, "at": stamp(), "why": c["why"]}
     head = f"{a.id} · {sid} v{n} · kẹt · {role} · {c['why']}"
-    if rec.get("nudges", 0) < w["max_nudges"] and rec.get("agent_id") and rec.get("stopped") != "no_report":
+    if rec.get("nudges", 0) < w["max_nudges"] and rec.get("agent_id"):
         rec["nudges"] = rec.get("nudges", 0) + 1
         rec["nudged_at"] = stamp()
+        rec.pop("stopped", None)  # a nudge resumes a stopped agent (maxTurns): the next SubagentStop says again
         st.setdefault("stalls", []).append(entry | {"rung": "nudge"})
         save_st(st)
         ledger(f"{head} · nudge {rec['nudges']}/{w['max_nudges']}")

@@ -240,8 +240,8 @@ def main(argv: list[str] | None = None):
     x.add_argument("--fallback", action="store_true",
                    help="Producer đã lưu report agent trả bằng tin nhắn vì lệnh ghi bị chặn (ledger: report_fallback)")
     sub.add_parser("retry", help="giao lại asset đang blocked (hoặc waiting_human vì kẹt)").add_argument("id")
-    sub.add_parser("stall", help="việc đang chạy bị kẹt (P next ghi KẸT): bậc tiếp theo nudge → giao lại → hỏi anh (D33.11)"
-                   ).add_argument("id")
+    x = sub.add_parser("stall", help="việc đang chạy bị kẹt (P next ghi KẸT): bậc tiếp theo nudge → giao lại → hỏi anh (D33.11)")
+    x.add_argument("id"); x.add_argument("--agent-id", help="id subagent đang kẹt (từ lúc giao), để nudge được")
     x = sub.add_parser("wait", help="dispatch: background: chờ tới khi có report, kẹt hoặc hết giờ; chỉ một bản (D33.13)")
     x.add_argument("--every", type=float, default=30, help="giây giữa hai lần đọc đĩa")
     x.add_argument("--max-min", type=float, default=50, help="tối đa bao nhiêu phút rồi thoát")

@@ -258,3 +258,26 @@ def test_policy_takes_only_known_dispatch_modes_and_watch_numbers_and_falls_back
         "watch.stall_min: phải là số > 0", "watch.nap: khóa không hợp lệ (stall_min|deadline_factor|max_nudges)"]
     assert policy.watch({}) == {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}
     assert policy.watch({"watch": {"max_nudges": 0}})["max_nudges"] == 0 and policy.dispatch({}) == "foreground"
+
+
+def test_a_subagent_cut_by_max_turns_is_nudged_with_the_id_its_stop_hook_gave_without_editing_any_file_d33_6_d33_11(
+        tmp_path):
+    """maxTurns stops an agent before it can write BLOCKED; SubagentStop records no_report and the agent id, so the
+    first rung resumes that agent. The Producer can also pass the id it got at launch."""
+    f, out, j = project(tmp_path)
+    tr = tmp_path / "agent-m4.jsonl"
+    tr.write_text(j.dumps({"type": "user", "message": {"content": f"Đọc `{out['brief']}` trước tiên."}}) + "\n",
+                  encoding="utf-8")
+    assert hook(tmp_path, {"agent_type": "zps-3dp-step-blockout", "agent_id": "m4",
+                           "agent_transcript_path": str(tr)}).returncode == 0
+    assert "nudge 1/1: gửi tới agent m4" in f.p("stall", "pilot-house")
+    assert "stopped" not in f.st()["dispatches"][0]
+
+
+def test_stall_takes_the_agent_id_from_the_producer_and_dispatch_mode_has_one_writer_d33_11_d33_14(tmp_path):
+    f, out, _ = project(tmp_path)
+    edit_job(f, deadline=ago(1))
+    assert "nudge 1/1: gửi tới agent z9" in f.p("stall", "pilot-house", "--agent-id", "z9")
+    f.p("approvals", "set", "dispatch", "background", "--by", "chạy lô")
+    assert "dispatch: background" in (tmp_path / "production/policy.yaml").read_text(encoding="utf-8")
+    assert "dispatch phải là foreground|background" in f.p("approvals", "set", "dispatch", "fast", "--by", "x", ok=False)

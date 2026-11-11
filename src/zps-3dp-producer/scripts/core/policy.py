@@ -109,6 +109,9 @@ def set_approval(a):
     if a.step == "review_board":
         a.who in BOARDS or die(f"review_board phải là {'|'.join(BOARDS)}")
         pol["review_board"] = a.who
+    elif a.step == "dispatch":
+        a.who in DISPATCH or die(f"dispatch phải là {'|'.join(DISPATCH)}")
+        pol["dispatch"] = a.who
     elif a.step == "test_mode":
         a.who in ("true", "false") or die("test_mode phải là true|false")
         pol["test_mode"] = a.who == "true"
