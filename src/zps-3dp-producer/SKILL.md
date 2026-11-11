@@ -43,7 +43,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
    Lời giao việc chỉ gồm file role và brief: file role là agent `agent` (Codex: `agent_file`), brief là prompt trên. Không thêm gì vào prompt. Không hướng dẫn cách ghi file: không heredoc, không `cat >`, không `tee`, không python. Agent ghi report bằng tool ghi file, theo brief.
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
-4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash, chờ xong, rồi `P ingest <id>`.
+4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash với `timeout` 3600000 (D33.4), chờ xong, rồi `P ingest <id>`.
 5. `P brief` in một dòng thay cho JSON khi bước `texture` dừng trước khi giao (thiếu key Meshy, câu hỏi Meshy): làm theo phần "Tiếp" của dòng đó.
 
 **Chế độ giao việc** (D33): không kết thúc lượt để chờ thông báo. Việc xong hay chưa đọc từ file trên đĩa (`P next`, file report).

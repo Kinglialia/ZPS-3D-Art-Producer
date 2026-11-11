@@ -24,6 +24,7 @@ def image_gen(preset: Path) -> dict:
 
 
 CODEX_TIMEOUT_S, CODEX_TIMEOUT_MIN_S = 900, 300
+BASH_TIMEOUT_MS = 3600000  # D33.4: BASH_MAX_TIMEOUT_MS of templates/settings.snippet.json; the worker passes it to Bash
 
 
 def codex_timeout(cfg: dict) -> int:
@@ -43,7 +44,8 @@ def pilot_line(prof: dict) -> str:
 def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = (),
                cfg: dict | None = None) -> list[str]:
     t = SKILL_DIR / "agents" / agent_name(step.get("agent")) / "tools"
-    out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
+    long = "blender" in step["uses"] or (gen and "codex_image" in step["uses"]) or step["id"] == texture.STEP
+    out = ([f"TOOLS: {t}"] if t.is_dir() else []) + ([f"BASH_TIMEOUT_MS: {BASH_TIMEOUT_MS}"] if long else []) + (
         [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else []
     ) + list(extra)
     if gen and "codex_image" in step["uses"]:

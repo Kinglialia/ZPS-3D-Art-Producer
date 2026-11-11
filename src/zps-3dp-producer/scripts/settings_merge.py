@@ -4,7 +4,8 @@ loads this file by path before any dependency exists, and `P preflight` uses the
 The snippet holds two placeholders that the commands of a brief need as absolute paths: <SKILL> (the installed skill
 folder, as the TOOLS, MESHY and GEN_IMAGE lines print it) and <BLENDER> (the BLENDER line). Without Blender the
 Blender rule is left out. The merge only appends: an allow rule that is missing, a hook whose command no group of that
-event runs yet. Existing keys and values never change, so a second run adds nothing."""
+event runs yet, an `env` key the settings do not set (D33.4: the Bash timeouts). Existing keys and values never change,
+so a second run adds nothing and a value the user set stays."""
 from __future__ import annotations
 
 import copy
@@ -38,14 +39,17 @@ def commands(groups) -> list[str]:
 
 
 def missing(settings: dict, want: dict) -> dict:
-    """{"allow": rules not in settings, "hooks": {event: commands not run by any group of that event}}."""
+    """{"allow": rules not in settings, "hooks": {event: commands not run by any group of that event},
+    "env": {key: value the settings do not set}}."""
     have = ((settings.get("permissions") or {}).get("allow")) or []
     hooks = settings.get("hooks") or {}
     out_hooks = {}
     for ev, groups in want.get("hooks", {}).items():
         if gone := [c for c in commands(groups) if c not in commands(hooks.get(ev))]:
             out_hooks[ev] = gone
-    return {"allow": [r for r in want["permissions"]["allow"] if r not in have], "hooks": out_hooks}
+    env = settings.get("env") or {}
+    return {"allow": [r for r in want["permissions"]["allow"] if r not in have], "hooks": out_hooks,
+            "env": {k: v for k, v in (want.get("env") or {}).items() if k not in env}}
 
 
 def merge(settings: dict, want: dict) -> dict:
@@ -53,6 +57,8 @@ def merge(settings: dict, want: dict) -> dict:
     gap = missing(settings, want)
     if gap["allow"]:
         out.setdefault("permissions", {}).setdefault("allow", []).extend(gap["allow"])
+    if gap["env"]:
+        out.setdefault("env", {}).update(gap["env"])
     for ev, cmds in gap["hooks"].items():
         out.setdefault("hooks", {}).setdefault(ev, []).extend(
             g for g in want["hooks"][ev] if any(c in cmds for c in commands([g])))
@@ -65,8 +71,9 @@ def read(path: Path) -> dict:
         return {}
     doc = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(doc, dict) or not isinstance(doc.get("permissions", {}), dict) or not isinstance(
-            (doc.get("permissions") or {}).get("allow", []), list) or not isinstance(doc.get("hooks", {}), dict):
-        raise ValueError("không phải object settings có permissions.allow là list và hooks là object")
+            (doc.get("permissions") or {}).get("allow", []), list) or not isinstance(doc.get("hooks", {}), dict) or not isinstance(
+            doc.get("env", {}), dict):
+        raise ValueError("không phải object settings có permissions.allow là list, hooks và env là object")
     return doc
 
 

@@ -85,13 +85,14 @@ def settings_gap(b: dict | None) -> dict | None:
     if not EDITION or not SNIPPET.is_file():
         return None
     d = SKILL_DIR.parents[1]
-    have = {"permissions": {"allow": []}, "hooks": {}}
+    have = {"permissions": {"allow": []}, "hooks": {}, "env": {}}
     for f in (d / "settings.json", d / "settings.local.json"):
         try:
             doc = settings_merge.read(f)
         except (OSError, ValueError):
             continue
         have["permissions"]["allow"] += (doc.get("permissions") or {}).get("allow") or []
+        have["env"] |= doc.get("env") or {}
         for ev, groups in (doc.get("hooks") or {}).items():
             have["hooks"].setdefault(ev, []).extend(groups if isinstance(groups, list) else [])
     want = settings_merge.wanted(SNIPPET, SKILL_DIR, b["path"] if b else None)
@@ -114,9 +115,10 @@ def run_preflight(a):
         parts.append(f"codex-cli {cli['version']} thiếu flag {', '.join(cli['missing_flags'])} của `codex exec` "
                      "→ cài codex-cli đã test (0.164.0) rồi chạy lại `preflight`")
     parts.append(f"kit {k['overall']}" if "overall" in k else "không có kit preflight.py")
-    if gap and (gap["missing"]["allow"] or gap["missing"]["hooks"]):
+    if gap and (gap["missing"]["allow"] or gap["missing"]["hooks"] or gap["missing"]["env"]):
         lack = ([f"{len(gap['missing']['allow'])} allow rule"] if gap["missing"]["allow"] else []) + [
-            f"hook {ev}" for ev in gap["missing"]["hooks"]]
+            f"hook {ev}" for ev in gap["missing"]["hooks"]] + (
+            [f"env {', '.join(gap['missing']['env'])} (Bash timeout, D33.4)"] if gap["missing"]["env"] else [])
         parts.append(f"{gap['file']} thiếu {', '.join(lack)} → chạy lại install.py của bản cài")
     print(f"preflight: {'; '.join(parts)} → {rel(OUT)}")
 

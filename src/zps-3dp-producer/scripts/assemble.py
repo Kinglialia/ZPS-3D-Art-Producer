@@ -55,9 +55,15 @@ def sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+BLENDER_TIMEOUT_S = 900  # D33.3: three Blender runs stay under BASH_MAX_TIMEOUT_MS 3600000 of the settings snippet
+
+
 def blender(exe: str, script: Path, *args) -> tuple[int, str]:
-    r = subprocess.run([exe, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(script), "--",
-                        *map(str, args)], capture_output=True, text=True)
+    try:
+        r = subprocess.run([exe, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(script), "--",
+                            *map(str, args)], capture_output=True, text=True, timeout=BLENDER_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return 1, f"Blender quá {BLENDER_TIMEOUT_S} s: {script.name}"
     return r.returncode, r.stdout + r.stderr
 
 

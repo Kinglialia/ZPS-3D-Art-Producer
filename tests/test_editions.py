@@ -452,8 +452,9 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
         assert r.returncode == 0, r.stderr
         return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
     out, gap = preflight()
-    assert ".claude/settings.json thiếu 6 allow rule, hook SessionStart → chạy lại install.py của bản cài" in out
+    assert (".claude/settings.json thiếu 6 allow rule, hook SessionStart, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
+            "(Bash timeout, D33.4) → chạy lại install.py của bản cài") in out
     assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (6, ["SessionStart"])
     s.write_text(merged, encoding="utf-8")
     out, gap = preflight()
-    assert ("thiếu" in out, gap["missing"]) == (False, {"allow": [], "hooks": {}})
+    assert ("thiếu" in out, gap["missing"]) == (False, {"allow": [], "hooks": {}, "env": {}})

@@ -3,7 +3,7 @@
 
 Usage: python3 gen_image_codex.py --model <m> --reasoning <r> --pid-file <f> --prompt <request.md>
            --image <ref> [--image <ref> ...] --out <dir/name.png> [--prompt <b.md> --out <dir/b.png> ...]
-           [--batch] [--size 1536x1024] [--timeout 900] [--approve-for-me "<why the last call was blocked>"]
+           [--batch] [--size 1536x1024] [--timeout 900] [--wall-s 3300] [--approve-for-me "<why the last call was blocked>"]
 The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prompt holds only what to draw;
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
 Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin, in an env without any *_API_KEY other than
@@ -18,6 +18,8 @@ checked on its own (exists, PNG header, Pillow reads it, long side); only the fi
 one line per file. D30.22: --batch (the brief adds it when the step has `codex_batch = true`) asks for every pending file
 in one call, then checks each file and asks again only for the failed ones; all --out files share one folder, and the
 CODEX_HOME fallback holds only for a call with one file. --timeout is per call; the brief gives it from pipeline.toml [codex] timeout_s (≥ 300).
+D33.3: --wall-s caps the whole run below the Bash limit of the settings snippet (BASH_MAX_TIMEOUT_MS 3600000): no new
+call starts when it could end after the cap; the jobs left fail with "hết thời gian tổng".
 D28.1: the record keeps the requested model (--model) and the actual one, the `model:` line of the header that
 `codex exec` prints on stderr ("không có số" without it). When --out lies in <root>/assets/<id>/<step>/vN/, both also go
 to the ledger and to `inputs[<step>]["vN"]` of status.json. D30.19: the record and the ledger line also keep the version
@@ -198,9 +200,14 @@ def check(a, j: dict, p, start: float, alone: bool) -> tuple[str | None, bool, l
 def run_jobs(a, jobs: list[dict]):
     """Each round calls Codex once per pending job, or once for all of them with --batch. After a call every job file is checked on its own, and only the
     jobs that failed go to the next round, at most TRIES tries each."""
-    pending = list(jobs)
+    pending, t0 = list(jobs), time.monotonic()
     while pending:
         for group in [pending] if a.batch else [[j] for j in pending]:
+            if time.monotonic() - t0 + a.timeout > a.wall_s:
+                for j in group:
+                    j["rec"]["errors"].append(f"hết thời gian tổng {a.wall_s} s (D33.3): không gọi thêm")
+                    j["rec"]["attempts"] = TRIES
+                continue
             p, start = call(a, group)
             for j in group:
                 rec = j["rec"]
@@ -223,6 +230,7 @@ def main():
     ap.add_argument("--out", required=True, type=Path, action="append")
     ap.add_argument("--size", default="1536x1024")
     ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--wall-s", type=int, default=3300)
     ap.add_argument("--batch", action="store_true")
     ap.add_argument("--approve-for-me", metavar="REASON")
     a = ap.parse_args()

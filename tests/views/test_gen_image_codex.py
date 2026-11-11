@@ -28,13 +28,13 @@ def gen(tmp_path):
     out.parent.mkdir(parents=True)
     log, pid = tmp_path / "calls.jsonl", tmp_path / "pids/codex_image/hut.pid"
 
-    def run(mode="ok", found=True, size=None, timeout=None, keys=None):
+    def run(mode="ok", found=True, size=None, timeout=None, keys=None, extra=()):
         env = {**os.environ, **(keys or {}), "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(pid),
                "CODEX_HOME": str(tmp_path / "codex-home"),
                "PATH": path if found else "/usr/bin:/bin"}
         args = [sys.executable, str(GEN), "--model", "gpt-6-astra", "--reasoning", "medium", "--pid-file", str(pid),
                 "--prompt", str(tmp_path / "front.md"), *[f"--image={r}" for r in refs], "--out", str(out),
-                *(["--size", size] if size else []), *(["--timeout", str(timeout)] if timeout else [])]
+                *(["--size", size] if size else []), *(["--timeout", str(timeout)] if timeout else []), *extra]
         p = subprocess.run(args, capture_output=True, text=True, env=env)
         calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
         rec = out.with_suffix(".json")
@@ -424,3 +424,11 @@ def test_the_fake_parser_logs_every_image_of_one_i_flag_and_of_each_equals_form(
     both forms, so a batch test sees every reference the call attached."""
     assert fake_codex.image_args(["-i", "a.png", "b.png", "--skip-git-repo-check", "--image=c.png", "-"]) == [
         "a.png", "b.png", "c.png"]
+
+
+def test_no_new_codex_call_starts_when_it_could_end_after_the_total_cap_so_the_run_ends_before_the_bash_limit_d33_3(gen):
+    """Run 5 had no Bash call cut, but 3 tries of 900 s per file outlast any Bash timeout. With --wall-s 2 and 1 s per
+    call, the second try could end after 2 s: it never starts, and the record says why."""
+    r = gen("slow:60", timeout=1, extra=("--wall-s", "2"))
+    assert (r["rc"], len(r["calls"])) == (1, 1)
+    assert r["record"]["errors"] == ["hết thời gian chờ 1 s", "hết thời gian tổng 2 s (D33.3): không gọi thêm"]
