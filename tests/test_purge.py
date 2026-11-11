@@ -16,18 +16,20 @@ from flowkit import A, AID, counts, to_texture
 from shared import P
 
 # The fake flow writes text into every output; these are the files a purge must delete: the GLB and .blend files of
-# every final/, all of work/ (the Meshy download), and the asset's code (D32: custom_parts.py and each parts_lib.py
-# that holds a copy of it). Text records, step text sources and board images stay.
+# every final/ and all of work/ (the Meshy download, the JSON meshes of custom_parts.py). Text records, step text
+# sources and board images stay, and so does the asset's custom_parts.py (D32.3): a redo after DUYỆT 2 rebuilds from
+# the part graph, and the graph names its functions.
 DELETED = [
     "assemble/v1/final/model/pilot-house.blend", "assemble/v1/final/model/pilot-house.glb",
-    "blockout/v1/final/assembled.glb", "blockout/v1/final/parts_lib.py", "custom_parts.py",
-    "model/v1/final/parts_lib.py", "model/v1/final/pilot-house-untextured.glb", "model/v1/final/pilot-house.blend",
+    "blockout/v1/final/assembled.glb", "blockout/v1/work/custom_mesh/ridge.json",
+    "model/v1/final/pilot-house-untextured.glb", "model/v1/final/pilot-house.blend",
     "texture/v1/work/meshy/call-1/base_color.png", "texture/v1/work/meshy/call-1/glb.glb",
     "texture/v1/work/meshy/call-1/meshy_call.json", "texture/v1/work/meshy/call-1/task.json",
     "texture/v1/work/meshy/call-1/topology.json"]
 HERO = "texture/v1/final/final_lit_vs_concept.png"
 MARK = "feedback/texture-v1-1/final_lit_vs_concept.png"
-SOURCES = ["blockout/v1/final/part_graph.json", "blockout/v1/final/sources.json", "model/v1/final/spec.json",
+SOURCES = ["blockout/v1/final/part_graph.json", "blockout/v1/final/parts_lib.py", "blockout/v1/final/sources.json",
+           "custom_parts.py", "model/v1/final/parts_lib.py", "model/v1/final/spec.json",
            "texture/v1/final/texture_spec.json"]
 
 
@@ -44,6 +46,8 @@ def base(tmp_path_factory):
     (root / A / MARK).parent.mkdir(parents=True)
     Image.new("RGB", (64, 64)).save(root / A / MARK)
     (root / A / "custom_parts.py").write_text("def ridge(w, d, h):\n    return None\n", encoding="utf-8")
+    (root / A / "blockout/v1/work/custom_mesh").mkdir(parents=True)
+    (root / A / "blockout/v1/work/custom_mesh/ridge.json").write_text("{}", encoding="utf-8")
     return root
 
 
@@ -107,12 +111,11 @@ def test_the_users_approval_arms_and_prints_the_list_but_nothing_is_deleted_in_t
     out = approve(proj).splitlines()
     total = sum((proj / A / r).stat().st_size for r in DELETED)
     assert out[:2] == ["pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong",
-                       f"Lệnh xóa D29: 13 file, {total / 1024:.1f} KB; thu nhỏ 1 ảnh trang duyệt trỏ tới; xóa ở đầu "
+                       f"Lệnh xóa D29: 11 file, {total / 1024:.1f} KB; thu nhỏ 1 ảnh trang duyệt trỏ tới; xóa ở đầu "
                        "phiên sau (hook SessionStart: startup hoặc clear). Giữ: `keep pilot-house`. Xóa ngay: "
                        "`purge pilot-house --by \"<nguyên văn>\"`. Danh sách: "
                        "production/assets/pilot-house/purge-pending.json"]
-    assert [l.split(":")[0].strip() for l in out[2:]] == ["assemble/v1", "blockout/v1", "custom_parts.py", "model/v1",
-                                                         "texture/v1"]
+    assert [l.split(":")[0].strip() for l in out[2:]] == ["assemble/v1", "blockout/v1", "model/v1", "texture/v1"]
     doc = json.loads((proj / A / "purge-pending.json").read_text(encoding="utf-8"))
     assert ([d["path"] for d in doc["delete"]], doc["thumbs"], doc["session"]) == (DELETED, [HERO], "s1")
     assert f"[{AID}] chờ xóa" in p(proj, "next")
@@ -127,7 +130,7 @@ def test_a_new_session_deletes_exactly_the_files_outside_the_keep_set(proj, sour
     approve(proj)
     before = tree(proj)
     out = hook(proj, source)
-    assert f"[{AID}] đã xóa 13 file, thu nhỏ 1 ảnh, giải phóng " in out
+    assert f"[{AID}] đã xóa 11 file, thu nhỏ 1 ảnh, giải phóng " in out
     after = tree(proj)
     assert sorted(set(before) - set(after)) == sorted(DELETED + ["purge-pending.json"])
     assert sorted(set(after) - set(before)) == ["purge-manifest.json"]
@@ -160,7 +163,7 @@ def test_purge_deletes_now_and_zip_packs_the_files_first(proj):
     approve(proj)
     z = proj / "keep" / "pilot.zip"
     out = p(proj, "purge", AID, "--by", "xóa luôn đi", "--zip", str(z))
-    assert out.startswith("[pilot-house] đã xóa 13 file, thu nhỏ 1 ảnh")
+    assert out.startswith("[pilot-house] đã xóa 11 file, thu nhỏ 1 ảnh")
     assert not any((proj / A / r).exists() for r in DELETED)
     assert sorted(zipfile.ZipFile(z).namelist()) == sorted(f"{AID}/{r}" for r in DELETED + [HERO])
     assert ledger(proj)[-1].endswith(f" · by: xóa luôn đi · nén {z}")
@@ -221,7 +224,7 @@ def test_ab_folders_keep_every_file_until_the_pair_is_judged_then_follow_the_nor
     env = {"claude": {"PRODUCER_ROOT": "production-claude", "PRODUCER_RUNTIME": "claude"},
            "codex": {"PRODUCER_ROOT": "production-codex", "PRODUCER_RUNTIME": "codex"}}
     for rt in ("claude", "codex"):
-        assert "Lệnh xóa D29: 13 file" in approve(proj, env=env[rt])
+        assert "Lệnh xóa D29: 11 file" in approve(proj, env=env[rt])
     wait = (f"cặp A/B {AID} chưa có kết quả so (chưa `ab prefer {AID} <A|B|tie>` và chưa đủ hai lần `ab judge`): "
             "giữ mọi file tới khi có")
     assert wait in hook(proj, "startup", env=env["claude"])
@@ -229,12 +232,12 @@ def test_ab_folders_keep_every_file_until_the_pair_is_judged_then_follow_the_nor
         assert p(proj, "purge", AID, "--by", "xóa", env=env[rt], ok=False) == f"LỖI: {AID}: không xóa: {wait}\n"
         assert all((proj / f"production-{rt}/assets" / AID / r).exists() for r in DELETED)
     p(proj, "ab", "prefer", AID, "A", "--by", "bản A đẹp hơn", env=env["claude"])
-    assert "đã xóa 13 file" in hook(proj, "startup", env=env["claude"])
+    assert "đã xóa 11 file" in hook(proj, "startup", env=env["claude"])
     assert not any((proj / "production-claude/assets" / AID / r).exists() for r in DELETED)
     out = hook(proj, "startup", env=env["codex"])
     assert f"[{AID}] chờ xóa" in out and "bản Codex không tự xóa" in out
     assert all((proj / "production-codex/assets" / AID / r).exists() for r in DELETED)
-    assert "đã xóa 13 file" in p(proj, "purge", AID, "--by", "xóa", env=env["codex"])
+    assert "đã xóa 11 file" in p(proj, "purge", AID, "--by", "xóa", env=env["codex"])
 
 
 def test_next_warns_above_disk_warn_gb_and_disk_sums_by_asset_step_and_type(proj):
@@ -273,7 +276,7 @@ def test_an_image_that_cannot_be_shrunk_keeps_its_pixels_and_the_purge_still_rec
     raw = (proj / A / HERO).read_bytes()
     (proj / A / HERO).write_bytes(raw[:200])
     approve(proj)
-    assert "đã xóa 13 file, thu nhỏ 1 ảnh" in p(proj, "purge", AID, "--by", "xóa")
+    assert "đã xóa 11 file, thu nhỏ 1 ảnh" in p(proj, "purge", AID, "--by", "xóa")
     man = json.loads((proj / A / "purge-manifest.json").read_text(encoding="utf-8"))
     assert man["thumbnails"][0]["path"] == HERO and man["thumbnails"][0]["error"]
     assert (proj / A / HERO).read_bytes() == raw[:200]

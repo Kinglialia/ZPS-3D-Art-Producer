@@ -14,7 +14,6 @@ from .state import (ASSETS, DELIVER, FINISHED, ROOT, RUNTIME, ProducerError, die
 
 TEXT = {".md", ".json", ".jsonl", ".txt", ".yaml", ".yml", ".toml", ".py", ".csv"}
 PENDING, MANIFEST = "purge-pending.json", "purge-manifest.json"
-ASSET_CODE = ("custom_parts.py", "parts_lib.py")
 NEW_SESSION = ("startup", "clear")
 THUMB_PX = 1024
 GB = 1 << 30
@@ -58,15 +57,15 @@ def big(p: Path) -> bool:
 def plan(cfg: dict, st: dict) -> dict:
     """D29.6: keep text records and step text sources outside `work/`, and the images the board links (shrunk when
     larger than THUMB_PX). Everything else under assets/<id>/ is deleted. `feedback/` keeps its marked images:
-    feedback.md links them. D32: the asset's code goes too: custom_parts.py and every parts_lib.py, the copy
-    build_parts.py writes beside each graph (it holds custom_parts.py)."""
+    feedback.md links them. D32.3: the asset's custom_parts.py and each parts_lib.py stay as text sources; the JSON
+    meshes custom_mesh.py made sit in work/ and go with it."""
     a = ASSETS / st["id"]
     shown = linked(cfg, st)
     out, thumbs = [], []
     for f in sorted(files(a)):
         r = f.relative_to(a).parts
         work = len(r) > 3 and re.fullmatch(r"v\d+", r[1]) and r[2] == "work"
-        if r[0] == "feedback" or not work and f.suffix.lower() in TEXT and f.name not in ASSET_CODE:
+        if r[0] == "feedback" or not work and f.suffix.lower() in TEXT:
             continue
         if not work and f.resolve() in shown:
             if big(f):
