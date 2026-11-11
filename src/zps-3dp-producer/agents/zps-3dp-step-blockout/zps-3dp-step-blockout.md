@@ -31,7 +31,7 @@ Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `R/part-g
 ## Quy trình
 
 1. Đọc nguồn (concept albedo, `asset-card.yaml`, Material Handoff, `<id>.layout.md` khi `has_map: true`, profile). Ghi `F/sources.json`, mỗi số kèm dòng trích nguồn. Nếu hash file nguồn không đổi so với version trước, dùng lại `sources.json` (`check_inputs` báo `sources_reusable`). Chạy `check_inputs.py`.
-2. Đếm thành phần trên concept. Ghi một dòng vào `F/blockout.md` (ví dụ "4 trụ, 1 cửa, 3 thùng").
+2. Đếm thành phần trên concept. Ghi một dòng vào `F/blockout.md` (ví dụ "4 trụ, 1 cửa, 3 thùng" hoặc "1 thân, 3 cành, 2 tảng đá").
 3. Đo trên concept riêng, không đo trên map tổng. Lấy cửa làm thước. Ghi bảng đo vào `blockout.md`: param, giá trị, nguồn, cách đo.
 4. Viết `part_graph.json`. Không viết `parts_lib.py`: mỗi lần dựng, `build_parts.py` chép `T/custom_lib.py` vào đó. Chạy `check_schema.py`, `check_materials.py`.
 5. Khóa tỉ lệ chính trước: footprint, tường, mái, cửa, các tầng nền. Dựng với `--upto` tới part chính cuối cùng, chạy gate từng part và `check_layout.py`. Chỉ khi gate pass mới thêm part phụ. `size_m` tính cả viền, đai và chi tiết nhô, nên `check_layout` có thể fail ở bước này: ghi số lệch vào `work/notes.md`; `check_layout` phải pass ở lần tự kiểm cuối.

@@ -88,7 +88,7 @@ Mọi tool ghi một file JSON cùng dạng kit (`lib/common.write_result`): `ov
 
 Review page hiện ba dòng đầu (bỏ dòng trống) làm tóm tắt. Dòng đầu: `# Blockout <id> v<N>`. Hai dòng sau là mục 1 và 2, mỗi mục một dòng. Các mục khác theo sau, đúng thứ tự:
 
-1. Thành phần đếm trên concept (ví dụ "4 trụ, 1 cửa, 3 thùng").
+1. Thành phần đếm trên concept (ví dụ "4 trụ, 1 cửa, 3 thùng" hoặc "1 thân, 3 cành, 2 tảng đá").
 2. Bbox so với MAP-LAYOUT (`has_map: true`) hoặc `size_m` của thẻ asset (`has_map: false`).
 3. Version, hash của `part_graph.json` + `parts_lib.py`.
 4. Bảng đo: param, giá trị, nguồn, cách đo.

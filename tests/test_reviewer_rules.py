@@ -6,15 +6,15 @@ import pytest
 
 AGENTS = Path(__file__).resolve().parents[1] / "src/zps-3dp-producer/agents"
 PRESERVE = ('- `preserve` nêu tên các chi tiết nằm cạnh vùng sửa có thể bị đụng tới (ví dụ "nét mực mép mái", '
-            '"khung cửa trái"), không ghi chung chung "giữ phần còn lại".')
+            '"chân bàn trái", "gốc cây"), không ghi chung chung "giữ phần còn lại".')
 COUNT = {
-    "blockout": "- Sai số lượng thành phần so với concept (số hàng ván, số cửa, số trụ): luôn là `structure`, "
+    "blockout": "- Sai số lượng thành phần so với concept (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là `structure`, "
                 "không bao giờ là ghi chú.",
-    "clay": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số hàng ván, số cửa, số trụ): luôn là "
+    "clay": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
             "`structure`, không bao giờ là ghi chú.",
-    "texture": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số hàng ván, số cửa, số trụ): luôn là "
+    "texture": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
                "`repaint` (vẽ sai) hoặc `fix_uv_mesh` (mesh sai), không bao giờ là `note`.",
-    "views": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số hàng ván, số cửa, số trụ): luôn là "
+    "views": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
              "`regen`, không bao giờ là `note_texture`.",
 }
 
