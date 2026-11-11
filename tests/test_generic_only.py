@@ -94,3 +94,11 @@ def test_the_heuristic_sees_a_file_of_building_examples_as_one_kind():
 
 def test_no_shipped_file_uses_the_words_of_one_past_asset():
     assert [f"{p}: {w}" for p, t in shipped_text().items() for w in ONE_ASSET if w in t.lower()] == []
+
+
+def test_no_role_file_tells_an_agent_to_write_asset_functions_in_bmesh():
+    """D32: an asset's own functions are pure Python with only math, turned into a JSON mesh outside Blender.
+    A role file that still says bmesh sends the agent back to the old path, which Blender would run as agent code."""
+    old = re.compile(r"chỉ bmesh|bmesh only|only bmesh")
+    roles = [p for p in tracked("src/zps-3dp-producer/agents") if p.endswith(".md")]
+    assert [p for p in roles if old.search((ROOT / p).read_text(encoding="utf-8").lower())] == []
