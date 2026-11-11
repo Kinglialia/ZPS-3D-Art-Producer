@@ -51,7 +51,7 @@ def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra:
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
                 f"GEN_ARGS: --model {ig['codex_model']} --reasoning {ig['reasoning']} "
                 f"--pid-file {rel(ROOT / 'pids' / 'codex_image' / (st['id'] + '.pid'))} "
-                f"--timeout {codex_timeout(cfg or {})}"]
+                f"--timeout {codex_timeout(cfg or {})}" + (" --batch" if step.get("codex_batch") is True else "")]
     return out + [""] if out else []
 
 

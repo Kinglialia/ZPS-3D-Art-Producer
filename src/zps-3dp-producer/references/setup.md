@@ -24,6 +24,7 @@ Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong
 - `[limits]` trong `pipeline.toml`: số tiến trình cùng lúc. Worker ghi PID mỗi lệnh Blender vào `production/pids/blender/<id>.pid` (brief ghi lệnh mẫu); `gen_image_codex.py` tự ghi `production/pids/codex_image/<id>-<pid>.pid` cho mỗi lần chạy. `P next` chỉ đếm PID còn sống.
 - `[codex] timeout_s` trong `pipeline.toml`: giây chờ mỗi lần gọi `codex exec` (mặc định 900, tối thiểu 300; D30.20). Brief đưa số này vào `GEN_ARGS`. Sau mỗi lần gọi, `gen_image_codex.py` kiểm từng file (có file, header PNG, đọc được, cạnh dài > 1040 px) và chỉ gen lại file hỏng hoặc thiếu.
 - `--approve-for-me` của Codex tự duyệt mọi yêu cầu quyền: không bao giờ có trong lệnh mặc định hay `GEN_ARGS` (D30.21). Chỉ khi một lần gọi bị chặn thật, người dùng chạy lại lệnh gen với `--approve-for-me "<lý do>"`; `<tên>.json` và ledger ghi lý do.
+- `codex_batch = true` ở `[[steps]]` texture: `GEN_ARGS` có `--batch`, các paint view dùng chung tham chiếu gen trong một lần gọi (D30.22). Mặc định `false`. Chỉ bật ở bước texture.
 - `PRODUCER_ROOT`: thư mục làm việc (mặc định `production`); gói cuối vào thư mục `deliver` cùng hậu tố (`production-codex` → `deliver-codex`). Dùng khi so A/B hai runtime.
 
 ## Project mới

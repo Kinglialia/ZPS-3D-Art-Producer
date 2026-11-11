@@ -108,3 +108,12 @@ def test_the_brief_never_hands_the_worker_a_flag_that_approves_for_the_user_d30_
         cfg, st, step, preset, _ = ctx(stage)
         assert [f for f in ("--approve-for-me", "--full-auto", "--dangerously-bypass-approvals-and-sandbox")
                 if f in gen_args(cfg, st, step, preset)] == [], stage
+
+
+def test_batching_is_off_in_a_new_project_and_on_only_for_the_step_that_sets_codex_batch_d30_22(ctx):
+    """One call for several images may mix the references of the views; it stays off until V6 shows the repaint
+    findings are no worse, and then only for the texture paint views."""
+    cfg, st, step, preset, _ = ctx("texture")
+    assert step["codex_batch"] is False and not gen_args(cfg, st, step, preset).endswith("--batch")
+    assert gen_args(cfg, st, step | {"codex_batch": True}, preset).endswith(" --timeout 900 --batch")
+    assert [s["id"] for s in cfg["steps"] if "codex_batch" in s] == ["texture"]

@@ -373,3 +373,54 @@ def test_approve_for_me_without_a_reason_is_refused_before_any_codex_call(gen, r
                                                             "FAKE_CODEX_LOG": str(gen.tmp / "none.jsonl")})
     assert (p.returncode, p.stderr.splitlines()[-1], (gen.tmp / "none.jsonl").exists()) == (
         2, "gen_image_codex.py: error: --approve-for-me cần lý do: lần gọi trước bị chặn ở đâu", False)
+
+
+def test_without_batch_each_paint_view_is_its_own_codex_call_d30_22(gen):
+    """Batching is off by default: one call per image keeps the references of one view out of the others."""
+    p, calls, recs = gen_many(gen, ["paint_1", "paint_2", "paint_3"])
+    assert (p.returncode, [c["outs"] for c in calls]) == (0, [["paint_1.png"], ["paint_2.png"], ["paint_3.png"]])
+    assert [r["batch"] for r in recs.values()] == [False] * 3
+
+
+def test_with_batch_the_views_go_in_one_call_with_every_shared_reference_and_each_file_is_checked(gen):
+    """D30.22: about 11.7 s of overhead per call; one call for the views that share the references saves it. The
+    files are still checked one by one."""
+    p, calls, recs = gen_many(gen, ["paint_1", "paint_2", "paint_3"], extra=["--batch"])
+    assert p.returncode == 0, p.stdout
+    assert [c["outs"] for c in calls] == [["paint_1.png", "paint_2.png", "paint_3.png"]]
+    assert calls[0]["images"] == [str(r) for r in gen.refs]
+    assert [f"JOB {k}\n" in calls[0]["prompt"] for k in (1, 2, 3)] == [True] * 3
+    assert {n: (r["status"], r["attempts"], r["batch"]) for n, r in recs.items()} == {
+        n: ("ok", 1, True) for n in ("paint_1", "paint_2", "paint_3")}
+
+
+def test_with_batch_one_broken_file_of_three_is_asked_for_again_alone(gen):
+    p, calls, recs = gen_many(gen, ["paint_1", "paint_2", "paint_3"], "break_once:paint_2.png", extra=["--batch"])
+    assert (p.returncode, [c["outs"] for c in calls]) == (
+        0, [["paint_1.png", "paint_2.png", "paint_3.png"], ["paint_2.png"]])
+    assert [recs[n]["attempts"] for n in ("paint_1", "paint_2", "paint_3")] == [1, 2, 1]
+
+
+def test_with_batch_a_new_image_under_codex_home_is_never_given_to_one_of_several_missing_files(gen):
+    """Codex saved one image but wrote none of the outputs: no rule maps it to one job, so the fallback waits for a
+    call with one job."""
+    p, calls, recs = gen_many(gen, ["paint_1", "paint_2"], "home", extra=["--batch"])
+    assert [c["outs"] for c in calls][:2] == [["paint_1.png", "paint_2.png"], ["paint_1.png", "paint_2.png"]]
+    assert (p.returncode, [r["fallback"] for r in recs.values()]) == (1, [False, False])
+
+
+def test_batch_refuses_outputs_in_two_folders_because_codex_exec_opens_one_working_folder(gen):
+    (gen.tmp / "a.md").write_text("x", encoding="utf-8")
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                        "--prompt", str(gen.tmp / "a.md"), "--out", str(gen.tmp / "x/a.png"),
+                        "--prompt", str(gen.tmp / "a.md"), "--out", str(gen.tmp / "y/a.png"), "--batch"],
+                       capture_output=True, text=True, env={**os.environ, "PATH": fake_codex.install(gen.tmp / "bin")})
+    assert (p.returncode, p.stderr.splitlines()[-1]) == (
+        2, "gen_image_codex.py: error: --batch cần mọi --out trong cùng một thư mục: codex exec -C chỉ mở một thư mục")
+
+
+def test_the_fake_reads_several_images_after_one_i_flag_as_codex_cli_0_164_0_does(gen):
+    """`-i, --image <FILE>...` takes values up to the next option; the script writes --image=<f> per file, so a
+    trailing `-` (prompt on stdin) is never read as an image."""
+    assert fake_codex.image_args(["-i", "a.png", "b.png", "--skip-git-repo-check", "--image=c.png", "-"]) == [
+        "a.png", "b.png", "c.png"]

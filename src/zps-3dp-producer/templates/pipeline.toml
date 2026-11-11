@@ -22,6 +22,8 @@
 #   D31.1); brief reviewer chỉ đưa sheet. Reviewer xin ảnh gốc hoặc crop có trên đĩa qua need_evidence: script tự lấy, không
 #   giao worker, tối đa [review] served_evidence lần mỗi đợt feedback.
 # no_views_concept: file concept thêm cho worker khi thẻ `views: none`; reviewer khi đó nhận đúng danh sách của worker.
+# codex_batch: true → GEN_ARGS có --batch: các paint view dùng chung tham chiếu gen trong một lần gọi Codex, rồi kiểm từng
+#   file (D30.22). Mặc định false. Chỉ bật ở bước texture; bật thử ở V6 và so số finding repaint với gọi từng ảnh.
 
 [project]
 name = "{{PROJECT}}"
@@ -124,6 +126,7 @@ no_views_concept = ["{id}.material.md"]
 sheet = ["final/final_lit_vs_concept.png", "final/review/lit_*.png", "final/review/unlit_*.png", "final/review/thumb.png",
          "final/review/id_map.png", "final/review/meshy_albedo.png", "final/albedo_*.png"]
 issues = ["model"]
+codex_batch = false
 pilot = true
 outputs = ["final/albedo_{res}.png", "final/texture_spec.json", "final/notes.md", "final/final_lit_vs_concept.png",
            "final/review/renders.json", "final/review/checks/tex_measure.json"]

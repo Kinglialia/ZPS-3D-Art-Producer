@@ -3,7 +3,7 @@
 
 Usage: python3 gen_image_codex.py --model <m> --reasoning <r> --pid-file <f> --prompt <request.md>
            --image <ref> [--image <ref> ...] --out <dir/name.png> [--prompt <b.md> --out <dir/b.png> ...]
-           [--size 1536x1024] [--timeout 900] [--approve-for-me "<why the last call was blocked>"]
+           [--batch] [--size 1536x1024] [--timeout 900] [--approve-for-me "<why the last call was blocked>"]
 The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prompt holds only what to draw;
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
 Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin, in an env without any *_API_KEY other than
@@ -15,7 +15,9 @@ The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset
 Several --prompt/--out pairs (same order) share the --image list. D30.20: after each call every expected file is
 checked on its own (exists, PNG header, Pillow reads it, long side); only the files that failed are made again.
 3 failed tries of one file: that file fails, and the script exits 1 at the end (D8.3). Writes <dir/name>.json and prints
-one line per file. --timeout is per call; the brief gives it from pipeline.toml [codex] timeout_s (≥ 300).
+one line per file. D30.22: --batch (the brief adds it when the step has `codex_batch = true`) asks for every pending file
+in one call, then checks each file and asks again only for the failed ones; all --out files share one folder, and the
+CODEX_HOME fallback holds only for a call with one file. --timeout is per call; the brief gives it from pipeline.toml [codex] timeout_s (≥ 300).
 D28.1: the record keeps the requested model (--model) and the actual one, the `model:` line of the header that
 `codex exec` prints on stderr ("không có số" without it). When --out lies in <root>/assets/<id>/<step>/vN/, both also go
 to the ledger and to `inputs[<step>]["vN"]` of status.json. D30.19: the record and the ledger line also keep the version
@@ -60,6 +62,18 @@ SIZE: {size}
 REQUEST:
 {request}
 """
+BATCH_FRAME = """You are one step of an art build pipeline. Do only this, for each JOB below:
+1. Use your image generation tool once per JOB to make the image that its REQUEST describes. Give the tool the attached
+   images that its REQUEST names.
+2. Save the image as PNG at the OUTPUT_PATH of the JOB, SIZE pixels.
+3. Write the RESULT_PATH of the JOB as JSON: {{"path": "<OUTPUT_PATH>", "width": <px>, "height": <px>, "error": null}}.
+   If you cannot make the image, write {{"path": null, "width": 0, "height": 0, "error": "<reason>"}}.
+Do not edit other files. Do not do other work.
+
+SIZE: {size}
+
+{jobs}"""
+JOB = "JOB {k}\nOUTPUT_PATH: {out}\nRESULT_PATH: {result}\nREQUEST:\n{request}\nEND JOB {k}\n"
 
 
 def new_images(since: float) -> list[Path]:
@@ -136,7 +150,9 @@ def call(a, jobs: list[dict]):
     for j in jobs:
         for p in (j["out"], j["result"]):
             p.unlink(missing_ok=True)
-    prompt = FRAME.format(out=jobs[0]["out"], result=jobs[0]["result"], size=a.size, request=jobs[0]["request"])
+    prompt = FRAME.format(out=jobs[0]["out"], result=jobs[0]["result"], size=a.size, request=jobs[0]["request"]) \
+        if len(jobs) == 1 else BATCH_FRAME.format(size=a.size, jobs="\n".join(
+            JOB.format(k=k, out=j["out"], result=j["result"], request=j["request"]) for k, j in enumerate(jobs, 1)))
     cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(jobs[0]["out"].parent),
            "-s", "workspace-write", "--skip-git-repo-check", *(["--approve-for-me"] if a.approve_for_me else []),
            *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
@@ -180,11 +196,11 @@ def check(a, j: dict, p, start: float, alone: bool) -> tuple[str | None, bool, l
 
 
 def run_jobs(a, jobs: list[dict]):
-    """Each round calls Codex once per pending job. After a call every job file is checked on its own, and only the
+    """Each round calls Codex once per pending job, or once for all of them with --batch. After a call every job file is checked on its own, and only the
     jobs that failed go to the next round, at most TRIES tries each."""
     pending = list(jobs)
     while pending:
-        for group in [[j] for j in pending]:
+        for group in [pending] if a.batch else [[j] for j in pending]:
             p, start = call(a, group)
             for j in group:
                 rec = j["rec"]
@@ -207,12 +223,15 @@ def main():
     ap.add_argument("--out", required=True, type=Path, action="append")
     ap.add_argument("--size", default="1536x1024")
     ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--batch", action="store_true")
     ap.add_argument("--approve-for-me", metavar="REASON")
     a = ap.parse_args()
     if a.approve_for_me is not None and not a.approve_for_me.strip():
         ap.error("--approve-for-me cần lý do: lần gọi trước bị chặn ở đâu")
     if len(a.prompt) != len(a.out):
         ap.error("mỗi --out cần đúng một --prompt, cùng thứ tự")
+    if a.batch and len({o.resolve().parent for o in a.out}) > 1:
+        ap.error("--batch cần mọi --out trong cùng một thư mục: codex exec -C chỉ mở một thư mục")
     a.actual, jobs = None, []
     for prompt, out in zip(a.prompt, a.out):
         out = out.resolve()
@@ -221,8 +240,8 @@ def main():
                      "request": prompt.read_text(encoding="utf-8").strip(),
                      "rec": {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model,
                              "model_actual": NO_NUMBER, "codex_cli": NO_NUMBER, "reasoning": a.reasoning,
-                             "prompt": str(prompt), "images": a.image, "approve_for_me": a.approve_for_me, "size": None,
-                             "fallback": False, "errors": []}})
+                             "prompt": str(prompt), "images": a.image, "approve_for_me": a.approve_for_me, "batch": a.batch,
+                             "size": None, "fallback": False, "errors": []}})
     if shutil.which("codex") is None:
         for j in jobs:
             j["rec"]["errors"].append("không thấy codex trên PATH")
