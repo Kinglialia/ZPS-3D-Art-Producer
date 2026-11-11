@@ -366,8 +366,8 @@ Lý do: agent sinh rất nhiều file trung gian. Sau khi anh duyệt kết qu�
 
 1. **Trước DUYỆT 2: giữ hết**, để anh so các bản khi duyệt.
 2. **Chỉ DUYỆT 2 do anh duyệt (`by: user`) mới mở lệnh xóa.** Producer tự duyệt (test run) thì không xóa. Finding do Producer waive (D30.1) không mở lệnh xóa.
-3. **DUYỆT 2 in danh sách xóa và tổng dung lượng sẽ giải phóng.** Không xóa trong cùng phiên đã duyệt.
-4. **Xóa ở đầu phiên sau, chỉ khi `source` là `startup` hoặc `clear`** (sửa 2026-11-10: `/clear` cũng mở phiên mới). Hook SessionStart gọi `P next --session`; script đọc `source` trong JSON mà hook nhận qua stdin. `resume` và `compact` không xóa. Lý do: hai giá trị này tiếp tục phiên cũ, không phải phiên mới. `P next` gõ tay (không có JSON của hook) không xóa. Phiên có `session_id` bằng phiên đã duyệt không xóa. Bản Codex không có hook: không bao giờ tự xóa; `P next` nhắc, anh chạy `P purge`.
+3. **DUYỆT 2 in danh sách xóa và tổng dung lượng sẽ giải phóng.** Không xóa trong cùng phiên đã duyệt. **[Sửa theo D40.1, D40.4]** Xóa ngay trong lệnh duyệt, sau khi hiện danh sách và dung lượng.
+4. **Xóa ở đầu phiên sau, chỉ khi `source` là `startup` hoặc `clear`** (sửa 2026-11-10: `/clear` cũng mở phiên mới). Hook SessionStart gọi `P next --session`; script đọc `source` trong JSON mà hook nhận qua stdin. `resume` và `compact` không xóa. Lý do: hai giá trị này tiếp tục phiên cũ, không phải phiên mới. `P next` gõ tay (không có JSON của hook) không xóa. Phiên có `session_id` bằng phiên đã duyệt không xóa. Bản Codex không có hook: không bao giờ tự xóa; `P next` nhắc, anh chạy `P purge`. **[Sửa theo D40.1]** Không còn xóa ở đầu phiên sau.
 5. **`P keep <id>`** hủy lệnh xóa trước lúc đó. **`P purge <id> --by "<nguyên văn>"`** xóa ngay khi anh muốn. Lúc xóa, script kiểm lại: asset vẫn `done`, bản `assemble` đã duyệt vẫn là bản lúc lập lệnh, có `deliver/<id>/`. Sai một điều thì hủy lệnh, không xóa (ví dụ anh `redo` sau DUYỆT 2).
    - Producer tự duyệt bằng `P feedback ... --action approve --by producer`, chỉ khi `policy.yaml` có `test_mode: true` (như D30.1).
    - Sau khi xóa, `redo` mọi bước bị từ chối, kèm đường dẫn manifest: `final/` chỉ còn file text.
@@ -424,7 +424,7 @@ Nguồn: Run 5, `NEXT-VERSION-BACKLOG.md` mục 4d, `docs/intents/v0.7.0-plan.md
 Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
 
 1. **R1 — Sheet review.** `review_sheet.py` ghép các góc của bước thành một ảnh PNG, cạnh dài khoảng 2048 px, có nhãn tên ảnh. Brief reviewer chỉ đưa sheet và concept. Reviewer cần ảnh lẻ thì xin qua `need_evidence` (crop hoặc ảnh gốc). Áp cho `blockout`, `model`, `texture`. Bước views dùng `views_sheet.py` sẵn có.
-2. **R2 — Phạm vi chấm theo loại vòng.** Brief reviewer có `REVIEW_SCOPE: full | fix`.
+2. **R2 — Phạm vi chấm theo loại vòng.** Brief reviewer có `REVIEW_SCOPE: full | fix`. **[Sửa theo D38.3]** Điều kiện `full` chỉ xét `blocker`, `major`, `unclear`; PASS ở `fix` không có `not_checked` là cuối cùng.
    - `full`: lần review đầu, và bản mà worker báo `DONE` với mọi finding đang mở đều có trong `FIXED` (bản sắp PASS).
    - `fix`: các vòng còn lại. Reviewer chỉ chấm id trong `TOP_FIX` (kèm `COMPARE`), các vùng `preserve`, và một lượt nhìn nhanh toàn sheet để bắt lỗi mới. Mục rubric không chấm ghi `not_checked`.
    - **Chỉ PASS khi lần review gần nhất là `full`.** Vòng `fix` hết lỗi mở, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
@@ -436,7 +436,7 @@ Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
 4. **R4 — `P stats` tách theo loại vòng.** Thời gian và token reviewer tách thành: vòng đầu, vòng sửa, vòng chấm cuối (`full`).
 5. **Để sau pilot:** hạ check-views, check-blockout xuống Sonnet khi ledger cho thấy reviewer chấm khớp với anh (D16.3).
 6. **Để sau V6:** bỏ reviewer ở bước có gate người duyệt ngay sau, nếu V6 xác nhận `views: none` dùng được cho phần lớn asset.
-7. **Không làm:** resume cùng một reviewer qua nhiều vòng. Lý do: reviewer bị neo vào nhận xét cũ, mất tính độc lập.
+7. **Không làm:** resume cùng một reviewer qua nhiều vòng. Lý do: reviewer bị neo vào nhận xét cũ, mất tính độc lập. **[Sửa theo D38.4]** Ngoại lệ: bằng chứng lấy sẵn trên đĩa trong cùng một lượt chấm thì resume reviewer đó.
 
 ## D32 — Hàm riêng của asset nằm trong project, không vào repo (2026-11-11, thay D27.13, D30.9 và D33 cũ)
 
@@ -482,8 +482,8 @@ Hiện tượng: pipeline đứng im cho tới khi anh nhắn, rồi mới chạ
 
 **Quy tắc 3: hạn chót và một quy tắc xử lý kẹt**
 
-10. Mỗi lần giao ghi hạn chót vào ledger: thời gian thường lệ của bước × `deadline_factor`. Thời gian thường lệ lấy từ `P stats` các lần chạy trước. Chưa có số thì dùng giá trị mặc định theo bước trong `pipeline.toml`.
-11. **Kẹt** = quá `stall_min` phút không có nhịp tim mới, hoặc quá hạn chót. Xử lý theo bậc: lần 1 nudge (SendMessage "Tiếp tục, báo trạng thái"); lần 2 giao lại cho agent mới cùng brief; lần 3 `waiting_human`. Ledger ghi mỗi lần.
+10. Mỗi lần giao ghi hạn chót vào ledger: thời gian thường lệ của bước × `deadline_factor`. Thời gian thường lệ lấy từ `P stats` các lần chạy trước. Chưa có số thì dùng giá trị mặc định theo bước trong `pipeline.toml`. **[Sửa theo D39.3]** Trung vị tính riêng cho lần dựng đầu và vòng sửa.
+11. **Kẹt** = quá `stall_min` phút không có nhịp tim mới, hoặc quá hạn chót. Xử lý theo bậc: lần 1 nudge (SendMessage "Tiếp tục, báo trạng thái"); lần 2 giao lại cho agent mới cùng brief; lần 3 `waiting_human`. Ledger ghi mỗi lần. **[Sửa theo D39.3, D39.4]** Hạn chót một mình không phải là kẹt; chỉ giao agent mới khi agent cũ đã dừng.
 
 **Hai chế độ chạy, cùng bộ quy tắc**
 
@@ -552,6 +552,79 @@ Một trường duy nhất: `views: none | back | full | full_top`. Không thêm
 4. **`full_top`:** `full` cộng top. Chỉ dùng khi mái có thiết kế riêng, không suy ra được từ concept.
 5. **Lý do bỏ top:** không bước nào sau views cần ảnh top. Hình mái do blockout quyết. Màu mái thấy trên concept 3/4. VẼ MỚI tự gen paint view. Meshy không dùng top.
 6. Giá trị lạ → `check_card` fail. V6 chọn giá trị mặc định.
+
+## D36 — Sửa lỗi sau review source 2026-11-11 (v0.8.0)
+
+Nguồn: review toàn bộ source ở `18e3333`. Danh sách việc: `docs/intents/v0.8.0-plan.md`. Mỗi lỗi có một test fail trước khi sửa.
+
+1. **Một điểm vào cho lệnh tool: `scripts/run_tool.py`.** Nó ghi và xóa file PID, trả mã thoát 1 khi tool lỗi hoặc khi JSON kết quả là `fail` hay `error`, đưa log vào `vN/work/logs/`, và in một dòng. Lý do: dòng PID của brief trả mã thoát của `rm`, nên Blender lỗi vẫn ra 0. Dòng đó dùng `&`, trong khi file agent cấm `&`. Allow rule hiện không phủ lệnh tool của worker. Một điểm vào sửa cả bốn chỗ. `run_tool.py` chỉ chạy tool nằm trong thư mục skill; đường dẫn ngoài bị từ chối, vì allow rule của nó là rule mở.
+2. **Không duyệt được bản chưa ai chấm.** Asset kẹt lần 3 vào `waiting_human` phải có lần đưa duyệt với nhãn "chưa chấm". Script từ chối `approve` khi có `stalled_from` ở bước có reviewer.
+3. **Report sai contract bị gạt sang bên** (`*.rejected-<k>.md`). `P wait` và kiểm kẹt không tính report đó.
+4. **JSON gate hỏng là `error`.** JSON gate bắt buộc nằm trong `outputs` của bước. Check chưa chạy không còn được tính là pass.
+5. **Hai phía của một phép so dùng cùng một thống kê.** Màu concept và màu đo đều là trung vị. Lý do: "vivid" so với trung vị cho dE 6,8 trên cùng một mảng gỗ, cao hơn ngưỡng texture là 3.
+6. **Nhóm seam theo mã vật liệu.** Ranh giữa hai vật liệu không phải là seam lỗi.
+7. **Gate đếm kiểm cả việc param được dùng**, không chỉ giá trị của nó.
+8. **Meshy:** hoàn đúng số credit đã trừ lúc POST. Khóa hết hiệu lực khi PID chết. Quá hạn tổng thì hỏi trạng thái một lần rồi tải.
+9. **Ảnh dự phòng Codex** chỉ lấy trong thư mục của đúng session.
+10. **"Cần sửa" gửi lúc asset đang chạy** được lưu và áp dụng ở lần ingest kế.
+11. **Bước texture đo trước, render sau.** `renders.json` ghi sha256 của albedo.
+12. Đổi hai quyết định cũ có test: ảnh JPEG hợp lệ lưu đuôi `.png` được nhận sau khi chuyển sang PNG; lỗi quota dừng ngay thay vì thử lại 3 lần.
+
+## D37 — Script lái, model chỉ quyết (v0.8.0)
+
+Lý do: worker đang chạy tay 15 đến 60 lệnh mỗi bước, phần lớn không cần phán đoán. Run 5: worker blockout 45 lượt.
+
+1. **Mỗi chuỗi lệnh tất định là một tool.** Blockout: `gate_all.py`, `make_variant.py`, `init_sources.py`, `blockout_md.py`. Views: `make_prompt.py`, `pick_best`. Model: `build_model.py`, `qa_all.py`. Texture: tool viết prompt paint.
+2. **Model chỉ viết phần cần phán đoán:** part graph, hàm `custom`, mô tả mặt khuất, chỗ sửa, ghi chú.
+3. **Dựng một lần rồi gate mọi part.** Kết quả bằng dựng từng part, vì mỗi part chỉ phụ thuộc part đứng trước.
+4. **Gộp lần mở Blender:** model từ 8 xuống 3, `assemble` từ 6 xuống 1.
+5. **Ảnh Codex chạy song song** theo số slot `codex_image` còn trống.
+6. **Ingest tự chạy mọi check thuần Python của bước.**
+7. **Thiếu một output thì resume worker cũ**, không dựng lại cả bước.
+8. File kit đóng băng không sửa. Tool mới nằm cạnh, gọi lại hàm của kit.
+
+## D38 — Review: gate trước, mắt sau (v0.8.0, sửa D31.2, D31.7)
+
+Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M. Run 4 bị từ chối contract 2 lần.
+
+1. **Reviewer không ghi thứ script tính được.** Script tính `COUNTS` và bộ id `TOP_FIX` loại lô.
+2. **Đọc contract dung thứ hình thức.** Viết hoa, in đậm, ghi chú trong ngoặc, dòng xuống hàng không còn là lỗi. Kiểm về nội dung giữ nguyên.
+3. **Sửa D31.2:** `full` khi `FIXED` phủ mọi finding `blocker`, `major`, `unclear`. PASS ở `fix` là cuối cùng khi `RUBRIC` không có `not_checked`. Lý do: worker chỉ được sửa `TOP_FIX`, nên điều kiện cũ gần như không đạt, và mỗi vòng sửa tốn ba reviewer.
+4. **Sửa D31.7:** bằng chứng lấy sẵn trên đĩa thì resume đúng reviewer đang chấm. Tính độc lập giữ nguyên: cùng lượt chấm, cùng version, reviewer chỉ nhận thêm đúng crop nó đã xin. Sang vòng worker khác vẫn là reviewer mới.
+5. **Sheet tối đa 8 ô**, có crop 1:1 do script chọn. Hai bước view có sheet.
+6. **Script điền key rubric đã có gate.** Reviewer chỉ nhận key cần nhìn và một `summary.json` nhỏ.
+7. **`reviewer_model` theo bước.**
+8. File agent chỉ giữ vai trò, phạm vi và rubric. Luật contract nằm ở brief. Reference có dòng "đọc khi …".
+
+## D39 — Không đứng im, vòng sửa hội tụ (v0.8.0, sửa D33.10, D33.11)
+
+Lý do: nguyên nhân Run 5 là Producer tự kết thúc lượt (D33 mục 1). Chỗ chặn hiện chỉ là văn xuôi.
+
+1. **Hook `Stop` của phiên chính** từ chối dừng khi còn report chưa ingest hoặc còn dòng giao việc chưa giao. Kiểm trên bản Claude Code đang dùng trước khi làm. Không chạy được thì giữ văn xuôi và ghi kết quả kiểm vào đây.
+2. **`SKILL.md` "Nhận kết quả" là danh sách đánh số.** Xóa lời mời truyền `--tokens`: chính nó gây ra lần chờ ở Run 5.
+3. **Sửa D33.10, D33.11:** kẹt là không có nhịp tim và không có file đổi trong `stall_min`. Hạn chót một mình không phải là kẹt. Trung vị tính riêng cho lần dựng đầu và vòng sửa.
+4. **Không có hai agent ghi cùng một version.** Chỉ giao agent mới khi agent cũ đã dừng.
+5. **Check fail y hệt hai lần thì hỏi anh.** Vòng trả thẳng không trừ vào `max_fix_rounds`, có trần riêng là 2.
+6. **`structure` nhận nhiều id một vòng** khi các finding đụng các part khác nhau. Lý do: D21.1 đã ghi vòng sửa không hội tụ khi có hơn 3 lỗi cấu trúc.
+7. Producer không tự quyết khi nghi reviewer chấm sai: ghi chú rồi hỏi anh. Lý do: Producer không được mở output, nên luật cũ không làm được.
+
+## D40 — Dọn ngay khi DUYỆT 2 (v0.8.0, sửa D29.3, D29.4; anh chốt 2026-11-11)
+
+1. **Anh duyệt DUYỆT 2 thì script xóa ngay trong lệnh đó**, sau khi chép `deliver/<id>/` và ghi report D41. Bỏ cơ chế xóa ở đầu phiên sau.
+2. **Giữ lại như D29.6 và D29.8:** `deliver/<id>/`, hồ sơ text, file nguồn text của từng bước, `custom_parts.py`, ảnh trang duyệt đã thu về 1024 px. Mọi version không được duyệt, file nặng của bản đã duyệt ở bước giữa, `work/`, evidence, phương án `param` không chọn: xóa thật.
+3. **Xóa thêm:** `production/show/<id>*`, file đẩy lên trang claude.ai của asset, file PID, report bị từ chối.
+4. **Trước khi xóa, lệnh và nút DUYỆT 2 hiện số file, dung lượng và câu "sau lệnh này không `redo` được".** Nút cần bấm xác nhận.
+5. **Muốn giữ:** `P keep <id>` trước khi duyệt, hoặc `purge: off` trong `policy.yaml`. `purge_zip` nén trước khi xóa.
+6. Giữ nguyên D29.2 (Producer tự duyệt không xóa), D29.5 (kiểm lại trước khi xóa), D29.11 (A/B chờ kết quả so). Bản Codex giờ cũng tự xóa.
+
+## D41 — Report thời gian và token thật của từng bước (v0.8.0; anh chốt 2026-11-11)
+
+1. **Asset tới `done` thì script ghi `deliver/<id>/RUN-REPORT.md` và in bảng.** Producer dán nguyên bảng vào chat, không tự tính lại.
+2. **Mỗi dòng một bước:** thời gian bước, worker, reviewer, chờ Producer, chờ anh, token worker, token reviewer, token Producer, số version, số vòng sửa, số lần giao, số lần gọi Codex, credit Meshy, số lần kẹt. Dòng cuối là tổng.
+3. **Chỉ số thật.** Số lấy từ transcript của runtime. Không có số thì ghi "không có số" kèm lý do. Không ước lượng.
+4. **Số được lưu lúc ingest**, vào `status.json`. Lý do: `P stats` hiện đọc lại transcript mỗi lần; transcript mất thì mất số. Report phải ghi xong trước khi D40 dọn.
+5. **Hai asset chạy cùng lúc:** token Producer của khoảng chồng nhau có ghi chú, không cộng hai lần vào tổng lô.
+6. `P report` không có id in bảng của cả lô. `P dashboard` có cột thời gian và token đã dùng.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
