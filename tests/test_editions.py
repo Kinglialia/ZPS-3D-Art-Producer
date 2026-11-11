@@ -392,7 +392,7 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
                                   f"{sk}/scripts/meshy_call.py:*)",
                                   "Bash(codex exec:*)", "Edit(/production/**)", "Edit(/production-*/**)"],
                         "deny": ["Bash(rm -rf:*)"]},
-        "model": "opus",
+        "model": "opus", "env": {"BASH_DEFAULT_TIMEOUT_MS": "600000", "BASH_MAX_TIMEOUT_MS": "3600000"},
         "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]},
                                    {"hooks": [{"type": "command", "command": f"{p} next --session"}]}]}}
     diff = r.stdout.split(f"+++ {s.resolve()}\n", 1)[1]

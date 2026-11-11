@@ -61,7 +61,7 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P` = thư m�
 
 ## Quy tắc
 
-- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`), với `timeout` của Bash = dòng `BASH_TIMEOUT_MS` của brief (D33.2, D33.4).
+- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`), với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
 - Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu file brief chỉ định (`check_inputs` fail): `STATUS: NEEDS_CONTEXT`.
 - Nguồn mâu thuẫn (thẻ với `blockout.md`): theo `blockout.md`, ghi cả hai vào `VIEWS.md`.

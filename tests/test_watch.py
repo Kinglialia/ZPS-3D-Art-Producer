@@ -21,7 +21,7 @@ def test_every_worker_and_reviewer_role_file_forbids_background_commands_and_wri
     assert len(ROLES) == 9
     for f in ROLES:
         text = f.read_text(encoding="utf-8")
-        assert "Không chạy lệnh nền" in text and "(D33.2" in text, f.name
+        assert "Không chạy lệnh nền" in text and "D33.2" in text, f.name
         assert "Ghi `<report>` là việc cuối cùng trước khi trả kết quả" in text and "(D33.8)" in text, f.name
 
 
@@ -37,12 +37,14 @@ def test_every_agent_file_caps_its_turns_so_a_looping_agent_stops_instead_of_run
 
 def test_the_settings_snippet_raises_the_bash_timeouts_and_the_brief_asks_for_the_same_cap_d33_4():
     """Claude Code 2.1.318 reads BASH_DEFAULT_TIMEOUT_MS (default 120000) and BASH_MAX_TIMEOUT_MS (default 600000) from
-    the environment; settings `env` sets them. The brief's BASH_TIMEOUT_MS must not ask for more than the max allows."""
+    the environment; settings `env` sets them. A worker or the Producer asking Bash for more than the max gets less, so
+    every role file and SKILL.md ask for exactly the max (the brief has no room: 4096-byte budget)."""
     import json
-    from core import briefs
     env = json.loads((SKILL / "templates/settings.snippet.json").read_text(encoding="utf-8"))["env"]
     assert env == {"BASH_DEFAULT_TIMEOUT_MS": "600000", "BASH_MAX_TIMEOUT_MS": "3600000"}
-    assert briefs.BASH_TIMEOUT_MS == int(env["BASH_MAX_TIMEOUT_MS"])
+    asks = [f"timeout: {env['BASH_MAX_TIMEOUT_MS']}` cho Bash" in f.read_text(encoding="utf-8")
+            for f in ROLES if f.name.startswith("zps-3dp-step")]
+    assert asks == [True] * 4 and f"`timeout` {env['BASH_MAX_TIMEOUT_MS']}" in (SKILL / "SKILL.md").read_text(encoding="utf-8")
 
 
 def test_the_merge_adds_a_missing_timeout_and_never_changes_one_the_user_set_d33_4():

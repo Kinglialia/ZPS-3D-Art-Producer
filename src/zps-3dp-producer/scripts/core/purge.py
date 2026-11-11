@@ -12,7 +12,7 @@ from . import policy, session
 from .state import (ASSETS, DELIVER, FINISHED, ROOT, RUNTIME, ProducerError, die, ledger, load_cfg, load_st, locked, now,
                     rel, save_st, write_atomic)
 
-TEXT = {".md", ".json", ".jsonl", ".txt", ".yaml", ".yml", ".toml", ".py", ".csv"}
+TEXT = {".md", ".json", ".jsonl", ".txt", ".log", ".yaml", ".yml", ".toml", ".py", ".csv"}
 PENDING, MANIFEST = "purge-pending.json", "purge-manifest.json"
 NEW_SESSION = ("startup", "clear")
 THUMB_PX = 1024
