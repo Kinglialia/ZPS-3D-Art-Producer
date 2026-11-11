@@ -410,6 +410,7 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 
 - Mỗi bước khai báo tài nguyên dùng (`uses = ["blender", "codex_image"]`). `P next` chỉ đề xuất giao việc khi còn chỗ; asset chờ hiện "chờ slot <tài nguyên>".
 - Mỗi runtime có `[limits]` riêng (mục 16). Hai runtime không chạy cùng lúc trên một máy.
+- `[codex] timeout_s = 900`: giây chờ mỗi lần gọi `codex exec`, tối thiểu 300 (D30.20). Khóa `codex_batch = true` của `[[steps]]` (chỉ texture, mặc định `false`) gộp các paint view vào một lần gọi (D30.22).
 
 ## 13. GUIDELINE.md (D14.7)
 

@@ -419,8 +419,8 @@ def test_batch_refuses_outputs_in_two_folders_because_codex_exec_opens_one_worki
         2, "gen_image_codex.py: error: --batch cần mọi --out trong cùng một thư mục: codex exec -C chỉ mở một thư mục")
 
 
-def test_the_fake_reads_several_images_after_one_i_flag_as_codex_cli_0_164_0_does(gen):
-    """`-i, --image <FILE>...` takes values up to the next option; the script writes --image=<f> per file, so a
-    trailing `-` (prompt on stdin) is never read as an image."""
+def test_the_fake_parser_logs_every_image_of_one_i_flag_and_of_each_equals_form(gen):
+    """The help of codex-cli 0.164.0 says `-i, --image <FILE>...`: one flag may carry several files. The fake logs
+    both forms, so a batch test sees every reference the call attached."""
     assert fake_codex.image_args(["-i", "a.png", "b.png", "--skip-git-repo-check", "--image=c.png", "-"]) == [
         "a.png", "b.png", "c.png"]
