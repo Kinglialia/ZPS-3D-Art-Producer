@@ -173,7 +173,7 @@ Spec: `docs/producer.md`. Nền: `producer-skill.zip` (SKILL.md, producer.py, re
 ## D16 — Chọn model cho worker và reviewer (2026-11-08)
 
 1. **Pilot: Opus cho mọi bước**, cả worker lẫn reviewer. Thay tạm D1 (reviewer blockout và views dùng Sonnet) trong lúc pilot. Lý do: pilot là lúc chỉnh rubric và profile; giữ model tốt nhất để lỗi còn lại là lỗi của spec, không phải của model.
-2. **Sau pilot: hạ từng bước**, đo rồi mới giữ. Ứng viên hạ:
+2. **Sau pilot: hạ từng bước**, đo rồi mới giữ. Ứng viên hạ: **[Làm theo D45]**
 
    | Bước | Ứng viên sau pilot |
    |---|---|
@@ -442,7 +442,7 @@ Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
 
 Nguyên tắc: repo skill chỉ chứa thứ dùng chung cho mọi object. Nguồn: backlog 4h. Lý do: hàm, fixture và dữ liệu của một asset (wooden-chest) đã vào repo. Chúng đi theo skill tới mọi project và kéo agent về asset đó.
 
-1. **Repo chỉ giữ hàm chung:** `bevel_box`, `vault`, `grooved_box` (nhận số khe `N`). Đã gỡ `plank_vault`, `arch_cap`, `arch_cap_pointed`, `strap_band`, `lock_plate` và tham số `seam` (`ef86fee`). Kiểm bằng test dữ liệu tổng hợp trong repo và bằng V6 trên asset mới. Không dựng lại wooden-chest.
+1. **Repo chỉ giữ hàm chung:** `bevel_box`, `vault`, `grooved_box` (nhận số khe `N`). Đã gỡ `plank_vault`, `arch_cap`, `arch_cap_pointed`, `strap_band`, `lock_plate` và tham số `seam` (`ef86fee`). Kiểm bằng test dữ liệu tổng hợp trong repo và bằng V6 trên asset mới. Không dựng lại wooden-chest. **[Sửa theo D42.2, chờ anh chốt]** Gỡ `vault`, `grooved_box`; giữ `bevel_box`.
    - Hệ quả: part graph của wooden-chest gọi các hàm đã gỡ. Muốn sửa asset đó thì agent viết lại `custom_parts.py` cho nó. Gói `deliver/` (GLB, `.blend`) không bị ảnh hưởng.
 2. **Hàm riêng của agent** nằm trong `production/assets/<id>/custom_parts.py`.
    - Python thuần, chỉ dùng `math`. Hàm trả đỉnh và mặt. File chạy ngoài Blender và ghi một file JSON lưới.
@@ -547,11 +547,11 @@ Nguyên tắc: skill là thứ dùng chung. Code, số mặc định, từ vựn
 Một trường duy nhất: `views: none | back | full | full_top`. Không thêm `views_top`. Trường này khác trường `view` của D27.6 (góc của ảnh concept).
 
 1. **`none`:** không có bước views. Mặt khuất lấy từ `hidden_sides` và blockout. TEXTURE NOTE và NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và file material. Brief model và brief texture chạy được khi không có bộ view. check-clay bỏ tiêu chí so với view.
-2. **`back`:** chỉ gen back. Bước `views_front` vẫn chạy, vì front là tham chiếu màu.
+2. **`back`:** chỉ gen back. Bước `views_front` vẫn chạy, vì front là tham chiếu màu. **[Sửa theo D44.3]** Hai bước view gộp thành một bước `views`.
 3. **`full`:** back và left; right lật từ left khi đối xứng. Không có top.
 4. **`full_top`:** `full` cộng top. Chỉ dùng khi mái có thiết kế riêng, không suy ra được từ concept.
 5. **Lý do bỏ top:** không bước nào sau views cần ảnh top. Hình mái do blockout quyết. Màu mái thấy trên concept 3/4. VẼ MỚI tự gen paint view. Meshy không dùng top.
-6. Giá trị lạ → `check_card` fail. V6 chọn giá trị mặc định.
+6. Giá trị lạ → `check_card` fail. V6 chọn giá trị mặc định. **[Sửa theo D43.6]** `views` là trường bắt buộc, không còn mặc định.
 
 ## D36 — Sửa lỗi sau review source 2026-11-11 (v0.8.0)
 
@@ -625,6 +625,58 @@ Lý do: nguyên nhân Run 5 là Producer tự kết thúc lượt (D33 mục 1).
 4. **Số được lưu lúc ingest**, vào `status.json`. Lý do: `P stats` hiện đọc lại transcript mỗi lần; transcript mất thì mất số. Report phải ghi xong trước khi D40 dọn.
 5. **Hai asset chạy cùng lúc:** token Producer của khoảng chồng nhau có ghi chú, không cộng hai lần vào tổng lô.
 6. `P report` không có id in bảng của cả lô. `P dashboard` có cột thời gian và token đã dùng.
+
+## D42 — Source chỉ giữ thứ pipeline dùng và thứ mọi object dùng chung (v0.8.0, nối D32, D34)
+
+1. **Đã gỡ 5 file kit không ai gọi** (nhánh `chore/remove-unused-files`, `2bd121c`): `apply_edit.py`, `fit_camera.py`, bản `render_blockout_views.py` của blockout, hai bản `bpy_cookbook.md`. Merge nhánh này trước khi bắt đầu code v0.8.0.
+2. **Gỡ `vault` và `grooved_box` khỏi `custom_lib.py`.** *Em đề xuất; anh chưa chốt.* Lý do: `vault` là `plank_vault` của cái rương, đổi tên ở `ef86fee`; tham số `planks`, `gap`, `depth` là rãnh ván của rương. Asset cần dáng đó viết hàm trong `custom_parts.py` của project (D32). Giữ `bevel_box`. Sửa D32.1.
+3. **Hàm chung còn lại trả `(verts, faces)` Python thuần**, như hàm của asset. Lý do: hàm dùng `bmesh` buộc mọi lần dựng mở Blender.
+4. **Luật giữ file kit:** một file chép từ kit chỉ nằm trong skill khi một tool hoặc file agent của bước đó gọi nó. Test quét: mỗi file trong bảng "Chép nguyên" của `SOURCE.md` có ít nhất một nơi gọi.
+5. Tài liệu `docs/` còn nhắc file đã gỡ thì sửa trong đợt spec.
+
+## D43 — Đầu vào từ Concept Artist: bớt chỗ pipeline phải đoán (v0.8.0)
+
+Lý do: review thấy worker đang đoán bằng mắt ô lấy màu, phía nhìn của concept 3/4, hướng nắng, và không có số để kiểm tỉ lệ.
+
+1. **Material Handoff thêm cột "Ô lấy màu"** (`x, y, w, h` pixel trên `concept_albedo.png`). Hex là trung vị đo trong ô. `P intake` đọc bảng, đo lại và ghi `assets/<id>/concept_colors.json`. Worker không còn chọn ô. Hex lệch số đo quá dE 6 thì intake cảnh báo.
+2. **Nền ảnh concept là một dòng máy đọc được** trong Material Handoff: `BG: #RRGGBB`.
+3. **Thẻ thêm `view_side: left | right`**, bắt buộc khi `view: '34'`.
+4. **Thẻ thêm `light: {from: left | right | front, elevation_deg}`** của `concept_shadow.png`. Tùy chọn; thiếu thì worker đoán như cũ và ghi vào "tự quyết".
+5. **`counts` là trường bắt buộc.** `{}` hợp lệ khi asset không có thành phần lặp lại.
+6. **`views` là trường bắt buộc**, không còn mặc định. Lý do: guideline ghi mặc định `none`, code ghi mặc định `full`.
+7. **Thẻ thêm `marks: [{name, z_m}]`**: 2 đến 3 mốc cao thấy rõ trên concept (ví dụ mép trên thân, mặt bệ). Tùy chọn. Có thì `check_proportion.py` so với blockout.
+8. **Thẻ thêm `bottom_visible: false`** (mặc định) và **`text_codes: []`** (mã vật liệu có chữ).
+9. **Ảnh concept:** ưu tiên chính diện phẳng cho `concept_albedo.png`. Ảnh 3/4 là file thêm `concept_34.png`, không thay ảnh chính.
+10. **Một nguồn guideline:** `templates/GUIDELINE.md` trong repo. Nội dung v1.3 (`GUIDELINE-concept-artist.md` ở gốc repo) gộp vào đó thành v1.4. Bỏ dòng lịch sử ("Nguồn: spec…", "đã lọt qua ở cả hai lần chạy thử"). Thêm một ví dụ thẻ cho loại vật khác công trình (D34.4). Thêm dòng: hai vật liệu kề nhau nên khác màu rõ, nếu không thì ghi chú.
+11. Trường mới là *chung* (cơ chế). Giá trị của từng asset là *asset*.
+
+## D44 — Bước view: duyệt mặt bên ở cổng blockout, ảnh vẽ chỉ khi cần (v0.8.0, sửa D35)
+
+Lý do: bước view tốn 2 worker, 2 reviewer và 3 đến 4 ảnh Codex. Meshy chỉ nhận một ảnh style. VẼ MỚI tự gen lại ảnh paint trên mesh thật. Thứ anh cần là xem và duyệt các mặt bên.
+
+1. **Cổng blockout có thêm ảnh mặt bên tô theo mã vật liệu:** `mat_left.png`, `mat_right.png`, `mat_back.png` (thêm `mat_top.png` khi thẻ có `views: full_top`). Script render, không gọi Codex. Anh duyệt bố cục các mặt cùng lúc duyệt blockout.
+2. **Ảnh vẽ bằng Codex chỉ chạy khi thẻ có `views` khác `none`.** Guideline v1.4 ghi luật chọn: `none` cho prop, cây, đá, vật đối xứng; khác `none` khi một mặt khuất có thiết kế riêng.
+3. **Hai bước `views_front`, `views_rest` gộp thành một bước `views`**, một worker, một reviewer, một lần anh duyệt. Trong bước: gen front, script đo front, pass mới gen các mặt còn lại. `regen_front` thành một loại sửa trong cùng bước, không mở lại bước khác.
+4. **`concept_colors.json` không còn thuộc bước view.** Nó đến từ intake (D43.1). Bước texture dùng nó ở mọi giá trị `views`.
+5. **Pilot so hai asset:** một có view, một không. Đo số vòng sửa của model và texture.
+
+## D45 — Model của subagent: hạ theo bước, đo rồi mới giữ (v0.8.0, làm D16.2)
+
+1. **`pipeline.toml` có `model`, `escalate_model`, `reviewer_model` cho từng bước.** `reviewer_model` chung là mặc định.
+2. **Pilot 1 của v0.8.0 chạy Opus hết**, để có mốc sau khi đổi code.
+3. **Pilot 2 hạ bốn vai có anh duyệt ngay sau:**
+
+   | Vai trò | Pilot 1 | Pilot 2 |
+   |---|---|---|
+   | Worker blockout, worker model | Opus | Opus |
+   | Worker views | Opus | Sonnet, `escalate_model` Opus |
+   | Worker texture | Opus | Opus (hạ ở pilot 3 nếu pilot 2 đạt) |
+   | Reviewer blockout, reviewer views | Opus | Sonnet |
+   | Reviewer clay, reviewer texture | Opus | Opus |
+
+4. **Giữ model mới khi** số vòng sửa của bước không tăng và anh duyệt ngay lần đầu như pilot 1. Số lấy từ `RUN-REPORT.md` (D41).
+5. **Vòng lấy bằng chứng có sẵn trên đĩa không cần model** (D31.1 đã làm; D38.5 thêm sheet cho bước view).
+6. Không đổi code và đổi model trong cùng một pilot. Lý do: không tách được nguyên nhân.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
