@@ -25,6 +25,18 @@ def seconds(a: str, b: str) -> float:
     return (at(b) - at(a)).total_seconds()
 
 
+def reread(disp: list[dict]) -> list[dict]:
+    """D33.22: a dispatch ingested without a number gets it from the subagent transcript now; nothing is saved."""
+    out = []
+    for x in disp:
+        if x.get("ingested") and x.get("role") != "script" and (x.get("tokens") is None or x.get("duration_ms") is None):
+            t, ms = session.dispatch_numbers(x, x["ingested"])
+            x = x | {"tokens": x["tokens"] if x.get("tokens") is not None else t,
+                     "duration_ms": x["duration_ms"] if x.get("duration_ms") is not None else ms}
+        out.append(x)
+    return out
+
+
 def took(x: dict) -> float | None:
     """The runtime's duration when the Producer passed it, else dispatch to ingest."""
     if x.get("duration_ms") is not None:
@@ -124,4 +136,6 @@ def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:
 
 def run(a):
     st = load_st(a.id)
+    if RUNTIME != "codex":
+        st = st | {"dispatches": reread(st.get("dispatches") or [])}
     print("\n".join(table(load_cfg(), st, producer_usage())) if st.get("dispatches") else f"{a.id}: chưa giao lần nào")

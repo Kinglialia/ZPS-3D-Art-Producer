@@ -480,6 +480,12 @@ def ingest(a):
     tokens, ms, at = getattr(a, "tokens", None), getattr(a, "duration_ms", None), stamp()
     fallback = bool(getattr(a, "fallback", False))
     if rec is not None:
+        if getattr(a, "agent_id", None):
+            rec["agent_id"] = a.agent_id
+        if tokens is None or ms is None:
+            from . import session
+            got = session.dispatch_numbers(rec, at)
+            tokens, ms = (got[0] if tokens is None else tokens), (got[1] if ms is None else ms)
         rec |= {"ingested": at, "tokens": tokens, "duration_ms": ms, "after": st["state"]} | (
             {"fallback": True} if fallback else {})
     save_st(st)

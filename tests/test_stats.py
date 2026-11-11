@@ -3,6 +3,7 @@ step, so the decision to keep the reviewer with the Producer rests on this table
 a review. A pilot run spent over a million tokens on reviewers, so R1-R3 (D31) are judged by the reviewer split per round kind."""
 import datetime as dt
 import json
+import re
 import subprocess
 import sys
 
@@ -143,3 +144,84 @@ def test_p_stats_reads_the_dispatches_of_a_real_run_one_row_per_step_d27_3(tmp_p
     assert [r.split(" | ")[-2] for r in rows[2:]] == ["không có số"] * 4
     assert rows[5] == ("| model | chưa duyệt | không có số | — | — | — | — | — | không có số | — | — | — | không có số "
                        "| 0 |")
+
+
+def utc(local_stamp: str, plus_s: float = 0) -> str:
+    at = dt.datetime.fromisoformat(local_stamp).astimezone(dt.timezone.utc) + dt.timedelta(seconds=plus_s)
+    return at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def agent_lines(at: str, brief: str, agent: str) -> str:
+    """A synthetic subagent transcript: the Producer's prompt, two API messages in the dispatch (one repeated per content
+    block, as Claude Code writes it), one from an earlier round of the same agent and one after the ingest."""
+    u = lambda i, o: {"input_tokens": i, "output_tokens": o, "cache_creation_input_tokens": 0,  # noqa: E731
+                      "cache_read_input_tokens": 0}
+    rows = [{"type": "assistant", "timestamp": utc(at, -3600), "agentId": agent, "isSidechain": True,
+             "message": {"id": "m0", "usage": u(9000, 9000)}},
+            {"type": "user", "timestamp": utc(at), "agentId": agent, "isSidechain": True,
+             "message": {"role": "user", "content": f"Đọc `{brief}` trước tiên: đó là toàn bộ yêu cầu của bạn."}},
+            {"type": "assistant", "timestamp": utc(at, 0.1), "isSidechain": True, "message": {"id": "m1", "usage": u(100, 20)}},
+            {"type": "assistant", "timestamp": utc(at, 0.1), "isSidechain": True, "message": {"id": "m1", "usage": u(100, 20)}},
+            {"type": "assistant", "timestamp": utc(at, 0.6), "isSidechain": True, "message": {"id": "m2", "usage": u(10, 20)}},
+            {"type": "assistant", "timestamp": utc(at, 7200), "isSidechain": True, "message": {"id": "m9", "usage": u(5, 5)}}]
+    return "\n".join(json.dumps(r) for r in rows) + "\n{broken line\n"
+
+
+def test_ingest_without_numbers_takes_tokens_and_time_from_the_subagent_transcript_so_the_producer_never_waits_d33_22(
+        tmp_path):
+    """Run 5: the Producer ended its turn five times to wait for a subagent's token and time numbers, and the notification
+    that carried them started no new turn (4h13m of 5h58m idle). `ingest` must not need them: the script reads the
+    subagent's own transcript. The same agent sits in two session folders (a resumed session copies it): each API
+    message counts once, and only the messages of this dispatch count (m0 is an earlier round, m9 is after ingest)."""
+    from flowkit import Flow
+    from shared import fixed_line, pilot_project
+    f = Flow(tmp_path)
+    pilot_project(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    out = f.brief("b1 brief")
+    rec = f.st()["dispatches"][-1]
+    assert rec["brief"] == out["brief"]
+    mains = [tmp_path / "t" / f"s{i}.jsonl" for i in (1, 2)]
+    for m in mains:
+        (m.with_suffix("") / "subagents").mkdir(parents=True)
+        m.write_text("", encoding="utf-8")
+        (m.with_suffix("") / "subagents" / "agent-a1.jsonl").write_text(agent_lines(rec["at"], out["brief"], "a1"),
+                                                                       encoding="utf-8")
+    (tmp_path / "production/session.json").write_text(json.dumps({"transcripts": [str(m) for m in mains]}),
+                                                      encoding="utf-8")
+    vd = (tmp_path / out["report"]).parent
+    f.outputs(vd, "blockout", "b1")
+    ph = re.search(r"^PROFILE_HASH: (\S+)$", f.cp["b1 brief"]["text"], re.M).group(1)
+    (tmp_path / out["report"]).write_text(f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: none\nPROFILE_HASH: {ph}\n"
+                                          + fixed_line(tmp_path, AID), encoding="utf-8")
+    f.p("ingest", AID, "--agent-id", "a1")
+    worker = f.st()["dispatches"][0]
+    assert (worker["tokens"], worker["duration_ms"], worker["agent_id"]) == (150, 600, "a1")
+    assert "token 150 · thời lượng 600 ms" in f.p("ledger", "--tail", "2")
+
+
+def test_a_reviewer_ingested_before_its_transcript_was_found_gets_its_number_at_the_next_stats_d33_22(tmp_path):
+    """The Producer passes no agent id for a reviewer; its transcript is found by the brief its prompt names. A number
+    missing at ingest is never 0: `P stats` reads the transcript again, and the dispatch keeps "không có số" on disk."""
+    from flowkit import Flow
+    from shared import pilot_project
+    from flowkit import counts
+    f = Flow(tmp_path)
+    pilot_project(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    f.work("b1")
+    f.review("b1", verdict="PASS", counts=counts(), top_fix=None)
+    rv = f.st()["dispatches"][1]
+    assert rv["role"] == "reviewer" and rv["tokens"] is None and rv["brief"].endswith("brief-review.md")
+    main = tmp_path / "t" / "s1.jsonl"
+    (main.with_suffix("") / "subagents").mkdir(parents=True)
+    (main.with_suffix("") / "subagents" / "agent-r7.jsonl").write_text(agent_lines(rv["at"], rv["brief"], "r7"),
+                                                                       encoding="utf-8")
+    (main.with_suffix("") / "subagents" / "agent-w9.jsonl").write_text(
+        agent_lines(rv["at"], "production/assets/other/blockout/v1/brief-review.md", "w9"), encoding="utf-8")
+    (tmp_path / "production/session.json").write_text(json.dumps({"transcripts": [str(main)]}), encoding="utf-8")
+    row = f.p("stats", AID).splitlines()[2].split(" | ")
+    assert row[0] == "| blockout" and row[HEAD.split(" | ").index("Token reviewer đầu")] == "150"
+    assert f.st()["dispatches"][1]["tokens"] is None

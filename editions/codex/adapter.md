@@ -19,7 +19,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 ## Token
 
-- Kết quả sub-agent có số token thì thêm `--tokens <N>`, có thời lượng thì thêm `--duration-ms <M>` vào `P ingest`. Thiếu số nào thì bỏ cờ đó.
+- Kết quả sub-agent có số token thì thêm `--tokens <N>`, có thời lượng thì thêm `--duration-ms <M>` vào `P ingest`. Thiếu số nào thì bỏ cờ đó. Không chờ số (D33.22): bản này không có transcript subagent cho script đọc, nên script ghi "không có số".
 
 ## Hook mở phiên
 

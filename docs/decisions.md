@@ -513,6 +513,13 @@ Hiện tượng: pipeline đứng im cho tới khi anh nhắn, rồi mới chạ
 20. Bản Codex: kiểm có hiện tượng tương tự không. Cơ chế dựa trên file nên dùng chung được. Ghi kết quả.
 21. Ghi D33 vào `decisions.md`, `producer.md`, file agent, `coding-checklist.md` (một dòng cho mỗi việc). Mỗi việc kèm test: nhịp tim không ghi khi tiến trình treo; `pending` của Meshy không tạo task mới; hai `P wait` → cái thứ hai bị từ chối; kẹt → đúng bậc xử lý; `SubagentStop` ghi trạng thái khi Producer không nhận thông báo.
 
+**Thêm sau Run 5 (mục 1 đã làm)**
+
+Kết quả mục 1: 5 lần đứng im, 4h13m trên 5h58m không làm gì. Mỗi lần, Producer kết thúc lượt và nói nó chờ số token và thời gian của subagent. Thông báo task-notification mang các số này tới sau khi lượt đã kết thúc, và không mở lượt mới. Không subagent nào có lệnh nền đang chạy. Không lệnh Bash nào bị cắt ở 2 phút.
+
+22. `P ingest` chạy được khi không có `--tokens` và `--duration-ms`. Producer không bao giờ chờ các số này. Script lấy token và thời lượng của lần giao đó từ transcript của subagent: thư mục `subagents/` cạnh transcript chính ghi trong `production/session.json`, tìm theo agent id, hoặc theo brief mà prompt nêu. Script chỉ đếm message trong khoảng từ lúc giao tới lúc ingest, mỗi message một lần. Đọc lỗi thì ghi "không có số". `P stats` sau đó đọc lại các số còn thiếu (chỉ in, không ghi).
+23. Quy tắc trong `SKILL.md`: subagent trả về thì ingest và giao việc tiếp trong cùng lượt. Không bao giờ kết thúc lượt để chờ một thông báo khi không có việc gì khác đang chạy.
+
 - **Không làm:** để worker tự chạy vòng lặp shell canh file; đặt nhịp tim chỉ theo đồng hồ.
 
 ## D34 — Skill chạy cho mọi object, không lệch về một loại (2026-11-11, gộp D33 cũ)

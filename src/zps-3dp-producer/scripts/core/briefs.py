@@ -536,7 +536,7 @@ def run(a):
             out["agent_file"] = rel(agent_file(out["agent"]))
         if not again:
             st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"],
-                                                    "at": stamp()} | ({"scope": st["review_scope"]}
+                                                    "at": stamp(), "brief": out["brief"]} | ({"scope": st["review_scope"]}
                                                                       if out["role"] == "reviewer" else {}))
         who = f"{out['agent']}, {out['model'] or 'model của phiên'}"
     save_st(st)

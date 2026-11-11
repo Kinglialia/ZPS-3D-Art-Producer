@@ -219,8 +219,8 @@ def main(argv: list[str] | None = None):
     sub.add_parser("brief", help="sinh brief cho worker/reviewer, in JSON để giao việc").add_argument("id")
     x = sub.add_parser("ingest", help="đọc báo cáo, chuyển state")
     x.add_argument("id"); x.add_argument("--agent-id", help="id subagent worker, để resume vòng sửa")
-    x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này, nếu runtime báo được (P compare, P stats)")
-    x.add_argument("--duration-ms", type=int, help="thời lượng runtime báo cho lần giao này, mili giây (P stats)")
+    x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này; không có thì script đọc transcript subagent (D33.22)")
+    x.add_argument("--duration-ms", type=int, help="thời lượng lần giao, mili giây; không có thì script đọc transcript subagent (D33.22)")
     x.add_argument("--fallback", action="store_true",
                    help="Producer đã lưu report agent trả bằng tin nhắn vì lệnh ghi bị chặn (ledger: report_fallback)")
     sub.add_parser("retry", help="giao lại asset đang blocked").add_argument("id")

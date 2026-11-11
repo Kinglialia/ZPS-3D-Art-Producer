@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import select
 import sys
+from pathlib import Path
 
 from .state import ROOT, stamp, write_atomic
 
@@ -87,3 +88,94 @@ def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int]] | None:
                 seen.add(key)
             out.append((at, n))
     return out
+
+
+def subagent_dirs() -> list[Path]:
+    """Claude Code keeps a subagent's transcript in `<main transcript without .jsonl>/subagents/agent-<id>.jsonl`."""
+    doc = load() or {}
+    paths = [p for p in [*(doc.get("transcripts") or []), doc.get("transcript_path")] if isinstance(p, str) and p]
+    out = []
+    for p in dict.fromkeys(paths):
+        d = Path(p).with_suffix("") / "subagents"
+        if d.is_dir():
+            out.append(d)
+    return out
+
+
+def lines_of(p: Path) -> list[dict]:
+    try:
+        raw = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in raw:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(d, dict):
+            out.append(d)
+    return out
+
+
+def asks_for(d: dict, brief: str) -> bool:
+    """A prompt line of the Producer: a user line, not a tool result or a reminder, that names the brief."""
+    if d.get("type") != "user" or d.get("isMeta"):
+        return False
+    c = (d.get("message") or {}).get("content")
+    text = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict)
+                                                  and x.get("type") == "text")
+    return brief in text
+
+
+def agent_files(agent_id: str | None, brief: str | None, path: str | None = None) -> list[Path]:
+    """D33.22: the transcript of one dispatch. The path the SubagentStop hook recorded, else `agent-<id>.jsonl`, else
+    every subagent transcript whose prompt names the brief. The same agent can sit in two session folders."""
+    if path and Path(path).is_file():
+        return [Path(path)]
+    dirs = subagent_dirs()
+    if agent_id:
+        found = [d / f"agent-{agent_id}.jsonl" for d in dirs if (d / f"agent-{agent_id}.jsonl").is_file()]
+        if found:
+            return found
+    if not brief:
+        return []
+    return [p for d in dirs for p in sorted(d.glob("agent-*.jsonl")) if any(asks_for(x, brief) for x in lines_of(p))]
+
+
+def agent_numbers(files: list[Path], start: str, end: str | None) -> tuple[int | None, int | None]:
+    """(tokens, duration ms) of one dispatch from its transcript: messages between the dispatch and the ingest only, as
+    a resumed worker keeps one cumulative transcript. Each API message counts once, also across copies of the file.
+    Nothing in the window, or nothing readable: (None, None), shown as "không có số"."""
+    lo = dt.datetime.fromisoformat(start)
+    hi = dt.datetime.fromisoformat(end) + dt.timedelta(seconds=1) if end else None  # stamps keep whole seconds
+    seen, total, times = set(), 0, []
+    for p in files:
+        for d in lines_of(p):
+            try:
+                at = local(d["timestamp"])
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+            if at < lo or (hi is not None and at > hi):
+                continue
+            times.append(at)
+            m = d.get("message") if d.get("type") == "assistant" else None
+            if not isinstance(m, dict) or not isinstance(m.get("usage"), dict):
+                continue
+            key = m.get("id") or d.get("requestId") or d.get("uuid")
+            if key is not None and key in seen:
+                continue
+            try:
+                n = sum(int(m["usage"].get(k) or 0) for k in USAGE)
+            except (TypeError, ValueError):
+                continue
+            if key is not None:
+                seen.add(key)
+            total += n
+    if not seen:
+        return None, None
+    return total, round((max(times) - min(times)).total_seconds() * 1000)
+
+
+def dispatch_numbers(rec: dict, end: str | None) -> tuple[int | None, int | None]:
+    return agent_numbers(agent_files(rec.get("agent_id"), rec.get("brief"), rec.get("transcript")), rec["at"], end)
