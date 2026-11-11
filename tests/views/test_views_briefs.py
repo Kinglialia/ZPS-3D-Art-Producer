@@ -81,3 +81,22 @@ def test_a_blockout_evidence_brief_keeps_the_blender_path_because_that_round_ren
     save_top_fix("blockout", "need_evidence")
     text = briefs.evidence_brief(st, step, 1, EVIDENCE, ph, {"blender": {"path": "/opt/blender"}}, preset).splitlines()
     assert "BLENDER: /opt/blender" in text
+
+
+def gen_args(cfg, st, step, preset):
+    return [l for l in briefs.tools_line(st, step, None, preset, cfg=cfg) if l.startswith("GEN_ARGS")][0]
+
+
+def test_the_gen_timeout_per_call_comes_from_pipeline_toml_and_a_project_without_the_section_gets_900_s(ctx):
+    """D30.20: one Codex image takes minutes; the brief gives the per-call timeout so a slow call is not cut short."""
+    cfg, st, step, preset, _ = ctx("views_front")
+    assert cfg["codex"] == {"timeout_s": 900}
+    assert gen_args(cfg | {"codex": {"timeout_s": 600}}, st, step, preset).endswith(" --timeout 600")
+    assert gen_args({k: v for k, v in cfg.items() if k != "codex"}, st, step, preset).endswith(" --timeout 900")
+
+
+def test_a_gen_timeout_under_5_minutes_stops_the_brief_because_a_cut_off_call_still_spends_codex_usage(ctx):
+    from core.state import ProducerError
+    cfg, st, step, preset, _ = ctx("views_front")
+    with pytest.raises(ProducerError, match=r"^pipeline.toml \[codex\] timeout_s = 299: cần số nguyên ≥ 300 giây \(D30.20\)$"):
+        gen_args(cfg | {"codex": {"timeout_s": 299}}, st, step, preset)

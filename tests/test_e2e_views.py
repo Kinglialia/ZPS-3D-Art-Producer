@@ -137,7 +137,8 @@ def test_the_front_brief_names_the_approved_blockout_only_the_concept_files_view
                         "brief": f"{A}/views_front/v1/brief-worker.md", "report": f"{A}/views_front/v1/worker-out.md"}
     assert lines(b["text"], f"TOOLS: {SKILL / 'agents/zps-3dp-step-views/tools'}", "BLENDER: blender",
                  f"GEN_IMAGE: {SKILL / 'scripts/gen_image_codex.py'}",
-                 "GEN_ARGS: --model gpt-6-astra --reasoning medium --pid-file production/pids/codex_image/pilot-house.pid",
+                 "GEN_ARGS: --model gpt-6-astra --reasoning medium --pid-file production/pids/codex_image/pilot-house.pid "
+                 "--timeout 900",
                  f"7. Đầu ra đã duyệt của bước `blockout`: `{A}/blockout/v1/final/`.",
                  f"- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/{AID}.pid; wait $!; "
                  f"rm -f production/pids/blender/{AID}.pid`.") == []

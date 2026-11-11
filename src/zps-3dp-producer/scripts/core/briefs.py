@@ -23,13 +23,25 @@ def image_gen(preset: Path) -> dict:
     return ig
 
 
+CODEX_TIMEOUT_S, CODEX_TIMEOUT_MIN_S = 900, 300
+
+
+def codex_timeout(cfg: dict) -> int:
+    """D30.20: seconds per `codex exec` call, pipeline.toml [codex] timeout_s; a project made before it gets 900."""
+    t = (cfg.get("codex") or {}).get("timeout_s", CODEX_TIMEOUT_S)
+    if not isinstance(t, int) or isinstance(t, bool) or t < CODEX_TIMEOUT_MIN_S:
+        die(f"pipeline.toml [codex] timeout_s = {t!r}: cần số nguyên ≥ {CODEX_TIMEOUT_MIN_S} giây (D30.20)")
+    return t
+
+
 def pilot_line(prof: dict) -> str:
     """D21.7, D22.10: the pilot package in this runtime's own deliver/, or not_checked while there is no pilot."""
     p = prof.get("pilot_asset")
     return f"PILOT: {rel(DELIVER / p)}/" if p else "PILOT: none (pilot_asset: null): so với pilot ghi not_checked"
 
 
-def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = ()) -> list[str]:
+def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = (),
+               cfg: dict | None = None) -> list[str]:
     t = SKILL_DIR / "agents" / agent_name(step.get("agent")) / "tools"
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
         [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else []
@@ -38,7 +50,8 @@ def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra:
         ig = image_gen(preset)
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
                 f"GEN_ARGS: --model {ig['codex_model']} --reasoning {ig['reasoning']} "
-                f"--pid-file {rel(ROOT / 'pids' / 'codex_image' / (st['id'] + '.pid'))}"]
+                f"--pid-file {rel(ROOT / 'pids' / 'codex_image' / (st['id'] + '.pid'))} "
+                f"--timeout {codex_timeout(cfg or {})}"]
     return out + [""] if out else []
 
 
@@ -132,7 +145,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
-        *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra)),
+        *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra), cfg=cfg),
         *views_line(st, step),
         *counts_line(st, step),
         *custom_parts_line(st, step),

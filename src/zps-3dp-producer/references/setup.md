@@ -22,6 +22,7 @@ Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong
 - `P approvals set <bước> <human|reviewer> --by "<nguyên văn>"`: ghi `production/policy.yaml`. `model reviewer` cần `--confirm-spend`. `P approvals set review_board <local|local+remote> --by "<nguyên văn>"`: đổi trang duyệt.
 - `P delegate <bước> <id> ... --by "<nguyên văn>"`: reviewer duyệt bước đó cho các asset này. Thứ tự: `delegate` > `approvals` > `human`.
 - `[limits]` trong `pipeline.toml`: số tiến trình cùng lúc. Worker ghi PID mỗi lệnh Blender vào `production/pids/blender/<id>.pid` (brief ghi lệnh mẫu); `gen_image_codex.py` tự ghi `production/pids/codex_image/<id>-<pid>.pid` cho mỗi lần chạy. `P next` chỉ đếm PID còn sống.
+- `[codex] timeout_s` trong `pipeline.toml`: giây chờ mỗi lần gọi `codex exec` (mặc định 900, tối thiểu 300; D30.20). Brief đưa số này vào `GEN_ARGS`. Sau mỗi lần gọi, `gen_image_codex.py` kiểm từng file (có file, header PNG, đọc được, cạnh dài > 1040 px) và chỉ gen lại file hỏng hoặc thiếu.
 - `PRODUCER_ROOT`: thư mục làm việc (mặc định `production`); gói cuối vào thư mục `deliver` cùng hậu tố (`production-codex` → `deliver-codex`). Dùng khi so A/B hai runtime.
 
 ## Project mới

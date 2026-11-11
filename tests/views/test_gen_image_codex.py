@@ -284,3 +284,68 @@ def test_no_shipped_file_names_the_removed_full_auto_flag(tmp_path):
             if p.is_file() and ".deps" not in p.parts and p.suffix in (".py", ".md", ".json", ".toml", ".yaml", ".sh")
             and "--full-auto" in p.read_text(encoding="utf-8", errors="replace")]
     assert hits == []
+
+
+def gen_many(gen, names, mode="ok", extra=()):
+    """One run of the script with a --prompt/--out pair per name; the prompts sit beside the fixture's front.md."""
+    log = gen.tmp / "many.jsonl"
+    env = {**os.environ, "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(gen.pid),
+           "CODEX_HOME": str(gen.tmp / "codex-home"), "PATH": fake_codex.install(gen.tmp / "bin")}
+    pairs = []
+    for n in names:
+        (gen.tmp / f"{n}.md").write_text(f"Paint the {n} view.\n", encoding="utf-8")
+        pairs += ["--prompt", str(gen.tmp / f"{n}.md"), "--out", str(gen.out.with_name(f"{n}.png"))]
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                        *[f"--image={r}" for r in gen.refs], *pairs, *extra], capture_output=True, text=True, env=env)
+    calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
+    recs = {n: json.loads(gen.out.with_name(f"{n}.json").read_text()) for n in names}
+    return p, calls, recs
+
+
+def test_one_broken_file_of_three_is_the_only_one_made_again_d30_20(gen):
+    """Each image costs Codex usage: a cut-off PNG for one view must not pay again for the two good ones."""
+    p, calls, recs = gen_many(gen, ["front", "left", "back"], "break_once:left.png")
+    assert p.returncode == 0, p.stdout
+    assert [c["outs"] for c in calls] == [["front.png"], ["left.png"], ["back.png"], ["left.png"]]
+    assert {n: (r["status"], r["attempts"], r["errors"]) for n, r in recs.items()} == {
+        "front": ("ok", 1, []), "left": ("ok", 2, ["file ảnh hỏng"]), "back": ("ok", 1, [])}
+    assert p.stdout.splitlines()[1] == f"[gen_image_codex] ok 1536x1024 lần 2 -> {gen.out.with_name('left.png')}"
+
+
+def test_a_missing_file_is_made_again_alone_and_every_call_carries_the_same_reference_images(gen):
+    p, calls, recs = gen_many(gen, ["front", "left"], "miss_once:front.png")
+    assert (p.returncode, [c["outs"] for c in calls]) == (0, [["front.png"], ["left.png"], ["front.png"]])
+    assert [c["images"] for c in calls] == [[str(r) for r in gen.refs]] * 3
+    assert recs["front"]["errors"] == ["không có file ảnh"]
+
+
+def test_a_file_that_keeps_failing_fails_alone_and_the_good_files_stay_but_the_run_exits_1(gen):
+    """The worker reads exit 1 as BLOCKED; the good images stay on disk with their records, so a rerun of only the
+    failed view is possible."""
+    p, calls, recs = gen_many(gen, ["front", "left"], "fail_for:front.png")
+    assert [c["outs"] for c in calls] == [["front.png"], ["left.png"], ["front.png"], ["front.png"]]
+    assert {n: (r["status"], r["attempts"]) for n, r in recs.items()} == {"front": ("fail", 3), "left": ("ok", 1)}
+    assert (p.returncode, p.stdout.splitlines()[0]) == (
+        1, f"[gen_image_codex] fail 3/3: codex: quota exceeded -> {gen.out.with_name('front.json')}")
+    assert (gen.out.with_name("front.png").exists(), gen.out.with_name("left.png").exists()) == (False, True)
+
+
+def test_a_file_without_a_png_header_is_a_failed_try_even_when_pillow_can_read_it(gen):
+    """The frame asks for PNG and the next tools read <name>.png as PNG; JPEG bytes under that name are not the image
+    the step expects."""
+    r = gen("jpeg")
+    assert (r["rc"], len(r["calls"]), r["record"]["errors"]) == (1, 3, ["file không có header PNG"] * 3)
+
+
+def test_the_codex_home_fallback_saves_a_jpeg_as_png_so_the_header_check_passes(gen):
+    r = gen("home_jpeg")
+    assert (r["rc"], r["record"]["fallback"], gen.out.read_bytes()[:8]) == (0, True, b"\x89PNG\r\n\x1a\n")
+
+
+def test_each_prompt_needs_its_own_out_so_no_image_is_saved_under_the_wrong_name(gen):
+    (gen.tmp / "b.md").write_text("x", encoding="utf-8")
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                        "--prompt", str(gen.tmp / "front.md"), "--prompt", str(gen.tmp / "b.md"), "--out", str(gen.out)],
+                       capture_output=True, text=True, env={**os.environ, "PATH": fake_codex.install(gen.tmp / "bin")})
+    assert (p.returncode, p.stderr.splitlines()[-1]) == (
+        2, "gen_image_codex.py: error: mỗi --out cần đúng một --prompt, cùng thứ tự")

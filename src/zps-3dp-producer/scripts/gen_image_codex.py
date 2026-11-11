@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
-"""Make one image with the Codex image tool (D8, D15, D18). Shared by the views and texture agents.
+"""Make images with the Codex image tool, one `codex exec` call per image (D8, D15, D18). Shared by the views and texture agents.
 
 Usage: python3 gen_image_codex.py --model <m> --reasoning <r> --pid-file <f> --prompt <request.md>
-           --image <ref> [--image <ref> ...] --out <dir/name.png> [--size 1536x1024] [--timeout 900]
+           --image <ref> [--image <ref> ...] --out <dir/name.png> [--prompt <b.md> --out <dir/b.png> ...]
+           [--size 1536x1024] [--timeout 900]
 The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prompt holds only what to draw;
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
 Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin, in an env without any *_API_KEY other than
 OPENAI_API_KEY and CODEX_API_KEY (a Meshy key never reaches Codex). If --out is missing, Codex reported no error and
-exactly one image appeared under $CODEX_HOME/generated_images during the call, it takes that image (D18.4);
+exactly one image appeared under $CODEX_HOME/generated_images during the call, it takes that image, saved as PNG (D18.4);
 this also holds after a timeout. A valid --out image is accepted even if result.json carries an error.
 A try fails when there is no image, Codex reports an error, the image is broken, or the long side is 1040 px or less.
 The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset each hold a slot.
-3 failed tries in a row: exit 1 (D8.3). Writes <dir/name>.json, prints one line.
+Several --prompt/--out pairs (same order) share the --image list. D30.20: after each call every expected file is
+checked on its own (exists, PNG header, Pillow reads it, long side); only the files that failed are made again.
+3 failed tries of one file: that file fails, and the script exits 1 at the end (D8.3). Writes <dir/name>.json and prints
+one line per file. --timeout is per call; the brief gives it from pipeline.toml [codex] timeout_s (≥ 300).
 D28.1: the record keeps the requested model (--model) and the actual one, the `model:` line of the header that
 `codex exec` prints on stderr ("không có số" without it). When --out lies in <root>/assets/<id>/<step>/vN/, both also go
 to the ledger and to `inputs[<step>]["vN"]` of status.json. D30.19: the record and the ledger line also keep the version
@@ -35,6 +39,7 @@ from root_guard import require_root
 TRIES = 3
 MIN_LONG = 1041
 IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 CODEX_KEYS = {"OPENAI_API_KEY", "CODEX_API_KEY"}
 NO_NUMBER = "không có số"
 FLAGS = ("-m", "-c", "-C", "-s", "--skip-git-repo-check", "--image")
@@ -115,10 +120,21 @@ def record_models(out: Path, requested: str, actual: str, cli: str):
         print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
 
 
-def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, list[int] | None]:
-    for p in (out, result):
-        p.unlink(missing_ok=True)
-    cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(out.parent),
+def to_png(src: Path, out: Path):
+    from PIL import Image
+    try:
+        with Image.open(src) as im:
+            im.save(out, "PNG")
+    except (OSError, SyntaxError, ValueError):
+        shutil.copyfile(src, out)
+
+
+def call(a, jobs: list[dict]):
+    for j in jobs:
+        for p in (j["out"], j["result"]):
+            p.unlink(missing_ok=True)
+    prompt = FRAME.format(out=jobs[0]["out"], result=jobs[0]["result"], size=a.size, request=jobs[0]["request"])
+    cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(jobs[0]["out"].parent),
            "-s", "workspace-write", "--skip-git-repo-check", *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
     start = time.time() - 1
     try:
@@ -128,9 +144,14 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
         p = None
     if p is not None and (m := actual_model(p.stderr)):
         a.actual = m
-    err, fallback = codex_error(result), False
-    if not out.is_file() and not err and len(found := new_images(start)) == 1:
-        shutil.copyfile(found[0], out)
+    return p, start
+
+
+def check(a, j: dict, p, start: float, alone: bool) -> tuple[str | None, bool, list[int] | None]:
+    """D30.20: the file of one job after a call. The CODEX_HOME fallback (D18.4) holds only for a call with one job."""
+    out, err, fallback = j["out"], codex_error(j["result"]), False
+    if alone and not out.is_file() and not err and len(found := new_images(start)) == 1:
+        to_png(found[0], out)
         fallback = True
     if not out.is_file():
         if err:
@@ -139,6 +160,9 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
             return f"hết thời gian chờ {a.timeout} s", False, None
         tail = (p.stderr.strip().splitlines() or [""])[-1][:200]
         return "không có file ảnh" + (f" (codex exit {p.returncode}: {tail})" if p.returncode else ""), False, None
+    with out.open("rb") as f:
+        if f.read(8) != PNG_SIGNATURE:
+            return "file không có header PNG", fallback, None
     from PIL import Image
     try:
         with Image.open(out) as im:
@@ -151,52 +175,75 @@ def attempt(a, out: Path, result: Path, prompt: str) -> tuple[str | None, bool, 
     return None, fallback, size
 
 
+def run_jobs(a, jobs: list[dict]):
+    """Each round calls Codex once per pending job. After a call every job file is checked on its own, and only the
+    jobs that failed go to the next round, at most TRIES tries each."""
+    pending = list(jobs)
+    while pending:
+        for group in [[j] for j in pending]:
+            p, start = call(a, group)
+            for j in group:
+                rec = j["rec"]
+                rec["attempts"] += 1
+                err, rec["fallback"], rec["size"] = check(a, j, p, start, len(group) == 1)
+                if err is None:
+                    rec["status"] = "ok"
+                else:
+                    rec["errors"].append(err)
+        pending = [j for j in pending if j["rec"]["status"] != "ok" and j["rec"]["attempts"] < TRIES]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", required=True)
     ap.add_argument("--reasoning", required=True)
     ap.add_argument("--pid-file", required=True, type=Path)
-    ap.add_argument("--prompt", required=True, type=Path)
+    ap.add_argument("--prompt", required=True, type=Path, action="append")
     ap.add_argument("--image", action="append", default=[])
-    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path, action="append")
     ap.add_argument("--size", default="1536x1024")
     ap.add_argument("--timeout", type=int, default=900)
     a = ap.parse_args()
-    out = a.out.resolve()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    result, rec_path = out.with_name(out.stem + ".result.json"), out.with_suffix(".json")
-    prompt = FRAME.format(out=out, result=result, size=a.size, request=a.prompt.read_text(encoding="utf-8").strip())
-    a.actual = None
-    rec = {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model, "model_actual": NO_NUMBER,
-           "codex_cli": NO_NUMBER, "reasoning": a.reasoning, "prompt": str(a.prompt), "images": a.image, "size": None, "fallback": False, "errors": []}
+    if len(a.prompt) != len(a.out):
+        ap.error("mỗi --out cần đúng một --prompt, cùng thứ tự")
+    a.actual, jobs = None, []
+    for prompt, out in zip(a.prompt, a.out):
+        out = out.resolve()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        jobs.append({"out": out, "result": out.with_name(out.stem + ".result.json"),
+                     "request": prompt.read_text(encoding="utf-8").strip(),
+                     "rec": {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model,
+                             "model_actual": NO_NUMBER, "codex_cli": NO_NUMBER, "reasoning": a.reasoning,
+                             "prompt": str(prompt), "images": a.image, "size": None, "fallback": False, "errors": []}})
     if shutil.which("codex") is None:
-        rec["errors"].append("không thấy codex trên PATH")
+        for j in jobs:
+            j["rec"]["errors"].append("không thấy codex trên PATH")
     else:
-        rec["codex_cli"] = cli_version()
+        cli = cli_version()
         pid_file = a.pid_file.with_name(f"{a.pid_file.stem}-{os.getpid()}{a.pid_file.suffix}")
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(os.getpid()), encoding="utf-8")
         try:
-            while rec["attempts"] < TRIES:
-                rec["attempts"] += 1
-                err, rec["fallback"], rec["size"] = attempt(a, out, result, prompt)
-                if err is None:
-                    rec["status"] = "ok"
-                    break
-                rec["errors"].append(err)
+            run_jobs(a, jobs)
         finally:
             pid_file.unlink(missing_ok=True)
-        rec["model_actual"] = a.actual or NO_NUMBER
-    if rec["status"] != "ok":
-        out.unlink(missing_ok=True)
-    rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
-    if rec["attempts"]:
-        record_models(out, rec["model_requested"], rec["model_actual"], rec["codex_cli"])
-    if rec["status"] == "ok":
-        print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
-        return
-    print(f"[gen_image_codex] fail{f' {TRIES}/{TRIES}' if rec['attempts'] else ''}: {rec['errors'][-1]} -> {rec_path}")
-    sys.exit(1)
+        for j in jobs:
+            j["rec"]["model_actual"], j["rec"]["codex_cli"] = a.actual or NO_NUMBER, cli
+    failed = False
+    for j in jobs:
+        out, rec, rec_path = j["out"], j["rec"], j["out"].with_suffix(".json")
+        if rec["status"] != "ok":
+            out.unlink(missing_ok=True)
+        rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+        if rec["attempts"]:
+            record_models(out, rec["model_requested"], rec["model_actual"], rec["codex_cli"])
+        if rec["status"] == "ok":
+            print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
+            continue
+        failed = True
+        print(f"[gen_image_codex] fail{f' {TRIES}/{TRIES}' if rec['attempts'] else ''}: {rec['errors'][-1]} -> {rec_path}")
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

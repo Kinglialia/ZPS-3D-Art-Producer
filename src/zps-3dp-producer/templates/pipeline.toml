@@ -41,6 +41,10 @@ blender = 2
 codex_image = 2
 meshy = 1
 
+# Mỗi lần gọi `codex exec` của gen_image_codex.py (D30.20): timeout_s ≥ 300 giây; brief đưa vào GEN_ARGS là --timeout.
+[codex]
+timeout_s = 900
+
 [[steps]]
 id = "blockout"
 agent = "step-blockout"
