@@ -8,7 +8,7 @@ from . import asset_card, preflight, purge
 from .board import build_outputs
 from .hashes import schedule_soon, warnings_for
 from .loop import next_action
-from .state import FINISHED, PORT, ROOT, all_status, load_cfg, rel, sort_key
+from .state import FINISHED, ProducerError, PORT, ROOT, all_status, load_cfg, rel, sort_key
 
 DISPATCH = ("todo", "fix", "evidence")
 
@@ -58,6 +58,11 @@ def show_next(a):
     ms = schedule_soon()
     if ms:
         print("Milestone ≤14 ngày: " + "; ".join(f"{d} {t}" for d, t in ms))
+    from . import policy, watch
+    try:
+        wt = policy.watch(policy.load())
+    except ProducerError:  # a broken policy.yaml never hides the asset list; the purge line above names the error
+        wt = policy.template()["watch"]
     steps = {s["id"]: s for s in cfg["steps"]}
     free = {r: lim - used(r) for r, lim in cfg["limits"].items()}
     for s in sts:
@@ -79,6 +84,8 @@ def show_next(a):
         w = warnings_for(cfg, s)
         flag = f"  ⚠ {'; '.join(w)} → hỏi người dùng làm lại hay giữ, rồi `ack {s['id']}`" if w else ""
         print(f"[{s['id']}] {s.get('stage')}/{s.get('state')} → {act}{flag}")
+        if rec := watch.job(s):
+            print(watch.line(s, rec, wt))
     p = ROOT / "ledger.md"
     rulings = [l for l in p.read_text(encoding="utf-8").splitlines() if "RULING:" in l][-3:] if p.exists() else []
     if rulings:

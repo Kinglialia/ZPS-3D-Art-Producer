@@ -10,6 +10,13 @@
           { "type": "command", "command": ".claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py next --session" }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py on-stop" }
+        ]
+      }
     ]
   },
   "permissions": {

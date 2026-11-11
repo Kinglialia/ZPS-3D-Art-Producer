@@ -9,6 +9,8 @@ BOARDS = ("local", "local+remote")
 BY = {"human": "người dùng", "producer": "Producer (test_mode)", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
 DISK_WARN_GB = 20
 TEXTURE_DEFAULTS = ("meshy", "paint")
+DISPATCH = ("foreground", "background")
+WATCH = ("stall_min", "deadline_factor", "max_nudges")
 HEAD = ("# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
         "# texture_default meshy của template: Run 5, 1 asset (Meshy SỬA 15m32s / 2 version; VẼ MỚI Run 4 38m25s / 4 version); tạm, đo lại sau 3–5 asset khác loại (D34.2)\n")
 
@@ -29,6 +31,16 @@ def check(pol: dict) -> list[str]:
         errs.append("test_mode: phải là true|false")
     if pol.get("texture_default") is not None and pol["texture_default"] not in TEXTURE_DEFAULTS:
         errs.append(f"texture_default: phải là {'|'.join(TEXTURE_DEFAULTS)}")
+    if pol.get("dispatch", "foreground") not in DISPATCH:
+        errs.append(f"dispatch: phải là {'|'.join(DISPATCH)}")
+    wt = pol.get("watch")
+    if wt is not None and not isinstance(wt, dict):
+        errs.append("watch: phải là bảng stall_min, deadline_factor, max_nudges")
+    for k, v in (wt or {}).items() if isinstance(wt, dict) else ():
+        if k not in WATCH:
+            errs.append(f"watch.{k}: khóa không hợp lệ ({'|'.join(WATCH)})")
+        elif isinstance(v, bool) or not isinstance(v, int | float) or v < (0 if k == "max_nudges" else 0.01):
+            errs.append(f"watch.{k}: phải là số {'≥ 0' if k == 'max_nudges' else '> 0'}")
     w = pol.get("disk_warn_gb", DISK_WARN_GB)
     if isinstance(w, bool) or not isinstance(w, int | float) or w <= 0:
         errs.append("disk_warn_gb: phải là số GB lớn hơn 0")
@@ -54,6 +66,20 @@ def texture_default(pol: dict) -> str:
     import yaml
     return pol.get("texture_default") or yaml.safe_load((TEMPLATES / "policy.yaml").read_text(encoding="utf-8"))[
         "texture_default"]
+
+
+def template() -> dict:
+    import yaml
+    return yaml.safe_load((TEMPLATES / "policy.yaml").read_text(encoding="utf-8"))
+
+
+def watch(pol: dict) -> dict:
+    """D33.18: the stall numbers of the project; a key the project lacks takes the template's value."""
+    return template()["watch"] | (pol.get("watch") or {})
+
+
+def dispatch(pol: dict) -> str:
+    return pol.get("dispatch") or "foreground"
 
 
 def save(pol: dict):

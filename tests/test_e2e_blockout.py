@@ -20,7 +20,7 @@ PIDS = f"production/pids/blender/{AID}.pid"
 KEYS = ("stage", "state", "fix_round", "fix_base", "round_versions", "offer", "label", "note", "evidence_used",
         "worker_agent_id", "approved", "rejected")
 BRIEF_MAX = 4096
-TIMING = r" · (worker|reviewer|script) giao .*$"
+TIMING = r" · ((worker|reviewer|script) giao .*|hạn chót \S+ \S+)$"  # timing and deadline: tests/test_watch.py
 NEXT_HEAD = ("1 asset đang chạy · 0 done · review page: `serve` → http://127.0.0.1:8765\n"
              "Chưa có production/preflight.json → chạy `preflight` một lần mỗi phiên\n")
 

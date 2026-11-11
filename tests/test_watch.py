@@ -101,3 +101,160 @@ def test_a_timeout_kills_the_child_raises_as_subprocess_does_and_logs_it_d33_7(t
         heartbeat.run(["sleep", "30"], tool="hang", vd=vd, timeout=1, every=0.5)
     assert rows() == [["hang", "start"], ["hang", "timeout"]]
     assert heartbeat.vdir_of(vd / "work/meshy/call-1") == vd and heartbeat.vdir_of(tmp_path / "x/v1") is None
+
+
+# ---- D33.9–18: on-stop, deadline, stall rule, P next, P wait, stats, board (synthetic jobs only) ----
+
+def project(tmp_path):
+    import json as _j
+    from flowkit import AID, Flow
+    from shared import pilot_project
+    f = Flow(tmp_path)
+    pilot_project(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    out = f.brief("b1 brief")
+    return f, out, _j
+
+
+def edit_job(f, **kw):
+    import json as _j
+    from flowkit import A
+    p = f.root / A / "status.json"
+    st = _j.loads(p.read_text(encoding="utf-8"))
+    st["dispatches"][-1] |= kw
+    p.write_text(_j.dumps(st), encoding="utf-8")
+
+
+def ago(minutes):
+    import datetime as dt
+    return (dt.datetime.now() - dt.timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def hook(root, payload):
+    import json as _j
+    import subprocess
+    from shared import P
+    r = subprocess.run([sys.executable, str(P), "on-stop"], cwd=root, input=_j.dumps(payload), capture_output=True,
+                       text=True)
+    return r
+
+
+def test_a_dispatch_gets_a_deadline_from_the_step_default_and_later_from_the_median_of_earlier_runs_d33_10(tmp_path):
+    """No run yet: pipeline.toml usual_min (blockout worker 40) × deadline_factor 2 = 80 minutes, in the ledger too."""
+    import datetime as dt
+    f, out, _ = project(tmp_path)
+    rec = f.st()["dispatches"][0]
+    span = dt.datetime.fromisoformat(rec["deadline"]) - dt.datetime.fromisoformat(rec["at"])
+    assert span == dt.timedelta(minutes=80)
+    assert f"giao worker (zps-3dp-step-blockout, opus) · hạn chót {rec['deadline']}" in f.p("ledger", "--tail", "1")
+    from core import watch
+    cfg = {"steps": [{"id": "blockout", "usual_min": {"worker": 40}}]}
+    runs = [{"dispatches": [{"step": "blockout", "role": "worker", "at": "2026-11-10 09:00:00",
+                             "ingested": "2026-11-10 09:10:00", "duration_ms": ms} for ms in (60000, 120000, 600000)]}]
+    assert watch.usual_s(cfg, "blockout", "worker", runs) == 120
+
+
+def test_subagent_stop_records_the_stop_on_disk_when_the_producer_never_hears_of_it_d33_9(tmp_path):
+    """The notification to the Producer can be lost (anthropics/claude-code #89505). The hook matches the dispatch by
+    the brief the subagent's prompt names and writes whether the report exists; the asset then shows as stalled."""
+    f, out, j = project(tmp_path)
+    tr = tmp_path / "agent-a5.jsonl"
+    tr.write_text(j.dumps({"type": "user", "message": {"content": f"Đọc `{out['brief']}` trước tiên."}}) + "\n",
+                  encoding="utf-8")
+    other = hook(tmp_path, {"agent_type": "general-purpose", "agent_id": "x", "agent_transcript_path": str(tr)})
+    assert (other.returncode, other.stdout, "stopped" in f.st()["dispatches"][0]) == (0, "", False)
+    r = hook(tmp_path, {"agent_type": "zps-3dp-step-blockout", "agent_id": "a5", "agent_transcript_path": str(tr)})
+    assert r.returncode == 0, r.stderr
+    rec = f.st()["dispatches"][0]
+    assert (rec["stopped"], rec["agent_id"], rec["transcript"]) == ("no_report", "a5", str(tr))
+    assert "on-stop worker · không có report" in f.p("ledger", "--tail", "1")
+    nxt = f.p("next")
+    assert "blockout v1 · worker" in nxt and "KẸT" in nxt and "→ `stall pilot-house`" in nxt
+    empty = tmp_path / "elsewhere"
+    empty.mkdir()
+    assert hook(empty, {"agent_type": "zps-3dp-step-blockout"}).returncode == 0
+    assert hook(tmp_path, "not json").returncode == 0
+
+
+def test_a_stalled_job_climbs_nudge_then_one_new_agent_then_the_user_and_the_ledger_logs_each_rung_d33_11(tmp_path):
+    """One rule for every stall, decided by the script: max_nudges nudges (1), then the same brief to a new agent
+    (never a resume of the stuck one), then waiting_human. Each rung waits stall_min before the next."""
+    f, out, j = project(tmp_path)
+    edit_job(f, deadline=ago(5), agent_id="a1")
+    assert "OK" not in f.p("next").split("↳")[1]
+    r = f.p("stall", "pilot-house")
+    assert "nudge 1/1: gửi tới agent a1 đúng câu \"Tiếp tục, báo trạng thái\"" in r
+    assert "không kẹt" in f.p("stall", "pilot-house", ok=False)
+    edit_job(f, nudged_at=ago(11))
+    r = f.p("stall", "pilot-house")
+    new = j.loads(r.strip().splitlines()[-1])
+    assert (new["role"], new["resume"], new["brief"]) == ("worker", None, out["brief"])
+    d = f.st()["dispatches"]
+    assert len(d) == 2 and "ended" in d[0] and d[1]["redispatch_of"] == d[0]["at"] and "ended" not in d[1]
+    edit_job(f, deadline=ago(1))
+    r = f.p("stall", "pilot-house")
+    assert "waiting_human" in r and f.st()["state"] == "waiting_human"
+    assert [x["rung"] for x in f.st()["stalls"]] == ["nudge", "redispatch", "human"]
+    led = f.p("ledger", "--tail", "6")
+    assert "kẹt · worker · quá hạn chót" in led and "nudge 1/1" in led and "giao lại cho agent mới" in led
+    stats = f.p("stats", "pilot-house")
+    assert "| Bước | Kẹt | Nudge | Giao lại | Hỏi anh |" in stats and "| blockout | 3 | 1 | 1 | 1 |" in stats
+    r = f.p("retry", "pilot-house")
+    assert f.st()["state"] == "running" and j.loads(r.strip().splitlines()[-1])["resume"] is None
+
+
+def test_silence_counts_only_while_a_tool_runs_so_a_thinking_worker_is_not_stuck_but_a_hung_tool_is_d33_11(tmp_path):
+    f, out, _ = project(tmp_path)
+    edit_job(f, at=ago(20))
+    vd = (tmp_path / out["report"]).parent
+    (vd / "heartbeat.log").write_text(f"{ago(15)} · blender render · done · exit 0\n", encoding="utf-8")
+    assert "· OK" in f.p("next")
+    (vd / "heartbeat.log").write_text(f"{ago(15)} · blender render · running · cpu +3.0 s\n", encoding="utf-8")
+    nxt = f.p("next")
+    assert "KẸT 15m · nudge 0/1" in nxt and "không có nhịp tim mới" in f.p("stall", "pilot-house")
+
+
+def test_the_board_labels_a_stalled_asset_kẹt_d33_17(tmp_path):
+    from core import board, state
+    f, out, _ = project(tmp_path)
+    edit_job(f, deadline=ago(1))
+    import os
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        cfg = state.load_cfg()
+        assert board.asset_view(cfg, state.load_st("pilot-house"))["label"] == "kẹt"
+    finally:
+        os.chdir(cwd)
+
+
+def test_a_second_p_wait_is_refused_while_one_runs_and_the_first_wakes_on_the_report_d33_13(tmp_path):
+    """Waiting loops must not pile up (D33.13): the lock holds the pid of the one `P wait`."""
+    import subprocess
+    import time
+    from shared import P
+    f, out, _ = project(tmp_path)
+    first = subprocess.Popen([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=tmp_path,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    lock = tmp_path / "production/wait.lock"
+    for _ in range(100):
+        if lock.exists():
+            break
+        time.sleep(0.05)
+    second = subprocess.run([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=tmp_path,
+                            capture_output=True, text=True)
+    assert second.returncode == 1 and "đã có một `P wait` đang chạy" in second.stderr
+    (tmp_path / out["report"]).write_text("STATUS: DONE\n", encoding="utf-8")
+    so, _ = first.communicate(timeout=30)
+    assert first.returncode == 0 and "có báo cáo" in so and "→ `ingest pilot-house`" in so
+    assert not lock.exists()
+
+
+def test_policy_takes_only_known_dispatch_modes_and_watch_numbers_and_falls_back_to_the_template_d33_14_18():
+    from core import policy
+    assert policy.check({"dispatch": "fast"}) == ["dispatch: phải là foreground|background"]
+    assert policy.check({"watch": {"stall_min": 0, "nap": 1}}) == [
+        "watch.stall_min: phải là số > 0", "watch.nap: khóa không hợp lệ (stall_min|deadline_factor|max_nudges)"]
+    assert policy.watch({}) == {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}
+    assert policy.watch({"watch": {"max_nudges": 0}})["max_nudges"] == 0 and policy.dispatch({}) == "foreground"

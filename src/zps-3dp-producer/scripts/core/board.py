@@ -112,6 +112,15 @@ def view_images(cfg: dict, st: dict, step: str, n: int | None) -> list[tuple[Pat
     return out
 
 
+def stuck(st: dict) -> bool:
+    """D33.17: the board marks an asset whose running job is stalled."""
+    from .watch import stalled
+    try:
+        return stalled(st)
+    except Exception:  # noqa: BLE001 — a broken policy.yaml must not break the board
+        return False
+
+
 def asset_view(cfg: dict, st: dict, step: str | None = None, n: int | None = None, link=None) -> dict:
     """One card. Default: the current step and the version shown to the user, with `P serve` links."""
     aid, step = st["id"], step or st["stage"]
@@ -136,7 +145,7 @@ def asset_view(cfg: dict, st: dict, step: str | None = None, n: int | None = Non
         "glb": link(glb) if glb else None,
         "summary": lines[:SUMMARY_LINES], "more": lines[SUMMARY_LINES:],
         "reason": note[0] if note else "",
-        "label": (st.get("label") or "") if current else "",
+        "label": ("kẹt" if stuck(st) else st.get("label") or "") if current else "",
         "stale": f"dựng từ {src} — cũ" if (src := (st.get("stale") or {}).get(f"{step} v{n}")) else None,
         "decided": (st.get("decisions") or {}).get(f"{step} v{n}", {}).get("at"),
         "open": [finding_view(i, f) for i, f in op.items() if f["priority"] != "preference"],

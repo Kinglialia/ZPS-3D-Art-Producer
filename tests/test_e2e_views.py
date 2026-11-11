@@ -22,7 +22,7 @@ SEEN = "front.png, back.png, report.json"
 KEYS = ("stage", "state", "fix_round", "fix_base", "round_versions", "offer", "label", "note", "worker_agent_id",
         "approved", "rejected", "reopened", "prior", "stale")
 BRIEF_MAX = 4096
-TIMING = r" · (worker|reviewer|script) giao .*$"
+TIMING = r" · ((worker|reviewer|script) giao .*|hạn chót \S+ \S+)$"  # timing and deadline: tests/test_watch.py
 
 
 def counts(major=0, minor=0):

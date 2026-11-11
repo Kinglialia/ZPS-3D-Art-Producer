@@ -27,6 +27,8 @@ MOVES = {
     ("running", "worker_done"): "review", ("running", "checks_done"): "waiting_human", ("running", "stuck"): "blocked",
     ("running", "checks_failed"): "fix",
     ("evidence_running", "worker_done"): "review", ("evidence_running", "stuck"): "blocked",
+    ("evidence_running", "ask_human"): "waiting_human", ("waiting_human", "restall_running"): "running",
+    ("waiting_human", "restall_reviewing"): "review", ("waiting_human", "restall_evidence_running"): "evidence",
     ("reviewing", "fix"): "fix", ("reviewing", "need_evidence"): "evidence", ("reviewing", "reopen"): "fix",
     ("reviewing", "served"): "review",
     ("reviewing", "stuck"): "blocked",
@@ -459,7 +461,7 @@ HANDLERS = {"running": on_worker, "evidence_running": on_evidence, "reviewing": 
 def open_dispatch(st: dict, sid: str, n: int, role: str) -> dict | None:
     """The dispatch an ingest closes: its step, version and role, not yet ingested. A script step has none."""
     return next((x for x in reversed(st.get("dispatches", [])) if (x["step"], x["v"], x["role"]) == (sid, n, role)
-                 and "ingested" not in x), None)
+                 and "ingested" not in x and "ended" not in x), None)
 
 
 def number(x, unit: str = "") -> str:
@@ -619,6 +621,9 @@ def retry(a):
     st = load_st(a.id)
     if st["state"] == "done_enabled":
         move(st, "resume", load_cfg())
+    elif st["state"] == "waiting_human" and st.get("stalled_from"):
+        move(st, f"restall_{st.pop('stalled_from')}")
+        st["note"], st["worker_agent_id"] = "", None
     elif st["state"] == "blocked" and st.get("blocked_from"):
         move(st, f"retry_{st.pop('blocked_from')}")
         st["note"] = ""

@@ -168,7 +168,7 @@ def test_the_built_codex_producer_dispatches_suffixed_agents_by_file_and_ledgers
     brief = (tmp_path / out["brief"]).read_text(encoding="utf-8")
     assert f"TOOLS: {p.parents[1] / 'agents/zps-3dp-step-blockout-codex/tools'}" in brief
     last = (tmp_path / "production/ledger.md").read_text(encoding="utf-8").splitlines()[-1]
-    assert last.endswith(" · codex · house-a · blockout v1 · giao worker (zps-3dp-step-blockout-codex, model của phiên)")
+    assert " · codex · house-a · blockout v1 · giao worker (zps-3dp-step-blockout-codex, model của phiên) · hạn chót " in last
 
 
 def test_install_copies_skills_and_flat_agents_and_an_upgrade_keeps_only_the_venvs(dist, tmp_path):
@@ -394,7 +394,8 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
                         "deny": ["Bash(rm -rf:*)"]},
         "model": "opus", "env": {"BASH_DEFAULT_TIMEOUT_MS": "600000", "BASH_MAX_TIMEOUT_MS": "3600000"},
         "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]},
-                                   {"hooks": [{"type": "command", "command": f"{p} next --session"}]}]}}
+                                   {"hooks": [{"type": "command", "command": f"{p} next --session"}]}],
+                  "SubagentStop": [{"hooks": [{"type": "command", "command": f"{p} on-stop"}]}]}}
     diff = r.stdout.split(f"+++ {s.resolve()}\n", 1)[1]
     assert f'+      "Bash({bl}:*)",\n' in diff and f'+            "command": "{p} next --session"\n' in diff
     before = s.read_bytes()
@@ -452,9 +453,9 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
         assert r.returncode == 0, r.stderr
         return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
     out, gap = preflight()
-    assert (".claude/settings.json thiếu 6 allow rule, hook SessionStart, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
+    assert (".claude/settings.json thiếu 6 allow rule, hook SessionStart, hook SubagentStop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
             "(Bash timeout, D33.4) → chạy lại install.py của bản cài") in out
-    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (6, ["SessionStart"])
+    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (6, ["SessionStart", "SubagentStop"])
     s.write_text(merged, encoding="utf-8")
     out, gap = preflight()
     assert ("thiếu" in out, gap["missing"]) == (False, {"allow": [], "hooks": {}, "env": {}})

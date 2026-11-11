@@ -134,8 +134,24 @@ def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:
     return rows
 
 
+def stall_rows(cfg: dict, st: dict) -> list[str]:
+    """D33.16: stalls, nudges and new dispatches per step (`P stall`)."""
+    xs = st.get("stalls") or []
+    if not xs:
+        return []
+    rows = ["", "| Bước | Kẹt | Nudge | Giao lại | Hỏi anh |", "|---|---|---|---|---|"]
+    for step in cfg["steps"]:
+        mine = [x for x in xs if x["step"] == step["id"]]
+        if mine:
+            rows.append(f"| {step['id']} | {len(mine)} | " + " | ".join(
+                str(sum(x["rung"] == k for x in mine)) for k in ("nudge", "redispatch", "human")) + " |")
+    return rows
+
+
 def run(a):
     st = load_st(a.id)
     if RUNTIME != "codex":
         st = st | {"dispatches": reread(st.get("dispatches") or [])}
-    print("\n".join(table(load_cfg(), st, producer_usage())) if st.get("dispatches") else f"{a.id}: chưa giao lần nào")
+    cfg = load_cfg()
+    print("\n".join(table(cfg, st, producer_usage()) + stall_rows(cfg, st)) if st.get("dispatches")
+          else f"{a.id}: chưa giao lần nào")

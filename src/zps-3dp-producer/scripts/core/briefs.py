@@ -529,17 +529,21 @@ def run(a):
     if not again:
         set_aside(Path(out["report"]))
     move(st, "dispatch")
-    who = step["script"]
+    who, due = step["script"], None
     if out["role"] != "script":
         out["model"] = model_of(out["model"])
         if EDITION.get("agent_file"):
             out["agent_file"] = rel(agent_file(out["agent"]))
         if not again:
+            from .watch import deadline
+            t0 = stamp()
+            due = deadline(cfg, sid, out["role"], t0)
             st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"],
-                                                    "at": stamp(), "brief": out["brief"]} | ({"scope": st["review_scope"]}
-                                                                      if out["role"] == "reviewer" else {}))
+                                                    "at": t0, "brief": out["brief"]} | ({"scope": st["review_scope"]}
+                                                                      if out["role"] == "reviewer" else {})
+                                                   | ({"deadline": due} if due else {}))
         who = f"{out['agent']}, {out['model'] or 'model của phiên'}"
     save_st(st)
     if not again:
-        ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({who})")
+        ledger(f"{a.id} · {sid} v{n} · giao {out['role']} ({who})" + (f" · hạn chót {due}" if due else ""))
     print(json.dumps(out, ensure_ascii=False))

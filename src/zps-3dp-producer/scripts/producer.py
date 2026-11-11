@@ -4,7 +4,8 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · ack · feedback · waive · meshy
+Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · stall · wait · on-stop · ack
+             feedback · waive · meshy
              texture-mode · approvals · delegate · rule · ledger · stats · dashboard · serve · show · board · validate
              keep · purge · disk · archive · texture-stats · ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
@@ -21,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core.state import PORT, ProducerError, load_cfg, locked  # noqa: E402
 from root_guard import require_root  # noqa: E402
 
-UNLOCKED = {"next", "ledger", "stats", "validate", "serve", "texture-stats", "ab", "compare", "disk"}
+UNLOCKED = {"next", "ledger", "stats", "validate", "serve", "texture-stats", "ab", "compare", "disk", "wait"}
 
 
 def cmd_init(a):
@@ -72,6 +73,21 @@ def cmd_brief(a):
 def cmd_ingest(a):
     from core.loop import ingest
     ingest(a)
+
+
+def cmd_stall(a):
+    from core.watch import stall
+    stall(a)
+
+
+def cmd_wait(a):
+    from core.watch import wait
+    wait(a)
+
+
+def cmd_on_stop(a):
+    from core.watch import cmd_on_stop
+    cmd_on_stop(a)
 
 
 def cmd_retry(a):
@@ -223,7 +239,13 @@ def main(argv: list[str] | None = None):
     x.add_argument("--duration-ms", type=int, help="thời lượng lần giao, mili giây; không có thì script đọc transcript subagent (D33.22)")
     x.add_argument("--fallback", action="store_true",
                    help="Producer đã lưu report agent trả bằng tin nhắn vì lệnh ghi bị chặn (ledger: report_fallback)")
-    sub.add_parser("retry", help="giao lại asset đang blocked").add_argument("id")
+    sub.add_parser("retry", help="giao lại asset đang blocked (hoặc waiting_human vì kẹt)").add_argument("id")
+    sub.add_parser("stall", help="việc đang chạy bị kẹt (P next ghi KẸT): bậc tiếp theo nudge → giao lại → hỏi anh (D33.11)"
+                   ).add_argument("id")
+    x = sub.add_parser("wait", help="dispatch: background: chờ tới khi có report, kẹt hoặc hết giờ; chỉ một bản (D33.13)")
+    x.add_argument("--every", type=float, default=30, help="giây giữa hai lần đọc đĩa")
+    x.add_argument("--max-min", type=float, default=50, help="tối đa bao nhiêu phút rồi thoát")
+    sub.add_parser("on-stop", help="hook SubagentStop: JSON trên stdin → ghi trạng thái lần giao xuống đĩa (D33.9)")
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
@@ -281,6 +303,10 @@ def main(argv: list[str] | None = None):
     x = sub.add_parser("archive", help="chuyển asset đã xong vào archive/")
     x.add_argument("id"); x.add_argument("--force", action="store_true")
     a = p.parse_args(argv)
+    if a.cmd == "on-stop":  # a hook: never exit 2 (it would keep the subagent running), never outside a project
+        with contextlib.suppress(Exception), locked():
+            cmd_on_stop(a)
+        return
     if a.cmd not in ("init", "preflight", "ab", "compare"):  # preflight may run before init; ab/compare run above both A/B roots
         require_root()
     try:

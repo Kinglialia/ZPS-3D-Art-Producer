@@ -8,7 +8,8 @@ from core import policy
 from core.state import ProducerError
 
 TEMPLATE = {"approvals": {"blockout": "human", "views_rest": "human", "model": "human"}, "review_board": "local",
-            "delegations": [], "test_mode": False, "disk_warn_gb": 20, "texture_default": "meshy"}
+            "delegations": [], "test_mode": False, "disk_warn_gb": 20, "texture_default": "meshy",
+            "dispatch": "foreground", "watch": {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}}
 
 
 @pytest.fixture
