@@ -292,10 +292,15 @@ def test_density_is_compared_with_the_pilot_package_of_this_runtime_d22_10(detai
     assert (checks["detail.vs_pilot"], data["pilot"]["tris_per_m2"]) == (("info", 1.6), 2.0)
 
 
+def two_boxes(f, a, b, materials=1):
+    parts(f, base=a, top=b)
+    write_glb(f / "pilot-house-untextured.glb", *join(box(*a), box(*b)), materials=materials)
+
+
 def test_check_mesh_finds_the_z_fight_of_an_inlay_flush_with_its_parent_top(tmp_path):
     f = tmp_path / "final"
     spec_of(f)
-    write_glb(f / "pilot-house-untextured.glb", *join(box((0, 0, 0), (2, 2, 0.5)), box((0.5, 0.5, 0.4), (1, 1, 0.5))))
+    two_boxes(f, ((0, 0, 0), (2, 2, 0.5)), ((0.5, 0.5, 0.4), (1, 1, 0.5)))
     assert tool("check_mesh", "--final", f).returncode == 1
     overall, checks, data = result(f, "mesh")
     assert (overall, checks["mesh.coplanar_overlap"], data["pairs"]) == ("fail", ("fail", 2), [
@@ -308,7 +313,7 @@ def test_an_inlay_under_1_mm_above_its_parent_is_z_fighting_and_1_mm_is_not(tmp_
     and the check that enforces the rule must not fail the 1 mm the rule allows (stored as float32 in the GLB)."""
     f = tmp_path / "final"
     spec_of(f)
-    write_glb(f / "pilot-house-untextured.glb", *join(box((0, 0, 0), (2, 2, 0.3)), box((0.5, 0.5, 0.2), (1, 1, top))))
+    two_boxes(f, ((0, 0, 0), (2, 2, 0.3)), ((0.5, 0.5, 0.2), (1, 1, top)))
     tool("check_mesh", "--final", f)
     assert result(f, "mesh")[1]["mesh.coplanar_overlap"] == want
 
@@ -316,11 +321,41 @@ def test_an_inlay_under_1_mm_above_its_parent_is_z_fighting_and_1_mm_is_not(tmp_
 def test_check_mesh_passes_a_box_standing_on_another_and_fails_two_materials(tmp_path):
     f = tmp_path / "final"
     spec_of(f)
-    write_glb(f / "pilot-house-untextured.glb", *join(box((0, 0, 0), (2, 2, 0.5)), box((0.5, 0.5, 0.5), (1, 1, 1))),
-              materials=2)
+    two_boxes(f, ((0, 0, 0), (2, 2, 0.5)), ((0.5, 0.5, 0.5), (1, 1, 1)), materials=2)
     tool("check_mesh", "--final", f)
     assert result(f, "mesh")[1] == {
-        "mesh.structure": ("fail", {"nodes": 1, "meshes": 1, "materials": 2}), "mesh.coplanar_overlap": ("pass", 0)}
+        "mesh.part_winding": ("pass", []), "mesh.structure": ("fail", {"nodes": 1, "meshes": 1, "materials": 2}),
+        "mesh.coplanar_overlap": ("pass", 0)}
+
+
+def flipped(lo, hi):
+    v, f = box(lo, hi)
+    return v, f[:, ::-1]
+
+
+def test_a_part_built_inside_out_fails_before_join(tmp_path):
+    """A custom function may return faces in the wrong order; join_mesh then drops the whole part as hidden, so the
+    worker must hear it right after the build. An open card part has no inside and is not judged."""
+    f = tmp_path / "final"
+    spec_of(f)
+    parts(f, base=((0, 0, 0), (2, 2, 0.5)), lid=((0.5, 0.5, 0.5), (1, 1, 1)), card=((0, 0, 1), (1, 1, 1)))
+    write_glb(f / "parts/lid.glb", *flipped((0.5, 0.5, 0.5), (1, 1, 1)))
+    v, t = box((0, 0, 1), (1, 1, 1.2))
+    write_glb(f / "parts/card.glb", v, t[:2])
+    r = tool("check_mesh", "--final", f, "--before-join")
+    assert (r.returncode, (f / "review/checks/mesh.json").exists()) == (1, False)
+    overall, checks, data = result(f, "mesh_build")
+    assert (overall, checks, data) == ("fail", {"mesh.part_winding": ("fail", ["lid"])}, {"open_parts": ["card"]})
+
+
+def test_a_build_of_open_parts_only_leaves_winding_not_checked(tmp_path):
+    f = tmp_path / "final"
+    spec_of(f)
+    parts(f, card=((0, 0, 0), (1, 1, 1)))
+    v, t = box((0, 0, 0), (1, 1, 1))
+    write_glb(f / "parts/card.glb", v, t[:2])
+    assert tool("check_mesh", "--final", f, "--before-join").returncode == 0
+    assert result(f, "mesh_build")[1] == {"mesh.part_winding": ("not_checked", [])}
 
 
 def uv_case(tmp_path, *quads):
