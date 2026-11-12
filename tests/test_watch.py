@@ -155,6 +155,36 @@ def test_a_dispatch_gets_a_deadline_from_the_step_default_and_later_from_the_med
     assert watch.usual_s(cfg, "blockout", "worker", runs) == 120
 
 
+def test_the_usual_time_is_the_median_of_first_builds_or_of_fix_rounds_never_both_d39_3():
+    """A fix round touches a few parts and a fix-scope review reads a few findings: pooled with first builds, they pull
+    the median down and every first build looks late. The worker kind comes from the version (a later version of the
+    step is a fix round; an evidence render is never a first build); the reviewer kind from its REVIEW_SCOPE."""
+    from core import watch
+    cfg = {"steps": [{"id": "model", "usual_min": {"worker": 60, "reviewer": 15}}]}
+
+    def d(role, v, minutes, **kw):
+        return {"step": "model", "role": role, "v": v, "at": "2026-11-10 09:00:00", "ingested": "2026-11-10 10:00:00",
+                "duration_ms": minutes * 60000, "brief": f"production/assets/a/model/v{v}/brief-{role}.md"} | kw
+    runs = [{"dispatches": [d("worker", 1, 40), d("reviewer", 1, 12, scope="full"), d("worker", 2, 8),
+                            d("reviewer", 2, 3, scope="fix"), d("reviewer", 2, 11, scope="full"),
+                            d("worker", 2, 2, brief="production/assets/a/model/v2/review/evidence-1/brief-worker.md")]},
+            {"dispatches": [d("worker", 1, 50), d("reviewer", 1, 14), d("reviewer", 1, 4)]}]
+    assert [watch.usual_s(cfg, "model", r, runs, k) / 60 for r in ("worker", "reviewer") for k in ("first", "fix")] == [
+        45, 5, 12, 3.5]
+    assert watch.usual_s(cfg, "model", "worker", [], "fix") / 60 == 60
+
+
+def test_the_template_usual_times_take_the_one_measured_number_and_keep_the_rest_w4():
+    """Run 5 measured one step only: texture with Meshy SỬA took 15m32s for two versions, worker and reviewer
+    together, so one texture worker dispatch fits in 16 minutes. Every other number is not measured yet."""
+    import tomllib
+    steps = tomllib.loads((SKILL / "templates/pipeline.toml").read_text(encoding="utf-8"))["steps"]
+    assert {s["id"]: s.get("usual_min") for s in steps} == {
+        "blockout": {"worker": 40, "reviewer": 10}, "views_front": {"worker": 30, "reviewer": 10},
+        "views_rest": {"worker": 40, "reviewer": 10}, "model": {"worker": 60, "reviewer": 15},
+        "texture": {"worker": 16, "reviewer": 15}, "assemble": None}
+
+
 def test_subagent_stop_records_the_stop_on_disk_when_the_producer_never_hears_of_it_d33_9(tmp_path):
     """The notification to the Producer can be lost (anthropics/claude-code #89505). The hook matches the dispatch by
     the brief the subagent's prompt names and writes whether the report exists; the asset then shows as stalled."""

@@ -47,8 +47,10 @@ meshy = 1
 [codex]
 timeout_s = 900
 
-# usual_min (D33.10): phút thường lệ của một lần giao khi `P stats` chưa có số của bước. Hạn chót = số này (hoặc
-# trung vị các lần trước) × watch.deadline_factor của policy.yaml. Tạm, chưa đo; số đo thay thế khi có.
+# usual_min (D33.10, D39.3): phút thường lệ của một lần giao khi `P stats` chưa có số của bước. Hạn chót = số này (hoặc
+# trung vị các lần trước, tính riêng lần dựng đầu và vòng sửa) × watch.deadline_factor của policy.yaml. Hạn chót chỉ
+# để báo trễ, không phải kẹt. Số đo: texture worker 16 = cả bước texture Run 5 (Meshy SỬA, 15m32s cho 2 version, gồm
+# worker và reviewer), nên một lần giao worker không dài hơn; Run 4 VẼ MỚI 38m25s cho 4 version. Các số khác chưa đo.
 [[steps]]
 id = "blockout"
 usual_min = { worker = 40, reviewer = 10 }
@@ -118,7 +120,7 @@ outputs = ["final/{id}-untextured.glb", "final/{id}.blend", "final/part_graph.js
 
 [[steps]]
 id = "texture"
-usual_min = { worker = 60, reviewer = 15 }
+usual_min = { worker = 16, reviewer = 15 }
 agent = "step-texture"
 reviewer = "check-texture"
 model = "opus"

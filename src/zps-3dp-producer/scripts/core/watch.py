@@ -35,20 +35,36 @@ def minutes(s: float) -> str:
     return f"{max(round(s / 60), 0)}m"
 
 
-def usual_s(cfg: dict, sid: str, role: str, sts: list[dict] | None = None) -> float | None:
-    """D33.10: the median time of this step and role over earlier dispatches of every asset (`P stats`), else the
-    `usual_min` of the step in pipeline.toml."""
+def kind_of(mine: list[dict], x: dict) -> str:
+    """D39.3: `first` or `fix` for dispatch x; mine: the asset's dispatches of the same step and role, in order. A
+    reviewer says it in its REVIEW_SCOPE (a `full` review reads as much as a first one); a reviewer from before the scope
+    is `first` only as the step's first review. A worker builds a fix round when the step has an older version, and an
+    evidence render is never a first build."""
+    if x["role"] == "reviewer":
+        if x.get("scope"):
+            return "fix" if x["scope"] == "fix" else "first"
+        return "first" if mine and mine[0] is x else "fix"
+    if "/review/evidence-" in (x.get("brief") or "") or any(y["v"] < x["v"] for y in mine):
+        return "fix"
+    return "first"
+
+
+def usual_s(cfg: dict, sid: str, role: str, sts: list[dict] | None = None, kind: str | None = None) -> float | None:
+    """D33.10, D39.3: the median time of this step, role and kind over earlier dispatches of every asset (`P stats`),
+    else the `usual_min` of the step in pipeline.toml. kind None pools first builds and fix rounds."""
     from .stats import took
-    xs = [t for s in (all_status() if sts is None else sts) for x in s.get("dispatches") or []
-          if x.get("step") == sid and x.get("role") == role and x.get("ingested") and (t := took(x))]
+    xs = []
+    for s in all_status() if sts is None else sts:
+        mine = [x for x in s.get("dispatches") or [] if x.get("step") == sid and x.get("role") == role]
+        xs += [t for x in mine if x.get("ingested") and (kind is None or kind_of(mine, x) == kind) and (t := took(x))]
     if xs:
         return statistics.median(xs)
     m = (step_of(cfg, sid)[1].get("usual_min") or {}).get(role)
     return m * 60 if isinstance(m, int | float) and not isinstance(m, bool) and m > 0 else None
 
 
-def deadline(cfg: dict, sid: str, role: str, start: str) -> str | None:
-    u = usual_s(cfg, sid, role)
+def deadline(cfg: dict, sid: str, role: str, start: str, kind: str | None = None) -> str | None:
+    u = usual_s(cfg, sid, role, kind=kind)
     return fmt(at(start) + dt.timedelta(seconds=u * policy.watch(policy.load())["deadline_factor"])) if u else None
 
 

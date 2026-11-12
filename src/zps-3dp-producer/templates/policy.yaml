@@ -11,6 +11,7 @@ texture_default: meshy           # meshy | paint: chế độ texture của `tex
 # D33.12–14: foreground = giao subagent chế độ thường (pilot); background = giao chạy nền và một `P wait` (lô).
 dispatch: foreground
 # D33.11, D33.18: số của dự án. Tạm, chưa đo trên nhiều loại vật; đổi khi `P stats` có số.
+# stall_min: vN không có nhịp tim và không có file đổi trong chừng ấy phút thì là kẹt (D39.3). Quá hạn chót chỉ là trễ.
 watch:
   stall_min: 10
   deadline_factor: 2
