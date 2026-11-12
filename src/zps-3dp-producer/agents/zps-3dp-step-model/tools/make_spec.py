@@ -4,7 +4,8 @@ Usage: python3 tools/make_spec.py --final F --blockout B --card C/asset-card.yam
 Geometry comes only from B/sources.json (D22.13): W x D x H, character_h, door_h, camera azimuth, elevation, fov.
 includes_base: false takes W x D x H from B/assembly.json instead, because layout then leaves the base out.
 Other numbers follow D13, later wins: skill default < preset < profile `overrides` < asset card.
-  tris cap: card tris_max, else tiers[card tier]; texture_res: card, else 2048; uv padding and texel minimum;
+  tris cap: card tris_max, else tiers[card tier]; texture_res: card, else 2048; texel minimum;
+  uv padding: stated at 2048, scaled by texture_res / 2048 (8 px at 1024, as the kit table);
   detail.relief_min_px 3, detail.alpha_min_px 16 (profile overrides.detail changes them);
   model.bevel: card `bevel`, else profile `style.bevel`, else none (D27.10). none = false; toon = the preset's
   bevel.toon numbers (radius_m, segments). Nothing else turns bevel on, notes and overrides included.
@@ -28,6 +29,7 @@ KEPT = ("sun", "concept_cam")
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
         "bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "dimensions")
 DIM_TOLERANCE = 0.02
+PADDING_AT = 2048
 
 
 def yaml_load(path):
@@ -81,6 +83,9 @@ def build(a):
         res, src["texture_res"] = int(card["texture_res"]), "thẻ asset"
     else:
         res = int(p["texture_res"])
+    pad = max(1, round(int(p["uv"]["padding_px"]) * res / PADDING_AT))
+    if res != PADDING_AT:
+        src["uv.padding_px"] += f"; × {res}/{PADDING_AT}"
     lay = s["layout"]
     if lay.get("includes_base", True):
         dims, src["dimensions"] = [float(lay[k]) for k in ("w", "d", "h")], "sources.json layout"
@@ -93,7 +98,7 @@ def build(a):
         "budget": {"max_tris_total": cap, "max_materials_total": 1},
         "dimensions_m": {aid: dims}, "dimensions_tolerance": DIM_TOLERANCE, "height_m": dims[2],
         "pivot": "bottom_center",
-        "uv": {"resolution": res, "min_padding_px": int(p["uv"]["padding_px"]), "allow_overlap": False,
+        "uv": {"resolution": res, "min_padding_px": pad, "allow_overlap": False,
                "allow_out_of_bounds": False},
         "export": {"path": f"{aid}-untextured.glb", "skip_export": True},
         "model": {"texel_min_px_per_m": float(p["uv"]["texel_min_px_per_m"]), **p["detail"], "bevel": bev,

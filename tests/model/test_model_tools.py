@@ -130,10 +130,17 @@ def test_card_beats_profile_overrides_beat_preset_beat_skill_default_d13(make_sp
     _, s = make_spec(card={"tris_max": 2400, "texture_res": 1024, "tier": "hero"},
                      profile={"overrides": {"uv": {"padding_px": 8}, "detail": {"relief_min_px": 4}}})
     assert (s["budget"]["max_tris_total"], s["uv"]["resolution"], s["uv"]["min_padding_px"],
-            s["model"]["relief_min_px"]) == (2400, 1024, 8, 4)
+            s["model"]["relief_min_px"]) == (2400, 1024, 4, 4)
     assert {k: s["sources"][k] for k in ("tris_cap", "texture_res", "uv.padding_px", "detail.relief_min_px")} == {
-        "tris_cap": "thẻ asset tris_max", "texture_res": "thẻ asset", "uv.padding_px": "profile overrides",
+        "tris_cap": "thẻ asset tris_max", "texture_res": "thẻ asset", "uv.padding_px": "profile overrides; × 1024/2048",
         "detail.relief_min_px": "profile overrides"}
+
+
+@pytest.mark.parametrize("res, pad", [(512, 4), (1024, 8), (2048, 16), (4096, 32)])
+def test_uv_padding_is_stated_at_2048_and_scales_with_the_texture_resolution(make_spec, res, pad):
+    """The same texel gap at every resolution: 16 px at 1024 doubled the kit table (8) and wasted atlas space."""
+    _, s = make_spec(card={"texture_res": res})
+    assert s["uv"]["min_padding_px"] == pad
 
 
 TOON = {"style": "toon", "radius_m": 0.009, "segments": 2}
