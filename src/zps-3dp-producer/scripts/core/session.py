@@ -164,13 +164,15 @@ def lines_of(p: Path) -> list[dict]:
 
 def asks_for(d: dict, brief: str) -> bool:
     """A prompt line of the Producer that names the brief: a Claude Code user line, not a tool result or a reminder; in
-    a Codex rollout, the task a parent sent (`agent_message`) or a user message the thread did not inherit."""
+    a Codex rollout, the task a parent sent (`agent_message`) or a user message the thread did not inherit. Codex
+    0.164.0 keeps the `spawn_agent` message as plain text in the `encrypted_content` item of the `agent_message`."""
     p = d.get("payload")
     if d.get("type") == "response_item" and isinstance(p, dict):
         if not (p.get("type") == "agent_message" or p.get("type") == "message" and p.get("role") == "user"
                 and not (d.get("metadata") or {}).get("inherited_user_message")):
             return False
-        return brief in " ".join(str(x.get("text", "")) for x in p.get("content") or [] if isinstance(x, dict))
+        return brief in " ".join(str(x.get("text") or x.get("encrypted_content") or "") for x in p.get("content") or []
+                                 if isinstance(x, dict))
     if d.get("type") != "user" or d.get("isMeta"):
         return False
     c = (d.get("message") or {}).get("content")

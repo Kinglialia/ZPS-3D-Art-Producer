@@ -37,8 +37,11 @@ def tok(ts, last, total):
 
 
 def task(ts, text):
+    """A child receives its spawn_agent message as plain text in the `encrypted_content` item (real rollouts, 128 of
+    129 spawns); the `input_text` item does not hold it."""
     return {"timestamp": ts, "type": "response_item", "payload": {
-        "type": "agent_message", "author": "/root", "recipient": "/root/w1", "content": [{"type": "input_text", "text": text}]}}
+        "type": "agent_message", "author": "/root", "recipient": "/root/w1",
+        "content": [{"type": "input_text", "text": "từ /root"}, {"type": "encrypted_content", "encrypted_content": text}]}}
 
 
 def call(ts, name, **args):

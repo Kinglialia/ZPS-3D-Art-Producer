@@ -78,7 +78,7 @@ v0.8.0 gộp hai bước `views_front`, `views_rest` thành một bước `views
 
 - Thấy pipeline không chạy: bấm Esc, rồi bảo Producer chạy `P next`. Asset kẹt: `P stall <id>`; asset `blocked` hoặc `waiting_human` vì kẹt: `P retry <id>`. Trạng thái nằm trong file, nên không mất gì.
 - Hook `SubagentStop` (`P on-stop`) ghi xuống đĩa mỗi lần subagent dừng, kể cả khi Producer không nhận thông báo. `install.py` gộp hook này và biến `env` Bash timeout (`BASH_DEFAULT_TIMEOUT_MS` 600000, `BASH_MAX_TIMEOUT_MS` 3600000) vào settings của project; `P preflight` báo khi thiếu.
-- Hook `Stop` (`P on-main-stop`) từ chối cho phiên chính dừng khi còn report chưa ingest (cả `report-script.md` của bước script), hoặc còn dòng giao việc chưa giao. `install.py` gộp hook này cùng các hook trên; hook `Stop` của người dùng vẫn giữ. Bản Codex: `install.py` gộp ba hook vào `.codex/hooks.json`; Codex chỉ chạy chúng khi project được tin (`references/runtime.md`).
+- Hook `Stop` (`P on-main-stop`) từ chối cho phiên chính dừng khi còn report chưa ingest (cả `report-script.md` của bước script), hoặc còn dòng giao việc chưa giao. `install.py` gộp hook này cùng các hook trên; hook `Stop` của người dùng vẫn giữ. Bản Codex: `install.py` gộp ba hook vào `.codex/hooks.json`; Codex chỉ chạy chúng khi project được tin; người dùng tin hook một lần sau khi cài, bước giao diện này chưa kiểm (`references/runtime.md`).
 - Ngưỡng kẹt và chế độ giao: `dispatch`, `watch` trong `policy.yaml`. Thời gian thường lệ mặc định mỗi bước: `usual_min` trong `pipeline.toml`.
 
 ## Review page

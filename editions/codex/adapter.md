@@ -8,7 +8,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
   > Vai của bạn nằm trong `<agent_file>`: đọc file đó trước tiên. Rồi đọc `<brief>`: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 - Không truyền `agent_type`: sub-agent là agent thường và đọc file vai. `agent_file` là khóa của `P brief`. Dòng `tools:` trong file agent không áp dụng trên Codex.
 - Các tool sub-agent (đã chạy thật): `spawn_agent(task_name, message, agent_type, model, reasoning_effort, fork_turns)`, `wait_agent(timeout_ms)`, `followup_task(target, message)`, `send_message(target, message)`, `interrupt_agent(target)`, `list_agents(path_prefix)`.
-- `target` là `task_name` đã đặt khi giao. `list_agents` in tên các agent. Truyền `task_name` làm `--agent-id` của `P ingest`.
+- `target` là giá trị `task_name` mà `spawn_agent` trả về (một đường dẫn, ví dụ `/root/<task_name>`; đã đối chiếu rollout thật). `list_agents` in tên các agent. Truyền giá trị đó làm `--agent-id` của `P ingest`.
 - Sub-agent dùng chung quyền mạng và sandbox của phiên gốc. `production/` và `production-*/` nằm trong thư mục project, nên sandbox `workspace-write` cho ghi report ở đó mà không cần thêm writable root.
 - Dừng agent: mục Dừng agent.
 
@@ -16,12 +16,12 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 - Dừng bằng `interrupt_agent` với `target` của agent đó. Codex không có tool đóng agent.
 - `P stall` chờ agent cũ dừng rồi mới giao agent mới, như bản Claude. Hook SubagentStop ghi lần dừng. Không có hook thì agent im thêm `stall_min` phút sau lần xin dừng là đủ: `P stall` sau đó giao agent mới. Lệnh không bao giờ chờ mãi.
-- `P stall` in id agent mà hook ghi. Tool từ chối id đó thì dùng `task_name`.
+- `P stall` in id agent mà hook ghi. Tool từ chối id đó thì dùng giá trị `task_name` mà `spawn_agent` trả về (chưa chạy thật).
 
 ## Resume
 
 - `resume` có giá trị (vòng sửa, ảnh reviewer xin, report sai contract): gửi bằng `followup_task` tới agent đó. Agent giữ ngữ cảnh lần trước (đã chạy thật).
-- Câu nudge của `P stall`: `send_message` khi agent còn chạy, `followup_task` khi agent đã xong lượt.
+- Câu nudge của `P stall`: `send_message` khi agent còn chạy, `followup_task` khi agent đã xong lượt (chưa chạy thật).
 
 ## Model
 
