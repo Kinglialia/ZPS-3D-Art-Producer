@@ -13,7 +13,7 @@ SKILL = Path(__file__).resolve().parents[1] / "src/zps-3dp-producer"
 MESSAGE = "LỖI: không thấy production/pipeline.toml: chạy lệnh từ gốc project"
 
 GUARDED = [
-    "scripts/assemble.py", "scripts/assemble_glb.py", "scripts/check_counts.py", "scripts/gen_image_codex.py",
+    "scripts/assemble.py", "scripts/assemble_glb.py", "scripts/assemble_qa.py", "scripts/check_counts.py", "scripts/gen_image_codex.py",
     "scripts/meshy_call.py", "scripts/producer.py", "scripts/review_sheet.py", "scripts/run_tool.py",
     *(f"agents/zps-3dp-step-blockout/tools/{n}.py" for n in (
         "build_parts", "check_base", "check_fix", "check_inputs", "check_layout", "check_markers", "check_materials",
