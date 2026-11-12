@@ -601,7 +601,7 @@ def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_
         "một dòng:",
         "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
         "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
-        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT và dòng COUNTS. Lệnh ghi file bị chặn: trả cả report giữa "
+        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. Lệnh ghi file bị chặn: trả cả report giữa "
         "dòng `--- report ---` và dòng `--- end ---`."]
     assert "Bạn chấm độc lập. Không sửa file nào ngoài report." in text.splitlines()
     assert "mức `minor`" not in text

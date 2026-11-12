@@ -372,7 +372,6 @@ def review_brief(cfg, st, step, n) -> str:
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
         f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear{'|not_checked' if scope == 'fix' else ''}; ...",
-        "COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N",
         f"TOP_FIX: <{'|'.join(findings.top_fix_kinds(step))}>: F<n>[, F<m>]",
         "EVIDENCE_OPENED: <nhãn ảnh và file đã mở>",
         *([f"COMPARE: {'; '.join(f'{i}=?' for i in cmp_ids)}"] if cmp_ids else []),
@@ -408,9 +407,10 @@ def review_brief(cfg, st, step, n) -> str:
         + (f"; {', '.join(single)} đúng 1 id; loại khác:" if single else ";")
         + " mọi finding blocker/major/minor đang mở của loại đó; "
         "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
-        "- COUNTS: số finding đang mở (mới + open/regressed). Mỗi key unclear trong RUBRIC cần một finding unclear.",
+        "- Không ghi COUNTS. TOP_FIX loại lô" + (f" (không phải {', '.join(single)})" if single else "")
+        + ": chỉ ghi loại, script điền id. Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
-        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT và dòng COUNTS. " + FALLBACK,
+        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]
     return "\n".join(lines) + "\n"
 

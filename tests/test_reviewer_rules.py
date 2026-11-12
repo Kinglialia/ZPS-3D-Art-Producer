@@ -33,7 +33,7 @@ def test_each_step_reviewer_writes_its_report_file_and_replies_two_lines_with_te
     """D22.6 stays: a report saved by the Producer passes through its context, so text is the exception."""
     body = (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8")
     assert ("- Chỉ đọc. Không sửa file nào ngoài report brief chỉ định. Không chạy lại script." in body.splitlines(),
-            "- Ghi report vào file brief chỉ định. Tin nhắn trả về cho Producer: chỉ dòng `VERDICT` và dòng `COUNTS`. "
+            "- Ghi report vào file brief chỉ định. Tin nhắn trả về cho Producer: chỉ dòng `VERDICT`. "
             + FALLBACK in body.splitlines()) == (True, True)
 
 

@@ -110,7 +110,13 @@ FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. Vòng trả th
 
 Agent tự ghi report vào đường dẫn `report` của brief; tin nhắn trả về chỉ gồm các dòng brief yêu cầu. Lệnh ghi bị chặn thì agent trả cả report giữa dòng `--- report ---` và dòng `--- end ---`; Producer ghi nguyên văn tin nhắn vào file và chạy `ingest --fallback` (`ab judge --fallback`). Script ghi sự kiện `report_fallback` (vai trò, bước) vào ledger và `fallback: true` vào lần giao. `ingest` và `ab judge` chỉ đọc phần giữa hai dòng đó khi có.
 
-Script đọc dòng `KEY: value` đầu tiên của mỗi khóa trong cả file. `FINDINGS` và `PRIOR` là khối: các dòng `- ` và dòng thụt lề ngay sau, tới khóa kế tiếp hoặc dòng không thụt lề. Sai thì `ingest` in một dòng `LỖI: <report> sai contract: <lỗi>; <lỗi>`, không đổi state.
+Script đọc dòng `KEY: value` đầu tiên của mỗi khóa trong cả file. Script đọc theo nội dung, không theo hình thức:
+- Khóa không phân biệt hoa thường, được in đậm hoặc đặt trong backtick (`**VERDICT:** PASS`).
+- Giá trị liệt kê (`VERDICT`, `RUBRIC`, `COMPARE`, `PICK`, trạng thái `PRIOR`) lấy từ chữ đầu, không phân biệt hoa thường. Ghi chú trong ngoặc sau giá trị bị bỏ (`roof=pass (ok)`).
+- Dòng thụt lề nối vào giá trị ngay trên nó. Một trường của finding xuống hàng vẫn là một trường.
+- `FINDINGS` và `PRIOR` là khối: các dòng `- ` và dòng thụt lề ngay sau, tới khóa kế tiếp. Dòng không thụt lề kết thúc khối. Nếu sau nó còn mục `- F<n>` thì mục đó sẽ mất, nên đó là lỗi và `ingest` nêu đúng dòng.
+
+Sai nội dung thì `ingest` in một dòng `LỖI: <report> sai contract: <lỗi>; <lỗi>`, không đổi state, và đổi tên report thành `<tên>.rejected-<k>.md` (k tăng dần). Đường dẫn report trống để agent viết lại; `P wait` và kiểm kẹt không tính file bị từ chối là report xong.
 
 Worker (`worker-out.md`). Tin nhắn trả về chỉ dòng `STATUS`.
 ```
@@ -124,18 +130,17 @@ RESOLVED_NOTES: <bước> vN F<k>, ...  ghi chú còn mở của bước trướ
 ACCEPTED_FAIL: <file JSON> — <lý do có số>; ...   check fail không sửa được (D31.3), hoặc none
 ```
 
-`ACCEPTED_FAIL`: một dòng, các mục cách nhau bằng `; `; lý do không chứa `;`. `<file JSON>` là đường dẫn trong `final/review/{gates,checks}/`, hoặc `final/review/join.json`, `unwrap.json`. `ingest` từ chối mục cho JSON không có trong `acceptable` của bước (`pipeline.toml`), mọi gate cứng (`HARD_GATES` trong code: `inputs.json`, `package.json` là hash; `schema.json`; `qa_export_check.json`; `meshy.json` là topology Meshy; `load_cfg` từ chối `acceptable` có gate cứng), lý do không có số, và mục chưa ghi vào mục `NGOẠI LỆ` của `final/README.md` của chính version đó (mọi bước; `assemble.py` chép các mục này vào Ngoại lệ của README gói cuối). Mục bị từ chối → vẫn là vòng sửa; ledger ghi `ACCEPTED_FAIL từ chối`. Ledger đếm mỗi mục hợp lệ theo bước và theo check (`accepted_fail` trong status.json). Vòng trả thẳng: `fix_base` giữ nguyên (findings của reviewer), `direct` = version check fail (brief sửa từ bản đó); review đầu tiên sau các vòng trả thẳng không có base nên không bị dừng vì "không tiến bộ".
+`ACCEPTED_FAIL`: một dòng, các mục cách nhau bằng `; `; lý do không chứa `;`. Giữa file và lý do là `—`, `–` hoặc `-` có khoảng trắng hai bên. `<file JSON>` là đường dẫn trong `final/review/{gates,checks}/`, hoặc `final/review/join.json`, `unwrap.json`. `ingest` từ chối mục cho JSON không có trong `acceptable` của bước (`pipeline.toml`), mọi gate cứng (`HARD_GATES` trong code: `inputs.json`, `package.json` là hash; `schema.json`; `qa_export_check.json`; `meshy.json` là topology Meshy; `load_cfg` từ chối `acceptable` có gate cứng), lý do không có số, và mục chưa ghi vào mục `NGOẠI LỆ` của `final/README.md` của chính version đó (mọi bước; `assemble.py` chép các mục này vào Ngoại lệ của README gói cuối). Mục bị từ chối → vẫn là vòng sửa; ledger ghi `ACCEPTED_FAIL từ chối`. Ledger đếm mỗi mục hợp lệ theo bước và theo check (`accepted_fail` trong status.json). Vòng trả thẳng: `fix_base` giữ nguyên (findings của reviewer), `direct` = version check fail (brief sửa từ bản đó); review đầu tiên sau các vòng trả thẳng không có base nên không bị dừng vì "không tiến bộ".
 
 Texture Artist thêm `UNFIXABLE: yes|no`; `yes` → waiting_human với `ask` (`meshy_regen`), hoặc blocked khi bước này không có Meshy.
 
 Script (`report-script.md`, bước có `script` trong `pipeline.toml`, ví dụ `assemble`): `STATUS`, `OUTPUT`, `ISSUES`, `PROFILE_HASH` như worker (`PROFILE_HASH` là tham số cuối của lệnh), rồi `EVIDENCE_OPENED` và `FINDINGS` mỗi điểm fail một finding. `ingest` ghi các finding đó vào `findings.json` của version để trang duyệt hiện. `DONE` → waiting_human; `BLOCKED` → blocked.
 
-Reviewer (`review-out.md`). Tin nhắn trả về chỉ dòng `VERDICT` và `COUNTS`.
+Reviewer (`review-out.md`). Tin nhắn trả về chỉ dòng `VERDICT`. Script tự tính `COUNTS` và id của loại `TOP_FIX` kiểu lô; reviewer không ghi hai thứ này.
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear|not_checked; ...   not_checked chỉ khi brief ghi REVIEW_SCOPE: fix
-COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N
-TOP_FIX: <loại>: F<n>[, F<m>]        chỉ khi FIX
+TOP_FIX: <loại>[: F<n>]              chỉ khi FIX; loại một id (structure, regen_front) ghi id, loại lô chỉ ghi loại
 EVIDENCE_OPENED: <nhãn ảnh, file đã mở>
 COMPARE: F<n>=better|same|worse; ... vòng sửa: mọi id trong TOP_FIX của bản gốc
 PICK: a|b|c                          chỉ khi TOP_FIX của bản gốc là param
@@ -157,10 +162,10 @@ PRIOR:                               đúng mọi finding đang mở của bản
 - `not_checked` trong `RUBRIC`: nhận ở vòng `fix`, từ chối ở vòng `full`.
 - `COMPARE` đủ id trong `TOP_FIX` của bản gốc; `resolved` cần `better`; `worse` cần `regressed`. Id ngoài `TOP_FIX`: bỏ qua và ghi cảnh báo vào ledger, không báo lỗi (D30.4).
 - `RESOLVED_NOTES`, `RESOLVED_CONFIRMED`: mỗi mục dạng `<bước> vN F<k>`. `RESOLVED_CONFIRMED` chỉ gồm mục có trong `RESOLVED_NOTES` của report worker cùng version (D27.8).
-- `COUNTS` bằng số finding đang mở sau khi áp `PRIOR`.
+- `COUNTS`: script tính từ finding đang mở sau khi áp `PRIOR`. Report còn ghi `COUNTS` mà lệch hoặc thiếu mức thì ledger ghi cảnh báo, không từ chối.
 - Số key `unclear` trong `RUBRIC` ≤ số finding `unclear` đang mở.
 - VERDICT: `PASS` khi không còn `blocker`, `major`, `unclear` đang mở (`preference`, `minor` không chặn). `FIX` khi còn. `PASS` ở vòng `fix` chưa cho bước qua: script giao reviewer `full` trên cùng version (D31.2).
-- `TOP_FIX`: loại nằm trong `top_fix` của bước (trừ loại `note*`) hoặc `need_evidence`; là loại của finding nặng nhất, cùng mức thì `structure`, `fix_uv_mesh` trước. `structure` đúng một id. Loại khác: đủ mọi finding `blocker|major|minor` đang mở của loại đó. `need_evidence`: đủ mọi finding `unclear` đang mở, chỉ khi không còn `blocker`, `major`.
+- `TOP_FIX`: loại nằm trong `top_fix` của bước (trừ loại `note*`) hoặc `need_evidence`; là loại của finding nặng nhất, cùng mức thì `structure`, `fix_uv_mesh` trước. `structure` đúng một id, reviewer ghi id đó. Loại lô: script lấy đủ mọi finding `blocker|major|minor` đang mở của loại đó; reviewer ghi id lệch thì ledger cảnh báo và script dùng id của mình. `need_evidence`: đủ mọi finding `unclear` đang mở, chỉ khi không còn `blocker`, `major`.
 
 Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa ghi). Brief reviewer điền sẵn `PRIOR`, `COMPARE` với `?` để reviewer thay.
 
