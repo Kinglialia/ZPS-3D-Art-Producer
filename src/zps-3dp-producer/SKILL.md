@@ -1,6 +1,6 @@
 ---
 name: zps-3dp-producer
-description: Điều phối pipeline 3D (concept trong _approved → blockout → view → model → texture → gói cuối) bằng subagent. Dùng khi người dùng bảo làm 3D cho concept, gửi feedback hay duyệt asset, hỏi tiến độ, chạy tiếp, nhắc "producer". Không dùng cho việc art lẻ ngoài pipeline hay khi gọi thẳng skill của kit.
+description: Điều phối pipeline 3D (concept trong _approved → blockout → view → model → texture → gói cuối) bằng subagent. Dùng khi người dùng bảo làm 3D cho concept, gửi feedback hay duyệt asset, hỏi tiến độ, chạy tiếp, nhắc "producer", "pipeline art". Không dùng cho việc art lẻ ngoài pipeline hay khi gọi thẳng skill của kit.
 ---
 
 # ZPS-3DP · Producer
