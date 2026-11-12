@@ -1139,3 +1139,38 @@ def test_retry_after_a_worker_stall_drops_the_worker_agent_so_the_new_build_neve
     out = flow.call(loop.retry, Namespace(id=AID))
     assert (flow.st["state"], flow.st["worker_agent_id"], json.loads(out.splitlines()[-1])["resume"]) == (
         "running", None, None)
+
+
+def rereview_v1_asks_for_evidence(f):
+    """v3 is the newest build, v1 the best: the waives make the reviewer judge v1 again, and it asks for more images."""
+    stall(f)
+    waive(f, "F1")
+    waive(f, "F2")
+    assert (f.st["rereview"], f.st["versions"]) == (1, {"blockout": 3})
+    return f.review(counts=counts(unclear=1), rubric="props=unclear", top_fix="need_evidence: F3",
+                    findings=[finding("F3", "unclear", "param")])
+
+
+def test_the_evidence_round_of_a_rereview_targets_the_version_judged_not_the_newest_c7(flow):
+    """The reproduction: the answer need_evidence cleared `rereview`, `current_v()` fell back to v3, so the worker
+    rendered pictures for v3 and its report was checked against the hash of v1."""
+    assert rereview_v1_asks_for_evidence(flow).endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → "
+                                                         "`brief house-a`\n")
+    assert (flow.st["evidence"]["version"], loop.current_v(flow.st, "blockout")) == (1, 1)
+    out = flow.brief()
+    ev = f"production/assets/{AID}/blockout/v1/review/evidence-1"
+    assert (out["brief"], out["report"]) == (f"{ev}/brief-worker.md", f"{ev}/worker-out.md")
+    head, line = flow.work(out=out).splitlines()
+    assert head == "house-a: evidence-1 DONE → blockout/review. Tiếp: giao reviewer → `brief house-a`"
+    assert json.loads(line)["report"] == f"production/assets/{AID}/blockout/v1/review-out.md"
+
+
+def test_a_pass_after_the_evidence_of_a_rereview_offers_the_judged_version_not_the_newest_c7(flow):
+    rereview_v1_asks_for_evidence(flow)
+    flow.work()
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="props=pass",
+                prior=["- F3: resolved | evidence: clay_front"])
+    st = flow.st
+    assert (st["state"], st["offer"], st["evidence"], st["versions"]) == ("waiting_human", 1, None, {"blockout": 3})
+    flow.human("approve", "giữ v1")
+    assert (flow.st["approved"], flow.st["rejected"]) == ({"blockout": 1}, {"blockout": [2, 3]})

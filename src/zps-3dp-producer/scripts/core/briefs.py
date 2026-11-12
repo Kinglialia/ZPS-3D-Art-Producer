@@ -556,7 +556,7 @@ def run(a):
             out = {"role": "worker", "agent": agent_name(step["agent"]), "model": model, "resume": resume,
                    "brief": rel(bp), "report": rel(d / "worker-out.md")}
     elif s in ("evidence", "evidence_running"):
-        n = st["versions"][sid]
+        n = current_v(st, sid)
         ed = vdir(a.id, sid, n) / "review" / f"evidence-{st['evidence']['k']}"
         ed.mkdir(parents=True, exist_ok=True)
         bp = ed / "brief-worker.md"

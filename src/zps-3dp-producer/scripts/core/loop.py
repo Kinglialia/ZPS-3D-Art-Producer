@@ -102,7 +102,10 @@ def review_base(st: dict, n: int) -> int | None:
 
 
 def current_v(st: dict, sid: str) -> int | None:
-    """The version a review judges: `rereview` when the same version is judged again without a worker, else the newest."""
+    """The version a review judges: the one an evidence round stands on, else `rereview` when the same version is judged
+    again without a worker, else the newest."""
+    if (ev := st.get("evidence")) and sid == st["stage"]:
+        return ev["version"]
     rr = st.get("rereview")
     return rr if rr and sid == st["stage"] and st["state"] in ("review", "reviewing") else st["versions"].get(sid)
 
