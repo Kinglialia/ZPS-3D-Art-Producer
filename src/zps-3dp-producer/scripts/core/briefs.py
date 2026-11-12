@@ -1,9 +1,11 @@
 """Worker and reviewer briefs, and `P brief` dispatch."""
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
@@ -99,6 +101,15 @@ def brace(paths: list[str]) -> list[str]:
             groups.setdefault(d, []).append(f[:-5])
     out = [o for o in paths if not (o.endswith(".json") and len(groups.get(o.rpartition("/")[0], ())) > 1)]
     return out + [f"{d}/{{{','.join(fs)}}}.json" for d, fs in groups.items() if len(fs) > 1]
+
+
+def prepare_final(base: Path, new: Path, exclude: list[str]):
+    """C24: final/ of a fix round = final/ of its base version minus the paths that match a pattern of `exclude`."""
+    for f in sorted(p for p in (base / "final").rglob("*") if p.is_file()):
+        r = f.relative_to(base / "final").as_posix()
+        if not any(fnmatch.fnmatchcase(r, pat) for pat in exclude):
+            (new / "final" / r).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, new / "final" / r)
 
 
 def concept_files(st, step, review: bool = False) -> list[str]:
@@ -296,6 +307,8 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "## Đầu ra",
         f"- Sản phẩm vào `{rel(d / 'final')}/`; JSON gate và check vào `{rel(d / 'final' / 'review')}/gates/`, `checks/`; "
         f"script, log, bản trung gian vào `{rel(d / 'work')}/`.",
+        *([f"- `{rel(d / 'final')}/` đã chuẩn bị sẵn từ bản gốc (trừ `fix_copy_exclude`). Không chép tay."]
+          if fix and src and step.get("fix_copy_exclude") else []),
     ]
     lines += pid_line(st, step)
     if cfg["preview"]["spec"]:
@@ -578,6 +591,8 @@ def run(a):
         (d / "work").mkdir(parents=True, exist_ok=True)
         why = st.get("retry_why") if s == "running" else None
         fix = s == "fix" or (s == "running" and (st.get("fix_round", 0) > 0 or bool(st.get("direct"))))
+        if s == "fix" and (base := st.get("direct") or st.get("fix_base")) and step.get("fix_copy_exclude"):
+            prepare_final(vdir(a.id, sid, base), d, step["fix_copy_exclude"])
         hashes.record_inputs(cfg, st, i, n, ph)
         if step["script"]:
             blender = ((pf or {}).get("blender") or {}).get("path") or "blender"

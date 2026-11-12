@@ -1,4 +1,5 @@
-"""The texture step through the real CLI with fake agents: ingest refuses stale renders (T2)."""
+"""The texture step through the real CLI with fake agents: ingest refuses stale renders (T2) and `P brief` prepares
+final/ of a fix round (L14, C24)."""
 import hashlib
 import json
 
@@ -43,6 +44,7 @@ def flow(tmp_path_factory):
     f.after_stale = f.st()
     f.brief("t2 brief")
     f.vd2 = f.root / A / "texture/v2"
+    f.prepared = {p.relative_to(f.vd2 / "final").as_posix(): p.read_bytes() for p in (f.vd2 / "final").rglob("*") if p.is_file()}
     return f
 
 
@@ -56,6 +58,13 @@ def test_a_render_made_from_another_albedo_goes_back_to_the_worker_and_no_review
     assert check["checks"][0]["note"] == "render lại: albedo_2048.png đã đổi sau lần render (chạy lại render_texture.py)"
     assert "texture v1 · worker DONE (check fail)" in (flow.root / "production/ledger.md").read_text(encoding="utf-8")
     assert "render_fresh.json" in flow.cp["t2 brief"]["text"]
+
+
+def test_a_fix_round_gets_final_prepared_from_its_base_minus_what_the_render_and_measure_write_c24(flow):
+    """One wrong copy by hand left a stale measure or render in the new version; the script copies by the step's list."""
+    assert set(flow.prepared) == {ALBEDO, "notes.md", "texture_spec.json", "review/id_map.png", "notes/kept.txt"}
+    assert flow.prepared[ALBEDO] == (flow.vd1 / "final" / ALBEDO).read_bytes()
+    assert "`production/assets/pilot-house/texture/v2/final/` đã chuẩn bị sẵn" in flow.cp["t2 brief"]["text"]
 
 
 def test_a_render_of_the_current_albedo_reaches_the_reviewer_t2(flow):
