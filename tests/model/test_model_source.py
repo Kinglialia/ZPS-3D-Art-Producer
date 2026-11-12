@@ -36,3 +36,15 @@ def test_copied_file_matches_its_recorded_sha256(dst, src, digest):
 @pytest.mark.parametrize("dst,src,digest", COPIED + DRAWN)
 def test_recorded_sha256_is_the_kit_file(dst, src, digest):
     assert sha(KIT / src) == digest
+
+
+def test_source_names_the_three_bake_functions_unwrap_calls():
+    unwrap = (AGENT / "tools/unwrap.py").read_text(encoding="utf-8")
+    used = set(re.findall(r"\bbake\.(\w+)\(", unwrap))
+    assert used == {"xatlas_unwrap", "set_uv_layer", "uv_occupancy"} and all(f"`{f}()`" in TEXT for f in used)
+
+
+def test_source_says_export_check_does_not_validate_gltf_while_setup_deps_installs_no_validator():
+    """A reader of qa_export_check.json pass must not take it for a glTF validation that never ran."""
+    assert "gltf" not in (AGENT / "tools/setup_deps.sh").read_text(encoding="utf-8").lower()
+    assert "check `gltf_validator` của `qa_export_check.json` là `not_checked`: `export_check` không validate glTF" in TEXT

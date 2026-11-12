@@ -26,6 +26,8 @@ Không sửa file chép nguyên. `tests/model/test_model_source.py` so sha256 v�
 
 `unwrap.py` gọi `xatlas_unwrap()`, `set_uv_layer()`, `uv_occupancy()` của `bake.py`, không gọi `main()` (D24.4). `bake.py` import `optlib`, `optbpy`, `lib/` ngay đầu file, nên ba file đó đi cùng.
 
+`asset_checks/export_check.py` chỉ chạy glTF-Validator khi máy có `gltf_validator` trên PATH, hoặc `node` cùng gói npm `gltf-validator` (qua `gltf_validate.mjs`). `setup_deps.sh` không cài validator, vì cần mạng và node. Khi đó check `gltf_validator` của `qa_export_check.json` là `not_checked`: `export_check` không validate glTF, chỉ xuất lại và so số.
+
 ## Chưa chép
 
 - `finalize.py`, `report.py`: chỉ `assemble.py` của Producer dùng (GĐ 4).
