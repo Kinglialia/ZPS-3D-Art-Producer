@@ -903,3 +903,24 @@ def test_direct_mode_writes_one_start_and_one_end_line_per_counted_try_and_the_s
         " · codex-cli 0.164.0"] * 2
     inp = json.loads((root / "assets/hut/status.json").read_text(encoding="utf-8"))["inputs"]["views"]["v1"]
     assert inp == {"image_model_requested": "tool ảnh của phiên", "image_model_actual": "không có số"}
+
+
+@pytest.mark.parametrize("extra,direct_on,word", [
+    (["--approve-for-me", "blocked"], True, "--approve-for-me"),
+    (["--size", "0x1024"], True, "--size"),
+    (["--size", "wide"], True, "--size"),
+    (["--tool-error", "  "], True, "--tool-error"),
+    (["--tool-error", "usage limit"], False, "--tool-error")])
+def test_a_flag_that_means_nothing_for_the_mode_is_refused_before_any_record_is_written(direct, extra, direct_on, word):
+    args = ["--direct"] if direct_on else ["--model", "m", "--reasoning", "r", "--pid-file", str(direct.dir / "x.pid")]
+    p = subprocess.run([sys.executable, str(GEN), *args, "--prompt", str(direct.dir.parents[1] / "front.md"),
+                        "--out", str(direct.dir / "front-1.png"), *extra], capture_output=True, text=True)
+    assert (p.returncode, word in p.stderr, (direct.dir / "front-1.json").exists()) == (2, True, False)
+
+
+def test_direct_mode_keeps_a_file_out_of_tries_failed_so_a_worker_that_ignored_exit_1_spends_no_more(direct):
+    for _ in range(3):
+        direct()
+    paint(direct.dir / "front-1.png")
+    r = direct()
+    assert (r["rc"], r["records"]["front"]["attempts"], (direct.dir / "front-1.png").exists()) == (1, 3, False)
