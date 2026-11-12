@@ -20,6 +20,7 @@ ACTIONS = ("approve", "redo", "note", "paint")
 STATUS_LINE = "Trạng thái:"
 REDOING = "**đang làm lại**\n\n"
 REDO_FROM = ("todo", "fix", "review", "evidence", "waiting_human", "blocked", "done", "done_enabled")
+PENDING_FROM = ("running", "reviewing", "evidence_running")
 NEXT = "next"
 MOVES = {
     ("todo", "dispatch"): "running", ("fix", "dispatch"): "running", ("running", "dispatch"): "running",
@@ -384,6 +385,8 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     event, reason = review_event(rv["verdict"], kind, who != "human", st.get("fix_round", 0), r["max_fix_rounds"],
                                  not base or findings.progress(base, doc), st.get("evidence_used", 0),
                                  reopened_of(st).get(kind, 0))
+    if event == "approve" and st.get("pending_redo"):
+        event = "await_approval"
     st["evidence"] = None
     st["last_rubric"] = "; ".join(f"{k}={x}" for k, x in rv["rubric"].items())
     asks = evidence_on_disk(d, doc, rv["top_fix"]["ids"]) if kind == "need_evidence" and event in (
@@ -501,6 +504,8 @@ def ingest(a):
     role = "reviewer" if st["state"] == "reviewing" else "script" if step["script"] else "worker"
     rec = open_dispatch(st, sid, n, role)
     event, reason = h(cfg, st, step, vdir(a.id, sid, n), n, a)
+    if applied := apply_pending(cfg, st, sid, n):
+        reason = "; ".join(x for x in (reason, applied) if x)
     tokens, ms, at = getattr(a, "tokens", None), getattr(a, "duration_ms", None), stamp()
     fallback = bool(getattr(a, "fallback", False))
     if rec is not None:
@@ -657,6 +662,35 @@ def marks_as_notes(aid: str, step: dict, n: int, ids: list[str]) -> list[str]:
     return ids
 
 
+def apply_pending(cfg: dict, st: dict, sid: str, n: int) -> str:
+    """C6: the redos stored while the step ran become `H` findings now, on the version just ingested (or the approved
+    version of an earlier step), and the asset goes to a fix round as a normal redo does. Only the earliest step that holds
+    some is applied; the others wait for the next ingest. Nothing is applied when the ingest moved the asset before it."""
+    pend = st.get("pending_redo") or {}
+    here = step_of(cfg, st["stage"])[0]
+    due = sorted((step_of(cfg, k)[0], k) for k in pend if pend[k] and step_of(cfg, k)[0] <= here)
+    if not due or st["state"] not in REDO_FROM:
+        return ""
+    i, k = due[0]
+    step = cfg["steps"][i]
+    v = n if k == sid == st["stage"] else st["approved"].get(k) or st["versions"].get(k)
+    if v is None:
+        return ""
+    entries = pend.pop(k)
+    if w := next((w for w in st.get("offer_log", []) if w["key"] == st.get("offer_key") and "decision" not in w), None):
+        w |= {"decision": "redo", "decided": now()}
+    st.pop("ask", None)
+    got = []
+    for e in entries[:-1]:
+        got.append(findings.add_human(st["id"], step, v, e["text"], e["marks"]))
+    got.append(redo(cfg, st, i, step, v, entries[-1]["text"], entries[-1]["marks"]))
+    for e, ids in zip(entries, got):
+        if e["folder"]:
+            annotate.record(Path(e["folder"]), e["marks"], ids[len(ids) - len(e["marks"]):])
+    ids = [x for g in got for x in g]
+    return f"Cần sửa nhận lúc đang chạy → {k} {', '.join(ids)}"
+
+
 def retry(a):
     st = load_st(a.id)
     if st["state"] == "done_enabled":
@@ -798,7 +832,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         ids = findings.add_human(aid, step, n, None, marks) if marks and waiting else []
         return marks_as_notes(aid, step, n, ids) if approved else ids
 
-    ids, msg, armed, finished = [], "đã ghi feedback", False, False
+    ids, msg, armed, finished, hold = [], "đã ghi feedback", False, False, False
     if answer:
         decide()
         msg = texture.resolve(st, "call" if action == "approve" else "paint", policy.BY["human"])
@@ -823,8 +857,14 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         if action == "approve":
             msg = f"đã ghi feedback; {aid} không chờ duyệt {target} (state={st['state']})"
         elif action == "redo":
-            msg = f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau"
+            hold = st["state"] in PENDING_FROM and n is not None
+            msg = (f"đã ghi feedback; {aid} đang {st['state']}, lưu Cần sửa {target}: áp dụng ở lần ingest kế" if hold else
+                   f"đã ghi feedback; {aid} đang {st['state']}, sẽ áp dụng ở vòng sau")
         ids = settle()
+        if hold:
+            st.setdefault("pending_redo", {}).setdefault(target, []).append(
+                {"text": raw or (None if marks else text), "at": now(), "offer": offer, "marks": marks or [],
+                 "folder": rel(folder) if folder else None})
     if marks:
         annotate.record(folder, marks, ids)
         msg += (f"; khoanh {len(marks)} vùng → {', '.join(ids)}" if ids else

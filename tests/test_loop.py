@@ -1221,3 +1221,99 @@ def test_a_step_with_note_kinds_stores_the_marks_of_an_approve_as_its_first_note
         findings.add_human(AID, step, 1, None, [{"n": 1, "image": "back.png", "png": "p/x.png", "note": "n"}])
         assert loop.marks_as_notes(AID, step, 1, ["H1"]) == ["H1"]
         assert findings.load(AID, step["id"], 1)["findings"]["H1"]["kind"] == kind
+
+
+def pending_texts(f):
+    return {s: [(e["text"], e["offer"], e["marks"]) for e in es] for s, es in f.st.get("pending_redo", {}).items()}
+
+
+def test_a_redo_sent_while_the_worker_runs_is_stored_and_becomes_a_finding_at_its_ingest_c6(flow):
+    """The reproduction: the redo printed "sẽ áp dụng ở vòng sau" and nothing kept it; v1 went to review as if it had
+    never been sent."""
+    flow.brief()
+    assert flow.human("redo", "mái cao hơn") == (
+        "house-a: đã ghi feedback; house-a đang running, lưu Cần sửa blockout: áp dụng ở lần ingest kế. "
+        "Tiếp: đang chờ subagent (mất kết nối thì `brief house-a` để giao lại)")
+    assert pending_texts(flow) == {"blockout": [("mái cao hơn", None, [])]}
+    assert findings.load(AID, "blockout", 1) is None
+    head = flow.work().splitlines()[0]
+    assert head == "house-a: worker DONE → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert findings.load(AID, "blockout", 1)["findings"] == {"H1": H1}
+    assert (flow.st["pending_redo"], flow.st["fix_base"], flow.st["round_versions"]) == ({}, 1, [1])
+    assert "Cần sửa nhận lúc đang chạy → blockout H1" in flow.ledger()
+
+
+def test_two_redos_sent_while_the_worker_runs_become_two_findings_in_one_fix_round_c6(flow):
+    flow.brief()
+    flow.human("redo", "mái cao hơn")
+    flow.human("redo", "cửa rộng hơn")
+    flow.work()
+    doc = findings.load(AID, "blockout", 1)["findings"]
+    assert (sorted(doc), doc["H2"]["repair"], flow.st["state"], flow.st["fix_round"]) == (
+        ["H1", "H2"], "cửa rộng hơn", "running", 1)
+
+
+def test_a_redo_sent_while_the_reviewer_judges_turns_a_pass_at_a_human_gate_into_a_fix_round_not_an_offer_c6(flow):
+    flow.work()
+    flow.brief()
+    assert flow.st["state"] == "reviewing"
+    flow.human("redo", "mái cao hơn")
+    assert pending_texts(flow) == {"blockout": [("mái cao hơn", None, [])]}
+    head = flow.review(out={"report": f"production/assets/{AID}/blockout/v1/review-out.md",
+                            "brief": f"production/assets/{AID}/blockout/v1/brief-review.md"},
+                       verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass").splitlines()[0]
+    assert head == "house-a: review PASS (0 mở) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    st = flow.st
+    assert (st["offer"], st["approved"], st["pending_redo"], list(findings.load(AID, "blockout", 1)["findings"])) == (
+        None, {}, {}, ["H1"])
+
+
+def test_a_redo_sent_while_the_reviewer_judges_is_not_lost_when_the_reviewer_would_approve_it_c6(flow):
+    """The reproduction: the automatic PASS approved v1 and approval deleted the redo line of "Hiện hành"."""
+    policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
+    flow.cap.readouterr()
+    flow.work()
+    flow.brief()
+    flow.human("redo", "mái cao hơn")
+    flow.review(out={"report": f"production/assets/{AID}/blockout/v1/review-out.md",
+                     "brief": f"production/assets/{AID}/blockout/v1/brief-review.md"},
+                verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
+    st = flow.st
+    assert (st["state"], st["approved"], st["pending_redo"], list(findings.load(AID, "blockout", 1)["findings"])) == (
+        "running", {}, {}, ["H1"])
+    fb = (flow.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
+    assert "- " in fb.split("## Log")[0] and "blockout v1 · redo · mái cao hơn" in fb.split("## Log")[0]
+
+
+def test_a_redo_sent_during_an_evidence_round_becomes_a_finding_when_the_evidence_is_ingested_c6(flow):
+    need_evidence_v1(flow)
+    out = flow.brief()
+    assert flow.st["state"] == "evidence_running"
+    flow.human("redo", "chụp gần cửa")
+    assert pending_texts(flow) == {"blockout": [("chụp gần cửa", None, [])]}
+    head = flow.work(out=out).splitlines()[0]
+    assert head == "house-a: evidence-1 DONE → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    st = flow.st
+    assert (st["evidence"], st["pending_redo"], "H1" in findings.load(AID, "blockout", 1)["findings"]) == (None, {}, True)
+
+
+def test_a_redo_with_marks_sent_while_the_worker_runs_keeps_the_marks_for_the_finding_c6(flow):
+    from PIL import Image
+    flow.brief()
+    (flow.v(1) / "final/review").mkdir(parents=True)
+    Image.new("RGB", (200, 100), "white").save(flow.v(1) / "final/review/game_cam.png")
+    msg = loop.act(AID, "redo", "", None, [CAM_MARK])[1]
+    assert msg.startswith("house-a: đã ghi feedback; house-a đang running, lưu Cần sửa blockout")
+    assert [(e["text"], len(e["marks"])) for e in flow.st["pending_redo"]["blockout"]] == [(None, 1)]
+    flow.work()
+    h1 = findings.load(AID, "blockout", 1)["findings"]["H1"]
+    assert (h1["kind"], h1["priority"], h1["repair"], h1["mark"]["n"]) == ("structure", "major", "cửa lệch trái", 1)
+    folder = flow.root / "production/assets" / AID / "feedback/blockout-v1-1"
+    assert json.loads((folder / "regions.json").read_text(encoding="utf-8"))[0]["id"] == "H1"
+
+
+def test_a_redo_for_a_later_step_than_the_stage_is_still_refused_and_stores_nothing_c6(flow):
+    flow.brief()
+    with pytest.raises(ProducerError, match="không làm lại views_rest được"):
+        flow.human("redo", "x", "views_rest")
+    assert flow.st.get("pending_redo", {}) == {}
