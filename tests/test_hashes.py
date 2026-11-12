@@ -167,3 +167,98 @@ def test_warnings_follow_content_of_concept_card_and_profile_and_ack_clears_them
     assert warn() == []
     assert json.loads((flow.root / f"production/assets/{AID}/status.json").read_text())["sources"]["profile"] == (
         hashes.digest(PROFILE | {"has_map": True}))
+
+
+def reference_tree_hash(d):
+    """The hash as it was before the cache: relative path, NUL, bytes of every file, dot files and `skip` left out."""
+    import hashlib
+    h = hashlib.sha256()
+    for p in sorted(x for x in d.rglob("*") if x.is_file() and not any(s.startswith(".") for s in x.relative_to(d).parts)):
+        h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()
+
+
+@pytest.fixture
+def tree(tmp_path, monkeypatch):
+    """A final/ with a nested GLB-like file; `reads` lists the files tree_hash read from disk."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "production").mkdir()
+    d = tmp_path / "final"
+    (d / "review").mkdir(parents=True)
+    (d / "part_graph.json").write_text("{}", encoding="utf-8")
+    (d / "assembled.glb").write_bytes(b"glTF" * 1000)
+    (d / "review/lineup.png").write_bytes(b"png")
+    (d / ".DS_Store").write_bytes(b"finder")
+    reads = []
+    real = hashes.read_file
+    monkeypatch.setattr(hashes, "read_file", lambda p: reads.append(p.name) or real(p))
+    return d, reads
+
+
+def test_a_cached_tree_hash_equals_the_hash_of_the_bytes_so_the_hashes_stored_at_approval_stay_valid_c15(tree):
+    d, reads = tree
+    first = hashes.tree_hash(d)
+    assert first == reference_tree_hash(d)
+    reads.clear()
+    assert (hashes.tree_hash(d), reads) == (first, [])
+    assert (d.parent / "production/hash-cache.json").is_file()
+
+
+def test_a_tree_that_did_not_change_is_not_read_again_c15(tree):
+    """The reproduction: every brief and ingest read each byte of every approved final/ again, under the global lock."""
+    d, reads = tree
+    hashes.tree_hash(d)
+    assert sorted(reads) == ["assembled.glb", "lineup.png", "part_graph.json"]
+    reads.clear()
+    for _ in range(3):
+        hashes.tree_hash(d)
+    assert reads == []
+
+
+def test_a_changed_file_changes_the_hash_even_when_its_size_stays_c15(tree):
+    d, reads = tree
+    before = hashes.tree_hash(d)
+    (d / "part_graph.json").write_text("[]", encoding="utf-8")
+    after = hashes.tree_hash(d)
+    assert (after != before, after == reference_tree_hash(d), "part_graph.json" in reads[3:]) == (True, True, True)
+
+
+def test_a_touched_file_is_read_again_and_the_hash_stays_c15(tree):
+    import os
+    d, reads = tree
+    before = hashes.tree_hash(d)
+    reads.clear()
+    st = (d / "assembled.glb").stat()
+    os.utime(d / "assembled.glb", ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+    assert (hashes.tree_hash(d), "assembled.glb" in reads) == (before, True)
+    reads.clear()
+    assert (hashes.tree_hash(d), reads) == (before, [])
+
+
+def test_the_cache_is_keyed_by_folder_and_skip_so_the_concept_tree_without_its_card_keeps_its_own_hash_c15(tree):
+    d, _ = tree
+    (d / "asset-card.yaml").write_text("a: 1", encoding="utf-8")
+    full, without = hashes.tree_hash(d), hashes.tree_hash(d, skip="asset-card.yaml")
+    assert full != without
+    (d / "asset-card.yaml").write_text("a: 2", encoding="utf-8")
+    assert (hashes.tree_hash(d, skip="asset-card.yaml"), hashes.tree_hash(d) != full) == (without, True)
+
+
+def test_a_broken_cache_file_is_ignored_and_rebuilt_c15(tree):
+    d, _ = tree
+    expect = hashes.tree_hash(d)
+    (d.parent / "production/hash-cache.json").write_text("{not json", encoding="utf-8")
+    assert hashes.tree_hash(d) == expect
+    assert hashes.tree_hash(d) == expect
+
+
+def test_a_same_size_edit_of_an_approved_file_after_the_cache_is_warm_still_stops_the_next_brief_c15(flow):
+    approve_blockout(flow)
+    assert (flow.root / "production/hash-cache.json").is_file()
+    flow.brief()
+    graph = flow.v(2) / "final/part_graph.json"
+    assert graph.read_text(encoding="utf-8") == "x"
+    graph.write_text("z", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        briefs.run(Namespace(id=AID))
+    assert str(e.value) == "blockout v2: final/ đã duyệt bị sửa sau khi duyệt (hash lệch)"

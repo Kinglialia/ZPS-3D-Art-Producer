@@ -1,6 +1,7 @@
 """Source tracking (docs/producer.md §10, §11): profile hash, per-version `inputs`, stale versions, warnings, `ack`."""
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import functools
 import hashlib
@@ -9,11 +10,12 @@ import re
 from pathlib import Path
 
 from . import asset_card
-from .state import ROOT, die, ledger, load_st, save_st, vdir
+from .state import ROOT, die, ledger, load_st, save_st, vdir, write_atomic
 
 AD_LINE = re.compile(r"^\s*-\s*`?([^`\s]+\.md)`?.*?steps:\s*([a-z0-9_,\s-]+)\s*$", re.I)
 DATED_LINE = re.compile(r"^\s*-\s*(\d{4}-\d{2}-\d{2})\s*·\s*(.+)$")
 CARD = "asset-card.yaml"
+CACHE = "hash-cache.json"
 SOURCES = ("concept", "card", "profile")
 WARN = {"concept": "concept đổi sau khi bắt đầu", "card": "thẻ đổi sau khi bắt đầu", "profile": "profile đổi sau khi bắt đầu"}
 
@@ -68,13 +70,50 @@ def schedule_soon(days: int = 14) -> list[tuple[str, str]]:
             if m and today <= m.group(1) <= until]
 
 
+def read_file(p: Path) -> bytes:
+    return p.read_bytes()
+
+
+def _cache_path() -> Path:
+    return ROOT / CACHE
+
+
+def _cache_load() -> dict:
+    try:
+        doc = json.loads(_cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _cache_save(cache: dict):
+    if not ROOT.is_dir():
+        return
+    live = {k: v for k, v in cache.items() if Path(k.rpartition("|")[0]).is_dir()}
+    with contextlib.suppress(OSError):
+        write_atomic(_cache_path(), json.dumps(live, ensure_ascii=False, indent=1))
+
+
 def tree_hash(d: Path, skip: str = "") -> str | None:
+    """sha256 over relative path and bytes of every file, dot files and `skip` left out. The result of a folder is kept in
+    production/hash-cache.json with the (path, mtime_ns, size) of each file; while all of them match, no byte is read. A
+    changed mtime or size reads the folder again. The formula is the one hashes stored at approval were made with."""
     if not d.is_dir():
         return None
+    files = sorted(x for x in d.rglob("*") if x.is_file() and x.name != skip
+                   and not any(s.startswith(".") for s in x.relative_to(d).parts))
+    sig = hashlib.sha256()
+    for p in files:
+        st = p.stat()
+        sig.update(f"{p.relative_to(d).as_posix()}\0{st.st_mtime_ns}\0{st.st_size}\n".encode())
+    key, cache = f"{d.resolve()}|{skip}", _cache_load()
+    if (hit := cache.get(key)) and hit.get("sig") == sig.hexdigest() and isinstance(hit.get("hash"), str):
+        return hit["hash"]
     h = hashlib.sha256()
-    for p in sorted(x for x in d.rglob("*") if x.is_file() and x.name != skip
-                    and not any(s.startswith(".") for s in x.relative_to(d).parts)):
-        h.update(p.relative_to(d).as_posix().encode() + b"\0" + p.read_bytes())
+    for p in files:
+        h.update(p.relative_to(d).as_posix().encode() + b"\0" + read_file(p))
+    cache[key] = {"sig": sig.hexdigest(), "hash": h.hexdigest()}
+    _cache_save(cache)
     return h.hexdigest()
 
 
