@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from flowkit import put_all
+from flowkit import blockout_files, put_all
 from shared import P, PILOT, PROFILE_HASH, blockout_only, finding, pilot_project, report, run
 
 AGENT = P.parents[1] / "agents/zps-3dp-step-blockout"
@@ -68,15 +68,15 @@ class Pilot:
         self.save(name, out, text=(self.root / out["brief"]).read_text(encoding="utf-8"))
         return out
 
-    def work(self, name, status="DONE", fixed=(), variants=(), failing=False):
+    def work(self, name, status="DONE", fixed=(), variants=(), failing=False, wide=False):
         out, text = self.cp[f"{name} brief"]["out"], self.cp[f"{name} brief"]["text"]
         vd = (self.root / out["report"]).parent
         for sub, tag in (("final", "a"), *((f"variants/{x}", x) for x in variants)):
             put_all(vd / sub, "blockout", OUTPUTS, name, f" phương án {tag}")
+        if wide:
+            blockout_files(vd / "final", name, " phương án a", roof_h=1.3)
         if failing:
-            (vd / "final/review/checks/layout.json").write_text(json.dumps({
-                "tool": "blockout/check_layout", "overall": "fail",
-                "checks": [{"check": "layout.bbox", "status": "fail"}]}), encoding="utf-8")
+            blockout_files(vd / "final", name, " phương án a", roof_h=1.3)
             (vd / "final/README.md").write_text("## NGOẠI LỆ\n- layout.json — bbox lệch 8% do mái chìa 0.3 m\n",
                                                 encoding="utf-8")
         ph = re.search(r"^PROFILE_HASH: (\w+)$", text, re.M).group(1)
@@ -451,3 +451,37 @@ def test_the_review_brief_names_the_profile_and_only_the_handoff_files_so_the_re
 
 def test_a_param_review_brief_names_the_image_labels_of_each_variant_so_evidence_cites_one_form(flow):
     assert ("`v2a/<ảnh>`, `v2b/<ảnh>`, `v2c/<ảnh>`; ảnh bản gốc: `v1/<ảnh>`.") in flow["v2 review brief"]["text"]
+
+
+def test_ingest_runs_gate_all_itself_so_a_worker_that_left_passing_placeholders_cannot_hide_a_failing_layout_l15(tmp_path):
+    """Run 5: a gate result nobody re-ran was trusted as written. The fake worker leaves a pass JSON for every check; the
+    graph it built is 8 % too tall. Only a run of gate_all by ingest can tell, and it writes the gate of every part."""
+    f = Pilot(tmp_path)
+    pilot_project(tmp_path)
+    blockout_only(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    f.brief("b1 brief")
+    f.work("b1", wide=True)
+    out = f.cp["b1 worker"]["out"]
+    assert out.splitlines()[0] == (
+        "pilot-house: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief pilot-house`")
+    final = tmp_path / V.replace("/v", "/v1") / "final"
+    layout = json.loads((final / "review/checks/layout.json").read_text(encoding="utf-8"))
+    assert layout["overall"] == "fail" and layout["tool"] != "fake"
+    st = f.cp["b1 worker"]["st"]
+    assert (st["fix_round"], st["direct"], st["direct_rounds"]) == (0, 1, 1) and "layout.json" in st["note"]
+    assert sorted(p.stem for p in (final / "review/gates").iterdir()) == ["base", "door", "roof_b", "roof_f", "walls"]
+
+
+def test_ingest_lets_a_good_graph_through_to_the_reviewer_after_its_own_gate_all_run_l15(tmp_path):
+    f = Pilot(tmp_path)
+    pilot_project(tmp_path)
+    blockout_only(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    f.brief("b1 brief")
+    f.work("b1")
+    assert json.loads(f.cp["b1 worker"]["out"].splitlines()[-1])["role"] == "reviewer"
+    final = tmp_path / V.replace("/v", "/v1") / "final"
+    assert json.loads((final / "review/checks/schema.json").read_text(encoding="utf-8"))["tool"] != "fake"

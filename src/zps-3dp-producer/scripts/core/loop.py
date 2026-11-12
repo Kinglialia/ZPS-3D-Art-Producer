@@ -4,14 +4,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import shutil
+import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path, PurePosixPath
 
 from . import annotate, asset_card, findings, hashes, policy, purge, texture
 from .contract import parse_contract, parse_findings, parse_review, parse_worker, unwrap
-from .state import (ASSETS, DELIVER, FINISHED, HARD_GATES, ProducerError, die, ledger, load_cfg, load_st, now, outputs_of, rel, save_st,
-                    stamp, step_of, vdir)
+from .state import (ASSETS, DELIVER, FINISHED, HARD_GATES, ROOT, SKILL_DIR, ProducerError, agent_name, die, ledger, load_cfg,
+                    load_st, now, outputs_of, rel, save_st, stamp, step_of, vdir)
 
 NOT_PASSED = "chưa đạt"
 UNREVIEWED = "chưa chấm"
@@ -251,6 +254,35 @@ def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -
     return ok, refused
 
 
+RECHECK = {"blockout": "gate_all.py"}
+RECHECK_TIMEOUT_S = 600
+
+
+def recheck(st: dict, step: dict, d) -> tuple[list[str], str | None]:
+    """D37.6: the pure-Python checks of the step, run by ingest through run_tool.py instead of trusted from the worker
+    (Blender never starts). Returns (paths of a run that failed without a result JSON, why nothing ran or None)."""
+    tool = RECHECK.get(step["id"])
+    if not tool:
+        return [], None
+    agent = agent_name(step["agent"])
+    tools = SKILL_DIR / "agents" / agent / "tools"
+    if not (tools / ".deps" / "venv" / "bin" / "python").is_file():
+        return [], f"ingest không kiểm lại {tool} được: thiếu venv của tool ({rel(tools)}/.deps), chạy setup_deps.sh"
+    card = st.get("concept_dir")
+    check_inputs = ["--approved", card, "--profile", str(ROOT / "PROJECT-PROFILE.yaml")] if card else None
+    cmd = [sys.executable, str(SKILL_DIR / "scripts" / "run_tool.py"), "--agent", agent, "--version-dir", rel(d), tool,
+           "--work", rel(d / "final"), *(["--check-args", "check_inputs=" + shlex.join(check_inputs)] if card else
+                                       ["--skip", "check_inputs"])]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=RECHECK_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return [], f"ingest không kiểm lại {tool} được: quá {RECHECK_TIMEOUT_S} giây"
+    line = (p.stdout.strip().splitlines() or [""])[-1].split()
+    if p.returncode == 2:
+        return [], f"ingest không kiểm lại {tool} được: {(p.stderr.strip().splitlines() or ['bị từ chối'])[-1]}"
+    return (line[2:] if p.returncode and line[1:2] == ["error"] else []), None
+
+
 def checks_failed(cfg, st, step, d, n, c) -> bool:
     """D31.3, D39.5: a failed gate or check JSON the worker did not validly accept goes straight back to the worker, no
     reviewer. A direct round does not count toward max_fix_rounds; [review] max_direct_rounds caps them, and the same
@@ -261,8 +293,12 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
         write(d / "final", card)
     if step["gate"] == "checks_human":
         return False
+    extra, skipped = recheck(st, step, d)
+    if skipped:
+        ledger(f"{st['id']} · {step['id']} v{n} · {skipped}")
+        print(f"{st['id']}: {skipped}", file=sys.stderr)
     done = {"direct_rounds": 0, "direct_names": None}
-    if not (bad := failed_checks(d)):
+    if not (bad := [*failed_checks(d), *extra]):
         st |= done
         return False
     sid, r = step["id"], cfg["review"]

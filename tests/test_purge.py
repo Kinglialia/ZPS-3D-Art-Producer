@@ -17,12 +17,15 @@ from flowkit import A, AID, counts, to_texture
 from shared import P
 
 # The fake flow writes text into every output; these are the files a purge must delete: the GLB and .blend files of
-# every final/ and all of work/ (the Meshy download, the JSON meshes of custom_parts.py). Text records, step text
+# every final/ and all of work/ (the Meshy download, the JSON meshes of custom_parts.py, the log of the gate_all.py that ingest runs on
+# the blockout, which also builds the part meshes). Text records, step text
 # sources and board images stay, and so does the asset's custom_parts.py (D32.3): a redo after DUYỆT 2 rebuilds from
 # the part graph, and the graph names its functions.
 DELETED = [
     "assemble/v1/final/model/pilot-house.blend", "assemble/v1/final/model/pilot-house.glb",
-    "blockout/v1/final/assembled.glb", "blockout/v1/work/custom_mesh/ridge.json",
+    "blockout/v1/final/assembled.glb", "blockout/v1/final/parts/base.glb", "blockout/v1/final/parts/door.glb",
+    "blockout/v1/final/parts/roof_b.glb", "blockout/v1/final/parts/roof_f.glb", "blockout/v1/final/parts/walls.glb",
+    "blockout/v1/work/custom_mesh/ridge.json", "blockout/v1/work/logs/gate_all.log",
     "model/v1/final/pilot-house-untextured.glb", "model/v1/final/pilot-house.blend",
     "texture/v1/work/meshy/call-1/base_color.png", "texture/v1/work/meshy/call-1/glb.glb",
     "texture/v1/work/meshy/call-1/meshy_call.json", "texture/v1/work/meshy/call-1/task.json",

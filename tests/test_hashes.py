@@ -12,6 +12,7 @@ from core.state import ProducerError, load_cfg, save_st
 
 @pytest.fixture
 def flow(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(loop, "recheck", lambda st, step, d: ([], None))
     monkeypatch.chdir(tmp_path)
     intake.init(Namespace(project="Pilot", concepts="concepts"))
     write_profile(tmp_path)

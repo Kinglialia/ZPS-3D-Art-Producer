@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import subprocess
 from argparse import Namespace
 from pathlib import Path
 
@@ -14,6 +15,7 @@ AID = "house-a"
 OUTPUTS = ["part_graph.json", "parts_lib.py", "assembled.glb", "sources.json", "blockout.md"]
 RESULTS = ["inputs", "schema", "materials", "layout", "base", "markers", "support", "proportion"]
 ZERO = {"blocker": 0, "major": 0, "minor": 0, "preference": 0, "unclear": 0}
+REAL_RECHECK = loop.recheck
 
 
 def counts(**kw):
@@ -29,7 +31,9 @@ class Flow:
 
     def call(self, fn, *a):
         fn(*a)
-        return self.cap.readouterr().out
+        got = self.cap.readouterr()
+        self.err = got.err
+        return got.out
 
     def brief(self):
         return json.loads(self.call(briefs.run, Namespace(id=AID)))
@@ -75,6 +79,9 @@ class Flow:
 
 @pytest.fixture
 def flow(tmp_path, monkeypatch, capsys):
+    """The fake worker leaves placeholder files, so the ingest re-run of the step checks (L15) is off here; it runs for
+    real in tests/test_e2e_blockout.py and in the tests below that call REAL_RECHECK."""
+    monkeypatch.setattr(loop, "recheck", lambda st, step, d: ([], None))
     monkeypatch.chdir(tmp_path)
     intake.init(Namespace(project="Pilot", concepts="concepts"))
     blockout_only(tmp_path)
@@ -1581,3 +1588,55 @@ def test_an_ingest_that_approves_by_policy_prints_no_dispatch_while_the_next_ste
     p.write_text(p.read_text(encoding="utf-8").replace("blender = 2", "blender = 0"), encoding="utf-8")
     out = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
     assert out.count("\n") == 1 and "views_front/todo" in out
+
+
+def tools_without_venv(tmp_path, venv=False):
+    skill = tmp_path / "skill"
+    tools = skill / "agents/zps-3dp-step-blockout/tools"
+    tools.mkdir(parents=True)
+    if venv:
+        (tools / ".deps/venv/bin").mkdir(parents=True)
+        (tools / ".deps/venv/bin/python").write_text("", encoding="utf-8")
+    return skill
+
+
+def test_ingest_says_in_one_line_that_it_did_not_recheck_when_the_tools_venv_is_missing_and_goes_on_l15(
+        flow, monkeypatch, tmp_path):
+    """A fresh project where no worker ran setup_deps: run_tool.py would install the venv inside the ingest. The ingest
+    names the gap on stderr and in the ledger and ends as before; it never crashes."""
+    monkeypatch.setattr(loop, "recheck", REAL_RECHECK)
+    monkeypatch.setattr(loop, "SKILL_DIR", tools_without_venv(tmp_path))
+    out = flow.work()
+    assert json.loads(out.splitlines()[-1])["role"] == "reviewer"
+    assert flow.err.count("\n") == 1 and "thiếu venv của tool" in flow.err and "setup_deps.sh" in flow.err
+    assert "house-a · blockout v1 · ingest không kiểm lại gate_all.py được: thiếu venv của tool" in flow.ledger()
+
+
+def test_a_recheck_that_dies_without_a_result_json_sends_the_worker_back_with_its_log_l15(flow, monkeypatch, tmp_path):
+    """gate_all.py exits 1 with no failing JSON when the build dies. failed_checks reads JSON only, so without the log
+    path of that run the check that did not finish would count as a pass."""
+    log = f"production/assets/{AID}/blockout/v1/work/logs/gate_all.log"
+    ran = []
+
+    def fake_run(cmd, **kw):
+        ran.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1, stdout=f"gate_all error {log}\n", stderr="")
+    monkeypatch.setattr(loop, "recheck", REAL_RECHECK)
+    monkeypatch.setattr(loop, "SKILL_DIR", tools_without_venv(tmp_path, venv=True))
+    monkeypatch.setattr(loop.subprocess, "run", fake_run)
+    head = flow.work().splitlines()[0]
+    assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert flow.st["note"] == "vòng trả thẳng 1/2: check fail gate_all.log"
+    assert [Path(x).name for x in ran[0] if x.endswith(".py")] == ["run_tool.py", "gate_all.py"]
+    assert ran[0][ran[0].index("--version-dir") + 1] == f"production/assets/{AID}/blockout/v1"
+    assert "--skip" in ran[0] and "check_inputs" in ran[0]
+
+
+def test_a_recheck_the_runner_refuses_is_one_line_and_not_a_failure_l15(flow, monkeypatch, tmp_path):
+    monkeypatch.setattr(loop, "recheck", REAL_RECHECK)
+    monkeypatch.setattr(loop, "SKILL_DIR", tools_without_venv(tmp_path, venv=True))
+    monkeypatch.setattr(loop.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(
+        cmd, 2, stdout="", stderr="run_tool: refused gate_all.py: not a .py file\n"))
+    out = flow.work()
+    assert json.loads(out.splitlines()[-1])["role"] == "reviewer"
+    assert flow.err.strip() == f"{AID}: ingest không kiểm lại gate_all.py được: run_tool: refused gate_all.py: not a .py file"
