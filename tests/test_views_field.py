@@ -278,7 +278,7 @@ def test_brief_of_a_step_that_reads_concept_colours_points_at_the_intake_file_c2
 def test_brief_says_the_worker_picks_the_boxes_when_intake_wrote_no_colour_file_g3(at_root, sid):
     from core import briefs
     lines = briefs.card_lines(card_asset(at_root), step_of(sid))
-    assert lines == ["CONCEPT_COLORS: none (Material Handoff không có Ô lấy màu): tự chọn ô như trước", ""]
+    assert lines == ["CONCEPT_COLORS: none (Material Handoff không có Ô lấy màu): tự chọn ô theo file agent", ""]
 
 
 @pytest.mark.parametrize("sid", ["blockout", "model"])

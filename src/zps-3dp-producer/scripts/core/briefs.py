@@ -154,7 +154,7 @@ def counts_line(st, step) -> list[str]:
     return lines(yaml.safe_load(card.read_text(encoding="utf-8")) or {})
 
 
-COLORS_NONE = "CONCEPT_COLORS: none (Material Handoff không có Ô lấy màu): tự chọn ô như trước"
+COLORS_NONE = "CONCEPT_COLORS: none (Material Handoff không có Ô lấy màu): tự chọn ô theo file agent"
 
 
 def concept_colors_line(st, step) -> list[str]:
