@@ -901,20 +901,21 @@ def acceptable(root, *names):
                                                            "'", '"'), 1), encoding="utf-8")
 
 
-def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_counts_as_a_round_d31_3(flow):
-    """Pilot run: reviewers spent tokens judging versions a script had already failed; the fix needs the script's words."""
+def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_is_not_a_fix_round_d31_3_w7(flow):
+    """Pilot run: reviewers spent tokens judging versions a script had already failed; the fix needs the script's words.
+    The round has its own counter (W7): a worker that cannot fix a check must not use up the rounds of the reviewer."""
     head, line = flow.work(checks={"join.json": "fail", "layout.json": "pass"}).splitlines()
     assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
     out = json.loads(line)
     assert (out["role"], out["brief"], out["resume"]) == ("worker", f"production/assets/{AID}/blockout/v2/brief-worker.md",
                                                           "w1")
-    assert (flow.st["fix_round"], flow.st.get("fix_base"), flow.st["direct"]) == (1, None, 1)
+    assert (flow.st["fix_round"], flow.st.get("fix_base"), flow.st["direct"], flow.st["direct_rounds"]) == (0, None, 1, 1)
     assert not (flow.v(1) / "brief-review.md").exists()
     text = flow.text(out)
     assert (f"Bản gốc: `production/assets/{AID}/blockout/v1/` (bản vừa dựng, check fail; final/ + work/)" in text,
             f"Đọc trước nguyên văn lỗi script của bản gốc: `production/assets/{AID}/blockout/v1/final/review/checks/join.json`."
-            in text, "Đây là vòng sửa 1." in text) == (True, True, True)
-    assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail join.json" in flow.ledger()
+            in text, "Đây là vòng trả thẳng 1." in text) == (True, True, True)
+    assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng trả thẳng 1/2: check fail join.json" in flow.ledger()
 
 
 @pytest.mark.parametrize("name", ["join.json", "unwrap.json"])
@@ -926,7 +927,7 @@ def test_a_failed_join_or_unwrap_json_in_final_review_goes_straight_back_to_the_
     head = flow.work(out=out).splitlines()[0]
     assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
     assert (flow.st["direct"], (flow.v(1) / "brief-review.md").exists()) == (1, False)
-    assert f"house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail {name}" in flow.ledger()
+    assert f"house-a · blockout v1 · worker DONE (check fail) ·  · vòng trả thẳng 1/2: check fail {name}" in flow.ledger()
 
 
 def test_an_info_unwrap_json_in_final_review_does_not_stop_the_review_d31_3(flow):
@@ -972,24 +973,60 @@ def test_accepted_fail_without_the_readme_entry_or_a_number_is_refused_d31_3(flo
         "running", True)
 
 
-def test_a_failed_check_after_the_last_fix_round_goes_to_the_human_d31_3(flow):
+def test_a_failed_check_after_the_direct_round_cap_goes_to_the_human_w7(flow):
+    out = flow.brief()
+    st = flow.st
+    st["direct_rounds"] = 2
+    save_st(st)
+    assert flow.work(out=out, checks={"join.json": "fail"}) == (
+        "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: hết 2 vòng trả thẳng; check fail "
+        "ở v1: join.json (review page)\n")
+    assert (flow.st["offer"], flow.st["label"]) == (1, "chưa đạt")
+
+
+def test_the_fix_rounds_of_the_reviewer_do_not_stop_a_direct_round_w7(flow):
+    """Run 5: a check that the worker could not fix used up max_fix_rounds, and the human got the version with no
+    reviewer finding. The caps are separate: three used fix rounds leave the direct rounds whole."""
     out = flow.brief()
     st = flow.st
     st["fix_round"] = 3
     save_st(st)
-    assert flow.work(out=out, checks={"join.json": "fail"}) == (
-        "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: hết 3 vòng sửa; check fail ở "
-        "v1: join.json (review page)\n")
-    assert (flow.st["offer"], flow.st["label"]) == (1, "chưa đạt")
+    head = flow.work(out=out, checks={"join.json": "fail"}).splitlines()[0]
+    assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert (flow.st["fix_round"], flow.st["direct_rounds"]) == (3, 1)
+
+
+def test_the_same_failing_names_as_the_round_before_ask_the_human_at_once_and_name_the_checks_w6(flow):
+    """Run 5: the same failure went back to the worker until the rounds ran out. Two rounds with the same names mean the
+    worker cannot fix it, so the third dispatch is waste."""
+    flow.work(checks={"join.json": "fail", "layout.json": "fail"})
+    assert flow.st["direct_names"] == ["join.json", "layout.json"]
+    assert flow.work(checks={"layout.json": "fail", "join.json": "fail"}) == (
+        "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: check fail y hệt vòng trả thẳng "
+        "trước, ở v2: join.json, layout.json (review page)\n")
+    assert (flow.st["fix_round"], flow.st["direct_rounds"], flow.st["label"]) == (0, 1, "chưa đạt")
+
+
+def test_other_failing_names_than_the_round_before_are_progress_so_the_round_goes_on_w6(flow):
+    flow.work(checks={"join.json": "fail"})
+    flow.work(checks={"layout.json": "fail"})
+    assert (flow.st["state"], flow.st["direct_rounds"], flow.st["direct_names"]) == ("running", 2, ["layout.json"])
+
+
+def test_a_clean_version_ends_the_run_of_direct_rounds_so_a_later_failure_starts_again_w7(flow):
+    flow.work(checks={"join.json": "fail"})
+    flow.work()
+    assert (flow.st["direct_rounds"], flow.st["direct_names"]) == (0, None)
 
 
 def test_the_first_review_after_two_direct_returns_is_not_stopped_for_no_progress_because_it_has_no_base_d31_3(flow):
-    for _ in range(2):
-        flow.work(checks={"join.json": "fail"})
+    flow.work(checks={"join.json": "fail"})
+    flow.work(checks={"layout.json": "fail"})
     flow.work()
-    assert flow.st["fix_round"] == 2
+    assert (flow.st["fix_round"], flow.st["direct_rounds"]) == (0, 0)
     assert flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")]).splitlines()[0] == (
         "house-a: review FIX (major=1) → blockout/fix. Tiếp: giao worker → `brief house-a`")
+    assert flow.st["fix_round"] == 1
 
 
 def test_a_hard_gate_in_the_acceptable_list_of_pipeline_toml_is_refused_at_load_d31_3(flow):

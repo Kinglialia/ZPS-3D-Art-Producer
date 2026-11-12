@@ -48,7 +48,8 @@ MOVES = {
 
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0, "evidence_served": 0,
-            "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None}
+            "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None, "direct_rounds": 0,
+            "direct_names": None}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -251,13 +252,18 @@ def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -
 
 
 def checks_failed(cfg, st, step, d, n, c) -> bool:
-    """D31.3: a failed gate or check JSON the worker did not validly accept goes straight back to the worker, no
-    reviewer. The round counts toward max_fix_rounds."""
+    """D31.3, D39.5: a failed gate or check JSON the worker did not validly accept goes straight back to the worker, no
+    reviewer. A direct round does not count toward max_fix_rounds; [review] max_direct_rounds caps them, and the same
+    failing names as the round before ask the human at once."""
     from .briefs import failed_checks
     if step.get("counts_gate") and st.get("concept_dir") and (card := Path(st["concept_dir"]) / "asset-card.yaml").is_file():
         from check_counts import write
         write(d / "final", card)
-    if step["gate"] == "checks_human" or not (bad := failed_checks(d)):
+    if step["gate"] == "checks_human":
+        return False
+    done = {"direct_rounds": 0, "direct_names": None}
+    if not (bad := failed_checks(d)):
+        st |= done
         return False
     sid, r = step["id"], cfg["review"]
     ok, refused = accept_fails(step, d, bad, c["ACCEPTED_FAIL"])
@@ -269,16 +275,21 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
         ledger(f"{st['id']} · {sid} v{n} · ACCEPTED_FAIL từ chối · {x}")
     st["accepted"] = {"v": n, "items": [f"{name} — {why}" for name, why in ok.values()]} if ok else None
     if not (left := [b for b in bad if b not in ok]):
+        st |= done
         return False
+    failing = sorted({PurePosixPath(b).name for b in left})
     names = ", ".join(PurePosixPath(b).name for b in left) + (f" (từ chối: {'; '.join(refused)})" if refused else "")
-    if st.get("fix_round", 0) >= r["max_fix_rounds"]:
+    rounds, cap = st.get("direct_rounds", 0), r["max_direct_rounds"]
+    stop = (f"check fail y hệt vòng trả thẳng trước, ở v{n}: {names}" if failing == st.get("direct_names") else
+            f"hết {cap} vòng trả thẳng; check fail ở v{n}: {names}" if rounds >= cap else None)
+    if stop:
         move(st, "ask_human")
         best = findings.best_version([findings.load(st["id"], sid, v) for v in st.get("round_versions", [])]) or n
-        offer(st, sid, best, note=f"hết {r['max_fix_rounds']} vòng sửa; check fail ở v{n}: {names}", label=NOT_PASSED)
+        offer(st, sid, best, note=stop, label=NOT_PASSED)
     else:
         move(st, "checks_failed")
-        st["fix_round"] = st.get("fix_round", 0) + 1
-        st |= {"direct": n, "note": f"vòng sửa {st['fix_round']}/{r['max_fix_rounds']}: check fail {names}"}
+        st |= {"direct": n, "direct_rounds": rounds + 1, "direct_names": failing,
+               "note": f"vòng trả thẳng {rounds + 1}/{cap}: check fail {names}"}
     return True
 
 

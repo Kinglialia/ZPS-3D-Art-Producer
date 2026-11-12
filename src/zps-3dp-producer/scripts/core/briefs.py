@@ -285,7 +285,8 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
             f"{k + 1 + bool(bad)}. {why}",
             *(f"   - Vùng người dùng khoanh: {x}" for x in findings.mark_lines(doc)),
             "",
-            f"Đây là vòng sửa {st['fix_round']}. Chỉ sửa đúng các điểm trên; giữ nguyên những gì đã đạt.",
+            f"Đây là vòng {'trả thẳng ' + str(st['direct_rounds']) if st.get('direct') else 'sửa ' + str(st['fix_round'])}. "
+            "Chỉ sửa đúng các điểm trên; giữ nguyên những gì đã đạt.",
         ]
     lines += [
         "",
@@ -559,7 +560,7 @@ def run(a):
         d = vdir(a.id, sid, n)
         (d / "final").mkdir(parents=True, exist_ok=True)
         (d / "work").mkdir(parents=True, exist_ok=True)
-        fix = s == "fix" or (s == "running" and st.get("fix_round", 0) > 0)
+        fix = s == "fix" or (s == "running" and (st.get("fix_round", 0) > 0 or bool(st.get("direct"))))
         hashes.record_inputs(cfg, st, i, n, ph)
         if step["script"]:
             blender = ((pf or {}).get("blender") or {}).get("path") or "blender"

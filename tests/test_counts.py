@@ -195,7 +195,7 @@ def test_a_worker_that_never_ran_the_counts_check_still_goes_back_because_ingest
     assert (r["overall"], r["checks"][1]["value"]) == ("fail", [
         "3 part có tag: legs, thẻ legs = 4: đặt param legs = 4 vào params và fixed_params, hoặc gắn tag: legs cho đúng "
         "4 part"])
-    assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng sửa 1/3: check fail counts.json" in flow.ledger()
+    assert "house-a · blockout v1 · worker DONE (check fail) ·  · vòng trả thẳng 1/2: check fail counts.json" in flow.ledger()
 
 
 def test_accepted_fail_for_counts_json_is_refused_because_it_is_a_hard_gate(flow):  # noqa: F811

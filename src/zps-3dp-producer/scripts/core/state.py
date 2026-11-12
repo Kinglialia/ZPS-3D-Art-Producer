@@ -165,6 +165,7 @@ def load_cfg() -> dict:
     r = cfg.setdefault("review", {})
     r.setdefault("max_fix_rounds", 3)
     r.setdefault("resume_rounds", 2)
+    r.setdefault("max_direct_rounds", 2)
     r.setdefault("reviewer_model", "opus")
     return cfg
 
