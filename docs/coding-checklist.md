@@ -4,7 +4,7 @@ Mỗi dòng là một điều chưa xác nhận bằng chạy thật. Khi viết
 
 **Quy trình bên code (D34.1, bắt buộc với mọi plan):** trước khi làm, plan ghi phân loại của từng việc: *chung* (vào skill), *dự án* (profile, preset, art bible, `policy.yaml`), *asset* (thẻ asset, `custom_parts.py`). Câu kiểm: "Nếu là cái bàn, cái cây hay một ngôi nhà, thay đổi này còn đúng không?" Không đúng thì không vào skill. Báo cáo mỗi đợt ghi lại phân loại đó. Plan và báo cáo run có mục "thay đổi chỉ giúp riêng một asset" (D34.5).
 
-Số hiệu: từ v0.7.1, D32 = hàm riêng của asset, D33 = chống thời gian chết, D34 = skill cho mọi object, D35 = `views` (D32 cũ). Bảng đối chiếu ở đầu `docs/decisions.md`. Commit trước v0.7.1 dùng số cũ.
+Số hiệu: từ v0.7.1, D32 = hàm riêng của asset, D33 = chống thời gian chết, D34 = skill cho mọi object, D35 = `views` (D32 cũ). Bảng đối chiếu ở đầu `docs/decisions.md`. Commit trước v0.7.1 dùng số cũ. Từ v0.8.0, D36–D45 là quyết định của review source 2026-11-11. Dòng của plan v0.8.0 nằm ở mục cuối bảng, theo mã dòng của plan.
 
 | # | Agent | Việc cần kiểm | Nguồn | Kết quả |
 |---|---|---|---|---|
@@ -168,7 +168,7 @@ Số hiệu: từ v0.7.1, D32 = hàm riêng của asset, D33 = chống thời gi
 | 158 | Producer | Lệnh dài (Blender, `codex exec`, `meshy_call.py`) đi qua tool của Producer; mỗi tool có timeout riêng dưới giới hạn Bash | D33.3 | v0.7.1 G4: giới hạn = `BASH_MAX_TIMEOUT_MS` 3600000 của snippet. `gen_image_codex.py --wall-s` (mặc định 3300): không bắt đầu lần gọi mới khi có thể kết thúc sau hạn tổng (D30.20 giữ 900 s mỗi lần gọi; xung đột với 10 phút được giải bằng nâng max, không hạ timeout của Codex). `assemble.py`: mỗi lần Blender `timeout` 900 s (3 lần < 3600 s). `meshy_call.py`: chờ 480 s rồi `pending` (dòng 160). File worker bảo truyền `timeout: 3600000` cho Bash (brief không còn chỗ: ngân sách 4096 byte); `SKILL.md` bảo Producer chạy `assemble` với timeout đó. Test: `test_no_new_codex_call_starts_when_it_could_end_after_the_total_cap_...`, `test_the_settings_snippet_raises_the_bash_timeouts_and_the_brief_asks_for_the_same_cap_d33_4`. Chưa có test cho timeout Blender của `assemble.py`. Lệnh Blender worker tự chạy (`Bash(<BLENDER>:*)`) không đi qua tool của Producer: chỉ có timeout của Bash |
 | 159 | Producer | `settings.snippet.json` đặt Bash timeout mặc định 10 phút (kiểm tên biến trên Claude Code 2.1.317); `P preflight` báo khi chưa đặt | D33.4 | v0.7.1 G4: tên biến kiểm offline trên binary Claude Code CLI 2.1.318 (`~/.local/share/claude/versions/2.1.318`): hàm đọc `process.env.BASH_DEFAULT_TIMEOUT_MS` (mặc định 120000) và `BASH_MAX_TIMEOUT_MS` (mặc định 600000, không nhỏ hơn default). Snippet: `env` đặt 600000 và 3600000. `settings_merge` gộp `env` chỉ thêm khóa thiếu, không đổi giá trị người dùng đặt; `P preflight` in `env ... (Bash timeout, D33.4)` khi thiếu. Ghi thêm: subagent chạy nền bị Claude Code chuyển lệnh Bash sang nền sau 180000 ms (`vDr`), nên giao foreground là mặc định (dòng 167). Test: `test_the_merge_adds_a_missing_timeout_and_never_changes_one_the_user_set_d33_4`, `test_preflight_names_the_missing_rules_and_hook_...` (thêm env). Chưa kiểm bản desktop 2.1.321 |
 | 160 | Texture Artist | `meshy_call.py` chờ tối đa khoảng 8 phút rồi thoát `pending`, `task_id` trong `task.json`; `--resume` chờ đúng task, không tạo task mới, không tốn credit; hạn tổng 30 phút → `BLOCKED`. Test: `pending` không tạo task mới | D33.5 | v0.7.1 G4: `--timeout` mặc định 480 s là thời gian chờ một lần chạy; hết giờ khi đã có task → exit 5 `pending`, không tính là lần thử, `task_id` trong `task.json`. `--resume` cùng `--out`: chỉ chờ task đó; không có `task_id` → từ chối (exit 3). Quá `--total-s` (1800) từ lần chạy đầu → BLOCKED `blocked_total`, không gửi request. File agent texture: thoát 5 → chạy lại với `--resume`. Fake Meshy thêm `running:<n>` (task IN_PROGRESS). Test: `test_a_slow_task_exits_pending_and_resume_waits_on_that_task_without_a_second_post_or_charge_d33_5` (1 POST, budget 10 không đổi), `test_resume_without_a_task_is_refused_and_past_the_total_wait_it_blocks_without_a_request_d33_5` |
-| 161 | Mọi agent | `maxTurns` trong file agent; kiểm có chạy trên bản Claude Code đang dùng; vượt → `BLOCKED` | D33.6 | v0.7.1 G4: `maxTurns: 400` (4 worker), `maxTurns: 100` (5 reviewer) trong frontmatter. Đã kiểm trên Claude Code CLI 2.1.318 (binary cài ở máy, đọc offline): `maxTurns` có trong danh sách khóa frontmatter của agent và schema "Maximum number of agentic turns (API round-trips) before stopping". Chưa kiểm bản desktop 2.1.321 của Run 5, chưa biết số lượt có cộng qua SendMessage resume không, nên đặt rộng (~8× Run 5: worker blockout 45 lượt, reviewer 12; tạm, đo lại). Vượt → agent dừng không có report → `P on-stop` ghi `no_report`, quy tắc kẹt xử lý (dòng 164, 166); agent không tự ghi BLOCKED được. Test: `test_every_agent_file_caps_its_turns_...` |
+| 161 | Mọi agent | `maxTurns` trong file agent; kiểm có chạy trên bản Claude Code đang dùng; **[Thay bằng D33, mục "Đã làm ở G4"]** ~~vượt → `BLOCKED`~~ vượt → agent dừng không có report, `P on-stop` ghi `no_report` | D33.6 | v0.7.1 G4: `maxTurns: 400` (4 worker), `maxTurns: 100` (5 reviewer) trong frontmatter. Đã kiểm trên Claude Code CLI 2.1.318 (binary cài ở máy, đọc offline): `maxTurns` có trong danh sách khóa frontmatter của agent và schema "Maximum number of agentic turns (API round-trips) before stopping". Chưa kiểm bản desktop 2.1.321 của Run 5, chưa biết số lượt có cộng qua SendMessage resume không, nên đặt rộng (~8× Run 5: worker blockout 45 lượt, reviewer 12; tạm, đo lại). Vượt → agent dừng không có report → `P on-stop` ghi `no_report`, quy tắc kẹt xử lý (dòng 164, 166); agent không tự ghi BLOCKED được. Test: `test_every_agent_file_caps_its_turns_...` |
 | 162 | Producer | Tool ghi `vN/heartbeat.log` khi bắt đầu, khi xong, khoảng 30 giây một lần khi tiến trình con còn dùng CPU hoặc ra output; không ghi theo đồng hồ. Test: tiến trình treo → không ghi nhịp tim | D33.7 | v0.7.1 G4: `scripts/heartbeat.py` (chỉ stdlib): `run()` thay `subprocess.run` trong `assemble.py` (Blender), `gen_image_codex.py` (`codex exec`), `meshy_call.py` (gen_api, `_resume`, `_base_color`). Dòng `start`, `done`/`timeout`, và `running` mỗi 30 s chỉ khi CPU của cây tiến trình con (`ps -A -o pid,ppid,time`) tăng hoặc output tăng. Log ở `vN/` chứa đường dẫn output; không thuộc `assets/<id>/<bước>/vN` thì không ghi. Test tác vụ giả lập (D33.18b): `sleep` → chỉ start/done; vòng lặp bận → ≥ 2 `running`; lệnh chỉ in → `running` theo output; timeout → `timeout` và TimeoutExpired. Một phần: lệnh Blender worker tự chạy qua `Bash(<BLENDER>:*)` không có tool cha nên không có nhịp tim; quy tắc kẹt chỉ tính im lặng khi dòng cuối là `start`/`running`, còn lại chỉ theo hạn chót |
 | 163 | Mọi reviewer và worker | File output (`worker-out.md`, `review-out.md`) là tín hiệu xong; agent ghi file này cuối cùng | D33.8 | v0.7.1 G4: 9 file agent: "Ghi `<report>` là việc cuối cùng trước khi trả kết quả ... (D33.8)"; cùng test với dòng 157. `P on-stop` và `P wait` đọc file này làm tín hiệu xong (dòng 164, 168) |
 | 164 | Producer | Hook `SubagentStop` gọi `P on-stop`, ghi trạng thái lần giao theo id trong ledger; installer gộp hook (D30.7). Test: Producer không nhận thông báo → đĩa vẫn đúng | D33.9 | v0.7.1 G4: snippet có hook `SubagentStop` → `P on-stop`; `settings_merge` gộp như hook khác. `P on-stop` đọc stdin, bỏ qua agent không phải `zps-3dp-*` và project không có `production/`, khớp lần giao theo agent id hoặc brief trong transcript subagent, ghi `stopped` (`report`/`no_report`), `agent_id`, `transcript` và một dòng ledger; luôn exit 0, không qua `require_root`. Test (`tests/test_watch.py`): `test_subagent_stop_records_the_stop_on_disk_when_the_producer_never_hears_of_it_d33_9` |
@@ -199,5 +199,240 @@ Số hiệu: từ v0.7.1, D32 = hàm riêng của asset, D33 = chống thời gi
 | 189 | Texture Artist | Gộp nhiều ảnh một lần gọi: tùy chọn config, mặc định tắt; chỉ ảnh dùng chung tham chiếu; kiểm `-i` nhiều ảnh. Test: tắt → gọi lẻ; bật → 1 lần gọi, kiểm từng file. V6: so finding `regen`/`repaint` | D30.22 | v0.7.1 G3: `[[steps]]` texture có `codex_batch = false` (mặc định tắt); `true` → `GEN_ARGS ... --batch`. `--batch`: mọi file chờ trong một lần gọi (khung `JOB k`), rồi kiểm từng file, lần sau chỉ gọi file hỏng; mọi `--out` cùng thư mục; không lấy ảnh dự phòng từ `CODEX_HOME` khi lần gọi có nhiều file. Codex giả đọc `--image=`/`-i a b` và ghi danh sách ảnh. Test: tắt → 3 lần gọi; bật → 1 lần gọi có đủ ảnh tham chiếu; bật + 1 file hỏng → lần 2 chỉ file đó. `texture.md` mục 3: `paint_0` riêng, 7 góc gộp. Chưa làm: bật thử ở V6 và so số finding `repaint` với gọi từng ảnh |
 | 190 | Producer | `P ingest` không cần `--tokens`, `--duration-ms`; script lấy số từ transcript subagent (`subagents/` cạnh transcript chính trong `session.json`, theo agent id hoặc brief của prompt); chỉ message trong khoảng giao → ingest, mỗi message một lần; lỗi → "không có số"; `P stats` đọc lại | D33.22 | v0.7.1 G4: `session.agent_files`, `agent_numbers`, `dispatch_numbers`; lần giao ghi `brief`, ingest ghi `agent_id`; `stats.reread` chỉ in. Test (transcript tổng hợp): `test_ingest_without_numbers_takes_tokens_and_time_from_the_subagent_transcript_...` (2 bản sao, message vòng trước và sau ingest bị loại: 150 token, 600 ms), `test_a_reviewer_ingested_before_its_transcript_was_found_gets_its_number_at_the_next_stats_...` (reviewer không có agent id, tìm theo brief, bản ghi trên đĩa vẫn không có số). Bản Codex: không có transcript, ghi "không có số" |
 | 191 | Producer | `SKILL.md`: subagent trả về → ingest và giao tiếp trong cùng lượt; không kết thúc lượt chờ thông báo khi không có gì khác đang chạy | D33.23 | v0.7.1 G4: `SKILL.md` mục "Nhận kết quả" (`--agent-id` cho mọi vai trò), `runtime.md` mục Token cả hai bản |
+
+## Dòng của v0.8.0 (D36–D45)
+
+Mỗi dòng ứng với một dòng của `docs/intents/v0.8.0-plan.md`. Cột "#" là mã dòng của plan (S1, R0, C1, …), không tiếp số của bảng trên. Dòng chia nhóm theo quyết định.
+
+Cột "Kết quả" ghi "Chưa chạy" cho tới khi test của dòng đó pass. Ticket nào xong dòng nào thì sửa ô "Kết quả" của dòng đó. Ticket K26 kiểm cả bảng.
+
+### Spec (S1–S5)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| S1 | Producer | `decisions.md`: D36–D41 (đã viết cùng plan này). D29.3, D29.4, D31.2, D31.7, D33.10, D33.11 đã có thẻ `[Sửa theo D..]`. | plan v0.8.0 · S1 | Xong trên `main` (`82014d7`): D36–D41 nằm trong `decisions.md`. D29.3, D29.4, D31.2, D31.7, D33.10, D33.11 có thẻ `[Sửa theo D..]` |
+| S2 | Producer | `producer.md`, `references/contracts.md`, `coding-checklist.md`: một dòng cho mỗi việc dưới đây. Xóa 7 dòng cũ của `producer.md` (dòng 268, 285, 335, 451, 455, 458, 476 ở `18e3333`). Đánh dấu D33.6 đã bị G4 thay. | plan v0.8.0 · S2 | Một phần (K01): `producer.md` và dòng này đã xong. `references/contracts.md` chưa làm: ticket nào sửa file đó thì ghi dòng của mình vào đó (K26 kiểm). D33.6 đánh dấu ở dòng 161 của bảng trên; thẻ trong `decisions.md` chưa có |
+| S3 | Producer | `VERSION` = 0.8.0. | plan v0.8.0 · S3 | Xong (K01): `VERSION` = 0.8.0 |
+| S4 | Producer | Sửa tài liệu còn nhắc file đã gỡ (D42.5): `docs/agents/blockout.md` dòng 81 và cây thư mục dòng 174–180, `docs/project-profile.md:87`, docstring của `fit_view.py` dòng 6 và 12. Bỏ `paths.blender` khỏi `config.yaml` của blockout nếu không tool nào đọc. | plan v0.8.0 · S4 | Một phần (K01): `docs/agents/blockout.md` và `docs/project-profile.md` đã sửa. Docstring `fit_view.py` và `config.yaml` chưa làm: thuộc K14 |
+| S5 | Producer | `decisions.md`: D42–D45 (đã viết). D16.2, D32.1, D35.2, D35.6 đã có thẻ. | plan v0.8.0 · S5 | Xong trên `main` (`48bfe17`): D42–D45 nằm trong `decisions.md`. D16.2, D32.1, D35.2, D35.6 có thẻ |
+
+### D36 — Sửa lỗi sau review source (R, C, B, V, M, T)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| R0 | Producer | `run_tool.py` chỉ nhận tên tool nằm trong `agents/*/tools/` và `scripts/` của skill, sau khi resolve đường dẫn. Đường dẫn ngoài hai chỗ đó, symlink ra ngoài, và file trong `production/` bị từ chối. Test: tool ở `/tmp`, `../` và symlink → thoát 2, không chạy. | D36.1 · R0 · bằng chứng: đọc | Chưa chạy |
+| R1 | Producer | `run_tool.py <tool> [args]`: tự ghi và xóa file PID khi tool dùng Blender hoặc Codex. Bỏ dòng PID khỏi brief (`briefs.py:134`). Bỏ ngoại lệ `&` trong file agent. Test: Blender thoát 1 → `run_tool` thoát 1; file PID mất sau khi xong. | D36.1 · R1 · bằng chứng: chạy | Chưa chạy |
+| R2 | Producer | Mã thoát: 1 khi tool thoát khác 0, hoặc khi JSON kết quả tool vừa ghi có `overall` là `fail` hay `error`. `gates.py`, `join_mesh.py`, 4 check QA của kit hiện thoát 0 khi fail. Test: gate fail → thoát 1. | D36.1 · R2 · bằng chứng: chạy | Chưa chạy |
+| R3 | Producer | stdout và stderr của tool vào `vN/work/logs/<tool>.log`. `run_tool` in đúng một dòng: tên tool, `overall`, đường dẫn JSON fail. Test: lệnh Blender in ≤ 1 dòng. | D36.1 · R3 · bằng chứng: đoán | Chưa chạy |
+| R4 | Producer | `settings.snippet.json`: một allow rule cho `run_tool.py`, một cho `assemble.py`. `P preflight` báo khi thiếu. Sinh lại cả rule Codex ở `editions/codex/installer/codex_rules.py`. Test: snippet có rule; preflight báo thiếu; test edition Codex có rule mới. | D36.1 · R4 · bằng chứng: đọc | Chưa chạy |
+| R5 | Producer | `run_tool` nhận `--blender` từ brief và truyền cho `setup_deps.sh`, để cài deps đúng bản Blender. Test: hai bản Blender → deps vào đúng bản. | D36.1 · R5 · bằng chứng: đoán | Chưa chạy |
+| C1 | Producer | Từ chối `approve` khi asset `waiting_human` có `stalled_from` và bước có reviewer. Xóa `stalled_from` khi sang bước sau. Vị trí: `watch.py:151`, `loop.py:758`. Test fail trước khi sửa. | D36 · C1 · bằng chứng: chạy | Chưa chạy |
+| C2 | Producer | Kẹt lần 3 phải gọi `offer()` với nhãn "chưa chấm". Vị trí: `watch.py:151`. Test fail trước khi sửa. | D36 · C2 · bằng chứng: chạy | Chưa chạy |
+| C3 | Producer | Report sai contract: đổi tên thành `*.rejected-<k>.md`. `wake()` và `check()` bỏ qua report đã bị từ chối. Vị trí: `loop.py:163`, `watch.py:79`. Test fail trước khi sửa. | D36 · C3 · bằng chứng: chạy | Chưa chạy |
+| C4 | Producer | Dòng không thụt lề trong `FINDINGS`, `PRIOR` là lỗi contract, nêu đúng dòng. Vị trí: `contract.py:49`. Test fail trước khi sửa. | D36 · C4 · bằng chứng: chạy | Chưa chạy |
+| C5 | Producer | `failed_checks`: JSON không đọc được là `error`. Thêm JSON gate bắt buộc vào `outputs` của từng bước. Vị trí: `briefs.py:61`, `pipeline.toml`. Test fail trước khi sửa. | D36 · C5 · bằng chứng: đọc | Chưa chạy |
+| C6 | Producer | "Cần sửa" khi asset đang `running`, `reviewing`, `evidence_running`: lưu `pending_redo[<bước>]`, áp dụng thành finding `H` ở lần ingest kế, trước mọi lần duyệt. Vị trí: `loop.py:766`. Test fail trước khi sửa. | D36 · C6 · bằng chứng: đọc | Chưa chạy |
+| C7 | Producer | `current_v()` trả `evidence.version` khi đang có vòng bằng chứng. Vị trí: `loop.py:96`. Test fail trước khi sửa. | D36 · C7 · bằng chứng: đọc | Chưa chạy |
+| C8 | Producer | `check_counts`: fail khi không part nào dùng param đếm (trong `dims`, `args`, `segments`). Vị trí: `check_counts.py:25`. Test fail trước khi sửa. | D36 · C8 · bằng chứng: đọc | Chưa chạy |
+| C9 | Producer | `remote.py`: chỉ đánh dấu đã kéo khi `act()` chạy xong hoặc bỏ qua vì cũ. Vị trí: `remote.py:137`. Test fail trước khi sửa. | D36 · C9 · bằng chứng: đọc | Chưa chạy |
+| C10 | Producer | Duyệt kèm vùng khoanh: ghi thành loại `note`, chuyển cho bước sau. Vị trí: `loop.py:749`. Test fail trước khi sửa. | D36 · C10 · bằng chứng: đọc | Chưa chạy |
+| C11 | Producer | `retry` sau khi reviewer kẹt không xóa `worker_agent_id`. Vị trí: `loop.py:626`. Test fail trước khi sửa. | D36 · C11 · bằng chứng: đọc | Chưa chạy |
+| C12 | Producer | `match()` của `on-stop`: bỏ qua transcript có prompt đầu cũ hơn `rec["at"]`. Vị trí: `watch.py:226`. Test fail trước khi sửa. | D36 · C12 · bằng chứng: đoán | Chưa chạy |
+| C13 | Producer | `P brief` in lại (state `running`, `reviewing`): in JSON đã lưu rồi thoát. Không băm lại, không dựng sheet, không chạy gate texture, không ghi đè brief. Vị trí: `briefs.py:470`. Test fail trước khi sửa. | D36 · C13 · bằng chứng: đọc | Chưa chạy |
+| C14 | Producer | `P preflight` chạy các lệnh dò ngoài khóa chung, chỉ giữ khóa khi ghi. Vị trí: `producer.py:307`. Test fail trước khi sửa. | D36 · C14 · bằng chứng: đọc | Chưa chạy |
+| C15 | Producer | `tree_hash` nhớ theo (đường dẫn, mtime, cỡ). Vị trí: `hashes.py:71`. Test fail trước khi sửa. | D36 · C15 · bằng chứng: đọc | Chưa chạy |
+| C16 | Producer | Ingest sang `evidence` và sang `todo` của bước sau in dòng giao việc (D30.5). Vị trí: `loop.py:504`. Test fail trước khi sửa. | D36 · C16 · bằng chứng: chạy | Chưa chạy |
+| C17 | Producer | `P wait` thức khi có asset giao được. Bỏ cổng slot lúc giao, hoặc đếm worker đang chạy có dùng tài nguyên. Vị trí: `watch.py:166`, `limits.py:28`. Test fail trước khi sửa. | D36 · C17 · bằng chứng: đọc | Chưa chạy |
+| C18 | Producer | Intake cảnh báo khi thẻ có `counts` rỗng *(dự án: danh sách khóa)*. Vị trí: `intake.py`, `asset-card.yaml:12`. Test fail trước khi sửa. | D36 · C18 · bằng chứng: đọc | Chưa chạy |
+| C19 | Producer | `pipeline.toml`: thêm JSON gate vào `acceptable` của blockout (cho B5, B7). Vị trí: `pipeline.toml`. Test fail trước khi sửa. | D36 · C19 · bằng chứng: chạy cơ chế | Chưa chạy |
+| C20 | Producer | `pipeline.toml`: thêm ô checker UV vào `sheet` của model (cho M2). Vị trí: `pipeline.toml`. Test fail trước khi sửa. | D36 · C20 · bằng chứng: đọc | Chưa chạy |
+| C21 | Producer | Brief model chuyển `camera_fit.json` của blockout (cho M12). Vị trí: `briefs.py`. Test fail trước khi sửa. | D36 · C21 · bằng chứng: đọc | Chưa chạy |
+| C22 | Producer | Brief texture ghi dòng `CONCEPT_COLORS:` (cho T14). Vị trí: `briefs.py`. Test fail trước khi sửa. | D36 · C22 · bằng chứng: đọc | Chưa chạy |
+| C23 | Producer | Brief chép các khóa profile worker cần, không bảo đọc cả `PROJECT-PROFILE.yaml` (cho T19). Vị trí: `briefs.py:157`. Test fail trước khi sửa. | D36 · C23 · bằng chứng: đọc | Chưa chạy |
+| C24 | Producer | `P brief` chuẩn bị `final/` cho vòng sửa của texture (cho L14). Vị trí: `briefs.py`. Test fail trước khi sửa. | D36 · C24 · bằng chứng: đoán | Chưa chạy |
+| B1 | Blockout | `param_fit` với graph có part `custom` chạy qua Blender như lệnh dựng. Vị trí: `step-blockout.md:75`. Test fail trước khi sửa. | D36 · B1 · bằng chứng: chạy | Chưa chạy |
+| B2 | Blockout | `check_layout` fail khi `assembly.json` có `upto < parts_total`. Vị trí: `check_layout.py:27`. Test fail trước khi sửa. | D36 · B2 · bằng chứng: đọc | Chưa chạy |
+| B3 | Blockout | Dọn `review/gates/` trước mỗi lần gate đủ (xem B10). Vị trí: `gates.py:204`. Test fail trước khi sửa. | D36 · B3 · bằng chứng: đọc | Chưa chạy |
+| B4 | Blockout | `custom_mesh.py` fail khi lưới không kín (cạnh không dùng đúng 2 lần), nêu part và hàm. Vị trí: `custom_mesh.py:82`. Test fail trước khi sửa. | D36 · B4 · bằng chứng: đọc | Chưa chạy |
+| B5 | Blockout | Gate5: sửa `part-graph.md:98` cho khớp với `acceptable` mới (C19). Vị trí: `graph.py:456`. Test fail trước khi sửa. | D36 · B5 · bằng chứng: chạy cơ chế | Chưa chạy |
+| B6 | Blockout | Ảnh chân: không có `tag: base` thì ngắm z = 0, khung `max(1, 0.25 × max(w, d))`. Vị trí: `render_review.py:100`. Test fail trước khi sửa. | D36 · B6 · bằng chứng: đọc | Chưa chạy |
+| B7 | Blockout | `check_base`: lề theo cỡ nền, hoặc cho `base.json` vào `acceptable`. Vị trí: `check_base.py:19`. Test fail trước khi sửa. | D36 · B7 · bằng chứng: đoán | Chưa chạy |
+| B8 | Blockout | Chú thích part: chữ đen, hoặc đưa danh sách "số = tên" vào brief reviewer (post-process, không sửa file kit). Vị trí: `render_views.py:242`. Test fail trước khi sửa. | D36 · B8 · bằng chứng: chạy | Chưa chạy |
+| B9 | Blockout | Thêm `check_proportion.py`: so tỉ lệ bbox của silhouette model với mask concept theo từng view, lệch quá 10% thì fail. Vị trí: mới. Test fail trước khi sửa. | D36 · B9 · bằng chứng: đọc | Chưa chạy |
+| V1 | Concept Views | Ảnh dự phòng Codex: chỉ tìm trong `generated_images/<session id>/`. Bỏ dự phòng khi có PID `codex_image` khác đang sống. Vị trí: `gen_image_codex.py:83`. Test fail trước khi sửa. | D36 · V1 · bằng chứng: đọc | Chưa chạy |
+| V2 | Concept Views | `detail`: `not_checked` cho ranh có hai màu cách nhau dưới dE 10. Vị trí: `measure_views.py:191`. Test fail trước khi sửa. | D36 · V2 · bằng chứng: chạy | Chưa chạy |
+| V3 | Concept Views | `concept_colors.py` dùng trung vị của ô, cùng thống kê với phép đo. Sửa cả `tex_measure` (T3). Vị trí: `concept_colors.py:27`. Test fail trước khi sửa. | D36 · V3 · bằng chứng: chạy | Chưa chạy |
+| V4 | Concept Views | `measure.py --front`: bỏ `front` khỏi danh sách regen và khỏi check fail, xếp view còn lại của cặp. Vị trí: `measure_views.py:417`. Test fail trước khi sửa. | D36 · V4 · bằng chứng: đọc | Chưa chạy |
+| V5 | Concept Views | `measure.py`: strip tên view, thoát 2 khi tên lạ, fail khi thiếu view của thẻ. Vị trí: `measure.py:75`. Test fail trước khi sửa. | D36 · V5 · bằng chứng: đọc | Chưa chạy |
+| V6 | Concept Views | `views_rest` truyền `--concept-colors`. Thứ tự tham chiếu: front đã đo, rồi `concept_colors`. Vị trí: `measure_views.py:356`. Test fail trước khi sửa. | D36 · V6 · bằng chứng: đọc | Chưa chạy |
+| V7 | Concept Views | `pick_bg.py`: màu nền của profile cũng qua kiểm `min_dist`. Vị trí: `pick_bg.py:55`. Test fail trước khi sửa. | D36 · V7 · bằng chứng: đọc | Chưa chạy |
+| V8 | Concept Views | `concept_colors.py`: in cỡ ảnh, fail khi cụm chính của ô dưới 0,6 hoặc thiếu mã có trên guide front. Vị trí: `concept_colors.py:23`. Test fail trước khi sửa. | D36 · V8 · bằng chứng: đoán | Chưa chạy |
+| V9 | Concept Views | Chọn `--size` bằng script từ `bbox_size_m` của `views.json`. Vị trí: `views.md:11`. Test fail trước khi sửa. | D36 · V9 · bằng chứng: đọc | Chưa chạy |
+| V10 | Concept Views | Asset đối xứng: `measure.py` tự lật lại `right` sau mỗi lần `left` đổi. Vị trí: `step-views.md:42`. Test fail trước khi sửa. | D36 · V10 · bằng chứng: đoán | Chưa chạy |
+| V11 | Concept Views | Ảnh Pillow đọc được thì chuyển sang PNG và nhận. Vị trí: `gen_image_codex.py:188`. Test fail trước khi sửa. | D36 · V11 · bằng chứng: đọc, đổi quyết định cũ | Chưa chạy |
+| V12 | Concept Views | Lỗi quota hoặc rate limit: dừng ngay. Lỗi policy: thử lại tối đa 1 lần. Vị trí: `gen_image_codex.py:182`. Test fail trước khi sửa. | D36 · V12 · bằng chứng: đọc, đổi quyết định cũ | Chưa chạy |
+| V13 | Concept Views | Prompt: "lưu nguyên ảnh của tool, không resize, không crop". Vị trí: `gen_image_codex.py:57`. Test fail trước khi sửa. | D36 · V13 · bằng chứng: đoán | Chưa chạy |
+| V14 | Concept Views | Kill cả nhóm tiến trình khi hết giờ. Vị trí: `heartbeat.py:142` (G-core sửa). Test fail trước khi sửa. | D36 · V14 · bằng chứng: đoán | Chưa chạy |
+| V15 | Concept Views | Thêm phép đo vào `measure.py`: gradient sáng theo vùng, mask chạm mép ảnh, viền nền quanh vật, số thành phần liên thông so với guide. Vị trí: mới. Test fail trước khi sửa. | D36 · V15 · bằng chứng: đọc | Chưa chạy |
+| M1 | 3D Artist | `check_uv_edge`: không còn mảnh lớn thì đo mọi mảnh theo diện tích. Vị trí: `check_uv_edge.py:54`. Test fail trước khi sửa. | D36 · M1 · bằng chứng: chạy | Chưa chạy |
+| M2 | 3D Artist | Thêm `uv.stretch` vào `check_uv_edge` (tỉ số hai giá trị kỳ dị của Jacobian UV, theo diện tích). Render một ảnh checker (vào sheet: C20). Vị trí: mới. Test fail trước khi sửa. | D36 · M2 · bằng chứng: đọc | Chưa chạy |
+| M3 | 3D Artist | Ghi luật "nằm trong bbox blockout ±2%" vào `model.md` và rubric `param` của check-clay. `check_detail` so bbox ngay sau mỗi lần dựng. Vị trí: `make_spec.py:30`. Test fail trước khi sửa. | D36 · M3 · bằng chứng: đọc | Chưa chạy |
+| M4 | 3D Artist | Tách cạnh theo loại part: giữ smooth trong part tròn và bevel, chỉ tách giữa các part và ở cạnh cứng thật. Vị trí: `join_mesh.py:33`. Test fail trước khi sửa. | D36 · M4 · bằng chứng: đọc, chưa xem render | Chưa chạy |
+| M5 | 3D Artist | Render `normal_*` từ GLB đã join. `check_mesh` kiểm chiều mặt từng part (thể tích có dấu > 0) trước join. Vị trí: `step-model.md:34`. Test fail trước khi sửa. | D36 · M5 · bằng chứng: đoán | Chưa chạy |
+| M6 | 3D Artist | `check_detail` so `fixed_params` của blockout và model, khác là fail. Vị trí: `step-model.md:31`. Test fail trước khi sửa. | D36 · M6 · bằng chứng: đọc | Chưa chạy |
+| M7 | 3D Artist | `join_mesh`: thêm mặt đất vào BVH, bỏ `bottom` khỏi `seen()` trừ khi thẻ nói thấy đáy. Vị trí: `join_mesh.py:80`. Test fail trước khi sửa. | D36 · M7 · bằng chứng: đọc | Chưa chạy |
+| M8 | 3D Artist | `make_spec` ghi camera cố định có `distance_m`, hoặc bỏ `screen_tris_check` khỏi vòng lặp. Vị trí: `make_spec.py:106`. Test fail trước khi sửa. | D36 · M8 · bằng chứng: đọc | Chưa chạy |
+| M9 | 3D Artist | Padding UV theo `res/2048`. Vị trí: `make_spec.py:96`. Test fail trước khi sửa. | D36 · M9 · bằng chứng: đọc | Chưa chạy |
+| M10 | 3D Artist | `PLANE_TOL_M = 1e-3`, khớp luật 1 mm. Vị trí: `check_mesh.py:25`. Test fail trước khi sửa. | D36 · M10 · bằng chứng: đọc | Chưa chạy |
+| M11 | 3D Artist | `px_per_m` và thumbnail dùng cùng một cách tính. Vị trí: `render_review.py:88`. Test fail trước khi sửa. | D36 · M11 · bằng chứng: đoán | Chưa chạy |
+| M12 | 3D Artist | `make_spec` chép mask và camera concept của blockout, truyền `--spec` để có `overlay_*`. Nhận `camera_fit.json` của blockout qua brief (C21). `model.md` ghi quy ước góc. Vị trí: `step-model.md:34`. Test fail trước khi sửa. | D36 · M12 · bằng chứng: đọc | Chưa chạy |
+| M13 | 3D Artist | Bevel toon: ghi rõ không áp ngưỡng pixel. Vị trí: `model.md:18`. Test fail trước khi sửa. | D36 · M13 · bằng chứng: đọc | Chưa chạy |
+| M14 | 3D Artist | `join_mesh`: giới hạn số mẫu mỗi mặt. Vị trí: `join_mesh.py:37`. Test fail trước khi sửa. | D36 · M14 · bằng chứng: đoán | Chưa chạy |
+| M15 | 3D Artist | `SOURCE.md` ghi đúng 3 hàm của `bake.py` đang dùng. Cài `gltf-validator` trong `setup_deps`, hoặc bỏ lời hứa validate. Vị trí: `export_check.py:99`. Test fail trước khi sửa. | D36 · M15 · bằng chứng: đọc | Chưa chạy |
+| T1 | Texture Artist | `assemble`: chỉ so view có trong `renders.json`. Ghi "game view chưa kiểm" vào README. Vị trí: `assemble.py:44`. Test fail trước khi sửa. | D36 · T1 · bằng chứng: đọc | Chưa chạy |
+| T2 | Texture Artist | Đo trước, render sau. `renders.json` ghi sha256 albedo. Ingest và `assemble` từ chối khi lệch. Vị trí: `step-texture.md:35`. Test fail trước khi sửa. | D36 · T2 · bằng chứng: đọc | Chưa chạy |
+| T3 | Texture Artist | `tex_measure` so trung vị với trung vị (xem V3), dE00, ngưỡng đặt lại sau pilot. `tone_fix` thêm dịch a*b* theo mã. Vị trí: `tex_measure.py:94`. Test fail trước khi sửa. | D36 · T3 · bằng chứng: chạy | Chưa chạy |
+| T4 | Texture Artist | Nhóm seam theo (ô 3D, mã vật liệu). p90 chỉ đo trong một mã. Vị trí: `tex.py:255`. Test fail trước khi sửa. | D36 · T4 · bằng chứng: chạy | Chưa chạy |
+| T5 | Texture Artist | Chiếu view: mỗi mặt một view thắng, viền chuyển hẹp. Đo khớp paint với guide, lệch thì gen lại. Thiếu view thì thoát 1. Vị trí: `project_views.py:94`. Test fail trước khi sửa. | D36 · T5 · bằng chứng: đọc | Chưa chạy |
+| T6 | Texture Artist | Meshy: lưu số credit đã trừ lúc POST, hoàn đúng số đó. Vị trí: `meshy_call.py:416`. Test fail trước khi sửa. | D36 · T6 · bằng chứng: đọc | Chưa chạy |
+| T7 | Texture Artist | Khóa Meshy hết hiệu lực khi PID chết. Vị trí: `meshy_call.py:380`. Test fail trước khi sửa. | D36 · T7 · bằng chứng: đọc | Chưa chạy |
+| T8 | Texture Artist | Quá `total_s`: hỏi trạng thái một lần, `SUCCEEDED` thì tải. Sau `blocked_total`, `paid_calls` không mời resume, hỏi anh. Vị trí: `meshy_call.py:411`, `core/texture.py:74`. Test fail trước khi sửa. | D36 · T8 · bằng chứng: đọc | Chưa chạy |
+| T9 | Texture Artist | Cho chạy lại chỉ phần kiểm topology khi đã tải đủ mà thiếu `topology.json`. Vị trí: `meshy_call.py:403`. Test fail trước khi sửa. | D36 · T9 · bằng chứng: đọc | Chưa chạy |
+| T10 | Texture Artist | `tone_fix` loại rãnh bằng `tex.occluded`. Thêm `light.highlight_share`. Vị trí: `tone_fix.py:47`. Test fail trước khi sửa. | D36 · T10 · bằng chứng: đọc | Chưa chạy |
+| T11 | Texture Artist | `crop_edit`: đệm crop về 3:2, 2:3 hoặc 1:1. Từ chối khi viền lệch. Chạy `tex.gutter` sau khi dán. Vị trí: `crop_edit.py:37`. Test fail trước khi sửa. | D36 · T11 · bằng chứng: đọc, một phần đoán | Chưa chạy |
+| T12 | Texture Artist | `seam.unpainted_share` bỏ qua mã có màu concept gần đen. Vị trí: `tex_measure.py:116`. Test fail trước khi sửa. | D36 · T12 · bằng chứng: đọc | Chưa chạy |
+| T13 | Texture Artist | Thêm check độ nét theo mã, và cảnh báo UV lật ở mã có chữ. Vị trí: mới. Test fail trước khi sửa. | D36 · T13 · bằng chứng: đọc | Chưa chạy |
+| T14 | Texture Artist | Mọi tool đọc đường dẫn màu concept từ dòng `CONCEPT_COLORS:` của brief (C22), cả khi `VIEWS: none`. Vị trí: `step-texture.md:31`. Test fail trước khi sửa. | D36 · T14 · bằng chứng: đọc | Chưa chạy |
+| T15 | Texture Artist | Đổi `R` (độ phân giải) thành `RES`. Vị trí: `step-texture.md:18`. Test fail trước khi sửa. | D36 · T15 · bằng chứng: đọc | Chưa chạy |
+| T16 | Texture Artist | `--timeout` Meshy mặc định 1700. Bỏ bước `--dry-run`. Vị trí: `meshy_call.py:510`. Test fail trước khi sửa. | D36 · T16 · bằng chứng: đọc | Chưa chạy |
+| T17 | Texture Artist | Nhịp tim của `assemble_glb` ghi vào thư mục `assemble`. Vị trí: `assemble.py:59`. Test fail trước khi sửa. | D36 · T17 · bằng chứng: đọc | Chưa chạy |
+| T18 | Texture Artist | `id_map`: khớp theo hash trọng tâm, không cấp mảng F × 4096. Vị trí: `id_map.py:57`. Test fail trước khi sửa. | D36 · T18 · bằng chứng: đọc | Chưa chạy |
+
+### D37 — Script lái, model chỉ quyết (L)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| L1 | Blockout | `gate_all.py`: dựng một lần, gate mọi part, chạy mọi `check_*`, chỉ in mục fail. Thay cho: dựng và gate từng part (`step-blockout.md:38`). | D37 · L1 | Chưa chạy |
+| L2 | Blockout | `make_variant.py --from F --out V/variants/b --set k=v`: chạy cả chuỗi của một phương án. Thay cho: chuỗi tay khoảng 60 lệnh (`step-blockout.md:53`). | D37 · L2 | Chưa chạy |
+| L3 | Blockout | `init_sources.py` điền phần tính được của `sources.json`. `blockout_md.py` điền mục 2, 3, 8. Thay cho: viết tay. | D37 · L3 | Chưa chạy |
+| L4 | Blockout | Lưới `custom` dựng bằng numpy trong venv. Blender chỉ để render. Thay cho: mỗi lần dựng mở Blender (`mesh_from_json.py:44`). | D37 · L4 | Chưa chạy |
+| L5 | Blockout | Finding `param`: áp mọi giá trị, dựng một lần, `check_fix` từng id. Thay cho: mỗi finding một lần dựng. | D37 · L5 | Chưa chạy |
+| L6 | Blockout | Thêm bước đánh số "mask → spec → fit_view → render có `--spec`". Thay cho: chỉ nằm ở mục Tool. | D37 · L6 | Chưa chạy |
+| L7 | Concept Views | `make_prompt.py`: điền mẫu từ `views.json`, `bg_color.json`, `material.md`, `blockout.md`. Nhận `--hidden`, `--fix`. In luôn `--size`. Thay cho: model viết tay mỗi prompt. | D37 · L7 | Chưa chạy |
+| L8 | Concept Views | `gen_image_codex.py` chạy song song theo số slot `codex_image` còn trống, mỗi luồng một file PID. Thay cho: gọi tuần tự. | D37 · L8 | Chưa chạy |
+| L9 | Concept Views | `pick_best`: giữ ảnh có điểm đo cao hơn sau regen. Vẫn fail thì tự ghi dòng `ACCEPTED_FAIL` có số. Thay cho: không có luật. | D37 · L9 | Chưa chạy |
+| L10 | 3D Artist | `build_model.py` (join + unwrap một phiên Blender), `qa_all.py` (4 check QA một phiên), một lệnh render. Thay cho: 8 lần mở Blender. | D37 · L10 | Chưa chạy |
+| L11 | 3D Artist | Dựng một lần rồi gate mọi part đổi (dùng lại L1). Thay cho: dựng từng part. | D37 · L11 | Chưa chạy |
+| L12 | Texture Artist | Tool viết 8 prompt paint từ mẫu. Dùng L8 để gọi song song. Thay cho: model viết tay, gọi tuần tự. | D37 · L12 | Chưa chạy |
+| L13 | Texture Artist | `assemble`: một phiên Blender cho xuất GLB, 4 QA, render so sánh. Thay cho: 6 lần mở. | D37 · L13 | Chưa chạy |
+| L14 | Producer | `P brief` chuẩn bị `final/` cho vòng sửa của texture (C24). G-texture xóa đoạn chép tay khỏi file agent. Thay cho: worker chép tay trừ 7 mẫu. | D37 · L14 | Chưa chạy |
+| L15 | Producer | Ingest tự chạy mọi `check_*` thuần Python của bước, không chỉ `counts`. Thay cho: check chưa chạy được tính là pass. | D37 · L15 | Chưa chạy |
+| L16 | Producer | `retry` sau `blocked` vì thiếu output: resume worker cũ với dòng "thiếu output: X". Thay cho: dựng lại cả bước (`loop.py:620`). | D37 · L16 | Chưa chạy |
+
+### D38 — Review rẻ hơn, nhìn rõ hơn (Q)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| Q1 | Producer | Script tự tính `COUNTS` và bộ id `TOP_FIX` loại lô. Reviewer không ghi hai trường này. Còn ghi thì chỉ cảnh báo khi lệch. | D38 · Q1 | Chưa chạy |
+| Q2 | Producer | Đọc contract dung thứ hình thức: lấy từ đầu của giá trị, không phân biệt hoa thường, bỏ `**` và backtick quanh khóa, nối dòng thụt lề, nhận `-` và `–` trong `ACCEPTED_FAIL`. Giữ mọi kiểm về nội dung. | D38 · Q2 | Chưa chạy |
+| Q3 | Producer | `review_scope` là `full` khi `FIXED` phủ mọi finding `blocker`, `major`, `unclear` đang mở. PASS ở `fix` là cuối cùng khi `RUBRIC` không có `not_checked` (sửa D31.2). | D38 · Q3 | Chưa chạy |
+| Q4 | Producer | Bằng chứng lấy sẵn trên đĩa: resume đúng reviewer đang chấm. Agent mới khi sang vòng worker khác. Tính độc lập giữ nguyên: cùng lượt chấm, cùng version, chỉ thêm đúng crop reviewer đã xin (sửa D31.7). | D38 · Q4 | Chưa chạy |
+| Q5 | Producer | Sheet tối đa 8 ô. Nhiều hơn thì tách `sheet-1`, `sheet-2`. Bỏ `normal_*`, `unlit_*`, `lineup`, atlas khỏi glob. Thêm crop 1:1 do script chọn (wire, thumb, nhóm seam xấu nhất, ranh vật liệu). | D38 · Q5 | Chưa chạy |
+| Q6 | Producer | Thêm `sheet` cho `views_front` và `views_rest`. Reviewer xin crop theo tỉ lệ 0–1, script tự cắt. | D38 · Q6 | Chưa chạy |
+| Q7 | Producer | Script điền các key rubric đã có gate (`density`, `blockout_match`, phần màu của `sync`, `light`, `material`, `seams`). Brief reviewer chỉ liệt kê key cần nhìn. | D38 · Q7 | Chưa chạy |
+| Q8 | Producer | Reviewer nhận một `review/summary.json` nhỏ (khoảng 100 B mỗi part) thay cho `assembly.json` và mọi JSON gate. | D38 · Q8 | Chưa chạy |
+| Q9 | Producer | `reviewer_model` theo bước, khóa chung là mặc định *(dự án: giá trị)*. | D38 · Q9 | Chưa chạy |
+| Q10 | Producer | File reviewer: bỏ dòng contract đã có trong brief, bỏ dòng duyệt theo ủy quyền, gộp hai luật mở ảnh. Sửa "`param` mọi finding" cho khớp code. | D38 · Q10 | Chưa chạy |
+| Q11 | Mọi agent | File agent: ghi "đọc khi …" cho từng reference. Cắt `craft.md` còn phần bằng chứng ảnh và preflight. Xóa hai bản `bpy_cookbook.md`. Chuyển phần vòng sửa sang `references/fix.md`, brief chỉ nêu khi là vòng sửa. Bỏ thẻ "D…". | D38 · Q11 | Chưa chạy |
+| Q12 | Mọi agent | Từ vựng chung theo D34.4: "mép trên, đáy, chỗ chạm đất" thay cho "mái, tường, cửa, chân nhà" ở `views.md:30`, `step-blockout.md:36`, `check-blockout.md:37`. | D38 · Q12 | Chưa chạy |
+| Q13 | Mọi agent | Đổi `<F>` (id finding) thành `<Fid>`. Danh sách gate cứng in từ `HARD_GATES` vào brief, bỏ khỏi file agent. | D38 · Q13 | Chưa chạy |
+| Q14 | Texture Artist | `texture.md:29`: "Khi `GEN_ARGS` có `--batch`: …", và ghi đường gọi lẻ. `texture_complexity.py` chạy một lần mỗi hash mesh. | D38 · Q14 | Chưa chạy |
+
+### D39 — Không đứng im, vòng sửa hội tụ (W)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| W1 | Producer | Hook `Stop` của phiên chính: `P on-main-stop` từ chối dừng khi còn lần giao đã có report mà chưa ingest, hoặc còn dòng giao việc script đã in mà chưa giao. Kiểm trên bản Claude Code đang dùng trước khi làm; không chạy được thì giữ văn xuôi và ghi kết quả kiểm. Vị trí: `settings.snippet.json`, `watch.py`. | D39 · W1 | Chưa chạy |
+| W2 | Producer | `SKILL.md` "Nhận kết quả": danh sách đánh số, ba luật chống đứng im ở đầu, không có ngoại lệ. Xóa lời mời truyền `--tokens`, `--duration-ms` ở `SKILL.md:55` và adapter. Vị trí: `SKILL.md:55`, `adapter.md:21`. | D39 · W2 | Chưa chạy |
+| W3 | Producer | Kẹt = không có nhịp tim và không có file đổi trong `stall_min`. Hạn chót một mình không phải là kẹt. Vị trí: `watch.py:87`. | D39 · W3 | Chưa chạy |
+| W4 | Producer | Trung vị thời gian theo (bước, vai trò, lần đầu hay vòng sửa). `usual_min` lấy từ số đo Run 4, Run 5 *(dự án: số)*. Vị trí: `watch.py:38`, `pipeline.toml`. | D39 · W4 | Chưa chạy |
+| W5 | Producer | Chỉ giao agent mới khi `on-stop` đã ghi agent cũ dừng. Chưa dừng thì in lệnh dừng agent cũ trước. Vị trí: `watch.py:128`. | D39 · W5 | Chưa chạy |
+| W6 | Producer | Check fail trùng bộ tên với vòng trả thẳng trước: hỏi anh ngay, nêu tên check. Vị trí: `loop.py:249`. | D39 · W6 | Chưa chạy |
+| W7 | Producer | Vòng trả thẳng vì check fail không trừ vào `max_fix_rounds`. Có trần riêng `max_direct_rounds = 2`. Vị trí: `loop.py:254`. | D39 · W7 | Chưa chạy |
+| W8 | Producer | `structure` nhận nhiều id trong một vòng khi các finding đụng các part khác nhau. Reviewer ghi part của từng finding. Vị trí: `findings.py:14`. | D39 · W8 | Chưa chạy |
+| W9 | Producer | `SKILL.md:142`: thay "reviewer chấm sai rõ ràng → tự quyết" bằng "ghi `P feedback … --action note` rồi hỏi anh". Xóa `SKILL.md:149`. Với `local+remote`: sau `board pull` luôn chạy lại `P next`. Vị trí: `SKILL.md`. | D39 · W9 | Chưa chạy |
+| W10 | Producer | Xóa chữ "chạy nền" của `external_command`. Vị trí: `briefs.py:235`, `setup.md:59`. | D39 · W10 | Chưa chạy |
+| W11 | Producer | Mô tả skill thêm câu loại trừ. Chạy eval trigger thật một lần. Vị trí: `SKILL.md:3`, `evals/triggers.json`. | D39 · W11 | Chưa chạy |
+
+### D40 — Dọn ngay khi DUYỆT 2 (P)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| P1 | Producer | DUYỆT 2 do anh duyệt: xóa trong chính lệnh `approve`, sau khi chép `deliver/<id>/` và ghi report D41. Bỏ cơ chế "đầu phiên sau" (`purge-pending.json`, điều kiện `source`). Test: approve → file mất ngay; `--by producer` → không xóa. | D40 · P1 | Chưa chạy |
+| P2 | Producer | Danh sách giữ như D29.6, D29.8. Thêm: xóa `production/show/<id>*`, `production/board/push/*/` của asset, `pids/*/<id>*`, mọi `*.rejected-*.md`. Test: manifest liệt kê đủ. | D40 · P2 | Chưa chạy |
+| P3 | Producer | Trước khi xóa, lệnh in một dòng: số file, dung lượng, "sau lệnh này không `redo` được". Nút DUYỆT 2 trên trang (local và remote) hiện đúng dòng đó và cần bấm xác nhận. Test: trang hiện dung lượng trước khi gửi. | D40 · P3 | Chưa chạy |
+| P4 | Producer | `P keep <id>` chạy trước khi duyệt: lần duyệt đó không xóa. `policy.yaml` có `purge: on_approve \| off`, mặc định `on_approve` *(dự án)*. `purge_zip: <thư mục>` thì nén trước khi xóa. Test: `keep` rồi approve → còn nguyên. | D40 · P4 | Chưa chạy |
+| P5 | Producer | Giữ D29.2 (Producer tự duyệt không xóa), D29.5 (kiểm lại trước khi xóa), D29.11 (A/B chờ kết quả so). Bản Codex giờ cũng tự xóa, vì không còn cần hook. Test: A/B chưa có kết quả → không xóa. | D40 · P5 | Chưa chạy |
+| P6 | Producer | `SKILL.md`, `contracts.md`, adapter: bỏ đoạn "phiên sau script tự xóa". | D40 · P6 | Chưa chạy |
+
+### D41 — Report thời gian và token thật (X)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| X1 | Producer | `P ingest` ghi `tokens`, `duration_ms` đọc từ transcript vào `status.json` ngay lúc ingest (hiện `P stats` đọc lại mỗi lần, không lưu). Ghi tách `input`, `output`, `cache_read`, `cache_creation`. Test: ingest xong → số nằm trong `status.json`. | D41 · X1 | Chưa chạy |
+| X2 | Producer | Số Producer của bước: ghi vào `status.json` khi bước được duyệt. Test: xóa transcript → report vẫn đủ số. | D41 · X2 | Chưa chạy |
+| X3 | Producer | `P report <id>` ghi `deliver/<id>/RUN-REPORT.md` và in bảng. Tự chạy khi asset tới `done`, trước khi dọn (P1). Test: DUYỆT 2 → có file, có bảng trên stdout. | D41 · X3 | Chưa chạy |
+| X4 | Producer | Mỗi dòng một bước: thời gian bước, worker, reviewer, chờ Producer, chờ anh, token worker, token reviewer, token Producer, số version, số vòng sửa, số lần giao, số lần gọi Codex, credit Meshy, số lần kẹt. Dòng cuối: tổng. Test: bảng đủ cột. | D41 · X4 | Chưa chạy |
+| X5 | Producer | Chỉ số thật. Không có số thì ghi "không có số" và nêu lý do (không có transcript, bản Codex). Không ước lượng, không chia đều. Test: thiếu transcript → "không có số". | D41 · X5 | Chưa chạy |
+| X6 | Producer | Hai asset chạy cùng lúc: token Producer ghi chú "tính chung với <id>". Test: hai asset chồng thời gian → có ghi chú. | D41 · X6 | Chưa chạy |
+| X7 | Producer | `P report` không có id: bảng theo asset và tổng của lô. `P dashboard` thêm cột thời gian và token đã dùng. | D41 · X7 | Chưa chạy |
+| X8 | Producer | `SKILL.md`: khi asset `done`, dán nguyên bảng của script vào chat. Không tự tính lại. | D41 · X8 | Chưa chạy |
+| X9 | Producer | Trang duyệt: thẻ asset `done` có link `RUN-REPORT.md`. | D41 · X9 | Chưa chạy |
+
+### D42 — Source chỉ giữ thứ dùng chung (U)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| U1 | Blockout | Gỡ `vault`, `grooved_box` và các hàm phụ của chúng khỏi `custom_lib.py`. Giữ `bevel_box`. Anh chốt 2026-11-12 Đã làm ở nhánh `chore/remove-object-shapes`. Test: `FUNCTIONS` chỉ còn `bevel_box`; graph gọi `vault` → `check_schema` fail và nêu `custom_parts.py`. | D42 · U1 | Xong trên `main` (`3a0b60f`): `vault`, `grooved_box` đã gỡ khỏi `custom_lib.py` |
+| U2 | Blockout | `bevel_box` trả `(verts, faces)` Python thuần (làm cùng L4). `custom_lib.py` không còn import `bmesh`. Test: dựng graph có `bevel_box` trong venv, không Blender. | D42 · U2 | Chưa chạy |
+| U3 | Blockout, 3D Artist | Ví dụ luật đếm trong file agent và `part-graph.md` không còn nhắc `grooved_box`. Dùng ví dụ `tag` cho hai loại vật khác nhau (D34.4). Test: test quét D34.4 hiện có. | D42 · U3 | Chưa chạy |
+| U4 | Producer | Test quét: mỗi file trong bảng "Chép nguyên" của mỗi `SOURCE.md` có ít nhất một tool hoặc file agent gọi (D42.4). Test: thêm một file chép không ai gọi → test fail. | D42 · U4 | Chưa chạy |
+
+### D43 — Đầu vào từ Concept Artist (G)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| G1 | Producer | `check_card.py`: `counts` và `views` bắt buộc. `view_side` bắt buộc khi `view: '34'`. Kiểm kiểu của `light`, `marks`, `bottom_visible`, `text_codes` khi có. Test: thiếu `views` → lỗi; `view: '34'` thiếu `view_side` → lỗi. | D43 · G1 | Chưa chạy |
+| G2 | Producer | `P intake` đọc bảng Material Handoff: cột "Ô lấy màu" và dòng `BG:`. Đo trung vị trong ô, ghi `assets/<id>/concept_colors.json`. Cảnh báo khi hex lệch số đo quá dE 6, khi ô nằm ngoài ảnh, khi một mã không có ô. Test: bảng có ô → file có đủ mã; ô sai → cảnh báo nêu mã. | D43 · G2 | Chưa chạy |
+| G3 | Producer | Brief ghi `CONCEPT_COLORS:` (C22) trỏ tới file của G2. Asset cũ không có cột ô: worker chọn ô như hiện nay, và brief nói rõ. Test: thẻ cũ vẫn chạy. | D43 · G3 | Chưa chạy |
+| G4 | Producer | Brief blockout ghi `VIEW_SIDE:`; brief model ghi `LIGHT:` khi thẻ có. `templates/asset-card.yaml` có đủ trường mới. Test: brief có dòng khi thẻ có trường. | D43 · G4 | Chưa chạy |
+| G5 | Blockout | `fit_view.py` nhận `--side` từ dòng `VIEW_SIDE:` của brief. `check_proportion.py` (B9) so thêm `marks` của thẻ với blockout. Test: `marks` lệch quá 10% → fail. | D43 · G5 | Chưa chạy |
+| G6 | 3D Artist | `join_mesh.py` đọc `bottom_visible` (M7). `make_spec` nhận `LIGHT:` thay cho việc worker đoán. Test: `bottom_visible: false` → mặt đáy bị bỏ. | D43 · G6 | Chưa chạy |
+| G7 | Texture Artist | Check UV lật (T13) chỉ chạy cho mã trong `text_codes`. Test: mã có chữ, UV lật → cảnh báo. | D43 · G7 | Chưa chạy |
+| G8 | Producer | `templates/GUIDELINE.md` v1.4: gộp nội dung v1.3 (`GUIDELINE-concept-artist.md` ở gốc repo), thêm các trường D43, luật chọn `views` (D44.2), ví dụ thẻ thứ hai cho loại vật khác công trình, dòng về hai vật liệu kề nhau. Bỏ dòng lịch sử. `check_card.py` là bước bắt buộc. Ưu tiên concept chính diện phẳng; `concept_34.png` là file thêm. Test: test quét D34.4; mẫu thẻ trong guideline qua được `check_card.py`. | D43 · G8 | Chưa chạy |
+| G9 | Producer | `check_card.py` nhận `concept_34.png` là file tùy chọn. Blockout dùng nó cho `fit_view` khi có. Test: có file → brief nêu; không có → không lỗi. | D43 · G9 | Chưa chạy |
+
+### D44 — Bước view (N)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| N1 | Blockout | `render_sides.py`: render `mat_left`, `mat_right`, `mat_back` (và `mat_top` khi `views: full_top`), mỗi part một màu theo mã vật liệu, có chú thích mã. Chạy trong lệnh render review. Test: graph 3 mã → ảnh có đúng 3 màu. | D44 · N1 | Chưa chạy |
+| N2 | Producer | Thêm các ảnh `mat_*` vào `sheet` và vào thẻ blockout trên trang duyệt (local và remote). Test: trang hiện ảnh mặt bên ở cổng blockout. | D44 · N2 | Chưa chạy |
+| N3 | Producer | `pipeline.toml`: một bước `views` thay cho `views_front`, `views_rest`. Gate `review_human`. `top_fix` gồm `regen` (nêu view trong `region`), `note_exception`, `note_texture`. Bỏ loại `regen_front` và đường mở lại bước trước của nó trong `loop.py`, `findings.py`. Test: asset `views: full` đi blockout → views → model; `views: none` bỏ bước. | D44 · N3 | Chưa chạy |
+| N4 | Producer | Chuyển state của project đang chạy: asset đang ở `views_front` hoặc `views_rest` được ánh xạ sang `views` khi nâng cấp, hoặc `P validate` từ chối và nêu cách làm lại. Test: project v0.7.1 có asset giữa bước view → không hỏng state. | D44 · N4 | Chưa chạy |
+| N5 | Concept Views | File agent và `views.md` cho một bước: gen front → `measure.py` front → pass thì gen các mặt còn lại song song (L8) → đo → sheet → báo cáo. Bỏ phần chọn ô màu (D44.4). Test: e2e views một bước. | D44 · N5 | Chưa chạy |
+| N6 | Concept Views | `check_inputs.py`, `check_package.py`, `diff_guides.py` nhận một thư mục `final/` cho cả bộ view. Test: test tool hiện có, sửa đường dẫn. | D44 · N6 | Chưa chạy |
+| N7 | 3D Artist, Texture Artist | Brief và tool đọc bộ view từ một bước `views` (`--views` thay cho `--views-front`, `--views-rest`). Test: e2e model, e2e texture. | D44 · N7 | Chưa chạy |
+| N8 | Producer | `contracts.md`, `SKILL.md`, `producer.md`: sửa tên bước, bỏ đoạn `regen_front`. | D44 · N8 | Chưa chạy |
+
+### D45 — Model của subagent (A)
+
+| # | Agent | Việc cần kiểm | Nguồn | Kết quả |
+|---|---|---|---|---|
+| A1 | Producer | `pipeline.toml`: `reviewer_model` theo bước (Q9), `escalate_model` cho bước `views`. Giá trị pilot 1: Opus hết. Test: `P brief` in đúng model của bước. | D45 · A1 | Chưa chạy |
+| A2 | Producer | Sau pilot 1 *(dự án)*: worker `views` = `sonnet` với `escalate_model = "opus"`; reviewer `check-blockout`, `check-views` = `sonnet`. | D45 · A2 | Chưa chạy |
+| A3 | Producer | `RUN-REPORT.md` (D41) ghi model của từng lần giao, để so pilot 1 với pilot 2. Test: report có cột model. | D45 · A3 | Chưa chạy |
+| A4 | Producer | Ghi kết quả so vào `decisions.md` D45: số vòng sửa, tỉ lệ duyệt ngay, token, thời gian của từng bước đã hạ. | D45 · A4 | Chưa chạy |
+
 
 Claude Code version checked: 2.1.317 (desktop app subagent, 2026-11-10): `review-out.md` and `worker-out.md` write OK; `report-review.md` and `report-worker.md` are blocked. CLI on the same machine: 2.1.318.
