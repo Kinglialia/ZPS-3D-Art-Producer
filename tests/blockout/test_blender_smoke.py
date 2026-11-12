@@ -129,3 +129,19 @@ def test_a_prop_without_a_base_part_still_gets_foot_crops_from_the_parts_on_the_
     foot = rr["data"]["foot"]
     assert (foot["base"], foot["scale"], foot["left"], foot["right"]) == (
         False, 1.0, [2.0, -2.0, 0.0], [-2.0, -2.0, 0.0])
+
+
+def test_render_critic_gives_the_kit_files_with_a_legend_a_reviewer_can_read(built, tmp_path):
+    """Same files and labels as render_views.py; the words of the legend in parts_*.png are dark on the margin."""
+    spec = tmp_path / "spec.json"
+    spec.write_text(json.dumps({"config": {"self_build": {"render_size": 256}}}), encoding="utf-8")
+    kit, own = tmp_path / "kit", tmp_path / "own"
+    for tool, outdir in (("self_build/render_views.py", kit), ("render_critic.py", own)):
+        r = blender("--python", TOOLS / tool, "--", "--work", built, "--mode", "critic", "--outdir", outdir,
+                    "--spec", spec)
+        assert (outdir / "renders.json").is_file(), r.stdout[-400:]
+    assert sorted(read(own / "renders.json")["artifacts"]) == sorted(read(kit / "renders.json")["artifacts"])
+    probe = ("import sys, numpy as np; from PIL import Image; g = np.asarray(Image.open(sys.argv[1]).convert('L')); "
+             "m = g[:, g.shape[1] * 3 // 4:]; print(int(m.min()))")
+    darkest = {n: int(py("-c", probe, d / "parts_front.png").stdout) for n, d in (("kit", kit), ("own", own))}
+    assert darkest["kit"] >= 200 and darkest["own"] < 60, darkest
