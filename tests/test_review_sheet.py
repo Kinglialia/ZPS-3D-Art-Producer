@@ -91,11 +91,12 @@ def test_the_original_image_is_served_whole_when_the_reviewer_asks_no_box(flow):
 @pytest.mark.parametrize("condition", ["xin ảnh close_up_door", "cận cảnh cửa, 512 px", "ảnh game_cam, 512 px",
                                        "xin ảnh game_cam box 100,200,400,500", "xin ảnh game_cam box 0.5,0,0.2,1"])
 def test_an_image_not_on_disk_a_view_note_or_a_pixel_box_still_goes_to_the_worker_render_round(flow, condition):  # noqa: F811
-    assert ask(flow, condition).endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`\n")
+    assert ask(flow, condition).splitlines()[0].endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`")
 
 
 def test_served_rounds_stop_at_served_evidence_and_the_next_ask_goes_to_the_worker(flow):  # noqa: F811
     st = flow.st
     st["evidence_served"] = 2
     save_st(st)
-    assert ask(flow, "xin ảnh game_cam").endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`\n")
+    assert ask(flow, "xin ảnh game_cam").splitlines()[0].endswith(
+        "→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`")

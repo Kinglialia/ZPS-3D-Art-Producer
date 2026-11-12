@@ -236,8 +236,21 @@ def need_evidence_v1(f):
                     findings=[finding("F1", "unclear", "param")])
 
 
-def test_need_evidence_renders_into_the_version_review_folder_and_the_reviewer_rejudges_the_same_version(flow):
-    assert need_evidence_v1(flow).endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`\n")
+def test_need_evidence_prints_the_dispatch_of_the_render_worker_c16(flow):
+    """The ingest that moves the asset to evidence ends with the dispatch line, as the one that ends in fix does: a
+    Producer that reads only the ingest output no longer waits for a turn that never comes."""
+    head, line = need_evidence_v1(flow).splitlines()
+    assert head == "house-a: review FIX (unclear=1) → blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`"
+    out = json.loads(line)
+    ev = f"production/assets/{AID}/blockout/v1/review/evidence-1"
+    assert (out["role"], out["resume"], out["brief"]) == ("worker", "w1", f"{ev}/brief-worker.md")
+    assert flow.st["state"] == "evidence_running"
+
+
+def test_need_evidence_renders_into_the_version_review_folder_and_the_reviewer_rejudges_the_same_version(flow, monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(loop, "dispatch_next", lambda cfg, st: None)
+        assert need_evidence_v1(flow).endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`\n")
     st = flow.st
     st["fix_round"] = 3
     save_st(st)
@@ -1540,3 +1553,31 @@ def test_the_first_ingest_after_a_retry_drops_the_reason_so_a_later_brief_has_no
     flow.call(loop.retry, Namespace(id=AID))
     flow.work()
     assert flow.st["retry_why"] is None
+
+
+def enable_views_front(f):
+    p = f.root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false', 'id = "views_front"'),
+                 encoding="utf-8")
+
+
+def test_an_ingest_that_approves_by_policy_prints_the_dispatch_of_the_next_step_c16(flow):
+    enable_views_front(flow)
+    policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
+    flow.cap.readouterr()
+    flow.work()
+    head, line = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass").splitlines()
+    assert head == "house-a: review PASS (0 mở) → views_front/todo. Tiếp: giao worker → `brief house-a`"
+    sent = json.loads(line)
+    assert (sent["role"], sent["agent"]) == ("worker", "zps-3dp-step-views")
+
+
+def test_an_ingest_that_approves_by_policy_prints_no_dispatch_while_the_next_step_has_no_free_slot_c16(flow):
+    enable_views_front(flow)
+    policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
+    flow.cap.readouterr()
+    flow.work()
+    p = flow.root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace("blender = 2", "blender = 0"), encoding="utf-8")
+    out = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
+    assert out.count("\n") == 1 and "views_front/todo" in out

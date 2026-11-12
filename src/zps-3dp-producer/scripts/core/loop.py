@@ -544,14 +544,15 @@ def ingest(a):
     build_outputs(cfg)
 
 
-INGEST_DISPATCH = ("review", "fix")
+INGEST_DISPATCH = ("review", "fix", "evidence", "todo")
 CHANGE_DISPATCH = ("todo", "fix", "review", "evidence", "running")
 WAIVE_DISPATCH = ("todo", "fix", "review", "evidence")  # running: the worker already has its brief
 
 
 def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
     """D27.2, D30.5: the next dispatch goes out in the same turn as the state change: the dispatch line of `P brief`.
-    A worker waits while a resource of its step has no free slot, as in `P next`. A `retry` that already moved the asset
+    An ingest ends in review, fix, evidence (a worker renders the asked image) or the todo of the next step (an auto
+    approve). A worker waits while a resource of its step has no free slot, as in `P next`. A `retry` that already moved the asset
     to running goes out: held there, nothing would show it waits."""
     if st["state"] not in states or st["state"] in FINISHED:
         return

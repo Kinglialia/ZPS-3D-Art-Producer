@@ -157,8 +157,10 @@ def test_check_texture_gets_only_the_view_set_and_two_concept_images(flow):
 
 
 def test_a_texture_pass_moves_straight_on_to_assemble_and_its_brief_is_a_script_command(flow):
-    assert flow["t2 review"]["out"] == "pilot-house: review PASS (0 mở) → assemble/todo. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = flow["t2 review"]["out"].splitlines()
+    assert head == "pilot-house: review PASS (0 mở) → assemble/todo. Tiếp: giao worker → `brief pilot-house`"
     b = flow["a1 brief"]
+    assert json.loads(line) == b["out"]
     ph = flow["t1 brief"]["text"].split("PROFILE_HASH: ")[1][:12]
     assert b["out"] == {"role": "script", "report": f"{A}/assemble/v1/report-script.md", "command": shlex.join([
         sys.executable, str(SKILL / "scripts/assemble.py"), "--blender", "blender", "--", AID, "1", ph])}

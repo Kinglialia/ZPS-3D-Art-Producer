@@ -163,7 +163,9 @@ def test_a_regen_fix_of_the_front_reads_the_failing_measure_json_first_and_resum
 
 
 def test_a_front_pass_is_approved_by_the_reviewer_since_views_front_has_no_human_gate(flow):
-    assert flow["vf2 review"]["out"] == "pilot-house: review PASS (0 mở) → views_rest/todo. Tiếp: giao worker → `brief pilot-house`\n"
+    head, line = flow["vf2 review"]["out"].splitlines()
+    assert head == "pilot-house: review PASS (0 mở) → views_rest/todo. Tiếp: giao worker → `brief pilot-house`"
+    assert json.loads(line) == flow["vr1 brief"]["out"]
     assert pick(flow["vf2 review"]["st"])["approved"] == {"blockout": 1, "views_front": 2}
 
 
