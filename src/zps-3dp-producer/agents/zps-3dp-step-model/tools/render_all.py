@@ -4,6 +4,7 @@ Blender.
 Usage: BLENDER -b --python tools/render_all.py -- --final F [--concept C/concept_shadow.png] [--size 1024]
 In this order, each as the tool runs alone:
   1. self_build/render_views.py --work F --spec F/spec.json --mode critic --outdir F/review/renders
+       --out F/review/renders/renders.json
   2. self_build/render_views.py --input F/<id>-untextured.glb --mode normal --outdir F/review/renders
        --out F/review/renders/normal.json: normal_* drawn again from the joined GLB
   3. render_review.py --final F [--concept ...] [--size ...]
@@ -38,7 +39,8 @@ def main():
     review = ["--final", final] + (["--concept", a.concept] if a.concept else []) + (["--size", a.size] if a.size else [])
     passed = [
         session.stage(render_views.main, os.path.join(renders, "renders.json"), "--work", final,
-                      "--spec", os.path.join(final, "spec.json"), "--mode", "critic", "--outdir", renders),
+                      "--spec", os.path.join(final, "spec.json"), "--mode", "critic", "--outdir", renders,
+                      "--out", os.path.join(renders, "renders.json")),
         session.stage(render_views.main, os.path.join(renders, "normal.json"), "--input", glb, "--mode", "normal",
                       "--outdir", renders, "--out", os.path.join(renders, "normal.json")),
         session.stage(render_review.main, os.path.join(final, "review", "review.json"), *review)]
