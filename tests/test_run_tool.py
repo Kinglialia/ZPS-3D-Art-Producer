@@ -412,3 +412,26 @@ def test_the_run_line_names_the_blender_of_the_preflight_and_a_step_without_blen
     plain = briefs.tools_line({"id": "a-hut"}, step | {"uses": []}, None, None, n=3)
     assert shlex.split(plain[1]) == ["RUN:", f"{SKILL_DIR}/scripts/run_tool.py", "--agent", "zps-3dp-step-blockout",
                                      "--version-dir", "production/assets/a-hut/blockout/v3"]
+
+
+SANDBOX_STACK = "6   Blender  0x0000000105cfffd4 _ZN7blender3gpu10MTLBackend18metal_is_supportedEv + 364\n"
+
+
+def test_a_blender_that_dies_in_the_codex_sandbox_exits_2_with_the_exact_line_to_run_again_not_a_tool_error(rt):
+    """Blender 5.2 segfaults in the Metal check inside the Codex sandbox. A worker who sees `error` repairs its own
+    files; the cause is the command shape, so the script names the one line that the Codex rule lets out."""
+    rt.tool("join_mesh.py", "print('never runs')\n")
+    rt.bl.write_text(f"#!/bin/sh\nprintf '%s' '{SANDBOX_STACK}' >&2\nexit 139\n", encoding="utf-8")
+    rc, out, err = rt.run("bl", "join_mesh.py", "--x", "a b", blender=True)
+    line = shlex.join([str(rt.skill / "scripts/run_tool.py"), "--blender", str(rt.bl), "--agent", "zps-3dp-step-model",
+                       "--version-dir", rt.relpath(rt.vd), "bl", "join_mesh.py", "--x", "a b"])
+    assert (rc, out) == (2, "")
+    assert "sandbox của Codex" in err and f"\n{line}\n" in err and "codex_rules.py --write" in err
+    assert not list(rt.pids.iterdir())
+
+
+def test_a_blender_segfault_of_another_cause_stays_a_tool_error(rt):
+    rt.tool("join_mesh.py", "print('never runs')\n")
+    rt.bl.write_text("#!/bin/sh\necho 'Segmentation fault in mesh code' >&2\nexit 139\n", encoding="utf-8")
+    rc, out, _ = rt.run("bl", "join_mesh.py", blender=True)
+    assert (rc, out) == (1, f"join_mesh error {rt.relpath(rt.log('join_mesh'))}\n")

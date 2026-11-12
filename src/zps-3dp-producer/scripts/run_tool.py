@@ -24,12 +24,14 @@ The script starts itself on the python of scripts/.deps/venv.
 Prints one line: `<tool> <pass|fail|error> [path ...]`. fail: a result JSON written during this run has `overall` fail or
 error, or `pass` false (core.briefs.failed_checks), and the paths are those JSON. error: the tool exited non-zero and
 wrote no such JSON, and the path is its log.
-Exit code: 0 pass; 1 fail or error; 2 refused or wrong command."""
+Exit code: 0 pass; 1 fail or error; 2 refused or wrong command, or Blender died in the Codex sandbox (the message gives
+the line to run again)."""
 from __future__ import annotations
 
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -165,6 +167,8 @@ def run(argv: list[str], skill: Path) -> int:
         if pid:
             pid.unlink(missing_ok=True)
     log = write_log(vd, real.stem, p)
+    if bl and heartbeat.sandbox_crash(p):
+        raise Refused(heartbeat.SANDBOX_HELP.format(cmd=shlex.join([str(skill / "scripts" / "run_tool.py"), *argv])))
     fails = written_fails(vd, before)
     overall = "fail" if fails else "error" if p.returncode else "pass"
     return finish(real.stem, overall, fails or ([os.path.relpath(log)] if overall == "error" else []))

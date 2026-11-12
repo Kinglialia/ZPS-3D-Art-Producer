@@ -2,6 +2,7 @@
 still write a BLOCKED report, so `ingest` moves the asset to blocked and `retry` can run it again."""
 import hashlib
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -154,3 +155,16 @@ def test_the_readme_drops_a_note_only_when_a_later_approved_reviewer_confirmed_t
     finding_doc(tmp_path, "model", 3, notes=["views v2 F3"])
     finding_doc(tmp_path, "model", 2, notes=["views v2 F2"])
     assert assemble.open_work(st) == ["- views v2 F3 [minor] top: rêu: sửa", "- views v2 F4 [minor] front: đinh: sửa"]
+
+
+def test_a_blender_that_dies_in_the_codex_sandbox_prints_the_exact_line_to_run_again(tmp_path):
+    rep = project(tmp_path)
+    exe = tmp_path / "Blender"
+    exe.write_text("#!/bin/sh\necho '7 Blender _ZN7blender3gpu10MTLBackend18metal_is_supportedEv + 364' >&2\nexit 139\n",
+                   encoding="utf-8")
+    exe.chmod(0o755)
+    cmd = [sys.executable, str(SCRIPTS / "assemble.py"), "--blender", str(exe), "--", AID, "1", "abc123"]
+    r = subprocess.run(cmd, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 1
+    assert "sandbox của Codex" in r.stderr and "\n" + shlex.join(cmd) + "\n" in r.stderr
+    assert "Blender chết trong sandbox của Codex" in rep.read_text(encoding="utf-8")

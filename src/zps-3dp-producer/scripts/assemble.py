@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -68,6 +69,10 @@ def blender(exe: str, script: Path, vd: Path, *args) -> tuple[int, str]:
                           timeout=BLENDER_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         return 1, f"Blender quá {BLENDER_TIMEOUT_S} s: {script.name}"
+    if heartbeat.sandbox_crash(r):
+        print(heartbeat.SANDBOX_HELP.format(cmd=shlex.join([sys.executable, os.path.abspath(sys.argv[0]), *sys.argv[1:]])),
+              file=sys.stderr)
+        raise Fail("Blender chết trong sandbox của Codex: chạy lại đúng dòng lệnh in ở stderr")
     return r.returncode, r.stdout + r.stderr
 
 

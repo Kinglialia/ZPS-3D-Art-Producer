@@ -23,6 +23,12 @@ VERSION = re.compile(r"^v\d+$")
 STOP = (signal.SIGTERM, signal.SIGHUP)
 CODEX_EXEC = "codex exec"
 IMAGE_TOOL = "image tool"
+SANDBOX_CRASH = "metal_is_supported"
+SANDBOX_HELP = ("Blender chết lúc khởi động: lệnh đã chạy trong sandbox của Codex, nơi Blender không mở được Metal. "
+                "Chạy lại đúng dòng sau, đứng một mình (không pipe, không &&, không cd, không biến, không thêm gì ở đầu), "
+                "để rule của Codex khớp và cho lệnh ra ngoài sandbox:\n{cmd}\n"
+                "Vẫn lỗi này thì dừng, STATUS: BLOCKED: người dùng chạy `installer/codex_rules.py --write` của bản build "
+                "rồi khởi động lại Codex.")
 _LIVE: set[subprocess.Popen] = set()
 _LIVE_LOCK = threading.RLock()
 _stopped: list[int] = []
@@ -46,6 +52,12 @@ def write(vd: Path | None, tool: str, state: str, note: str = ""):
     line = f"{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} · {tool} · {state}" + (f" · {note}" if note else "")
     with open(vd / LOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+def sandbox_crash(p: subprocess.CompletedProcess) -> bool:
+    """Blender 5.2 on macOS dies in the Metal check when it starts inside the Codex sandbox, also with -b and with any
+    --gpu-backend. The stack names this function; the exit code alone is any segfault."""
+    return bool(p.returncode) and SANDBOX_CRASH in (p.stdout or "") + (p.stderr or "")
 
 
 def last(vd: Path) -> tuple[dt.datetime, str, str] | None:
