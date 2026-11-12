@@ -10,6 +10,7 @@ SKILL = Path(__file__).resolve().parents[2] / "src/zps-3dp-producer"
 AGENT = SKILL / "agents/zps-3dp-step-texture"
 WORKER = AGENT / "zps-3dp-step-texture.md"
 REF = AGENT / "references/texture.md"
+FIX = AGENT / "references/fix.md"
 REVIEWER = SKILL / "agents/zps-3dp-check-texture.md"
 FIXED = "Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. Không dùng khi người dùng gọi trực tiếp."
 KEYS = ["light", "material", "thumbnail", "seams", "texture_note", "meshy_detail", "geometry_match", "inventory"]
@@ -73,7 +74,7 @@ def test_rubric_template_texture_keys_are_the_check_texture_keys(rubric):
 
 
 def commands():
-    text = front(WORKER)[1] + REF.read_text(encoding="utf-8")
+    text = front(WORKER)[1] + REF.read_text(encoding="utf-8") + FIX.read_text(encoding="utf-8")
     return text, re.findall(r"`RUN (?:bl )?([\w./-]+\.py)([^`]*)`", text)
 
 
@@ -84,7 +85,8 @@ def test_worker_points_only_at_references_and_tools_that_exist():
     tools = {s for s, _ in calls}
     assert tools == {"check_inputs.py", "texture_complexity.py", "id_map.py", "render_texture.py", "tex_measure.py",
                      "check_meshy.py", "tone_fix.py", "base_fill.py", "render_paint_views.py", "project_views.py",
-                     "seam_fix.py", "crop_edit.py", "../../zps-3dp-step-views/tools/concept_colors.py"}
+                     "seam_fix.py", "crop_edit.py", "make_paint_prompts.py",
+                     "../../zps-3dp-step-views/tools/concept_colors.py"}
     assert all((AGENT / "tools" / t).resolve().is_file() for t in tools)
 
 
@@ -114,7 +116,8 @@ def test_every_tool_command_is_a_run_line_so_the_exit_code_and_the_log_come_from
 
 
 def test_a_fix_round_keeps_the_review_evidence_of_the_version_it_fixes_and_rerenders_only_what_steps_5_and_6_write():
-    _, body = front(WORKER)
+    body = FIX.read_text(encoding="utf-8")
+    assert "Brief có `P` và `TOP_FIX`: làm theo `R/fix.md`" in front(WORKER)[1]
     assert ("Chép `P/final/` vào `F`, cả `review/` (`id_map.*`, `meshy_albedo.png`, `checks/meshy.json` là bằng chứng "
             "của lớp đang sửa), trừ file bước 5–6 ghi lại: `review/lit_*`, `review/unlit_*`, `review/thumb.png`, "
             "`review/renders.json`, `review/render_texture.json`, `review/checks/tex_measure.json`.") in body
@@ -151,3 +154,26 @@ def test_tone_fix_and_seam_fix_get_the_inputs_the_new_checks_need():
     text, calls = commands()
     got = {s: a for s, a in calls}
     assert "--concept-colors" in got["tone_fix.py"] and "--model M" in got["seam_fix.py"]
+
+
+def test_each_reference_says_when_to_read_it_and_the_fix_round_text_lives_only_in_fix_md_q11():
+    _, body = front(WORKER)
+    for ref in ("texture.md", "fix.md"):
+        assert re.search(rf"^- `R/{re.escape(ref)}`: (?:chỉ )?đọc (?:khi|ở) ", body, re.M), ref
+    assert "`repaint`:" not in body and "`meshy_regen`:" not in body
+
+
+def test_the_worker_and_the_references_carry_no_decision_tag_except_the_two_that_test_watch_pins_q11():
+    tags = lambda s: re.findall(r"\bD\d{2}(?:\.\d+)?\b", s)
+    assert tags(front(WORKER)[1]) == ["D33.2", "D33.8"]
+    assert tags(REF.read_text(encoding="utf-8")) == tags(FIX.read_text(encoding="utf-8")) == []
+
+
+def test_shared_gen_images_stand_before_the_first_prompt_so_every_view_gets_them_l12():
+    """gen_image_codex.py gives an --image placed after a --prompt to that job only."""
+    _, body = front(WORKER)
+    line = next(x for x in body.splitlines() if x.startswith("- Gen ảnh:"))
+    assert line.index("--image <ảnh chung>") < line.index("--prompt") < line.index("--image <ảnh riêng>")
+    ref = REF.read_text(encoding="utf-8").split("## 3. VẼ MỚI", 1)[1].split("## 4.", 1)[0]
+    assert "Gen cả 8 view trong một lệnh" in ref and "`--image C/concept_albedo.png --size <size>` trước `--prompt` đầu tiên" in ref
+    assert "Khi `GEN_ARGS` có `--batch`:" in ref and "`GEN_ARGS` có `--batch` (" not in ref
