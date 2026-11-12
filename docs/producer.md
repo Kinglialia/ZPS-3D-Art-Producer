@@ -64,7 +64,7 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 - Thẻ có `views: none` thì bỏ bước `views`. Ảnh vẽ bằng Codex chỉ chạy khi `views` khác `none` (D44.2).
 - Cổng blockout có thêm ảnh mặt bên tô theo mã vật liệu: `mat_left.png`, `mat_right.png`, `mat_back.png`, và `mat_top.png` khi `views: full_top`. Script render các ảnh này, không gọi Codex. Anh duyệt bố cục các mặt cùng lúc duyệt blockout (D44.1).
 - `concept_colors.json` không thuộc bước `views`. Nó đến từ intake (mục 9, D43.1) và bước `texture` dùng nó ở mọi giá trị `views` (D44.4).
-- Project đang chạy v0.7.1 có asset ở `views_front` hoặc `views_rest`: script ánh xạ sang `views` khi nâng cấp, hoặc `P validate` từ chối và nêu cách làm lại.
+- Project v0.7.1 có asset ở `views_front` hoặc `views_rest`: sửa `pipeline.toml`, rồi `P migrate <id>` ánh xạ asset sang `views`; `P next`, `P validate` nêu lệnh này.
 
 **Tên agent và chặn gọi nhầm** (D23.2, thay phần tên agent của D6.5):
 - Agent của Producer đặt tên theo **bước pipeline**, không theo vai trò: worker `zps-3dp-step-<bước>`, reviewer `zps-3dp-check-<bước>`. Tên hiển thị `3DP Step · <Bước>`, `3DP Check · <Bước>`. Lý do: kit có `zps-concept-views`, `zps-3d-artist`, `zps-texture-artist`; tên theo vai trò làm Claude chọn nhầm khi anh gọi skill của kit.
@@ -152,7 +152,7 @@ PRIOR:
 
 **Script tính, reviewer không ghi; contract đọc dung thứ** (D38.1, D38.2, D38.6, D38.8):
 - Script tính `COUNTS` (số finding mỗi mức) và bộ id `TOP_FIX` của loại lô. Reviewer không ghi hai trường này. Reviewer còn ghi mà lệch số của script thì `ingest` chỉ ghi cảnh báo vào ledger, không từ chối.
-- Script điền các key `RUBRIC` mà một file JSON gate đã quyết, và chỉ khi file đó có. Thiếu file thì key để reviewer chấm. Brief reviewer chỉ liệt kê key cần nhìn.
+- Script điền các key `RUBRIC` mà một file JSON gate đã quyết, và chỉ khi file đó có. Thiếu file thì key để reviewer chấm. Brief reviewer liệt kê key script đã điền; key còn lại reviewer đọc trong `rubric.md`. Hiện chỉ bước `model` có key điền sẵn (`density`, `blockout_match`).
 - Reviewer nhận `vN/review/summary.json` nhỏ thay cho `assembly.json` và mọi JSON gate: mỗi part một dòng (số, tên, primitive, vật liệu, tag, cỡ, kết quả gate; khoảng 100 B), rồi các số mỗi key rubric cần (`numbers`). Bước không có part và không có số thì không có file.
 - `ingest` đọc contract dung thứ hình thức: lấy giá trị từ phần đầu (ghi chú trong ngoặc phía sau không tính), không phân biệt hoa thường, bỏ `**` và dấu backtick quanh khóa, nối dòng thụt lề, nhận `-` và `–` trong `ACCEPTED_FAIL`. Mọi kiểm về nội dung giữ nguyên.
 - Dòng không thụt lề trong `FINDINGS` hoặc `PRIOR` là lỗi contract. `ingest` nêu đúng dòng đó.
@@ -236,7 +236,7 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 - Worker chỉ viết phần cần phán đoán: part graph, hàm `custom`, mô tả mặt khuất, chỗ sửa, ghi chú.
 - Dựng một lần rồi gate mọi part. Model mở Blender 3 lần thay cho 8, `assemble` mở 1 lần thay cho 6.
 - File kit đóng băng không sửa. Tool mới nằm cạnh và gọi lại hàm của kit.
-- `ingest` tự chạy mọi check thuần Python của bước, không chỉ `counts`. Check chưa chạy hoặc JSON không đọc được là `error`, không tính là pass (D36.4). JSON gate bắt buộc nằm trong `outputs` của bước.
+- `ingest` chạy lại `gate_all.py` của bước `blockout`. Bước `views`, `model`, `texture` chưa chạy lại check khi ingest; `texture` chỉ kiểm `render_fresh`. Check chưa chạy hoặc JSON không đọc được là `error`, không tính là pass (D36.4). JSON gate bắt buộc nằm trong `outputs` của bước.
 - Thiếu một output thì `retry` resume worker cũ với dòng "thiếu output: X", không dựng lại cả bước.
 
 **Brief bước `texture`:** script sinh brief từ các `final/` đã duyệt (`blockout` để đọc `sources.json`, `model`, và `views` khi thẻ có) và file concept trong `_approved/<id>/`. Script chép mục `ISSUES` của report bước `model` đã duyệt vào brief. Không có file handoff. Brief ghi dòng `CONCEPT_COLORS:` (mục 9) ở mọi giá trị `views`, và chép các khóa profile mà worker cần thay vì bảo worker đọc cả `PROJECT-PROFILE.yaml`.
@@ -324,9 +324,9 @@ Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên
 - `P next` hiện mỗi việc đang chạy một dòng (bước, version, vai trò, thời gian, nhịp tim gần nhất, hạn chót, trạng thái). `P stats` đếm kẹt, nudge, giao lại. Trang duyệt gắn nhãn "kẹt".
 - Người dùng thoát bằng Esc rồi `P retry`; trạng thái không mất.
 - **Phiên chính không đứng im** (D39.1, D39.2): mục "Nhận kết quả" của `SKILL.md` là danh sách đánh số với ba luật chống đứng im, không có ngoại lệ. Lời mời truyền `--tokens` bị xóa, vì chính nó gây lần chờ ở Run 5. Hook `Stop` của phiên chính (`P on-main-stop`) từ chối dừng khi còn lần giao đã có report mà chưa ingest, hoặc còn dòng giao việc script đã in mà chưa giao. Hook chỉ làm sau khi kiểm trên bản Claude Code đang dùng. Không chạy được thì giữ luật trong `SKILL.md` và ghi kết quả kiểm vào `decisions.md` D39.1.
-- **`run_tool.py <tool> [args]`** (D36.1) là điểm vào cho mọi lệnh tool của worker; dòng `RUN:` của brief cho tiền tố lệnh đầy đủ.
+- **`run_tool.py <tool> [args]`** (D36.1) là điểm vào cho mọi lệnh tool của worker, trừ lệnh gen ảnh (`GEN_IMAGE`) và Meshy (`MESHY`); dòng `RUN:` của brief cho tiền tố lệnh đầy đủ.
   - Chỉ nhận tool nằm trong `agents/*/tools/` và `scripts/` của skill, sau khi resolve đường dẫn. Đường dẫn ngoài hai chỗ đó, symlink ra ngoài và file trong `production/` bị từ chối (thoát 2, không chạy).
-  - Ghi và xóa file PID khi tool dùng Blender hoặc Codex.
+  - Ghi và xóa file PID khi tool chạy trong Blender (`bl`); `gen_image_codex.py` tự ghi PID Codex.
   - Mã thoát là 1 khi tool thoát khác 0, hoặc khi JSON kết quả vừa ghi có `overall` là `fail` hay `error`.
   - Stdout và stderr vào `vN/work/logs/<tool>.log`. Lệnh in đúng một dòng: tên tool, `overall`, đường dẫn JSON fail.
   - `--blender` từ brief được truyền cho `setup_deps.sh`, để cài deps đúng bản Blender.
@@ -402,7 +402,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 - **MAP-LAYOUT:** nếu profile có `has_map: true`, intake bắt buộc có `<id>.layout.md`. Nếu `has_map: false`, thẻ bắt buộc có `size_m: {w, d, h}` (mét); `check_card.py` kiểm trường này. Blockout lấy W×D×H từ `size_m` (D20.9).
 - **`views`** (D35, D43.6): `none | back | full | full_top`. Trường bắt buộc, không còn giá trị mặc định. Quyết định bước `views` gen những ảnh nào; `none` bỏ bước `views`. Giá trị lạ hoặc thiếu → `check_card.py` fail. Luật chọn (D44.2): `none` cho prop, cây, đá và vật đối xứng; khác `none` khi một mặt khuất có thiết kế riêng.
 - **`counts`** (D30.6, D32.5, D34.3, D43.5): trường bắt buộc; `{}` hợp lệ khi asset không có thành phần lặp lại, và intake cảnh báo khi `counts` rỗng. Giá trị là số nguyên ≥ 0; giá trị sai → `check_card.py` fail. Danh sách khóa là `counts_keys` của profile dự án (khóa và nghĩa); khóa ngoài danh sách → `check_card.py` cảnh báo. Gate blockout và model so số của thẻ với param cùng tên trong `fixed_params`, hoặc với số part có `tag: <khóa>`. Lệch → gate fail. Không part nào dùng param đếm của một khóa → gate fail. Skill không viết cứng khóa nào.
-- **Trường thẻ thêm ở D43**: `view_side: left | right`, bắt buộc khi có ảnh 3/4 (`view: '34'` hoặc `concept_34.png`). `light: {from: left | right | front, elevation_deg}`, tùy chọn; thiếu thì worker đoán và ghi vào mục tự quyết. `marks: [{name, z_m}]`, tùy chọn, 2 đến 3 mốc cao thấy rõ trên concept; có thì `check_proportion.py` so với blockout. `bottom_visible: false` (mặc định) và `text_codes: []` (mã vật liệu có chữ). `check_card.py` kiểm kiểu của các trường này khi có. Brief blockout ghi `VIEW_SIDE:`; brief model ghi `LIGHT:` khi thẻ có.
+- **Trường thẻ thêm ở D43**: `view_side: left | right` theo ảnh (nửa ảnh 3/4 có mặt bên của vật), bắt buộc khi có ảnh 3/4 (`view: '34'` hoặc `concept_34.png`). `light: {from: left | right | front, elevation_deg}`, tùy chọn; thiếu thì worker đoán và ghi vào mục tự quyết. `marks: [{name, z_m}]`, tùy chọn, 2 đến 3 mốc cao thấy rõ trên concept; có thì `check_proportion.py` so với blockout. `bottom_visible: false` (mặc định) và `text_codes: []` (mã vật liệu có chữ). `check_card.py` kiểm kiểu của các trường này khi có. Brief blockout ghi `VIEW_SIDE:`; brief model ghi `LIGHT:` khi thẻ có.
 - **Màu concept** (D43.1, D43.2): Material Handoff có cột "Ô lấy màu" (`x, y, w, h` pixel trên `concept_albedo.png`) và một dòng `BG: #RRGGBB`. `P intake` đo trung vị trong ô và ghi `assets/<id>/concept_colors.json`. Intake cảnh báo khi hex lệch số đo quá dE 6, khi ô nằm ngoài ảnh, và khi một mã không có ô. Brief ghi dòng `CONCEPT_COLORS:` trỏ tới file này. Asset cũ không có cột: worker chọn ô như trước và brief nói rõ.
 - Thiếu hoặc sai → không đăng ký. Producer báo anh theo nhóm lỗi.
 - Loại asset lấy từ `type` trong thẻ (`building`, `prop`, `tree`, `rock`). Loại `character`, `creature`: báo v1 chưa hỗ trợ (D9).
