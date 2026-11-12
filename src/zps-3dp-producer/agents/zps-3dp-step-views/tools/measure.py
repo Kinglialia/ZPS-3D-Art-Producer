@@ -16,8 +16,9 @@ the new ones, so a front that failed its own measure still fails here. V6: with 
 of a material is the measured front, and the concept colour only for a material the front does not show.
 --mirror-right (V10, symmetric left_right): before measuring, right.png is made again as left.png mirrored, so a left made
 again never leaves a stale right that the colour match then fails.
-V15: per view, the checks border (the object touches the image border: fail), components (the count of separate shapes
-differs from the guide: fail), ring (share of the object rim near the background colour: info), light (luminance change
+V15: per view, the checks border (object pixels on the outer ring of the image, at 512 px, at least BORDER_MIN_SHARE of
+its perimeter: the object is cut, fail), components (the count of separate shapes, 8-connected, differs from the guide:
+fail), ring (share of the object rim near the background colour: info), light (luminance change
 across each material region, a share of its mean: info).
 L9 --pick-best <gen dir>: for a view with a failing check (`regen`, border or components) whose first image <gen dir>/<view>-1.png differs from <final>/<view>.png
 (the regen), the first image is measured too, with the same options. The view keeps the image with the better measure:
@@ -54,6 +55,7 @@ from root_guard import require_root  # noqa: E402
 TOOL = "views/measure"
 BLIND_DE = 10.0
 MIN_COMPONENT_PX = round(0.002 * mv.N * mv.N)
+BORDER_MIN_SHARE = 0.005  # provisional until the pilot: fewer object pixels on the outer ring are noise, not a cut
 RING_FACTOR = 1.5
 LIGHT_NOTE_AT = 0.25
 mv.flood_background = lambda bgish: bgish
@@ -137,7 +139,7 @@ def components(mask):
         while stack:
             cy, cx = stack.pop()
             n += 1
-            for ny, nx in ((cy + 1, cx), (cy - 1, cx), (cy, cx + 1), (cy, cx - 1)):
+            for ny, nx in ((cy + dy, cx + dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx):
                 if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not seen[ny, nx]:
                     seen[ny, nx] = True
                     stack.append((ny, nx))
@@ -163,9 +165,10 @@ def metric_checks(v, gen, fr, mat_names, threshold, may_fail):
     bad = "fail" if may_fail else "info"
     mask = gen["mask"]
     touch = int(mask[0].sum() + mask[-1].sum() + mask[1:-1, 0].sum() + mask[1:-1, -1].sum())
+    cut = touch >= BORDER_MIN_SHARE * 2 * (mask.shape[0] + mask.shape[1] - 2)
     n_guide, n_image = components(fr["bm"]), components(fr["gm"])
-    out = [common.check(f"border.{v}", bad if touch else "pass", value=touch,
-                        note="vật chạm mép ảnh: bị cắt" if touch else None),
+    out = [common.check(f"border.{v}", bad if cut else "pass", value=touch,
+                        note="vật chạm mép ảnh: bị cắt" if cut else None),
            common.check(f"components.{v}", "pass" if n_guide == n_image else bad, value={"guide": n_guide, "image": n_image},
                         note=None if n_guide == n_image else "số khối rời khác guide: thiếu hoặc thừa prop")]
     if gen["bg"] == "alpha":

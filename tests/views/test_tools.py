@@ -596,6 +596,32 @@ def test_a_gen_that_touches_the_image_border_fails_because_the_object_is_cropped
     assert (rc, checks(check)["border.front"][0]) == (0, "pass")
 
 
+def test_a_few_stray_pixels_on_the_image_border_are_no_cropped_object_but_a_run_of_them_is(tmp_path):
+    """A speck of noise on the outer ring that outlives the speck filter failed border and asked for a paid regen.
+    The image is measured at 512 px, so 0.5 % of the perimeter is 10 px: a run of 34 px is an object cut by the edge."""
+    for name, (x0, x1) in (("speck", (300, 306)), ("run", (300, 340))):
+        img = wall_trim_gen(tmp_path / name / "final/front.png", trim=SLATE)
+        im = Image.open(img)
+        im.paste(BROWN, (x0, 0, x1, 6))
+        im.save(img)
+        measure(tmp_path / name)
+    assert [checks(tmp_path / n / "final/review/checks/measure.json")["border.front"] for n in ("speck", "run")] == [
+        ("pass", 5), ("fail", 34)]
+
+
+def test_two_shapes_joined_only_corner_to_corner_count_as_one():
+    """The frame is a NEAREST downscale, so a thin diagonal branch or connector keeps only corner contacts; counting
+    those as a split failed components on a correct image."""
+    sys.path.insert(0, str(TOOLS))
+    import numpy as np
+    import measure as M
+    m = np.zeros((200, 200), bool)
+    m[20:80, 20:80] = m[120:180, 120:180] = True
+    for k in range(80, 120):
+        m[k, k] = True
+    assert M.components(m) == 1
+
+
 def test_a_front_that_touches_the_border_is_only_info_when_the_set_is_measured_against_it_v15(tmp_path):
     wall_trim_gen(tmp_path / "final/front.png", margin=0)
     g = wall_trim_guides(tmp_path / "guides", ("front", "back"))
