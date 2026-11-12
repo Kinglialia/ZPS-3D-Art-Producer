@@ -11,7 +11,7 @@ import re
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, unquote, urlsplit
 
-from . import findings
+from . import findings, purge
 from .contract import FIELDS
 from .loop import next_action, shown
 from .report import NAME as REPORT, used
@@ -157,6 +157,7 @@ def asset_view(cfg: dict, st: dict, step: str | None = None, n: int | None = Non
         "ask": {"kind": ask["kind"], "price": st.get("meshy_price")} if ask else None,
         "report": link(DELIVER / aid / REPORT) if current and st["state"] == "done" and (DELIVER / aid / REPORT).is_file()
         else None,
+        "purge": purge.offer_notice(cfg, st) if waiting and step == "assemble" else None,
     }
 
 

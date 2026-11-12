@@ -31,6 +31,7 @@ textarea{margin-top:8px}
 button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:8px 16px;cursor:pointer;font:inherit}
 button.ok{background:var(--accent);color:#fff;border-color:var(--accent)}
 .msg{margin-top:6px;font-weight:600}
+.warn{margin-top:8px;color:var(--warn);font-weight:600}
 .marks{margin-top:8px}
 .mrow{display:flex;gap:6px;align-items:center;margin:4px 0}
 .mrow .num{background:#e61e1e;color:#fff;border:0;border-radius:99px;min-width:32px;padding:4px 8px}
@@ -78,7 +79,7 @@ const svgEl = (tag, attrs) => {
   return e;
 };
 const unit = v => Math.round(Math.min(1, Math.max(0, v)) * 1e4) / 1e4;
-const msgs = {}, marks = {}, drafts = {};
+const msgs = {}, marks = {}, drafts = {}, confirming = {};
 let transport = { load: null, send: null }, last = null, view;
 
 async function modelURL(it) {
@@ -289,8 +290,15 @@ function controls(a, items, open) {
   return [
     L.length ? $("div", { className: "marks" }, $("p", { className: "muted", textContent: `Vùng khoanh (${L.length}), gửi kèm nút bấm:` }), rows) : null,
     form,
+    a.purge ? $("p", { className: "warn", textContent: a.purge }) : null,
     $("div", { className: "row" }, where, acts.map(([t, act]) => $("button", {
-      textContent: t, className: act === "approve" ? "ok" : "", onclick: () => send(act) }))),
+      textContent: act === "approve" && a.purge && confirming[a.id] === (a.key ?? "") ? "Bấm lần nữa để duyệt và xóa" : t,
+      className: act === "approve" ? "ok" : "",
+      onclick: () => {
+        if (act === "approve" && a.purge && confirming[a.id] !== (a.key ?? "")) { confirming[a.id] = a.key ?? ""; return render(last); }
+        delete confirming[a.id];
+        send(act);
+      } }))),
     out];
 }
 
@@ -310,6 +318,7 @@ function card(a) {
     ...a.summary.map(l => $("p", { textContent: l })),
     a.more.length ? $("details", {}, $("summary", { textContent: "Xem thêm", className: "muted" }), ...a.more.map(l => $("p", { textContent: l }))) : null,
     a.reason ? $("p", { className: "muted", textContent: a.reason }) : null,
+    a.report ? $("p", {}, $("a", { href: a.report, textContent: "Report thời gian và token" })) : null,
     a.open.length ? findingList(a.open) : null,
     a.preference.length ? $("details", {}, $("summary", { textContent: `Khẩu vị (${a.preference.length})`, className: "muted" }), findingList(a.preference)) : null,
     can ? controls(a, items, open) : null);

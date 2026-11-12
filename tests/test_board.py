@@ -1,5 +1,7 @@
 import http.client
 import json
+import shutil
+import subprocess
 import threading
 from argparse import Namespace
 
@@ -7,6 +9,7 @@ import pytest
 
 from core import board, findings, intake, loop
 from core.state import ROOT, load_cfg, load_st, locked, save_st, vdir
+from shared import P
 
 AID = "house-a"
 PNG = b"\x89PNG"
@@ -96,7 +99,7 @@ def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_
             {"line": "F2 [preference] cửa — cửa hơi hẹp — rộng thêm — acceptance: cửa ≥ 1 m",
              "fields": {"viewing_condition": "front ortho", "consequence": "sai silhouette", "confidence": "high",
                         "preserve": "chiều cao tường"}}],
-        "redo_steps": [], "key": "blockout-v2-1", "ask": None, "report": None,
+        "redo_steps": [], "key": "blockout-v2-1", "ask": None, "report": None, "purge": None,
     }
 
 
@@ -404,3 +407,94 @@ def test_the_board_hides_approve_for_a_version_no_reviewer_passed_d36_2_c1(proje
     save_st(st)
     assert board_buttons(project, {"project": "Pilot", "assets": [view()]}) == ["Model 3D", "Duyệt", "Cần sửa", "Ghi chú"]
     assert board_buttons(project, unreviewed) == ["Model 3D", "Cần sửa", "Ghi chú"]
+
+
+LINE = "Sẽ xóa 21 file, 24.4 KB; sau lệnh này không `redo` được."
+DOM = """
+const fs = require("fs"), vm = require("vm");
+class El {
+  constructor(tag) { this.tag = tag; this.children = []; this.style = {}; this.className = ""; this.textContent = ""; }
+  append(...k) { this.children.push(...k.map(x => typeof x === "string" ? Object.assign(new El("#text"), { textContent: x }) : x)); }
+  replaceChildren(...k) { this.children = []; this.append(...k); }
+  addEventListener() {} setAttribute() {} remove() {} getBoundingClientRect() { return { left: 0, top: 0, width: 1, height: 1 }; }
+  all() { return [this, ...this.children.flatMap(c => c.all())]; }
+}
+const ids = {};
+global.document = { createElement: t => new El(t), createElementNS: (n, t) => new El(t), head: new El("head"),
+                    body: new El("body"), getElementById: id => ids[id] ||= new El("div"), addEventListener() {} };
+global.window = { BOARD: { mode: "none" }, addEventListener() {} };
+global.addEventListener = () => {};
+global.fetch = async () => { throw new Error("no network"); };
+vm.runInThisContext(fs.readFileSync(process.argv[2], "utf8"));
+const payload = JSON.parse(fs.readFileSync(0, "utf8")), sent = [];
+const find = (tag, text) => ids.app.all().filter(e => e.tag === tag && (text === undefined || e.textContent === text));
+(async () => {
+  await window.Board.start({ load: async () => payload, send: async body => { sent.push(body); return { ok: true, applied: true, message: "ok" }; } });
+  const out = { warn: find("p").filter(e => e.className === "warn").map(e => e.textContent),
+                buttons: find("button").map(e => e.textContent), links: find("a").map(e => [e.textContent, e.href]) };
+  const approve = () => find("button").find(e => e.className === "ok");
+  approve().onclick();
+  out.after_first = { sent: sent.length, buttons: find("button").map(e => e.textContent) };
+  approve().onclick();
+  out.after_second = sent.map(b => [b.action, b.id, b.offer]);
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
+def page_card(**over):
+    card = {"id": AID, "step": "assemble", "version": 1, "waiting": True, "header": "House A · assemble v1", "sheet": None,
+            "images": [], "glb": None, "summary": [], "more": [], "reason": "", "label": "", "stale": None, "decided": None,
+            "open": [], "preference": [], "redo_steps": [], "key": "assemble-v1-1", "ask": None, "report": None,
+            "purge": LINE}
+    return card | over
+
+
+def run_board_js(tmp_path, card):
+    (tmp_path / "dom.js").write_text(DOM, encoding="utf-8")
+    js = P.parent / "board" / "board.js"
+    r = subprocess.run(["node", str(tmp_path / "dom.js"), str(js)], input=json.dumps({"project": "Pilot", "assets": [card]}),
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+
+
+@needs_node
+def test_the_duyet_2_button_shows_the_deletion_line_and_sends_only_on_the_second_click_d40_4(tmp_path):
+    """The page cannot undo a delete, so the first click only asks: nothing reaches the Producer until the second."""
+    out = run_board_js(tmp_path, page_card())
+    assert out["warn"] == [LINE]
+    assert out["buttons"] == ["Duyệt", "Cần sửa", "Ghi chú"]
+    assert out["after_first"] == {"sent": 0, "buttons": ["Bấm lần nữa để duyệt và xóa", "Cần sửa", "Ghi chú"]}
+    assert out["after_second"] == [["approve", AID, "assemble-v1-1"]]
+
+
+@needs_node
+def test_a_card_without_a_deletion_approves_on_the_first_click_d40_4(tmp_path):
+    """Intermediate steps, Producer approvals, `purge: off` and `keep` have no line, so no extra click."""
+    out = run_board_js(tmp_path, page_card(purge=None))
+    assert out["warn"] == []
+    assert (out["after_first"]["sent"], out["after_second"]) == (1, [["approve", AID, "assemble-v1-1"]] * 2)
+
+
+@needs_node
+def test_a_done_card_links_the_run_report_and_a_card_without_one_has_no_link(tmp_path):
+    out = run_board_js(tmp_path, page_card(purge=None, report=f"/d/{AID}/RUN-REPORT.md"))
+    assert out["links"] == [["Report thời gian và token", f"/d/{AID}/RUN-REPORT.md"]]
+    assert run_board_js(tmp_path, page_card(purge=None))["links"] == []
+
+
+def test_the_served_script_has_the_report_link_and_the_two_step_confirm_d40_4():
+    """Without node the behaviour tests skip; the code that matters must still be in the file the board serves."""
+    js = (P.parent / "board" / "board.js").read_text(encoding="utf-8")
+    assert 'a.report ? $("p", {}, $("a", { href: a.report, textContent: "Report thời gian và token" }))' in js
+    assert "Bấm lần nữa để duyệt và xóa" in js and "a.purge" in js
+
+
+def test_the_remote_page_gets_the_line_from_the_row_so_it_needs_no_code_of_its_own_d40_4():
+    """remote.html spreads each pushed row into the payload that board.js renders, `purge` included."""
+    html = (P.parent / "board" / "remote.html").read_text(encoding="utf-8")
+    assert "...r," in html and "window.Board.start" in html
