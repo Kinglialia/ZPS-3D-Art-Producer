@@ -804,7 +804,7 @@ def run(a):
         d = vdir(a.id, sid, n)
         (d / "final").mkdir(parents=True, exist_ok=True)
         (d / "work").mkdir(parents=True, exist_ok=True)
-        why = st.get("retry_why") if s == "running" else None
+        why = st.get("retry_why") if s == "running" and st.get("worker_agent_id") else None
         fix = s == "fix" or (s == "running" and (st.get("fix_round", 0) > 0 or bool(st.get("direct"))))
         if s == "fix" and (base := st.get("direct") or st.get("fix_base")) and step.get("fix_copy_exclude"):
             prepare_final(vdir(a.id, sid, base), d, step["fix_copy_exclude"])

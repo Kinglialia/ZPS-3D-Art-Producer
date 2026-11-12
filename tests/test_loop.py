@@ -1737,6 +1737,19 @@ def test_a_retry_after_needs_context_resumes_the_same_worker_with_its_note_l16(f
     assert "dừng ở: NEEDS_CONTEXT: thiếu file layout." in flow.text(sent)
 
 
+def test_a_new_agent_on_a_retried_version_is_never_told_it_is_the_session_that_stopped(flow):
+    """The stall rung gives the same version to a new agent (resume null); "Bạn là phiên đó, làm tiếp" told it to trust
+    a session it never was."""
+    flow.work(skip=["blockout.md"])
+    flow.call(loop.retry, Namespace(id=AID))
+    st = flow.st
+    st["dispatches"][-1]["ended"] = {"at": "2026-11-12 10:00:00", "why": "kẹt"}
+    st["worker_agent_id"] = None
+    save_st(st)
+    again = flow.brief()
+    assert again["resume"] is None and "## Lần giao trước" not in flow.text(again)
+
+
 def test_the_first_ingest_after_a_retry_drops_the_reason_so_a_later_brief_has_no_stale_section_l16(flow):
     flow.work(status="NEEDS_CONTEXT")
     flow.call(loop.retry, Namespace(id=AID))
