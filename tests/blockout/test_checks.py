@@ -1,5 +1,6 @@
 """Pure blockout checks (docs/agents/blockout.md §5, §9): plain Python, one JSON, one line, exit 1 on fail."""
 import copy
+import json
 
 import pytest
 
@@ -195,6 +196,37 @@ def test_layout_fails_on_stale_assembly(tmp_path, run_check):
     r = run_check("check_layout", "--work", write_build(tmp_path / "w", stale=True))
     assert_fail(r)
     assert r.check("assembly.fresh")["status"] == "fail"
+
+
+def partial_build(tmp_path, upto, total=6, rows=3):
+    """An assembly.json written by `assembly.py --upto`: the first `rows` parts of the graph."""
+    w = write_build(tmp_path / "w", rows=HUT_ROWS[:rows])
+    path = w / "assembly.json"
+    asm = json.loads(path.read_text(encoding="utf-8"))
+    asm["data"].update(upto=upto, parts_total=total)
+    path.write_text(json.dumps(asm), encoding="utf-8")
+    return w
+
+
+def test_layout_fails_on_a_partial_build_even_when_its_bbox_matches_because_the_last_parts_are_still_unchecked(
+        tmp_path, run_check):
+    """The base, walls and roof already span the whole 4 x 4 x 3.7 box, so a bbox-only check would pass a half-built hut."""
+    r = run_check("check_layout", "--work", partial_build(tmp_path, upto=3))
+    assert_fail(r)
+    assert r.check("layout.bbox")["status"] == "pass"
+    assert r.check("layout.complete") == {"status": "fail", "value": {"upto": 3, "parts_total": 6}}
+
+
+@pytest.mark.parametrize("upto", [6, None])
+def test_layout_passes_a_full_build_whether_or_not_upto_was_given(tmp_path, run_check, upto):
+    r = run_check("check_layout", "--work", partial_build(tmp_path, upto=upto, rows=6))
+    assert_pass(r)
+    assert r.check("layout.complete")["status"] == "pass"
+
+
+def test_the_other_checks_still_run_on_a_partial_build_because_only_layout_judges_completeness(tmp_path, run_check):
+    w = partial_build(tmp_path, upto=3)
+    assert run_check("check_base", "--work", w).overall == "pass"
 
 
 # ---------------------------------------------------------------- check_base

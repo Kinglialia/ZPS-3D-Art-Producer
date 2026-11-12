@@ -3,6 +3,7 @@
 Usage: python3 tools/check_layout.py --work <dir> [--out <json>]
 Reads <dir>/part_graph.json, sources.json, assembly.json (per-part bbox rows; no rebuild).
 layout.includes_base false: parts tagged base are left out of the bbox.
+Fails when assembly.json came from `assembly.py --upto n` and holds fewer parts than the graph.
 Writes <dir>/review/checks/layout.json. Exit 0 pass, 1 fail, 2 error.
 Also holds the loader and CLI that check_base, check_support, check_markers, check_fix share.
 """
@@ -69,9 +70,17 @@ def bbox_check(graph, rows, sources):
                "parts": len(sel), "partial": len(rows) < len(graph.get("parts", []))}
 
 
+def completeness(work):
+    data = common.read_json(os.path.join(work, "assembly.json"))["data"]
+    upto, total = data.get("upto"), data.get("parts_total")
+    done = upto is None or total is None or upto >= total
+    return common.check("layout.complete", "pass" if done else "fail", value={"upto": upto, "parts_total": total},
+                        note=None if done else f"assembly.json holds {upto} of {total} parts: build without --upto")
+
+
 def run(a, graph, rows, sources):
     c, data = bbox_check(graph, rows, sources)
-    return [c], data, None
+    return [c, completeness(a.work)], data, None
 
 
 if __name__ == "__main__":
