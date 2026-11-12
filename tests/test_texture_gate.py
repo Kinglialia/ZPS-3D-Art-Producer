@@ -2,10 +2,13 @@
 UNFIXABLE, on the real CLI. Each test drives a fresh pilot to texture/todo with fake agents; no paid call."""
 import json
 import os
+import shlex
+import subprocess
+import sys
 
 import yaml
 
-from flowkit import AID, A, PROJECT_KEY, counts, to_texture
+from flowkit import AID, A, FAKE_MESHY, PROJECT_KEY, SHELL_KEY, brief_lines, counts, to_texture
 from shared import run
 
 
@@ -201,6 +204,82 @@ def test_a_paid_task_without_its_glb_is_named_in_the_next_brief_and_resumed_on_i
     f.meshy("t1 again", vd, "")
     assert (f.cp["t1 again meshy"]["rc"], list(budgets(tmp_path).values())) == (
         0, [{"max_credits": 10, "used_credits": 10}])
+
+
+def meshy_with(f, name, vd, mode, *extra):
+    """The worker's Meshy command from the brief, with extra flags (flowkit's f.meshy takes none)."""
+    text = f.cp[name + " brief"]["text"]
+    model = f.root / A / f"model/v{f.st()['approved']['model']}/final/{AID}-untextured.glb"
+    env = {**os.environ, "PYTHONPATH": str(FAKE_MESHY), "FAKE_MESHY_LOG": str(f.root / "meshy.jsonl"),
+           "FAKE_MESHY_MODE": mode, "MESHY_API_KEY": SHELL_KEY}
+    cmd = [sys.executable, brief_lines(text, "MESHY"), "texture", *shlex.split(brief_lines(text, "MESHY_ARGS")),
+           "--model", str(model), "--style-image", str(f.root / "concepts/_approved" / AID / "concept_albedo.png"),
+           "--out", str(vd / "work/meshy/call-1"), *extra]
+    return subprocess.run(cmd, cwd=f.root, capture_output=True, text=True, env=env).returncode
+
+
+def blocked_total_asset(tmp_path):
+    f = to_texture(tmp_path)
+    vd = (tmp_path / f.brief("t1 brief")["report"]).parent
+    assert meshy_with(f, "t1", vd, "running:100", "--timeout", "2") == 5
+    assert meshy_with(f, "t1", vd, "running:100", "--resume", "--total-s", "0") == 1
+    call = vd / "work/meshy/call-1"
+    assert json.loads((call / "meshy_call.json").read_text())["status"] == "blocked_total"
+    return f, vd
+
+
+def test_after_blocked_total_the_next_brief_asks_the_user_and_does_not_offer_a_rerun_without_credit(tmp_path):
+    """A rerun of a blocked task asks Meshy again and may block again. The paid credit is the user's call now."""
+    f, _ = blocked_total_asset(tmp_path)
+    assert f.brief("t1 again") is None
+    assert f.cp["t1 again"]["out"] == (
+        "pilot-house: texture → waiting_human trước khi giao. Tiếp: chờ người dùng: task Meshy task-1 chưa xong sau hạn "
+        "chờ tổng, credit đã trả: gọi Meshy thêm một lần (10 credit) hay VẼ MỚI? (duyệt = gọi Meshy, "
+        "`meshy pilot-house paint` = VẼ MỚI) (review page)\n")
+    assert "không tốn thêm credit" not in f.cp["t1 again"]["out"]
+    assert f.st()["ask"]["kind"] == "meshy_blocked"
+
+
+def test_answering_call_after_blocked_total_gives_a_new_version_one_more_call_and_no_old_task_to_rerun(tmp_path):
+    f, _ = blocked_total_asset(tmp_path)
+    f.brief("t1 again")
+    f.p("meshy", AID, "call")
+    f.brief("t2 brief")
+    t = f.cp["t2 brief"]["text"].splitlines()
+    assert [l for l in t if l.startswith("MESHY_CALLS")] == [
+        f"MESHY_CALLS: 1 (giá 10 credit một lần; `{A}/texture/{next(iter(budgets(tmp_path)))}` chỉ script ghi)"]
+    assert not any(l.startswith("MESHY_DONE") for l in t)
+    assert list(budgets(tmp_path).values()) == [{"max_credits": 20, "used_credits": 10}]
+
+
+def test_answering_paint_after_blocked_total_paints_and_never_calls_meshy_again(tmp_path):
+    f, _ = blocked_total_asset(tmp_path)
+    f.brief("t1 again")
+    f.p("meshy", AID, "paint")
+    f.brief("t2 brief")
+    assert mode_lines(f, "t2 brief") == ["MODE: VẼ MỚI (người dùng chọn cho mesh này: không gọi Meshy)"]
+
+
+def test_both_files_downloaded_without_topology_json_are_not_called_unusable_before_the_gate_ran(tmp_path):
+    """The layer is paid and complete. Only the gate has not run, so the brief must send the worker to run just that."""
+    f = to_texture(tmp_path)
+    out = f.brief("t1 brief")
+    vd = (tmp_path / out["report"]).parent
+    f.meshy("t1", vd, "")
+    call = f"{A}/texture/v1/work/meshy/call-1"
+    (tmp_path / call / "topology.json").unlink()
+    f.brief("t1 again brief")
+    t = f.cp["t1 again brief"]["text"].splitlines()
+    assert [l for l in t if l.startswith("MESHY")] == [
+        "MESHY_CALLS: 0 (đã dùng 10/10 credit): không gọi Meshy",
+        f"MESHY_DONE: `{call}` đã trả credit, đã tải đủ, chưa kiểm topology: chạy lại lệnh Meshy với `--out {call}`; "
+        "lệnh chỉ kiểm topology, không gọi Meshy, không tốn credit",
+        next(l for l in f.cp["t1 brief"]["text"].splitlines() if l.startswith("MESHY: ")),
+        f"MESHY_ARGS: --asset {AID} --pid-file production/pids/meshy/{AID}.pid"]
+    log_before = (tmp_path / "meshy.jsonl").read_text()
+    f.meshy("t1 again", vd, "")
+    assert (f.cp["t1 again meshy"]["rc"], (tmp_path / "meshy.jsonl").read_text() == log_before,
+            (tmp_path / call / "topology.json").is_file()) == (0, True, True)
 
 
 def mode_lines(f, name):

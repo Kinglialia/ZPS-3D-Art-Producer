@@ -68,11 +68,15 @@ def gate(st: dict, prof: dict, model_glb: Path, style: Path) -> tuple[str, str] 
     b = read_budget(p)
     left = int((b["max_credits"] - b["used_credits"]) // price)
     run = [f"MESHY: {MESHY_CALL}", f"MESHY_ARGS: --asset {aid} --pid-file {rel(ROOT / 'pids' / 'meshy' / f'{aid}.pid')}"]
-    done, resume = paid_calls(st)
+    done, resume, blocked = paid_calls(st)
+    if blocked:
+        ask(st, "meshy_blocked", "fix" if st.get("fix_round") else "todo", base=st.get("fix_base"))
+        return "ask_human", (f"task Meshy {blocked} chưa xong sau hạn chờ tổng, credit đã trả: gọi Meshy thêm một lần "
+                             f"({price} credit) hay VẼ MỚI? ({ANSWER.format(id=aid)})")
     if left <= 0:
         layer = usable_layer(aid, sha)
         if resume:
-            m = mode(st, MESHY, "task Meshy đã trả credit, chưa tải xong")
+            m = mode(st, MESHY, "task Meshy đã trả credit, chưa tải xong hoặc chưa kiểm topology")
         elif layer:
             m = mode(st, MESHY, "hết lần gọi: sửa trên lớp Meshy qua topology")
             if not any("topology pass" in line for line in done):
@@ -145,23 +149,31 @@ def usable_layer(aid: str, sha: str) -> Path | None:
     return max(found)[2] if found else None
 
 
-def paid_calls(st: dict) -> tuple[list[str], bool]:
-    """A worker briefed again on the same version: the Meshy calls it already paid, to reuse instead of losing them."""
+def paid_calls(st: dict) -> tuple[list[str], bool, str | None]:
+    """A worker briefed again on the same version: the Meshy calls it already paid, to reuse instead of losing them.
+    The third value is the task id of a call that ended `blocked_total`: it is the user's call, never a rerun."""
     import meshy_call
     if st["state"] != "running":
-        return [], False
-    out, resume = [], False
+        return [], False, None
+    out, resume, blocked = [], False, None
     for c in sorted((vdir(st["id"], STEP, st["versions"][STEP]) / "work" / "meshy").glob("call-*")):
-        if meshy_call.complete(c) and meshy_call.topology(c).get("overall") == "pass":
+        topo = meshy_call.topology(c)
+        if meshy_call.complete(c) and topo.get("overall") == "pass":
             out.append(f"MESHY_DONE: `{rel(c)}` đã trả credit, topology pass: dùng lại `base_color.png`, không gọi lại "
                        "Meshy")
-        elif meshy_call.complete(c):
+        elif meshy_call.complete(c) and topo:
             out.append(f"MESHY_DONE: `{rel(c)}` đã trả credit, topology fail (`topology.json`): không dùng lớp này")
-        elif tid := meshy_call.task(c).get("task_id"):
+        elif meshy_call.complete(c):
+            resume = True
+            out.append(f"MESHY_DONE: `{rel(c)}` đã trả credit, đã tải đủ, chưa kiểm topology: chạy lại lệnh Meshy với "
+                       f"`--out {rel(c)}`; lệnh chỉ kiểm topology, không gọi Meshy, không tốn credit")
+        elif (tid := meshy_call.task(c).get("task_id")) and meshy_call.earlier(c).get("status") == "blocked_total":
+            blocked = tid
+        elif tid:
             resume = True
             out.append(f"MESHY_DONE: `{rel(c)}` task {tid} đã trả credit, chưa có GLB hoặc base_color: chạy lại lệnh "
                        f"Meshy với `--out {rel(c)}`, không tốn thêm credit")
-    return out, resume
+    return out, resume, blocked
 
 
 def ask(st: dict, kind: str, nxt: str, base: int | None = None, new_round: bool = False):
