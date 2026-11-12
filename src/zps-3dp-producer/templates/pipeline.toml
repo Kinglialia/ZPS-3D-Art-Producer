@@ -11,7 +11,8 @@
 # regions: `region` của finding mới mở đầu bằng một trong các tên này, vd `back: mép mái`.
 # outputs, lock: {id} = mã asset, {res} = texture_res của thẻ (mặc định 2048). outputs gồm cả JSON kết quả mà một lần chạy
 #   đúng của bước luôn ghi: thiếu một file thì ingest dừng, nêu tên file. Không ghi JSON chỉ có ở một chế độ hay một
-#   vòng: meshy.json (một chế độ), inputs.json của views và model (vòng sửa của hai bước này không chạy lại). lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
+#   vòng: meshy.json (một chế độ), inputs.json của views và model (vòng sửa của hai bước này không chạy lại). Bước thiếu một
+#   JSON kết quả mà bước cùng id của template này có: mọi lệnh dừng, nêu bước. lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
 # issues: bước trong inputs mà brief chép dòng ISSUES của report worker bản đã duyệt (D20.3).
 # pilot: brief ghi PILOT: deliver/<pilot_asset>/ để tool so với pilot (D21.7, D22.10).
 # script: bước không có agent; `P brief` in lệnh chạy script (scripts/<script>), script ghi report-script.md.
@@ -32,7 +33,8 @@
 #   script tự lấy, không giao worker, tối đa [review] served_evidence lần mỗi đợt feedback.
 # no_views_concept: file concept thêm cho worker khi thẻ `views: none`; reviewer khi đó nhận đúng danh sách của worker.
 # fix_copy_exclude: mẫu đường dẫn (tính từ final/, `*` khớp cả dấu `/`). `P brief` của vòng sửa chép final/ của bản gốc sang
-#   final/ mới, trừ các đường dẫn khớp một mẫu: file bước làm lại ghi lại, chép sang sẽ thành bản cũ. Không ghi = không chép.
+#   final/ mới, trừ các đường dẫn khớp một mẫu: file bước làm lại ghi lại, chép sang sẽ thành bản cũ. Không ghi = không chép;
+#   bước có khóa này trong template thì bắt buộc (worker không tự chép final/), thiếu thì mọi lệnh dừng.
 # codex_batch: true → GEN_ARGS có --batch: các paint view dùng chung tham chiếu gen trong một lần gọi Codex, rồi kiểm từng
 #   file (D30.22). Mặc định false. Chỉ bật ở bước texture; bật thử ở V6 và so số finding repaint với gọi từng ảnh.
 

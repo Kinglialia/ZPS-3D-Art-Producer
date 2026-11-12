@@ -5,6 +5,7 @@ or with `views: none`; (b) makes the approved pair one approved `views` v1 (the 
 at model; (c) restarts the view work as the new `views` step for an asset in the middle of an old step or with only the
 front approved. Each case starts from a literal status.json of v0.7.1."""
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -322,6 +323,38 @@ def test_an_old_pipeline_toml_is_one_line_that_says_how_to_update_it_not_a_key_e
         "LỖI: production/pipeline.toml của v0.7.1 có bước views_front, views_rest: thay hai khối [[steps]] đó bằng "
         "khối `views` của zps-3dp-producer/templates/pipeline.toml, đổi hai id đó thành `views` trong inputs, review_inputs của model "
         "và texture, rồi chạy `migrate <id>` cho mỗi asset mà `next` nêu (references/setup.md, mục Nâng cấp từ v0.7.1)\n"))
+
+
+def test_a_pipeline_toml_updated_only_for_views_stops_with_one_line_naming_the_keys_still_missing(tmp_path):
+    """The upgrade steps once named only the view blocks. A texture fix round of such a file gets an empty final/: the
+    brief copies final/ only with fix_copy_exclude, and the agent no longer copies it by hand. The worker results that
+    ingest needs are missing from the old outputs, so a check that never ran would pass."""
+    pilot_project(tmp_path)
+    p = tmp_path / "production/pipeline.toml"
+    text = p.read_text(encoding="utf-8")
+    text = re.sub(r'\nacceptable = \["proportion.json".*\n', "\n", text, count=1)
+    text = re.sub(r'\nfix_copy_exclude = \[[^\]]*\]\n', "\n", text, count=1)
+    text = re.sub(r'(\nid = "blockout"\n(?:.*\n)*?outputs = )\[[^\]]*\]',
+                  r'\1["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb", "final/sources.json", '
+                  r'"final/blockout.md"]', text, count=1)
+    p.write_text(text, encoding="utf-8")
+    r = subprocess.run([sys.executable, str(SCRIPTS / "producer.py"), "next"], cwd=tmp_path, capture_output=True, text=True)
+    assert (r.returncode, r.stderr) == (1, (
+        "LỖI: production/pipeline.toml cũ hơn skill: blockout thiếu outputs (8 JSON kết quả); texture thiếu "
+        "fix_copy_exclude: chép các khóa đó từ zps-3dp-producer/templates/pipeline.toml (references/setup.md, mục "
+        "Nâng cấp từ v0.7.1)\n"))
+
+
+def test_a_pipeline_toml_without_the_keys_that_have_a_safe_default_still_runs(tmp_path):
+    """No acceptable sends every check fail back to the worker and then asks the human, which the ledger shows; the
+    per-step reviewer_model and max_direct_rounds fall back to [review] and 2."""
+    pilot_project(tmp_path)
+    p = tmp_path / "production/pipeline.toml"
+    text = re.sub(r'\nacceptable = \[[^\]]*\]\n', "\n", p.read_text(encoding="utf-8"))
+    text = re.sub(r'\n(reviewer_model|max_direct_rounds) = .*\n', "\n", text)
+    p.write_text(text, encoding="utf-8")
+    r = subprocess.run([sys.executable, str(SCRIPTS / "producer.py"), "next"], cwd=tmp_path, capture_output=True, text=True)
+    assert (r.returncode, r.stderr) == (0, "")
 
 
 def validate(root: Path) -> list[str]:

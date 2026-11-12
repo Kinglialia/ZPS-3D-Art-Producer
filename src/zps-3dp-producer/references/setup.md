@@ -66,6 +66,7 @@ Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline
 
 v0.8.0 gộp hai bước `views_front`, `views_rest` thành một bước `views`. Project tạo bằng v0.7.1 cần ba việc:
 1. `production/pipeline.toml`: thay hai khối `[[steps]]` cũ bằng khối `views` của `templates/pipeline.toml`. Đổi hai id cũ thành `views` trong `inputs`, `review_inputs` của `model` và `texture`. Chưa sửa thì mọi lệnh dừng với một dòng nêu việc này.
+   Chép thêm từ template các khóa mới vào khối `blockout`, `model`, `texture`. Bắt buộc: `fix_copy_exclude` của `texture` và các JSON kết quả mới trong `outputs`; thiếu thì mọi lệnh dừng với một dòng nêu bước và khóa. Nên chép: `acceptable`, `sheet`, `reviewer_model` của từng bước, `[review] max_direct_rounds`; thiếu thì dùng mặc định. Cách gọn: chép cả file template, rồi ghi lại giá trị riêng của project.
 2. `P next` và `P validate` in `migrate <id>` cho mỗi asset có status.json còn bước cũ; `P validate` in cả asset có `rubric.md` còn mục cũ. Mọi lệnh khác trên asset đó dừng với cùng dòng. Chạy `P migrate <id>`:
    - Asset chưa tới bước view, hoặc thẻ có `views: none`: không đổi gì.
    - Asset đã duyệt cả hai bước cũ: front và bộ view đã duyệt gộp thành `views` v1 đã duyệt. Asset đi tiếp ở bước đang đứng.

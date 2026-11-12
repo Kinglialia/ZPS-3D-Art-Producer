@@ -120,6 +120,23 @@ def locked(create: bool = False):
         yield
 
 
+def stale_steps(steps: list[dict]) -> list[str]:
+    """Keys of the shipped template that have no safe default, missing from the step of the same id: fix_copy_exclude
+    (the fix-round worker no longer copies final/ itself) and the result JSONs of outputs (a check that never ran would
+    pass). The other keys of a file made before the template fall back to a default."""
+    tpl = {t["id"]: t for t in tomllib.loads((TEMPLATES / "pipeline.toml").read_text(encoding="utf-8"))["steps"]}
+    out = []
+    for s in steps:
+        if not (t := tpl.get(s.get("id"))):
+            continue
+        miss = ["fix_copy_exclude"] if "fix_copy_exclude" in t and "fix_copy_exclude" not in s else []
+        if n := len({o for o in t.get("outputs", []) if o.endswith(".json")} - set(s.get("outputs", []))):
+            miss.append(f"outputs ({n} JSON kết quả)")
+        if miss:
+            out.append(f"{s['id']} thiếu {', '.join(miss)}")
+    return out
+
+
 def load_cfg() -> dict:
     p = ROOT / "pipeline.toml"
     if not p.exists():
@@ -135,6 +152,9 @@ def load_cfg() -> dict:
             f"{SKILL_DIR.name}/templates/pipeline.toml, đổi hai id đó thành `{VIEWS}` trong inputs, review_inputs của "
             "model và texture, rồi chạy `migrate <id>` cho mỗi asset mà `next` nêu (references/setup.md, mục Nâng cấp "
             "từ v0.7.1)")
+    if stale := stale_steps(steps):
+        die(f"{rel(p)} cũ hơn skill: {'; '.join(stale)}: chép các khóa đó từ {SKILL_DIR.name}/templates/pipeline.toml "
+            "(references/setup.md, mục Nâng cấp từ v0.7.1)")
     if len(set(ids)) != len(ids):
         die("step id bị trùng trong pipeline.toml")
     for i, s in enumerate(steps):
