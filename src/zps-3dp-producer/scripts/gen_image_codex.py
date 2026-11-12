@@ -255,7 +255,7 @@ def call(a, jobs: list[dict]):
         mark, overlap = a.calls_started, a.open_calls > 1
     try:
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY") or k in CODEX_KEYS}
-        p = heartbeat.run(cmd, tool="codex exec", vd=heartbeat.vdir_of(*(j["out"] for j in jobs)), input=prompt,
+        p = heartbeat.run(cmd, tool=heartbeat.CODEX_EXEC, vd=heartbeat.vdir_of(*(j["out"] for j in jobs)), input=prompt,
                           timeout=a.timeout, env=env)
         stderr = p.stderr
     except subprocess.TimeoutExpired as ex:

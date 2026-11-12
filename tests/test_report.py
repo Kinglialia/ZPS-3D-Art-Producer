@@ -74,8 +74,26 @@ def test_one_row_per_step_with_real_numbers_a_total_and_the_overlap_mark_x4_x6_a
         "| 3 | 1 | 6 | không có số | 20 | 1 | opus / sonnet |",
         "",
         "không có số (Token worker): không thấy transcript của subagent.",
-        "không có số (Gọi Codex): chưa có bản ghi số lần gọi Codex (gen_image_codex.py chỉ ghi model).",
+        "không có số (Gọi Codex): version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec.",
         "* Token Producer tính chung với a2."]
+
+
+def beats(root, aid, step, n, *tools):
+    vd = root / aid / step / f"v{n}"
+    vd.mkdir(parents=True, exist_ok=True)
+    (vd / "heartbeat.log").write_text("".join(f"2026-11-10 10:0{i}:00 · {t} · start\n2026-11-10 10:0{i}:30 · {t} · done · "
+                                              f"exit 0\n" for i, t in enumerate(tools)), encoding="utf-8")
+
+
+def test_the_codex_column_counts_the_codex_exec_starts_of_every_version_of_the_step(meshy20, tmp_path):
+    """One line per real `codex exec` start: a batch of four images is one call, a try the wall-time cap stopped is
+    none. A version without the log is no number, never zero."""
+    beats(tmp_path, "a1", "texture", 1, "codex exec", "blender render", "codex exec", "codex exec")
+    assert report.table(A1, CFG, [], LIVE)[3].split(" | ")[12] == "3"
+    beats(tmp_path, "a1", "texture", 2, "blender render")
+    assert report.table(A1 | {"versions": {"blockout": 2, "texture": 2}}, CFG, [], LIVE)[3].split(" | ")[12] == "3"
+    st = A1 | {"versions": {"blockout": 2, "texture": 3}}
+    assert report.table(st, CFG, [], LIVE)[3].split(" | ")[12] == "3 (+1 không có số)"
 
 
 def test_a_step_that_never_used_codex_or_meshy_shows_a_dash_not_a_zero(meshy20):

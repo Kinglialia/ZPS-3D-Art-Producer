@@ -7,6 +7,8 @@ import datetime as dt
 import json
 from dataclasses import dataclass, field
 
+import heartbeat
+
 from . import stats
 from .loop import NO_NUMBER
 from .state import ASSETS, DELIVER, RUNTIME, all_status, load_cfg, load_st, now, rel, write_atomic
@@ -20,7 +22,7 @@ HEAD = ("Bước", "Thời gian bước", "Worker", "Reviewer", "Chờ Producer"
 PRODUCER_WHY = {stats.NOT_SUPPORTED: "bản Codex chưa đọc được transcript của Producer",
                 NO_NUMBER: "không thấy transcript của phiên Producer"}
 NO_MESSAGE = "transcript của Producer không có message trong khoảng của bước"
-NO_CODEX_COUNT = "chưa có bản ghi số lần gọi Codex (gen_image_codex.py chỉ ghi model)"
+NO_CODEX_COUNT = "version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec"
 NOT_INGESTED = "lần giao chưa ingest"
 OVERLAP_NO_TRANSCRIPT = "hai asset chạy cùng lúc và không còn transcript để tính mỗi message một lần"
 
@@ -250,8 +252,10 @@ def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others:
     r.calls = len(mine)
     r.stalls = sum(1 for x in st.get("stalls") or [] if x["step"] == sid)
     if "codex_image" in step["uses"]:
-        r.codex = Metric(miss=1)
-        note(r, NO_CODEX_COUNT, "Gọi Codex")
+        r.codex = metric([heartbeat.starts(ASSETS / st["id"] / sid / f"v{k}", heartbeat.CODEX_EXEC)
+                          for k in range(1, r.versions + 1)])
+        if r.codex.miss:
+            note(r, NO_CODEX_COUNT, "Gọi Codex")
     if "meshy" in step["uses"]:
         r.credit = metric(budget_credits(st["id"], sid))
         if r.credit.miss:

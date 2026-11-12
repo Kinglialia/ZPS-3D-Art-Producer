@@ -21,6 +21,7 @@ EVERY_S = 30
 LOG = "heartbeat.log"
 VERSION = re.compile(r"^v\d+$")
 STOP = (signal.SIGTERM, signal.SIGHUP)
+CODEX_EXEC = "codex exec"
 
 
 def vdir_of(*paths) -> Path | None:
@@ -56,6 +57,15 @@ def last(vd: Path) -> tuple[dt.datetime, str, str] | None:
         except (ValueError, IndexError):
             continue
     return None
+
+
+def starts(vd: Path, tool: str) -> int | None:
+    """Runs of `tool` in this version: its `start` lines, written before each child starts. None when vN has no log."""
+    try:
+        rows = (vd / LOG).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    return sum(1 for row in rows if row.split(" · ")[1:3] == [tool, "start"])
 
 
 def seconds(text: str) -> float:

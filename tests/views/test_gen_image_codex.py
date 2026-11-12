@@ -687,3 +687,24 @@ def test_with_batch_every_image_goes_to_the_one_call_wherever_it_stands_on_the_c
                        capture_output=True, text=True, env=env)
     calls = [json.loads(l) for l in (gen.tmp / "b.jsonl").read_text().splitlines()]
     assert (p.returncode, [c["images"] for c in calls]) == (0, [[str(r) for r in gen.refs]])
+
+
+def codex_calls(tmp_path) -> int | None:
+    import heartbeat
+    return heartbeat.starts(tmp_path / "production/assets/hut/views/v1", heartbeat.CODEX_EXEC)
+
+
+def test_the_version_counts_each_real_codex_call_so_a_file_that_failed_twice_counts_three(tmp_path):
+    """The run report sums these per step: the owner asked for real call numbers, not one per image."""
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back"], mode="fail:2")
+    assert (p.returncode, len(calls), codex_calls(tmp_path)) == (0, 3, 3)
+
+
+def test_one_batch_call_for_four_images_counts_one_call(tmp_path):
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left", "right", "top"], extra=["--batch"])
+    assert (p.returncode, len(calls), codex_calls(tmp_path)) == (0, 1, 1)
+
+
+def test_a_try_the_wall_time_cap_stops_before_it_starts_is_no_call_although_the_record_says_three_attempts(tmp_path):
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back"], mode="slow:60", extra=["--timeout", "1", "--wall-s", "2"])
+    assert (p.returncode, recs["back"]["attempts"], len(calls), codex_calls(tmp_path)) == (1, 3, 1, 1)
