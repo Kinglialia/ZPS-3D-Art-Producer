@@ -12,6 +12,7 @@ WAIVED = "waived"
 BM = ("blocker", "major")
 BLOCKING = BM + ("unclear",)
 SINGLE = {"structure", "regen_front"}
+PER_PART = "structure"
 NOTE = {"note", "note_exception", "note_texture"}
 TIE_RANK = {"structure": 2, "fix_uv_mesh": 2, "regen_front": 2, "meshy_regen": 1}
 BATCH_PRIO = ("blocker", "major", "minor")
@@ -243,12 +244,38 @@ def check_top_fix(rv: dict, op: dict, step: dict, warns: list[str] | None = None
     if errs:
         return errs, t
     want = uc if k == "need_evidence" else [i for i, f in op.items() if f["kind"] == k and f["priority"] in BATCH_PRIO]
+    if k == PER_PART and len(t["ids"]) > 1:
+        return per_part(t["ids"], want, op), t
     if k in SINGLE:
         return ([] if len(t["ids"]) == 1 and t["ids"][0] in want else [
             f"TOP_FIX {k}: đúng một id trong {', '.join(want)}"]), t
     if t["ids"] and sorted(t["ids"]) != sorted(want) and warns is not None:
         warns.append(f"TOP_FIX {k}: ghi {', '.join(t['ids'])}, script dùng {', '.join(want)}")
     return [], {"kind": k, "ids": want}
+
+
+def parts_of(f: dict) -> set[str]:
+    """The parts a finding touches: the head of its `region` before `:`, comma-separated, any case."""
+    head, sep, _ = f.get("region", "").partition(":")
+    return {x.strip().lower() for x in head.split(",") if x.strip()} if sep else set()
+
+
+def per_part(ids: list[str], want: list[str], op: dict) -> list[str]:
+    """D39.6: several structure ids in one round only when no two of them touch one part, so the worker's edits never
+    meet. Otherwise the old rule, one id, and why."""
+    if dup := sorted({i for i in ids if ids.count(i) > 1}):
+        return [f"TOP_FIX {PER_PART}: {', '.join(dup)} ghi hai lần"]
+    if bad := [i for i in ids if i not in want]:
+        return [f"TOP_FIX {PER_PART}: {', '.join(bad)} không phải finding {PER_PART} {'/'.join(BATCH_PRIO)} đang mở "
+                f"({', '.join(want)})"]
+    rule = "nhiều id chỉ khi mỗi finding ở một part khác (region mở đầu `<part>:`), không thì ghi đúng một id"
+    parts = {i: parts_of(op[i]) for i in ids}
+    if bare := [i for i in ids if not parts[i]]:
+        return [f"TOP_FIX {PER_PART}: {', '.join(bare)} không ghi part ở đầu region; {rule}"]
+    for a, b in ((a, b) for x, a in enumerate(ids) for b in ids[x + 1:]):
+        if same := parts[a] & parts[b]:
+            return [f"TOP_FIX {PER_PART}: {a}, {b} cùng part {', '.join(sorted(same))}; {rule}"]
+    return []
 
 
 def progress(base: dict, doc: dict) -> bool:

@@ -480,8 +480,11 @@ def review_brief(cfg, st, step, n) -> str:
         + (f"; {', '.join(single)} đúng 1 id; loại khác:" if single else ";")
         + " mọi finding blocker/major/minor đang mở của loại đó; "
         "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
-        "- Không ghi COUNTS. TOP_FIX loại lô" + (f" (không phải {', '.join(single)})" if single else "")
-        + ": chỉ ghi loại, script điền id. Mỗi key unclear trong RUBRIC cần một finding unclear.",
+        "- Không ghi COUNTS. TOP_FIX loại lô" + (": chỉ ghi loại, script điền id. structure: 1 id mỗi part, region "
+                                                 "`<part>: …`." if findings.PER_PART in single else
+                                                 (f" (không phải {', '.join(single)})" if single else "")
+                                                 + ": chỉ ghi loại, script điền id.")
+        + " Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]

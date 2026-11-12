@@ -1712,3 +1712,15 @@ def test_a_pass_in_a_fix_round_that_judged_every_rubric_key_is_final_without_ano
         "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
     assert rounds(flow) == [("worker", 1, None), ("reviewer", 1, "full"), ("worker", 2, None), ("reviewer", 2, "fix")]
 
+
+def test_two_structure_findings_on_different_parts_are_fixed_and_judged_in_one_round_w8(flow):
+    flow.work()
+    out = json.loads(flow.review(top_fix="structure: F1, F2", findings=[
+        finding("F1", "major", "structure", region="roof: mái thấp"),
+        finding("F2", "major", "structure", region="door: thiếu cửa")]).splitlines()[-1])
+    assert "Sửa đúng `TOP_FIX: structure: F1, F2`; repair" in flow.text(out)
+    flow.work(out=out, fixed="F1, F2")
+    assert flow.review(verdict="PASS", top_fix=None, rubric="massing=pass", compare="F1=better; F2=better",
+                       prior=["- F1: resolved | evidence: clay_front", "- F2: resolved | evidence: clay_front"]) == (
+        "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
+

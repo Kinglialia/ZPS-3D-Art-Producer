@@ -101,10 +101,41 @@ def test_compare_worse_means_prior_regressed():
                    prior=["- F1: open", "- F2: open", "- F3: open"]) == ["F1: COMPARE worse thì PRIOR phải là regressed"]
 
 
-def test_structure_top_fix_takes_exactly_one_id_so_each_structural_change_is_isolated():
+MANY = "nhiều id chỉ khi mỗi finding ở một part khác (region mở đầu `<part>:`), không thì ghi đúng một id"
+
+
+def test_structure_findings_that_name_no_part_take_one_id_per_round_so_two_edits_never_meet_in_one_part_w8():
     assert errs_of(None, counts=counts(major=2), top_fix="structure: F1, F2", findings=[
-        finding("F1", "major", "structure"), finding("F2", "major", "structure")]) == [
-        "TOP_FIX structure: đúng một id trong F1, F2"]
+        finding("F1", "major", "structure"), finding("F2", "major", "structure", region="door: thiếu")]) == [
+        f"TOP_FIX structure: F1 không ghi part ở đầu region; {MANY}"]
+
+
+def test_structure_findings_on_different_parts_are_fixed_in_one_round_w8():
+    """D21.1: one structure id per round and 3 rounds cannot clear an output with more than 3 structure errors."""
+    doc, errs, warns = warned(None, top_fix="structure: F1, F3", findings=[
+        finding("F1", "major", "structure", region="roof: mái thấp"),
+        finding("F2", "minor", "param", region="roof: mái hẹp"),
+        finding("F3", "major", "structure", region="door, frame: thiếu cửa")])
+    assert (errs, warns, doc["top_fix"]) == ([], [], {"kind": "structure", "ids": ["F1", "F3"]})
+
+
+def test_two_structure_findings_on_one_part_are_refused_with_the_part_named_w8():
+    assert errs_of(None, top_fix="structure: F1, F2", findings=[
+        finding("F1", "major", "structure", region="roof: mái thấp"),
+        finding("F2", "major", "structure", region="Roof , eave: thiếu diềm")]) == [
+        f"TOP_FIX structure: F1, F2 cùng part roof; {MANY}"]
+
+
+def test_a_multi_id_structure_top_fix_still_names_only_open_structure_findings_and_obeys_the_tie_rule_w8():
+    f = [finding("F1", "blocker", "param", region="base: lệch"), finding("F2", "major", "structure", region="roof: thấp"),
+         finding("F3", "major", "structure", region="door: thiếu"), finding("F4", "preference", "structure",
+                                                                          region="chimney: nghiêng")]
+    assert errs_of(None, top_fix="structure: F2, F3", findings=f) == ["TOP_FIX phải là loại param"]
+    f[0] = finding("F1", "major", "param", region="base: lệch")
+    assert errs_of(None, top_fix="structure: F2, F4", findings=f) == [
+        "TOP_FIX structure: F4 không phải finding structure blocker/major/minor đang mở (F2, F3)"]
+    assert errs_of(None, top_fix="structure: F2, F2", findings=f) == ["TOP_FIX structure: F2 ghi hai lần"]
+    assert errs_of(None, top_fix="structure: F3, F2", findings=f) == []
 
 
 def test_a_batch_top_fix_with_only_its_kind_gets_every_open_finding_of_that_kind_from_the_script():
