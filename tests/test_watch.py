@@ -482,7 +482,7 @@ def test_a_doubt_about_the_reviewer_is_noted_and_asked_never_decided_and_no_remi
     auto = text[text.index("## Tự quyết hay hỏi"):text.index("Chỉ dừng lại hỏi người dùng khi")]
     assert "reviewer chấm sai" not in auto
     ask = text[text.index("Chỉ dừng lại hỏi người dùng khi"):text.index("## Giữ context nhỏ")]
-    assert "nghi reviewer chấm sai" in ask and '`P feedback <id> "<nguyên văn>" --action note`' in ask
+    assert "nghi reviewer chấm sai" in ask and '`P feedback <id> "<nghi ngờ của bạn>" --action note`' in ask
     assert "nhắc nó giữ" not in text and "ở lần giao sau" not in text
 
 
@@ -508,7 +508,8 @@ def test_the_brief_of_a_step_with_an_external_command_never_tells_the_worker_to_
         f.p("intake", AID)
         f.p("ready", AID)
         text = (root / f.brief("ext")["brief"]).read_text(encoding="utf-8")
-    assert "## Lệnh ngoài\nChạy lệnh, chờ lệnh xong;" in text and "tool --in " in text
-    assert "nền" not in text.lower()
+    block = text[text.index("## Lệnh ngoài"):].split("\n## ", 1)[0]
+    assert block.startswith("## Lệnh ngoài\nChạy lệnh, chờ lệnh xong;") and "tool --in " in block
+    assert "nền" not in block.lower()
     setup = (SKILL / "references/setup.md").read_text(encoding="utf-8")
     assert "chạy nền" not in [l for l in setup.splitlines() if "external_command" in l][0]

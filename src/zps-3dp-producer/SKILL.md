@@ -153,7 +153,7 @@ Session sau chỉ biết những gì nằm trong file. Mọi quyết định ng�
 Tự quyết, ghi lại rồi làm tiếp: brief mâu thuẫn với rubric, cần giả định để không bị kẹt. Ghi bằng
 `P rule "<id>: <quyết định> — <lý do> — <cái giá nếu sai>"`.
 
-Chỉ dừng lại hỏi người dùng khi: chọn thẩm mỹ cuối cùng; duyệt rubric; xoá file ngay (`P purge <id> --by "<nguyên văn>"` chỉ khi người dùng muốn; lệnh xóa sau DUYỆT 2 tự chạy ở phiên sau, người dùng muốn giữ thì `P keep <id>`); asset vượt số vòng sửa tối đa; mọi hướng đi đều là đoán; nghi reviewer chấm sai. Ghi nghi ngờ trước bằng `P feedback <id> "<nguyên văn>" --action note`, rồi hỏi. Lý do: bạn không mở output của reviewer, nên không đủ căn cứ để tự quyết.
+Chỉ dừng lại hỏi người dùng khi: chọn thẩm mỹ cuối cùng; duyệt rubric; xoá file ngay (`P purge <id> --by "<nguyên văn>"` chỉ khi người dùng muốn; lệnh xóa sau DUYỆT 2 tự chạy ở phiên sau, người dùng muốn giữ thì `P keep <id>`); asset vượt số vòng sửa tối đa; mọi hướng đi đều là đoán; nghi reviewer chấm sai. Ghi nghi ngờ trước bằng `P feedback <id> "<nghi ngờ của bạn>" --action note`, rồi hỏi. Lý do: bạn không mở output của reviewer, nên không đủ căn cứ để tự quyết.
 
 ## Giữ context nhỏ
 

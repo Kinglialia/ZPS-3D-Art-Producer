@@ -155,7 +155,7 @@ def cli(py, script, cwd, *args):
     return subprocess.run([py, str(script), *args], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout
 
 
-def test_the_producer_description_excludes_one_off_art_and_direct_kit_calls_and_the_eval_has_negatives_for_both_d39_11():
+def test_the_producer_description_excludes_one_off_art_and_direct_kit_calls_and_the_eval_has_negatives_for_both_row_w11():
     """Without the exclusion the Producer wins every 3D request in a project that has _approved concepts, also the ones
     a kit skill should take. The live trigger eval is not run here."""
     text = (build.SRC / "zps-3dp-producer/SKILL.md").read_text(encoding="utf-8")
