@@ -22,5 +22,5 @@ Không sửa file chép nguyên. `tests/blockout/test_source.py` so sha256 với
 |---|---|---|---|
 | `references/craft.md` | `zps-3d-artist/references/blockout.md` | `94499c3c5857c95267797f9c5e2c1bf4d57cfce1476cfdd1e7deb2c6810a0ec7` | blockout.md §A + Image evidence + Preflight; technique.md §1–2, verbatim excerpts |
 | `references/craft.md` | `zps-3d-artist/references/technique.md` | `9238c6d1cc2c25c5b15434ecbe2f09c44fa6a7608b90f5baad8311a70d96a615` | blockout.md §A + Image evidence + Preflight; technique.md §1–2, verbatim excerpts |
-| `config.yaml` | `zps-3d-artist/config.yaml` | `2fa8c02e553f015edafc6fb0edf2a84941b8d5aa484f4849e3f42ce656d3971e` | paths.blender, optimize.raster_size, self_build block; values as kit except paths.blender |
+| `config.yaml` | `zps-3d-artist/config.yaml` | `2fa8c02e553f015edafc6fb0edf2a84941b8d5aa484f4849e3f42ce656d3971e` | optimize.raster_size, self_build block; values as kit; no paths block (only the kit apply_edit.py read paths.blender) |
 | `tools/setup_deps.sh` | `zps-3d-artist/tools/setup_deps.sh` | `61a8837f13e208373e39c8662a8142599b7198a99ef313907a72889b7072a7ea` | reduced: no gltfpack/validator, blockout packages only, manifold3d in the Blender target |

@@ -29,3 +29,25 @@ def test_copied_file_matches_its_recorded_sha256(dst, src, digest):
 @pytest.mark.parametrize("dst,src,digest", ROWS)
 def test_recorded_sha256_is_the_kit_file(dst, src, digest):
     assert sha(KIT / src) == digest
+
+
+REMOVED = ("fit_camera.py", "apply_edit.py", "render_blockout_views.py", "bpy_cookbook.md")
+
+
+def test_no_own_file_points_to_a_kit_file_that_was_removed_from_the_skill():
+    """D42.5: the pointer sends a reader to a file that is not there. Copied kit files are left as they are."""
+    frozen = {d for d, _, _ in ROWS}
+    own = [p for p in (AGENT / "tools").rglob("*") if p.suffix in (".py", ".sh", ".yaml") and ".deps" not in p.parts]
+    own += [p for p in AGENT.rglob("*.md")] + [AGENT / "config.yaml"]
+    hits = {p.relative_to(AGENT).as_posix(): name for p in own if p.relative_to(AGENT).as_posix() not in frozen
+            and p.name != "SOURCE.md" for name in REMOVED if name in p.read_text(encoding="utf-8")}
+    assert hits == {}
+
+
+def test_config_has_no_key_that_no_tool_reads():
+    """paths.blender was read only by the kit apply_edit.py. The worker passes Blender to RUN: through the brief."""
+    import yaml
+    cfg = yaml.safe_load((AGENT / "config.yaml").read_text(encoding="utf-8"))
+    assert "paths" not in cfg
+    tools = "".join(p.read_text(encoding="utf-8") for p in (AGENT / "tools").rglob("*.py") if ".deps" not in p.parts)
+    assert '["paths"]' not in tools and "get(\"paths\")" not in tools

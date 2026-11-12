@@ -3,13 +3,13 @@
 Usage: PY tools/fit_view.py --work <F> --spec <spec.json> [--side left|right] [--rollout k] [--views 34]
        [--write-spec] [--out <F>/camera_fit.json]
 
-Kit fit_camera.py scans azimuth 0..90 only and ranks by bbox IoU, which barely separates mirrored or distant
-cameras (two mirrored cameras can score almost the same IoU). This tool scans azimuth -90..90 and elevation 5..55,
-ranks each camera first by whether the model's bottom silhouette breaks where the concept's does (the near bottom
-corner, which splits side face width from front face width), then by IoU, and refines at 1°.
+A bbox IoU alone barely separates mirrored or distant cameras (two mirrored cameras can score almost the same IoU).
+This tool scans azimuth -90..90 and elevation 5..55, ranks each camera first by whether the model's bottom silhouette
+breaks where the concept's does (the near bottom corner, which splits side face width from front face width), then by
+IoU, and refines at 1°.
 --side: image side where the concept shows the prop's side face (left = camera toward -X, azimuth < 0). Pass it
 for a near-square footprint: a square box looks the same from -30° and +60°.
-Output as fit_camera.py: camera_fit.json, and --write-spec stores spec.concept.cameras for render_views.py.
+Output: camera_fit.json, and --write-spec stores spec.concept.cameras for render_views.py.
 A view whose break matches no camera within 0.05 of the bbox width fails and is not written. Exit 1 on fail.
 """
 import os
