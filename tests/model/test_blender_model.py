@@ -247,7 +247,15 @@ def test_the_review_set_renders_in_one_blender_run(built):
     assert built["rc"]["render"] == 0
     art = read(built["final"] / "review/review.json")["artifacts"]
     assert sorted(art) == ["clay_lit_concept", "lineup", "lit_34_back", "lit_34_front", "lit_front", "lit_game",
-                           "model_sheet", "thumb", "wire_34"]
+                           "model_sheet", "thumb", "uv_checker", "wire_34"]
     assert all(os.path.getsize(p) > 1000 for p in art.values())
     from PIL import Image
     assert Image.open(art["thumb"]).height == 400
+
+
+def test_the_uv_checker_shows_the_colour_grid_on_the_model_not_the_clay(built):
+    """The grid is what makes stretch visible; a render that fell back to clay grey would show nothing."""
+    from PIL import Image
+    im = np.asarray(Image.open(read(built["final"] / "review/review.json")["artifacts"]["uv_checker"]).convert("RGB"), int)
+    colours = {tuple(c) for c in (im[::8, ::8] // 32).reshape(-1, 3).tolist()}
+    assert len(colours) >= 12

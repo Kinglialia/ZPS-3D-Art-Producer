@@ -7,6 +7,10 @@ Usage: python3 tools/check_uv_edge.py --final F
   uv.texel_islands    the same for every UV piece with >= 0.5 % of the surface (a piece: triangles that share a vertex
                       of the file, so a sharp edge may split an island into two pieces); no such piece (a faceted
                       mesh): every piece
+  uv.stretch          share of the surface (world area) whose triangles map UV to the mesh with a ratio of the two
+                      singular values of the Jacobian above spec model.uv_stretch.max_ratio: a circle painted in UV
+                      becomes an ellipse that much longer than wide. A triangle of zero UV area counts as stretched.
+                      Fails above model.uv_stretch.max_share; no limits in the spec: not_checked
 The kit uv_check measures the gaps between islands, not the gap to the border.
 data.at_<res> and data.at_1024 give the same numbers at the working resolution and at 1024 (scaled).
 Writes F/review/checks/uv_edge.json. Exit 0 pass, 1 fail, 2 error.
@@ -60,6 +64,30 @@ def numbers(g, res):
             "island_texel_min": common.r(min(isl), 1), "islands_checked": len(isl), "faceted": faceted}
 
 
+def stretch(g):
+    """Per triangle: (ratio of the singular values of the UV -> world Jacobian, world area); inf for zero UV area."""
+    f = g["f"]
+    t, tu = g["v"][f], g["uv"][f]
+    e = np.stack([t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]], axis=2)
+    u = np.stack([tu[:, 1] - tu[:, 0], tu[:, 2] - tu[:, 0]], axis=2)
+    world = np.linalg.norm(np.cross(e[:, :, 0], e[:, :, 1]), axis=1) / 2
+    det = u[:, 0, 0] * u[:, 1, 1] - u[:, 0, 1] * u[:, 1, 0]
+    ok = np.abs(det) > 1e-12
+    ratio = np.full(len(f), np.inf)
+    s = np.linalg.svd(e[ok] @ np.linalg.inv(u[ok]), compute_uv=False)
+    ratio[ok] = s[:, 0] / np.maximum(s[:, 1], 1e-12)
+    return ratio, world
+
+
+def stretch_check(g, lim):
+    if not lim:
+        return common.check("uv.stretch", "not_checked", note="spec.json chưa có model.uv_stretch: chạy lại make_spec.py")
+    ratio, world = stretch(g)
+    share = float(world[ratio > lim["max_ratio"]].sum() / world.sum())
+    return common.check("uv.stretch", "pass" if share <= lim["max_share"] else "fail", common.r(share, 4),
+                        lim["max_share"], note=f"phần diện tích có tỉ lệ kéo giãn > {lim['max_ratio']} (ngưỡng tạm)")
+
+
 def check(a):
     spec = common.read_json(os.path.join(a.final, "spec.json"))
     g = glbread.load(os.path.join(a.final, f"{spec['asset']}-untextured.glb"))
@@ -72,13 +100,14 @@ def check(a):
               "texel_px_per_m": common.r(at["texel_px_per_m"] * scale, 1),
               "island_texel_min": common.r(at["island_texel_min"] * scale, 1),
               "min_padding_px": common.r(pad * scale, 1), "texel_min_px_per_m": common.r(tmin * scale, 1)}
+    pieces_note = ", không mảnh nào ≥ 0,5 % diện tích: đo mọi mảnh" if at["faceted"] else " ≥ 0,5 % diện tích"
     checks = [common.check("uv.present", "pass", True),
               common.check("uv.edge_margin_px", "pass" if at["edge_margin_px"] >= pad else "fail", at["edge_margin_px"], pad),
               common.check("uv.texel_px_per_m", "pass" if at["texel_px_per_m"] >= tmin else "fail",
                            at["texel_px_per_m"], tmin),
               common.check("uv.texel_islands", "pass" if at["island_texel_min"] >= tmin else "fail",
-                           at["island_texel_min"], tmin, note=f"{at['islands_checked']} mảnh" + (", không mảnh nào ≥ 0,5 % diện tích: đo mọi mảnh"
-                                                                    if at["faceted"] else " ≥ 0,5 % diện tích"))]
+                           at["island_texel_min"], tmin, note=f"{at['islands_checked']} mảnh" + pieces_note),
+              stretch_check(g, spec["model"].get("uv_stretch"))]
     return checks, {f"at_{res}": at, "at_1024": at1024}
 
 

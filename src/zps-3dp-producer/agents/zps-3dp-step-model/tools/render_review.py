@@ -10,7 +10,10 @@ az 45, el 50): the sun and sky of the spec, the same light in every round.
   wire_34.png         clay with every edge drawn, 3/4 front
   thumb.png           the game view cropped and scaled so the asset is model.target_px_height px tall
   lineup.png          front, beside a figure model.character_h tall
-  model_sheet.png     the board's first image: the renders above and renders/parts_34.png when it exists
+  uv_checker.png      3/4 front with a colour grid through the UV (texture view): squeezed or skewed cells show
+                      stretch, cells of different sizes show uneven texel density
+  model_sheet.png     the board's first image: the renders above (not uv_checker) and renders/parts_34.png when it
+                      exists
 Writes F/review/review.json (artifacts = label -> path). Exit 0, 1 on error.
 """
 import math
@@ -125,6 +128,20 @@ def sheet(files, dst):
     out.save(dst)
 
 
+def checker(bpy, scene, obs):
+    img = bpy.data.images.new("uv_checker", 1024, 1024)
+    img.generated_type = "COLOR_GRID"
+    mat = bpy.data.materials.new("uv_checker")
+    mat.use_nodes = True
+    tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    mat.node_tree.nodes.active = tex
+    for o in obs:
+        o.data.materials.clear()
+        o.data.materials.append(mat)
+    scene.display.shading.color_type = "TEXTURE"
+
+
 def run(final, concept, size):
     import bpy
     spec = common.read_json(os.path.join(final, "spec.json"))
@@ -180,6 +197,8 @@ def run(final, concept, size):
     f_ob = RV.add_mesh(bpy, scene, "figure", fv, ft)
     shoot(bpy, scene, cam, np.concatenate([v, fv]), raster.VIEW_DIRS["front"], size, path("lineup"))
     bpy.data.objects.remove(f_ob)
+    checker(bpy, scene, obs)
+    shoot(bpy, scene, cam, v, raster.camera_dir(45, 30), size, path("uv_checker"))
     order = ("lit_34_front", "clay_lit_concept", "wire_34", "lit_34_back", "lit_game", "lineup", "thumb")
     sheet([(k, files[k]) for k in order if k in files] + [("parts_34", os.path.join(out, "renders", "parts_34.png"))],
           path("model_sheet"))

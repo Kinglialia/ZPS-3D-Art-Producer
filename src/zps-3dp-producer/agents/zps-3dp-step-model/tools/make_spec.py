@@ -7,6 +7,7 @@ Other numbers follow D13, later wins: skill default < preset < profile `override
   tris cap: card tris_max, else tiers[card tier]; texture_res: card, else 2048; texel minimum;
   uv padding: stated at 2048, scaled by texture_res / 2048 (8 px at 1024, as the kit table);
   detail.relief_min_px 3, detail.alpha_min_px 16 (profile overrides.detail changes them);
+  model.uv_stretch {max_ratio 2.0, max_share 0.05} for check_uv_edge.py uv.stretch (provisional);
   model.bevel: card `bevel`, else profile `style.bevel`, else none (D27.10). none = false; toon = the preset's
   bevel.toon numbers (radius_m, segments). Nothing else turns bevel on, notes and overrides included.
 spec["sources"] names the layer of every number ("mặc định" = skill default).
@@ -24,10 +25,13 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "
 from root_guard import require_root  # noqa: E402
 
 TOOL = "model/make_spec"
-DEFAULTS = {"texture_res": 2048, "detail": {"relief_min_px": 3, "alpha_min_px": 16}}
+# uv_stretch: provisional, not yet measured on a real asset; preset or profile overrides replace it.
+DEFAULTS = {"texture_res": 2048, "detail": {"relief_min_px": 3, "alpha_min_px": 16},
+            "uv_stretch": {"max_ratio": 2.0, "max_share": 0.05}}
 KEPT = ("sun", "concept_cam")
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
-        "bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "dimensions")
+        "bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "uv_stretch.max_ratio", "uv_stretch.max_share",
+        "dimensions")
 DIM_TOLERANCE = 0.02
 PADDING_AT = 2048
 
@@ -102,6 +106,7 @@ def build(a):
                "allow_out_of_bounds": False},
         "export": {"path": f"{aid}-untextured.glb", "skip_export": True},
         "model": {"texel_min_px_per_m": float(p["uv"]["texel_min_px_per_m"]), **p["detail"], "bevel": bev,
+                  "uv_stretch": p["uv_stretch"],
                   "target_px_height": p["camera"]["target_px_height"],
                   "px_per_m": round(p["camera"]["target_px_height"] / dims[2], 2),
                   "character_h": s["character_h"], "door_h": s.get("door_h")},

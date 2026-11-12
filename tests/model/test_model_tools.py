@@ -76,7 +76,8 @@ def result(final, name):
 
 def spec_of(final, **over):
     s = {"asset": "pilot-house", "budget": {"max_tris_total": 3000, "max_materials_total": 1}, "dimensions_tolerance": 0.02,
-         "uv": {"resolution": 2048, "min_padding_px": 16}, "model": {"texel_min_px_per_m": 64},
+         "uv": {"resolution": 2048, "min_padding_px": 16},
+         "model": {"texel_min_px_per_m": 64, "uv_stretch": {"max_ratio": 2.0, "max_share": 0.05}},
          "sources": {"tris_cap": "preset tiers.standard"}} | over
     final.mkdir(parents=True, exist_ok=True)
     (final / "spec.json").write_text(json.dumps(s), encoding="utf-8")
@@ -112,11 +113,13 @@ def test_the_spec_takes_geometry_from_sources_json_and_the_rest_from_preset_with
         "uv": {"resolution": 2048, "min_padding_px": 16, "allow_overlap": False, "allow_out_of_bounds": False},
         "camera": {"type": "persp", "azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40, "target_px_height": 400},
         "model": {"texel_min_px_per_m": 64.0, "relief_min_px": 3, "alpha_min_px": 16, "bevel": False,
+                  "uv_stretch": {"max_ratio": 2.0, "max_share": 0.05},
                   "target_px_height": 400, "px_per_m": 108.11, "character_h": 1.6, "door_h": 1.8},
         "sources": {"tris_cap": "preset tiers.standard", "texture_res": "mặc định", "uv.padding_px": "preset",
                     "uv.texel_min_px_per_m": "preset", "detail.relief_min_px": "mặc định",
                     "detail.alpha_min_px": "mặc định", "bevel": "mặc định", "camera.target_px_height": "preset",
-                    "screen_tris_max_small_ratio": "preset", "dimensions": "sources.json layout",
+                    "screen_tris_max_small_ratio": "preset", "uv_stretch.max_ratio": "mặc định",
+                    "uv_stretch.max_share": "mặc định", "dimensions": "sources.json layout",
                     "camera": "sources.json camera", "character_h": "sources.json", "door_h": "sources.json"}}
     assert "screen_tris" not in s and "sun" not in s
 
@@ -377,7 +380,7 @@ def test_uv_border_and_texel_are_reported_at_2048_and_at_1024(tmp_path):
     rc, (overall, checks, data) = uv_case(tmp_path, (0, 0, 1, 0.25, 0.5))
     assert (rc, overall, checks) == (0, "pass", {
         "uv.present": ("pass", True), "uv.edge_margin_px": ("pass", 512.0), "uv.texel_px_per_m": ("pass", 1024.0),
-        "uv.texel_islands": ("pass", 1024.0)})
+        "uv.texel_islands": ("pass", 1024.0), "uv.stretch": ("pass", 0.0)})
     assert data["at_1024"] == {"edge_margin_px": 256.0, "texel_px_per_m": 512.0, "island_texel_min": 512.0,
                                "min_padding_px": 8.0, "texel_min_px_per_m": 32.0}
 
@@ -405,6 +408,26 @@ def test_a_faceted_mesh_of_300_loose_triangles_is_measured_piece_by_piece_instea
     assert tool("check_uv_edge", "--final", f).returncode == 0
     _, checks, data = result(f, "uv_edge")
     assert (checks["uv.texel_islands"], data["at_2048"]["islands_checked"]) == (("pass", 68.3), 300)
+
+
+@pytest.mark.parametrize("sx, sy, want", [(0.3, 0.3, ("pass", 0.0)), (0.3, 0.1, ("fail", 1.0)), (0.3, 0.0, ("fail", 1.0))])
+def test_a_uv_squeezed_3x_along_one_axis_fails_uv_stretch(tmp_path, sx, sy, want):
+    """A texel density check passes a UV squeezed on one axis, yet every painted circle comes out an ellipse; a UV of
+    zero area is stretch without end. The share is of the surface whose singular value ratio is over the limit."""
+    f = tmp_path / "final"
+    spec_of(f)
+    v, t, uv = quad(0, 0, 1, 0, 1)
+    write_glb(f / "pilot-house-untextured.glb", v, t, 0.1 + uv * (sx, sy))
+    tool("check_uv_edge", "--final", f)
+    assert result(f, "uv_edge")[1]["uv.stretch"] == want
+
+
+def test_uv_stretch_is_not_checked_on_a_spec_made_before_its_limits(tmp_path):
+    rc, (_, checks, _) = uv_case(tmp_path, (0, 0, 1, 0.25, 0.5))
+    f = tmp_path / "final"
+    spec_of(f, model={"texel_min_px_per_m": 64})
+    tool("check_uv_edge", "--final", f)
+    assert result(f, "uv_edge")[1]["uv.stretch"] == ("not_checked", None)
 
 
 def test_a_mesh_without_uv_fails_uv_present(tmp_path):
