@@ -1,11 +1,12 @@
 """Flat background colour for every generated view (concept-views.md §3 step 3) -> <final>/bg_color.json.
 
 Usage: python3 tools/pick_bg.py --final <V/final> --concept <concept_albedo.png> --profile <PROJECT-PROFILE.yaml>
-style.view_bg of the profile wins. Else the first of CANDIDATES that is MIN_DIST or more (RGB distance) from
+style.view_bg of the profile wins, but it must also be MIN_DIST or more from every concept colour: else exit 1, nothing
+written (D36 V7), because measure.py would key that material out as background. Else the first of CANDIDATES that is MIN_DIST or more (RGB distance) from
 every colour palette_report finds on the concept; if none is, the farthest one. The concept's own background
 (transparent, or the most common border colour) is left out first.
 MIN_DIST = 100 = 2.5 x the 40 RGB key tolerance of measure.py, so no material is keyed out as background.
-Writes {"hex", "source": profile|pick, "min_dist", "nearest"}. Prints one line. Exit 0, 2 on error.
+Writes {"hex", "source": profile|pick, "min_dist", "nearest"}. Prints one line. Exit 0, 1 profile colour too near, 2 on error.
 """
 import argparse
 import json
@@ -51,10 +52,16 @@ def distance(cand, colours):
     return d[i], palette_report.to_hex(colours[i]).upper()
 
 
+class TooNear(Exception):
+    pass
+
+
 def pick(concept, view_bg=None):
     colours = concept_colours(concept)
     if view_bg:
         d, near = distance(view_bg, colours)
+        if d < MIN_DIST:
+            raise TooNear(f"nền của profile {view_bg.upper()} cách {near} chỉ {d:.1f}, cần ≥ {MIN_DIST:g}: đổi style.view_bg")
         return {"hex": view_bg.upper(), "source": "profile", "min_dist": round(d, 1), "nearest": near}
     scored = [(c, *distance(c, colours)) for c in CANDIDATES]
     c, d, near = next((s for s in scored if s[1] >= MIN_DIST), max(scored, key=lambda s: s[1]))
@@ -73,6 +80,9 @@ def main():
         with open(a.profile, encoding="utf-8") as f:
             view_bg = ((yaml.safe_load(f) or {}).get("style") or {}).get("view_bg")
         r = pick(a.concept, view_bg)
+    except TooNear as e:
+        print(f"[views/pick_bg] fail: {e}")
+        sys.exit(1)
     except Exception as e:  # noqa: BLE001
         print(f"[views/pick_bg] error {e!r}")
         sys.exit(2)

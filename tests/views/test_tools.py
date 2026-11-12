@@ -502,6 +502,15 @@ def test_views_front_still_compares_the_front_with_the_concept_colours_v6(tmp_pa
     assert rc == 1
 
 
+def test_a_profile_background_too_close_to_a_concept_colour_fails_like_a_picked_one_would_be_skipped_v7(
+        tmp_path, stone_and_wood):
+    """MIN_DIST keeps measure.py from keying a material out as background. The profile value had no such check."""
+    rc, out, _ = tool("pick_bg", "--final", tmp_path, "--concept", stone_and_wood, "--profile",
+                      profile(tmp_path, "#4B3121"))
+    assert (rc, (tmp_path / "bg_color.json").exists()) == (1, False)
+    assert out.startswith("[views/pick_bg] fail: nền của profile #4B3121 cách #4A3020 chỉ ")
+
+
 def test_a_gen_that_touches_the_image_border_fails_because_the_object_is_cropped_v15(tmp_path):
     wall_trim_gen(tmp_path / "final/front.png", margin=0)
     rc, _, rep, check = measure(tmp_path)
