@@ -682,6 +682,25 @@ def test_a_near_black_material_is_not_unpainted_but_black_holes_in_another_mater
     assert c["seam.unpainted_share"][0] == "fail", c
 
 
+def test_black_line_art_in_a_groove_is_not_unpainted_and_is_reported_as_info(tmp_path):
+    gm = grooved_model(tmp_path / "model")
+    img, _ = groove_texture(gm, tmp_path)
+    ink = ink_of(gm)
+    img = np.where(ink[..., None], 0, img)
+    c, _ = measure_groove(gm, tmp_path, img)
+    assert c["seam.unpainted_share"] == ("pass", 0.0), c["seam.unpainted_share"]
+    assert c["seam.unpainted_left_out"] == ("info", {"groove": int(ink.sum()), "no_concept": {}})
+
+
+def test_a_black_code_with_no_concept_colour_is_not_unpainted_and_is_reported_as_info(m, tmp_path):
+    """Black iron the concept gives no box: no colour says it should not be black, so it is no hole."""
+    tm, walls = wall_texels(m)
+    img = np.where(walls[..., None], 0, base_fill(m, tmp_path))
+    _, c, _ = measure(m, tmp_path, img, cols={"STONE": COLORS["STONE"]})
+    assert c["seam.unpainted_share"] == ("pass", 0.0), c["seam.unpainted_share"]
+    assert c["seam.unpainted_left_out"] == ("info", {"groove": 0, "no_concept": {"TIMBER": int(walls.sum())}})
+
+
 def test_a_baked_highlight_is_reported_as_info_not_as_a_failure(m, tmp_path):
     tm, walls = wall_texels(m)
     lab = tex.lab(base_fill(m, tmp_path))

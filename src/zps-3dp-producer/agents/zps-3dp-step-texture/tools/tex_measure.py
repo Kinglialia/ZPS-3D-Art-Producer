@@ -28,8 +28,9 @@ Per material code (CIE L*; the colour check is dE2000, the seam check dE76):
                 ở mã …" with the face count, for the reviewer to judge on the renders (it is a UV fault of the model
                 step, which the texture worker cannot fix). Never a failure.
   4 seams     seam.p90_dE <= seam_p90 (tex.seam_groups: groups of one material code only, so a border between two
-                codes is no seam); seam.unpainted_share (texels darker than RGB 8, codes whose concept colour is that
-                dark left out) <= unpainted;
+                codes is no seam); seam.unpainted_share (texels darker than RGB 8; groove texels, codes whose concept colour
+                is that dark and codes with no concept colour left out) <= unpainted;
+              seam.unpainted_left_out (info): such dark texels left out, {"groove": n, "no_concept": {code: n}};
               seam.padding_empty_share: texels in the 2 px ring around islands that are pure black <= padding_empty
 Thresholds below; profile `overrides.texture` replaces any of them.
 Writes F/review/checks/tex_measure.json. Prints one line. Exit 0, 1 fail, 2 error.
@@ -192,10 +193,15 @@ def measure(a, lim, top_l):
     p90 = tex.seam_spread(img, idx, gid)
     checks.append(tex.check("seam.p90_dE", "pass" if p90 <= lim["seam_p90"] else "fail", round(p90, 2), lim["seam_p90"]))
     near_black = [c for c in concept if tex.hex_rgb(concept[c]).max() < 2 * UNPAINTED_BELOW]
-    live = tm.inside & ~np.isin(code, near_black)
-    dark = float((img[live].max(-1) < UNPAINTED_BELOW).mean()) if live.any() else 0.0
+    no_concept = sorted(set(codes) - set(concept))
+    black = tm.inside & (img.max(-1) < UNPAINTED_BELOW)
+    live = tm.inside & ~np.isin(code, near_black + no_concept) & ~groove
+    dark = float(black[live].mean()) if live.any() else 0.0
     checks.append(tex.check("seam.unpainted_share", "pass" if dark <= lim["unpainted"] else "fail", round(dark, 4),
                             lim["unpainted"]))
+    checks.append(tex.check("seam.unpainted_left_out", "info", {
+        "groove": int((black & groove).sum()),
+        "no_concept": {c: n for c in no_concept if (n := int((black & ~groove & (code == c)).sum()))}}))
     ring = tex.border(~tm.inside) & ~tm.inside
     ring |= tex.border(~(tm.inside | ring)) & ~(tm.inside | ring)
     empty = float((img[ring].max(-1) == 0).mean()) if ring.any() else 0.0
