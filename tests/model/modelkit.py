@@ -80,9 +80,16 @@ def build_shared(d: Path, graph: dict):
     assert rc == 0, out
 
 
-def make_spec(final: Path, blockout: Path, **spec):
+def make_spec(final: Path, blockout: Path, card_over=None, **spec):
+    """card_over: fields set on the pilot card before make_spec reads it."""
+    card = PILOT / "_approved/pilot-house/asset-card.yaml"
+    if card_over:
+        import yaml
+        card = final.parent / f"{final.name}-card.yaml"
+        card.write_text(yaml.safe_dump(yaml.safe_load((PILOT / "_approved/pilot-house/asset-card.yaml").read_text(
+            encoding="utf-8")) | card_over), encoding="utf-8")
     rc, out = sh(VPY, TOOLS / "make_spec.py", "--final", final, "--blockout", blockout,
-                 "--card", PILOT / "_approved/pilot-house/asset-card.yaml", "--profile", PILOT / "PROJECT-PROFILE.yaml",
+                 "--card", card, "--profile", PILOT / "PROJECT-PROFILE.yaml",
                  "--preset", PRESET)
     assert rc == 0, out
     (final / "spec.json").write_text(json.dumps(read(final / "spec.json") | spec), encoding="utf-8")

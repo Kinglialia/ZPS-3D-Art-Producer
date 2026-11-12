@@ -34,6 +34,7 @@ def built(tmp_path_factory):
     t = tmp_path_factory.mktemp("model")
     b, f, g, wb, w = t / "blockout", t / "final", t / "inlay", t / "wide_blockout", t / "wide"
     e, under, flip, rnd = t / "eave", t / "bottom_visible", t / "inside_out", t / "round"
+    card_under = t / "card_bottom_visible"
     mask(t / "work")
     build_shared(rnd, ROUND)
     model(rnd, rnd)
@@ -44,6 +45,7 @@ def built(tmp_path_factory):
     build(w, wall_w=3.8, wall_d=3.8)
     build(e, [EAVE])
     build(under, [EAVE])
+    build(card_under, [EAVE])
     build(flip, [STEP])
     inside_out(flip / "parts/step.glb")
     model(f, b)
@@ -51,6 +53,7 @@ def built(tmp_path_factory):
     model(w, wb)
     model(e, b)
     model(under, b, bottom_visible=True)
+    model(card_under, b, card_over={"bottom_visible": True})
     model(flip, b)
     rc = {"inside_out": sh(VPY, TOOLS / "check_mesh.py", "--final", flip, "--before-join")[0]}
     glb = f / "pilot-house-untextured.glb"
@@ -72,7 +75,7 @@ def built(tmp_path_factory):
                            "--out", f / "review/renders/normal.json")[0]
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
-    return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "inside_out": flip, "round": rnd, "rc": rc}
+    return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "card_bottom_visible": card_under, "inside_out": flip, "round": rnd, "rc": rc}
 
 
 def mask(work: Path):
@@ -135,6 +138,14 @@ def test_a_spec_with_a_visible_bottom_keeps_the_base_underside(built):
     glb = built["bottom_visible"] / "pilot-house-untextured.glb"
     assert heights_up(glb, (1.9, 1.9), up=False) == [0.0]
     assert checks(built["bottom_visible"] / "review/join.json")[1]["join.bottom_visible"] == ("info", True)
+
+
+def test_a_card_with_a_visible_bottom_reaches_join_mesh_through_make_spec_g6(built):
+    """The card field, not a hand-written spec key, keeps the base underside: make_spec wrote bottom_visible."""
+    d = built["card_bottom_visible"]
+    assert read(d / "spec.json")["bottom_visible"] is True
+    assert heights_up(d / "pilot-house-untextured.glb", (1.9, 1.9), up=False) == [0.0]
+    assert checks(d / "review/join.json")[1]["join.bottom_visible"] == ("info", True)
 
 
 def test_a_part_built_inside_out_vanishes_in_the_join_unseen_so_check_mesh_fails_it_before(built):
