@@ -22,7 +22,6 @@ Reads F/spec.json (asset id), F/assembly.json (part order) and F/parts/<part>.gl
 Saves F/<id>.blend (object, mesh and material named <id>, no UV yet: unwrap.py next).
 Writes F/review/join.json. Exit 0, 1 on error.
 """
-import math
 import os
 import sys
 
