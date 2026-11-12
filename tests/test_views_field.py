@@ -235,8 +235,7 @@ def test_model_brief_names_the_fitted_camera_file_of_the_approved_blockout_only_
     work = at_root / "production/assets/05-warehouse/blockout/v2/work"
     work.mkdir(parents=True)
     (work / "camera_fit.json").write_text("{}", encoding="utf-8")
-    assert briefs.card_lines(st, step_of("model")) == [
-        "CAMERA_FIT: production/assets/05-warehouse/blockout/v2/work/camera_fit.json", ""]
+    assert briefs.card_lines(st, step_of("model")) == []
     final = at_root / "production/assets/05-warehouse/blockout/v2/final"
     final.mkdir()
     (final / "camera_fit.json").write_text("{}", encoding="utf-8")

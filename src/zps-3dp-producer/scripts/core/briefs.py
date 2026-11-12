@@ -166,10 +166,9 @@ def concept_colors_line(st, step) -> list[str]:
 
 
 def camera_fit_file(st) -> Path | None:
-    """The fitted concept camera of the approved blockout: fit_view.py writes it to work/, or to final/ with --out."""
+    """The fitted concept camera of the approved blockout: prep_overlay.py writes it to final/, where make_spec.py reads it."""
     v = (st.get("approved") or {}).get("blockout")
-    return next((f for sub in ("final", "work") if v and (f := vdir(st["id"], "blockout", v) / sub / "camera_fit.json").is_file()),
-                None)
+    return f if v and (f := vdir(st["id"], "blockout", v) / "final" / "camera_fit.json").is_file() else None
 
 
 def card_lines(st, step) -> list[str]:
