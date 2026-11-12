@@ -100,6 +100,34 @@ def compare(ref: Path, got: Path, side: Path) -> dict:
     return out
 
 
+def recorded_views(renders: Path) -> list[str]:
+    """The compare views the texture step rendered. A spec with no camera has no `unlit_game` (T1)."""
+    return [v for v in COMPARE if v in json.loads(renders.read_text(encoding="utf-8")).get("renders", {})]
+
+
+def compare_renders(tf: Path, work: Path, final: Path, views: list[str], rendered: bool, why) -> tuple[list[dict], dict]:
+    fails, results = [], {}
+    if not views:
+        fails.append(fail_point("compare", "renders.json", "work/evidence: renders.json không có view nào để so",
+                                "không so được GLB với render bước texture", "làm lại texture để có render unlit",
+                                f"renders.json có {' hoặc '.join(COMPARE)}"))
+    for view in views:
+        got = work / "compare" / f"{view}.png"
+        if not rendered or not got.is_file():
+            fails.append(fail_point("compare", view, f"work/evidence: render GLB lỗi {why}",
+                                    "không so được GLB với render bước texture", "đọc lỗi Blender", f"có {view}.png"))
+            continue
+        c = results[view] = compare(tf / "review" / f"{view}.png", got,
+                                    final / "review" / f"compare_{view.removeprefix('unlit_')}.png")
+        if c["mean_abs"] is None or c["mean_abs"] > COMPARE_MEAN or c["mask_mismatch"] > COMPARE_MASK:
+            fails.append(fail_point(
+                "compare", view, f"work/evidence/compare.json: mean_abs {c['mean_abs']}, mask {c['mask_mismatch']}",
+                "GLB trong engine khác render bước texture (color space, alpha, unlit)",
+                "kiểm color space, alpha và material của albedo trước khi vẽ lại",
+                f"mean_abs ≤ {COMPARE_MEAN:g} và mask ≤ {COMPARE_MASK:g} ở {view}"))
+    return fails, results
+
+
 def section(path: Path, key: str) -> list[str]:
     """Lines under the first heading that names key, up to the next heading."""
     if not path.is_file():
@@ -190,6 +218,8 @@ def readme(st, mv, tv, mf, tf, res, qa, data) -> str:
         *(["## Producer đã waive", *by_producer, ""] if (by_producer := waived(st, "producer")) else []), "## Chưa kiểm",
         "- Engine: ảnh render bằng Blender (Workbench), chưa mở trong engine.",
         f"- Camera game: {'chưa chốt (spec không có distance_m)' if not cam.get('distance_m') else 'đã chốt'}.",
+        *(f"- {v.removeprefix('unlit_')} view chưa kiểm: bước texture không render {v}"
+          f"{' (spec không có camera)' if v == 'unlit_game' else ''}." for v in data["skipped_views"]),
         f"- Tam giác nhỏ ở camera game: {small if small is not None else 'not_checked'} (screen_tris_check, chỉ cảnh báo).",
         ""])
 
@@ -242,24 +272,13 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
         fails.append(fail_point("qa", "GLB cuối", f"work/evidence/finalize.json: {'; '.join(bad + refused)}",
                                 "QA của kit không pass cho đúng file GLB này", "sửa theo JSON QA fail ở work/evidence/qa/",
                                 "finalize.py không từ chối"))
+    views = recorded_views(tf / "review" / "renders.json")
+    data["skipped_views"] = [v for v in COMPARE if v not in views]
     rc, out = blender(a.blender, RENDER, d, "--glb", glb, "--cameras", tf / "review" / "renders.json", "--views",
-                      ",".join(COMPARE), "--outdir", work / "compare")
-    data["compare"] = {}
+                      ",".join(views), "--outdir", work / "compare") if views else (0, "")
     (final / "review").mkdir(parents=True, exist_ok=True)
-    for view in COMPARE:
-        got = work / "compare" / f"{view}.png"
-        if rc != 0 or not got.is_file():
-            fails.append(fail_point("compare", view, f"work/evidence: render GLB lỗi {out.strip().splitlines()[-1:]}",
-                                    "không so được GLB với render bước texture", "đọc lỗi Blender", f"có {view}.png"))
-            continue
-        c = data["compare"][view] = compare(tf / "review" / f"{view}.png", got,
-                                            final / "review" / f"compare_{view.removeprefix('unlit_')}.png")
-        if c["mean_abs"] is None or c["mean_abs"] > COMPARE_MEAN or c["mask_mismatch"] > COMPARE_MASK:
-            fails.append(fail_point(
-                "compare", view, f"work/evidence/compare.json: mean_abs {c['mean_abs']}, mask {c['mask_mismatch']}",
-                "GLB trong engine khác render bước texture (color space, alpha, unlit)",
-                "kiểm color space, alpha và material của albedo trước khi vẽ lại",
-                f"mean_abs ≤ {COMPARE_MEAN:g} và mask ≤ {COMPARE_MASK:g} ở {view}"))
+    cfails, data["compare"] = compare_renders(tf, work, final, views, rc == 0, out.strip().splitlines()[-1:])
+    fails += cfails
     (final / "texture").mkdir(parents=True, exist_ok=True)
     shutil.copy2(albedo, final / "texture" / albedo.name)
     if (tf / "notes.md").is_file():

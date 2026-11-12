@@ -183,3 +183,15 @@ def test_the_heartbeat_goes_to_the_assemble_version_not_to_the_approved_model_ve
     log = (r["d"] / "heartbeat.log").read_text(encoding="utf-8").splitlines()
     assert [row.split(" · ")[2] for row in log][0::2] == ["start"] * (len(log) // 2) and log[-1].split(" · ")[2] == "done"
     assert not (r["d"].parents[1] / "model/v1/heartbeat.log").exists()
+
+
+def test_a_texture_step_without_a_game_view_is_compared_on_the_views_it_has_and_the_readme_says_so_t1(base_without_camera,
+                                                                                                      tmp_path):
+    """A spec with no camera makes the texture step render no unlit_game. That is no reason to block the package."""
+    r = assemble(base_without_camera, tmp_path)
+    assert (r["rc"], r["report"].splitlines()[0]) == (0, "STATUS: DONE"), r["report"]
+    assert list(r["compare"]["views"]) == ["unlit_34_front"]
+    review = sorted(p.name for p in (r["d"] / "final/review").glob("compare_*.png"))
+    assert review == ["compare_34_front.png"]
+    readme = (r["d"] / "final/README.md").read_text(encoding="utf-8")
+    assert "- game view chưa kiểm: bước texture không render unlit_game (spec không có camera)." in readme.splitlines()

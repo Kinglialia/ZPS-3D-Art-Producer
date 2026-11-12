@@ -286,3 +286,29 @@ def test_a_second_duyet_2_of_one_asset_replaces_its_estimate_record_so_the_proje
 def test_the_texture_review_brief_says_a_note_finding_is_minor_because_ingest_refuses_any_other_level(flow):
     """Pilot run: the texture reviewer wrote two `note` findings as major and ingest refused the report."""
     assert "- Loại `note`: mức `minor`." in lines(flow["t1 review brief"]["text"])
+
+
+def test_assemble_compares_only_the_views_the_texture_step_rendered_and_still_blocks_on_a_missing_one_t1(tmp_path):
+    """A spec with no camera leaves `unlit_game` out of renders.json. Skipping a view that was rendered would hide a defect."""
+    import assemble
+    from PIL import Image
+    tf, work, final = tmp_path / "texture", tmp_path / "work", tmp_path / "final"
+    for d in (tf / "review", work / "compare", final / "review"):
+        d.mkdir(parents=True)
+    for p in (tf / "review" / "unlit_34_front.png", work / "compare" / "unlit_34_front.png"):
+        Image.new("RGBA", (8, 8), (200, 100, 50, 255)).save(p)
+    renders = tf / "review" / "renders.json"
+
+    renders.write_text(json.dumps({"renders": {"unlit_34_front": {}, "lit_34_front": {}}}), encoding="utf-8")
+    views = assemble.recorded_views(renders)
+    fails, results = assemble.compare_renders(tf, work, final, views, True, [])
+    assert (views, fails, list(results)) == (["unlit_34_front"], [], ["unlit_34_front"])
+    assert (final / "review" / "compare_34_front.png").is_file()
+
+    renders.write_text(json.dumps({"renders": {"unlit_34_front": {}, "unlit_game": {}}}), encoding="utf-8")
+    fails, results = assemble.compare_renders(tf, work, final, assemble.recorded_views(renders), True, [])
+    assert ([f["region"] for f in fails], list(results)) == (["unlit_game"], ["unlit_34_front"])
+
+    renders.write_text(json.dumps({"renders": {}}), encoding="utf-8")
+    fails, _ = assemble.compare_renders(tf, work, final, assemble.recorded_views(renders), True, [])
+    assert [f["region"] for f in fails] == ["renders.json"]
