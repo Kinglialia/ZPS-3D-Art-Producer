@@ -22,9 +22,10 @@ Per material code (CIE L*; the colour check is dE2000, the seam check dE76):
                 (measure runs before render, D36.11)
               read.sharpness.<c> (info): std of the Laplacian of the atlas inside the code; the note names a code under
                 sharp_ratio of the median of the other codes
-              uv.mirrored_faces: faces whose UV triangle runs against the surface (negative determinant). Info for
-                every code; fail when a code of the card's `text_codes` has such a face (--card; mirrored lettering
-                cannot be read). No --card: info only.
+              uv.mirrored_faces (info): faces whose UV triangle runs against the surface (negative determinant). When
+                such a face lies in a code of the card's `text_codes` (--card), the note says "chữ có thể bị lật gương
+                ở mã …" with the face count, for the reviewer to judge on the renders (it is a UV fault of the model
+                step, which the texture worker cannot fix). Never a failure.
   4 seams     seam.p90_dE <= seam_p90 (tex.seam_groups: groups of one material code only, so a border between two
                 codes is no seam); seam.unpainted_share (texels darker than RGB 8, codes whose concept colour is that
                 dark left out) <= unpainted;
@@ -171,8 +172,8 @@ def measure(a, lim, top_l):
     data["uv_mirrored"] = {"count": len(mirrored), "faces": mirrored[:200].tolist(),
                            "by_code": {c: int((np.asarray(codes, object)[mirrored] == c).sum()) for c in sorted(set(codes))}}
     text_hit = {c: n for c, n in data["uv_mirrored"]["by_code"].items() if n and c in text_codes(a.card)}
-    checks.append(tex.check("uv.mirrored_faces", "fail" if text_hit else "info", len(mirrored),
-                            note="chữ bị lật UV: " + ", ".join(f"{c} {n}" for c, n in text_hit.items()) if text_hit else None))
+    checks.append(tex.check("uv.mirrored_faces", "info", len(mirrored), note="chữ có thể bị lật gương ở mã " + ", ".join(
+        f"{c} ({n} mặt lật UV)" for c, n in text_hit.items()) if text_hit else None))
     idx, gid = tex.seam_groups(tm, tex.mesh_area(g["v"], g["f"]), codes)
     p90 = tex.seam_spread(img, idx, gid)
     checks.append(tex.check("seam.p90_dE", "pass" if p90 <= lim["seam_p90"] else "fail", round(p90, 2), lim["seam_p90"]))

@@ -198,3 +198,10 @@ def test_shared_gen_images_stand_before_the_first_prompt_so_every_view_gets_them
     ref = REF.read_text(encoding="utf-8").split("## 3. VẼ MỚI", 1)[1].split("## 4.", 1)[0]
     assert "Gen cả 8 view trong một lệnh" in ref and "`--image C/concept_albedo.png --size <size>` trước `--prompt` đầu tiên" in ref
     assert "Khi `GEN_ARGS` có `--batch`:" in ref and "`GEN_ARGS` có `--batch` (" not in ref
+
+
+def test_the_reviewer_turns_a_mirrored_text_note_into_fix_uv_mesh_g7():
+    """The texture worker cannot fix UV, so tex_measure only names the code and the reviewer judges on the renders."""
+    _, body = front(REVIEWER)
+    assert ("Check `uv.mirrored_faces` của `tex_measure.json` có note \"chữ có thể bị lật gương ở mã …\"" in body
+            and "Chữ đọc ngược trên ảnh thì ghi finding `fix_uv_mesh`" in body)

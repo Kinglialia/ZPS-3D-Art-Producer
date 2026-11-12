@@ -51,7 +51,8 @@ def flow(tmp_path_factory):
 def test_a_render_made_from_another_albedo_goes_back_to_the_worker_and_no_reviewer_is_called_t2(flow):
     """The reviewer would grade pictures of an albedo that is no longer the file: the check says to render again."""
     st = flow.after_stale
-    assert (st["stage"], st["state"], st["direct"], st["fix_round"]) == ("texture", "running", 1, 1)
+    assert (st["stage"], st["state"], st["direct"], st["direct_rounds"], st["direct_names"]) == (
+        "texture", "running", 1, 1, ["render_fresh.json"])
     assert not (flow.vd1 / "brief-review.md").exists()
     check = json.loads((flow.vd1 / "final/review/checks/render_fresh.json").read_text(encoding="utf-8"))
     assert (check["overall"], check["checks"][0]["status"]) == ("fail", "fail")
@@ -62,7 +63,8 @@ def test_a_render_made_from_another_albedo_goes_back_to_the_worker_and_no_review
 
 def test_a_fix_round_gets_final_prepared_from_its_base_minus_what_the_render_and_measure_write_c24(flow):
     """One wrong copy by hand left a stale measure or render in the new version; the script copies by the step's list."""
-    assert set(flow.prepared) == {ALBEDO, "notes.md", "texture_spec.json", "review/id_map.png", "notes/kept.txt"}
+    assert set(flow.prepared) == {ALBEDO, "notes.md", "texture_spec.json", "review/id_map.png", "notes/kept.txt",
+                             "review/checks/inputs.json"}
     assert flow.prepared[ALBEDO] == (flow.vd1 / "final" / ALBEDO).read_bytes()
     assert "`final/` có sẵn, không chép tay." in flow.cp["t2 brief"]["text"]
     assert "`final/` có sẵn" not in flow.cp["t1 brief"]["text"]
@@ -72,3 +74,14 @@ def test_a_render_of_the_current_albedo_reaches_the_reviewer_t2(flow):
     worker(flow, "t2", renders_sha="current")
     check = json.loads((flow.vd2 / "final/review/checks/render_fresh.json").read_text(encoding="utf-8"))
     assert (flow.st()["state"], check["overall"], (flow.vd2 / "brief-review.md").is_file()) == ("reviewing", "pass", True)
+
+
+def test_a_second_stale_render_with_the_same_failing_name_asks_the_human_instead_of_a_third_try_t2(tmp_path_factory):
+    """A direct round is capped; the same failing name twice means the worker does not render again, so the human decides."""
+    f = to_texture(tmp_path_factory.mktemp("texture-stale"))
+    worker(f, "t1", renders_sha="0" * 64)
+    assert f.st()["state"] == "running" and f.st()["direct_rounds"] == 1
+    worker(f, "t2", renders_sha="0" * 64)
+    st = f.st()
+    assert (st["state"], st["direct_rounds"]) == ("waiting_human", 1)
+    assert st["note"].startswith("check fail y hệt vòng trả thẳng trước, ở v2: render_fresh.json")

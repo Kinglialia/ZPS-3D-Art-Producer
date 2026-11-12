@@ -646,14 +646,15 @@ def test_faces_with_a_mirrored_uv_island_are_listed_for_every_code(tmp_path):
 
 
 
-@pytest.mark.parametrize("text_codes, rc, status", [(["TIMBER"], 1, "fail"), (["SIGN"], 0, "info"), ([], 0, "info")])
-def test_a_mirrored_uv_is_a_failure_only_in_a_code_the_card_says_carries_text_g7(tmp_path, text_codes, rc, status):
-    """Mirrored lettering cannot be read, but a mirrored wall of plain wood is invisible: only text_codes decide."""
+@pytest.mark.parametrize("text_codes, note", [
+    (["TIMBER"], "chữ có thể bị lật gương ở mã TIMBER (2 mặt lật UV)"), (["SIGN"], None), ([], None)])
+def test_a_mirrored_uv_in_a_text_code_is_named_in_the_note_but_never_fails_g7(tmp_path, text_codes, note):
+    """The texture worker cannot change UV, so a failure would only bounce to the human: the reviewer reads the note,
+    looks at the renders and raises fix_uv_mesh. Other codes stay silent."""
     flipped = model_final(tmp_path / "flipped", RES, mirror=("+X", "+Z"))
     got, c, r = measure(flipped, tmp_path, base_fill(flipped, tmp_path), text_codes=text_codes)
-    assert (got, c["uv.mirrored_faces"]) == (rc, (status, 4))
-    note = next(x["note"] for x in r["checks"] if x["check"] == "uv.mirrored_faces")
-    assert bool(note and "TIMBER 2" in note) == (status == "fail")
+    assert (got, c["uv.mirrored_faces"]) == (0, ("info", 4))
+    assert next(x["note"] for x in r["checks"] if x["check"] == "uv.mirrored_faces") == note
 
 
 def test_renders_json_names_the_albedo_it_was_rendered_from_by_sha256_so_a_later_edit_shows_d36_11(tmp_path):
