@@ -601,6 +601,8 @@ Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M. Run 4 bị từ chối c
 Lý do: nguyên nhân Run 5 là Producer tự kết thúc lượt (D33 mục 1). Chỗ chặn hiện chỉ là văn xuôi.
 
 1. **Hook `Stop` của phiên chính** từ chối dừng khi còn report chưa ingest hoặc còn dòng giao việc chưa giao. Kiểm trên bản Claude Code đang dùng trước khi làm. Không chạy được thì giữ văn xuôi và ghi kết quả kiểm vào đây.
+   - **Kết quả kiểm (Claude Code 2.1.318; nguồn: chuỗi trong file chạy của bản cài).** Hook `Stop` nhận JSON trên stdin có `stop_hook_active`, `transcript_path`, `last_assistant_message`. Exit 2 với stderr: phiên chính chạy tiếp và model đọc stderr. Exit 0: cho dừng. Sau 8 lần từ chối liên tiếp (`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`) Claude Code tự cho dừng.
+   - Làm theo hợp đồng đã ghi trong bản cài, chưa chạy thử trong phiên `claude` thật. Lệnh là `P on-main-stop`; bản Codex không có hook `Stop`, giữ văn xuôi.
 2. **`SKILL.md` "Nhận kết quả" là danh sách đánh số.** Xóa lời mời truyền `--tokens`: chính nó gây ra lần chờ ở Run 5.
 3. **Sửa D33.10, D33.11:** kẹt là không có nhịp tim và không có file đổi trong `stall_min`. Hạn chót một mình không phải là kẹt. Trung vị tính riêng cho lần dựng đầu và vòng sửa.
 4. **Không có hai agent ghi cùng một version.** Chỉ giao agent mới khi agent cũ đã dừng.

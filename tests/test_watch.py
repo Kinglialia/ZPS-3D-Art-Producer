@@ -425,3 +425,13 @@ def test_the_hook_reads_the_transcript_the_stop_payload_names_and_a_heartbeat_to
     vd.mkdir(parents=True)
     (vd / "heartbeat.log").write_text(f"{(now + dt.timedelta(seconds=40)):%Y-%m-%d %H:%M:%S} · blender · start\n", encoding="utf-8")
     assert watch.on_main_stop(_j.dumps(on | {"transcript_path": str(other)})) is None
+
+
+def test_each_runtime_adapter_says_whether_a_hook_guards_the_end_of_the_turn_d39_1():
+    """Codex has no Stop hook, so its Producer has only the prose rule: the adapter must say so, or the owner reads a
+    guard that does not exist."""
+    editions = SKILL.parents[1] / "editions"
+    claude = (editions / "claude/adapter.md").read_text(encoding="utf-8")
+    codex = (editions / "codex/adapter.md").read_text(encoding="utf-8")
+    assert "hook Stop (`P on-main-stop`)" in claude and "mã 2" in claude
+    assert "Không có hook Stop" in codex and "on-main-stop" in codex

@@ -25,6 +25,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 - `install.py` gộp `templates/settings.snippet.json` vào `.claude/settings.json`: hook SessionStart chạy `P next --session`; allow rule cho `P`, `run_tool.py`, `assemble.py`, Blender, `meshy_call.py`, `codex exec` và lệnh ghi file dưới `production/`, `production-*/` (report của subagent), để subagent chạy nền không chờ xin quyền. Installer chỉ thêm, không đổi giá trị có sẵn, in diff trước khi ghi. `P preflight` báo khi thiếu. Rule không ăn thì thêm bằng `/permissions`.
 - `install.py` cũng gộp hook SubagentStop (`P on-stop`, ghi lần giao xuống đĩa khi subagent dừng, D33.9) và khối `env` (`BASH_DEFAULT_TIMEOUT_MS` 600000, `BASH_MAX_TIMEOUT_MS` 3600000, D33.4); khóa `env` người dùng đã đặt thì giữ.
+- `install.py` gộp thêm hook Stop (`P on-main-stop`). Khi còn report chưa ingest, hoặc còn dòng giao việc chưa giao, hook thoát với mã 2 và một dòng stderr; Claude Code đưa dòng đó cho model và phiên chính chạy tiếp. Hook không từ chối khi `stop_hook_active` là true, khi asset chờ người dùng, hoặc khi subagent còn chạy. Hook của người dùng ở cùng sự kiện vẫn giữ.
 - Hook nhận JSON qua stdin. `P next --session` ghi `source`, `session_id` và đường dẫn transcript vào `production/session.json`. `source` là `startup` hoặc `clear` thì script xóa file trung gian đã lập lệnh sau DUYỆT 2 (D29).
 
 ## Gửi file
