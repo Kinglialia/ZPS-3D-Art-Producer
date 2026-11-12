@@ -636,6 +636,16 @@ def test_a_worker_report_without_the_profile_hash_is_set_aside_the_same_way(flow
     assert flow.st["state"] == "running"
 
 
+def test_a_worker_report_with_another_profile_hash_is_set_aside_with_its_own_message(flow):
+    out = flow.brief()
+    rep = flow.root / out["report"]
+    rep.write_text("STATUS: DONE\nPROFILE_HASH: 000000000000\n", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        flow.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
+    assert str(e.value).startswith(f"production/assets/{AID}/blockout/v1/worker-out.md: PROFILE_HASH 000000000000 khác brief")
+    assert not rep.exists() and rep.with_name("worker-out.rejected-1.md").exists()
+
+
 def test_the_checks_that_run_after_parsing_also_set_the_report_aside(flow):
     flow.work()
     out = flow.brief()

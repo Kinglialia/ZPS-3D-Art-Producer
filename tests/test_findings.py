@@ -153,6 +153,11 @@ def test_heavier_param_finding_goes_before_structure():
         finding("F1", "major", "structure"), finding("F2", "blocker", "param")]) == []
 
 
+def test_a_fix_with_nothing_blocking_open_is_rejected_because_it_would_send_a_worker_for_nothing():
+    assert errs_of(None, verdict="FIX", top_fix="param: F1", findings=[finding("F1", "minor", "param")]) == [
+        "FIX nhưng không còn blocker/major/unclear đang mở"]
+
+
 def test_preference_never_blocks_pass():
     assert errs_of(None, verdict="PASS", top_fix=None, counts=counts(minor=1, preference=1), rubric="massing=pass",
                    findings=[finding("F1", "preference", "param"), finding("F2", "minor", "param")]) == []

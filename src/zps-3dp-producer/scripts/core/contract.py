@@ -20,7 +20,7 @@ WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", 
                "ACCEPTED_FAIL"}
 NONE = {"", "-", "—", "none"}
 
-KEY = re.compile(r"^\s*(?P<o>\*\*|`|__)?([A-Za-z_]+)(?P=o)?\s*:\s*(?:(?P=o))?\s*(.*)$")
+KEY = re.compile(r"^\s*(?P<o>\*\*|`)?([A-Za-z_]+)(?P=o)?\s*:\s*(?:(?P=o))?\s*(.*)$")
 FID = r"[FH]\d+"
 MARK = r"[*`]*"
 HEAD = re.compile(rf"^-\s*{MARK}({FID}){MARK}\s*\[(\w+)\]\s*{MARK}(\w*){MARK}(.*)$")
@@ -31,6 +31,7 @@ SPLIT = re.compile(rf"\s*\|\s*(?={MARK}(?:{'|'.join(FIELDS)}){MARK}\s*:)", re.I)
 PAREN = re.compile(r"\([^)]*\)")
 DASH = re.compile(r"\s+[—–-]\s+")
 WORD = re.compile(r"[*`_\s]*([A-Za-z_]+)")
+CHOICES = re.compile(r"[*`\s]*[|/]")
 FALLBACK = "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`."
 NOTE_ID = re.compile(r"^\w+ v\d+ [FH]\d+$")
 WRAPPED = re.compile(r"^--- report ---[ \t\r]*\n(.*?)^--- end ---[ \t\r]*$", re.M | re.S)
@@ -44,9 +45,10 @@ def unwrap(text: str) -> str:
 
 
 def word(s: str) -> str:
-    """The first word of a value, lower case, without bold or backticks: `**PASS** (đủ)` is `pass`."""
+    """The first word of a value, lower case, without bold or backticks: `**PASS** (đủ)` is `pass`. A list of choices
+    (`PASS | FIX`) is a template line nobody filled, so it has no word."""
     m = WORD.match(s)
-    return m.group(1).lower() if m else ""
+    return m.group(1).lower() if m and not CHOICES.match(s[m.end():]) else ""
 
 
 def parse_contract(text: str, keys: set[str], errs: list[str] | None = None) -> dict:

@@ -258,3 +258,21 @@ def test_worker_status_and_unfixable_are_read_from_their_first_word_so_the_loop_
     c, errs = parse_worker("STATUS: DONE_WITH_CONCERNS.\nPROFILE_HASH: abc\n")
     assert (errs, c["STATUS"], "UNFIXABLE" in c) == ([], "DONE_WITH_CONCERNS", False)
     assert parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nUNFIXABLE: maybe\n")[1] == ["UNFIXABLE phải là yes|no"]
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ("VERDICT: FIX", "VERDICT: PASS | FIX | ESCALATE", "VERDICT phải là ESCALATE|FIX|PASS"),
+    ("RUBRIC: massing=fail", "RUBRIC: massing=pass|fail|unclear", "RUBRIC massing: 'pass|fail|unclear' phải là pass|fail|unclear|not_checked"),
+    ("EVIDENCE_OPENED:", "COMPARE: F1=better|same|worse\nEVIDENCE_OPENED:", "COMPARE F1: 'better|same|worse' phải là better|same|worse"),
+    ("EVIDENCE_OPENED:", "PICK: a|b|c\nEVIDENCE_OPENED:", "PICK phải là a|b|c"),
+    ("confidence: high", "confidence: high|medium|low", "F1: confidence phải là high|medium|low"),
+])
+def test_an_unfilled_template_line_from_the_brief_is_still_rejected_so_no_verdict_is_guessed(old, new, message):
+    """Reading the first word must not turn `PASS | FIX | ESCALATE` into a PASS."""
+    _, errs = parse_review(report(findings=[finding()]).replace(old, new))
+    assert message in errs
+
+
+def test_an_unfilled_template_line_in_a_worker_report_is_still_rejected():
+    _, errs = parse_worker("STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED\nPROFILE_HASH: abc\nUNFIXABLE: yes|no\n")
+    assert errs == ["STATUS phải là BLOCKED|DONE|DONE_WITH_CONCERNS|NEEDS_CONTEXT", "UNFIXABLE phải là yes|no"]
