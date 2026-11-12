@@ -1,8 +1,9 @@
 """`custom` part functions (D32): the shared custom_lib.py holds only generic functions, and the asset's own functions
 live in <PRODUCER_ROOT>/assets/<id>/custom_parts.py. That file is plain Python that uses only math and returns
 vertices and faces (D32.2): custom_mesh.py runs it outside Blender, after an allow-list check, and writes one JSON mesh
-per part. Blender builds only custom_lib.py and those JSON meshes (mesh_from_json.py), so code an agent wrote never runs
-inside Blender, where it would have the user's rights and, on Codex, no sandbox."""
+per part. The build uses only custom_lib.py and those JSON meshes (mesh_from_json.py), so code an agent wrote never runs
+in the build or in Blender, where it would have the user's rights and, on Codex, no sandbox. Both are (verts, faces), so
+the build needs no Blender (U2, L4)."""
 import hashlib
 import json
 import os
@@ -90,11 +91,96 @@ def meshes(f, *cmd):
     return r.returncode, r.stdout.strip(), {p.name: read(p) for p in sorted(out.glob("*.json"))} if out.is_dir() else {}
 
 
+def sweep_state(verts, faces):
+    """Euler characteristic and bbox size of a mesh: a closed shell without a hole has V - E + F = 2."""
+    edges = {(min(a, b), max(a, b)) for f in faces for a, b in zip(f, [*f[1:], f[0]])}
+    ext = [max(v[i] for v in verts) - min(v[i] for v in verts) for i in range(3)]
+    return len(verts) - len(edges) + len(faces), [round(x, 9) for x in ext]
+
+
 def test_the_shared_library_holds_only_generic_functions_so_no_asset_code_ships_with_the_skill():
     import ast
     tree = ast.parse((TOOLS / "custom_lib.py").read_text(encoding="utf-8"))
     public = sorted(n.name for n in tree.body if isinstance(n, ast.FunctionDef) and not n.name.startswith("_"))
     assert public == GENERIC
+
+
+def test_custom_lib_imports_no_bmesh_so_a_graph_with_bevel_box_needs_no_blender():
+    """U2: a function that imports bmesh makes every build of a graph that calls it open Blender."""
+    import ast
+    tree = ast.parse((TOOLS / "custom_lib.py").read_text(encoding="utf-8"))
+    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    imported |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    assert imported == {"math"}
+
+
+def test_bevel_box_without_a_bevel_is_the_plain_box_of_8_vertices_6_faces_and_12_triangles():
+    import custom_lib
+    import mesh_from_json as MJ
+    for args in ((2.0, 1.0, 0.6, 0.0, 2, 4095), (2.0, 1.0, 0.6, 0.1, 2, 0)):
+        verts, faces = custom_lib.bevel_box(*args)
+        _, tris = MJ.arrays(verts, faces)
+        assert (len(verts), len(faces), len(tris), MJ.errors(verts, faces)) == (8, 6, 12, []), args
+
+
+def test_bevel_box_with_2_segments_on_all_12_edges_has_32_vertices_30_faces_and_60_triangles_in_a_closed_mesh():
+    import custom_lib
+    import mesh_from_json as MJ
+    verts, faces = custom_lib.bevel_box(2.0, 1.0, 0.6, 0.1, 2, 4095)
+    _, tris = MJ.arrays(verts, faces)
+    assert (len(verts), len(faces), len(tris), MJ.errors(verts, faces)) == (32, 30, 60, [])
+    assert sweep_state(verts, faces) == (2, [2.0, 1.0, 0.6])
+
+
+def test_bevel_box_cuts_into_the_corner_only_where_the_mask_says_so():
+    """The mask bit decides which edges round: the same box with one edge rounded loses volume at that edge only, so the
+    edge against another part stays sharp and the joint has no notch."""
+    import numpy as np
+    import custom_lib
+    import mesh_from_json as MJ
+
+    def volume(mask):
+        v, t = MJ.arrays(*custom_lib.bevel_box(2.0, 1.0, 0.6, 0.1, 2, mask))
+        return round(float(sum(v[a] @ np.cross(v[b], v[c]) for a, b, c in t) / 6), 6)
+    """Each rounded edge of length 0.6 loses (1 - sin 45 deg) * r^2 * 0.6 = 0.001757 m3 with 2 segments."""
+    assert (volume(0), volume(1), volume(3), volume(4095)) == (1.2, 1.198243, 1.196485, 1.160853)
+
+
+def test_every_edge_mask_gives_a_closed_mesh_with_the_bbox_w_d_h():
+    """4096 masks, so a corner where 0, 1, 2 or 3 rounded edges meet cannot leave a hole or change the size."""
+    import custom_lib
+    import mesh_from_json as MJ
+    bad = []
+    for mask in range(4096):
+        verts, faces = custom_lib.bevel_box(2.0, 1.0, 0.6, 0.1, 2, mask)
+        if MJ.errors(verts, faces) or sweep_state(verts, faces) != (2, [2.0, 1.0, 0.6]):
+            bad.append(mask)
+    assert bad == []
+
+
+@pytest.mark.parametrize("r, seg", [(0.3, 1), (0.3, 4), (0.5, 2), (9.0, 2)])
+def test_a_radius_up_to_half_the_shortest_side_keeps_every_mask_closed_and_a_larger_one_is_cut_down(r, seg):
+    import custom_lib
+    import mesh_from_json as MJ
+    for mask in (1, 5, 255, 4095):
+        verts, faces = custom_lib.bevel_box(1.0, 1.0, 1.0, r, seg, mask)
+        assert (MJ.errors(verts, faces), sweep_state(verts, faces)) == ([], (2, [1.0, 1.0, 1.0]))
+
+
+def test_arrays_gives_every_shell_an_outward_winding_and_splits_a_concave_face_into_triangles():
+    """The kit's union needs one winding per shell, counter-clockwise from outside. bmesh used to fix it with
+    recalc_face_normals; an asset function can list its faces either way, and an L-shaped face has no triangle fan."""
+    import numpy as np
+    import mesh_from_json as MJ
+    ring = [(0, 0), (2, 0), (2, 1), (1, 1), (1, 2), (0, 2)]
+    verts = [(x, y, 0.0) for x, y in ring] + [(x, y, 1.0) for x, y in ring]
+    faces = [tuple(range(6)), tuple(range(6, 12))[::-1]] + [(i, 6 + i, 6 + (i + 1) % 6, (i + 1) % 6) for i in range(6)]
+
+    def volume(v, t):
+        return float(sum(v[a] @ np.cross(v[b], v[c]) for a, b, c in t) / 6)
+    assert MJ.errors(verts, faces) == []
+    v, t = MJ.arrays(verts, faces)
+    assert (len(t), round(volume(v, t), 9)) == (20, 3.0)
 
 
 def test_schema_refuses_a_custom_part_whose_fn_is_in_neither_the_library_nor_the_asset_file(tmp_path, run_check):
@@ -405,11 +491,10 @@ def test_param_fit_leaves_alone_the_params_that_feed_an_asset_function(tmp_path)
     assert (held in r.stdout.splitlines(), read(f / "fit.json")["overall"]) == (True, "skipped"), r.stdout
 
 
-@pytest.mark.blender
-@needs_blender
-def test_param_fit_of_a_graph_with_a_custom_part_runs_only_in_blender_because_the_asset_mesh_is_a_bmesh(tmp_path):
-    """The JSON mesh of an asset function becomes a bmesh, and bmesh exists only inside Blender. Fitting is on, so the
-    search builds the graph: plain Python stops at the first build, Blender fits."""
+@needs_venv
+def test_param_fit_of_a_graph_with_a_custom_part_runs_in_the_venv_because_the_asset_mesh_is_plain_arrays(tmp_path):
+    """The JSON mesh of an asset function is read as (verts, faces), with no bmesh. Fitting is on, so the search builds
+    the graph: it used to stop at the first build in plain Python and fit only in Blender (L4)."""
     f = asset_dir(tmp_path, roof_graph(), ROOF)
     assert meshes(f)[0] == 0
     write_mask(tmp_path / "front.png", 400, 370)
@@ -417,12 +502,8 @@ def test_param_fit_of_a_graph_with_a_custom_part_runs_only_in_blender_because_th
     spec.write_text(json.dumps({"concept": {"views": {"front": "front.png"}}, "config": {"self_build": {
         "param_fit": {"enabled": True, "max_evals": 6, "time_limit_s": 60, "raster_size": 64}}}}), encoding="utf-8")
     fit = f / "fit.json"
-    subprocess.run([str(VPY), str(TOOLS / "build_parts.py"), "param_fit", "--work", str(f), "--spec", str(spec)],
-                   capture_output=True, text=True)
-    assert read(fit)["overall"] == "error" and "bmesh" in read(fit)["data"]["error"]
-    fit.unlink()
-    r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python", str(TOOLS / "build_parts.py"), "--",
-                        "param_fit", "--work", str(f), "--spec", str(spec)], capture_output=True, text=True)
+    r = subprocess.run([str(VPY), str(TOOLS / "build_parts.py"), "param_fit", "--work", str(f), "--spec", str(spec)],
+                       capture_output=True, text=True)
     assert read(fit)["overall"] != "error" and "search_after" in read(fit)["data"], (r.stdout[-600:], read(fit)["data"])
 
 
@@ -433,25 +514,70 @@ def test_build_parts_refuses_a_kit_tool_other_than_assembly_or_param_fit(tmp_pat
                                            "assembly, param_fit\n")
 
 
-@pytest.mark.blender
-@needs_blender
-def test_a_custom_part_builds_from_the_library_function_even_when_parts_lib_defines_the_same_name(tmp_path):
+def bevel_roof_graph(r, seg, mask):
     g = hut()
-    part(g, "roof").update(primitive="custom", fn="bevel_box", args=["wall_w", "wall_d", "roof_h", 0.2, 2, 1])
+    part(g, "roof").update(primitive="custom", fn="bevel_box", args=["wall_w", "wall_d", "roof_h", r, seg, mask])
     part(g, "roof").pop("dims")
-    f, sentinel = graph_dir(tmp_path, g), tmp_path / "sentinel"
-    agent_lib(f, sentinel, "def bevel_box(*a):\n    raise SystemExit('agent code')\n")
-    build(f, BLENDER, "-b", "--factory-startup", "--python")
+    return g
+
+
+def roof_row(f):
     asm = read(f / "assembly.json")
     roof = next(p for p in asm["data"]["parts"] if p["name"] == "roof")
-    assert (asm["overall"], sentinel.exists(), asm["data"]["union"]["extents"], roof["bbox_max"], roof["tris"]) == (
-        "pass", False, [4.0, 4.0, 3.7], [1.5, 1.5, 3.7], 20)
+    return asm, roof
+
+
+@needs_venv
+def test_a_custom_part_builds_from_the_library_function_even_when_parts_lib_defines_the_same_name(tmp_path):
+    """One rounded edge, 2 segments: 20 triangles, where the plain box of the same size has 12. The number proves that
+    bevel_box ran, and not a box and not the agent's bevel_box, which would stop the build."""
+    f, sentinel = graph_dir(tmp_path, bevel_roof_graph(0.2, 2, 1)), tmp_path / "sentinel"
+    agent_lib(f, sentinel, "def bevel_box(*a):\n    raise SystemExit('agent code')\n")
+    r = build(f, str(VPY))
+    asm, roof = roof_row(f)
+    assert (r.returncode, asm["overall"], sentinel.exists(), asm["data"]["union"]["extents"], roof["bbox_max"],
+            roof["tris"]) == (0, "pass", False, [4.0, 4.0, 3.7], [1.5, 1.5, 3.7], 20), r.stderr
+
+
+@needs_venv
+@pytest.mark.parametrize("r, seg, mask, tris", [(0.0, 2, 4095, 12), (0.2, 2, 4095, 60)])
+def test_a_graph_with_bevel_box_builds_in_the_venv_with_no_blender_and_the_union_stays_a_closed_manifold(
+        tmp_path, r, seg, mask, tris):
+    """U2: the venv has no bmesh. r = 0 is the plain box (12 triangles); 2 segments on all 12 edges is 60 triangles; the
+    union of the hut with either roof is still a manifold, so the winding the numpy path gave is outward."""
+    f = graph_dir(tmp_path, bevel_roof_graph(r, seg, mask))
+    out = build(f, str(VPY))
+    asm, roof = roof_row(f)
+    assert (out.returncode, asm["overall"], roof["tris"], roof["manifold"], asm["data"]["union"]["method"],
+            asm["data"]["union"]["extents"]) == (0, "pass", tris, True, "manifold3d", [4.0, 4.0, 3.7]), out.stderr
+
+
+@needs_venv
+def test_an_asset_function_that_lists_some_faces_backwards_still_builds_a_manifold_union(tmp_path):
+    """bmesh used to recalc the normals. The roof below has its floor face reversed, which the union would refuse."""
+    backwards = ROOF.replace("(0, 3, 2, 1)", "(0, 1, 2, 3)")
+    f = asset_dir(tmp_path, roof_graph(), backwards)
+    assert meshes(f)[0] == 0
+    out = build(f, str(VPY))
+    asm, roof = roof_row(f)
+    assert (out.returncode, asm["overall"], roof["manifold"], asm["data"]["union"]["method"]) == (
+        0, "pass", True, "manifold3d"), out.stderr
 
 
 @pytest.mark.blender
 @needs_blender
-def test_blender_builds_an_asset_part_from_its_json_mesh_and_parts_lib_holds_only_the_library(tmp_path):
-    """The JSON is halved along X by hand after custom_mesh.py: the roof Blender builds is half as wide, so the shape
+def test_blender_builds_the_same_bevel_roof_as_the_venv_does(tmp_path):
+    """Blender stays a way to run the build, with the same numbers: the venv gives 20 triangles for this roof."""
+    f = graph_dir(tmp_path, bevel_roof_graph(0.2, 2, 1))
+    build(f, BLENDER, "-b", "--factory-startup", "--python")
+    asm, roof = roof_row(f)
+    assert (asm["overall"], asm["data"]["union"]["extents"], roof["bbox_max"], roof["tris"]) == (
+        "pass", [4.0, 4.0, 3.7], [1.5, 1.5, 3.7], 20)
+
+
+@needs_venv
+def test_the_build_makes_an_asset_part_from_its_json_mesh_and_parts_lib_holds_only_the_library(tmp_path):
+    """The JSON is halved along X by hand after custom_mesh.py: the roof the build makes is half as wide, so the shape
     came from the JSON, not from running ridge_roof. parts_lib.py is a plain copy of custom_lib.py."""
     f = asset_dir(tmp_path, roof_graph(), ROOF)
     assert meshes(f)[0] == 0
@@ -459,7 +585,7 @@ def test_blender_builds_an_asset_part_from_its_json_mesh_and_parts_lib_holds_onl
     doc = read(j)
     doc["verts"] = [[x / 2, y, z] for x, y, z in doc["verts"]]
     j.write_text(json.dumps(doc), encoding="utf-8")
-    r = build(f, BLENDER, "-b", "--factory-startup", "--python")
+    r = build(f, str(VPY))
     asm = read(f / "assembly.json")
     roof = next(p for p in asm["data"]["parts"] if p["name"] == "roof")
     assert (asm["overall"], roof["bbox_min"], roof["bbox_max"], roof["tris"]) == (

@@ -7,7 +7,7 @@ the builtins of project_parts.BUILTINS and only `math` to import. Each `custom` 
 gets fn(*args), with args resolved from the graph params as the kit does, and the result (vertices, faces) goes to
 project_parts.mesh_dir(<w>)/<part>.json (mesh_from_json.py format; args and the sha256 of custom_parts.py included, so
 build_parts.py refuses a mesh made for other values). Older files in that folder are removed first.
-Run it after each change to part_graph.json or custom_parts.py, before the Blender build. It refuses to run inside
+Run it after each change to part_graph.json or custom_parts.py, before the build. It refuses to run inside
 Blender: Blender builds only from the JSON. Prints one line. Exit 0 done (or nothing to do), 1 refused or failed, 2 inside
 Blender.
 """

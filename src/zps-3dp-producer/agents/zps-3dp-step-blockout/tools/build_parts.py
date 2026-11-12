@@ -1,15 +1,16 @@
 """Run the kit's self_build assembly.py or param_fit.py with `custom` parts taken only from custom_lib.py and from the
-JSON meshes of the asset's own functions (D27.13, D32.2).
+JSON meshes of the asset's own functions (D27.13, D32.2). No bmesh: every `custom` part is a (verts, faces) pair that
+mesh_from_json.arrays() orients and triangulates, so the build runs in the venv and gives the same result in Blender.
 
 Usage:
   PY T/build_parts.py assembly --work <w> [assembly.py options]
   PY T/build_parts.py param_fit --work <w> --spec <spec.json> [param_fit.py options]
-  BLENDER -b --python T/build_parts.py -- assembly --work <w> ...     (graph with custom parts; lib/bootstrap.py puts
+  BLENDER -b --python T/build_parts.py -- assembly --work <w> ...     (same result; lib/bootstrap.py puts
                                                                        tools/.deps/blender-py<ver> on sys.path)
 The kit tools exec <graph dir>/parts_lib.py through graph.load_parts_lib. Here that function never imports it: it
 copies custom_lib.py over <graph dir>/parts_lib.py, so the file beside the graph is the shared code that ran. A part
 whose fn is a function of the asset's custom_parts.py (project_parts.find; names read with ast, the file never runs here)
-gets the mesh that custom_mesh.py wrote to project_parts.mesh_dir(<w>), built by mesh_from_json.py. That mesh must have
+gets the mesh that custom_mesh.py wrote to project_parts.mesh_dir(<w>), read by mesh_from_json.py. That mesh must have
 the same fn, the same args and the sha256 of the current custom_parts.py. A refused file, a name clash, a missing or
 stale mesh, or a `custom` part whose fn is in neither file stops the build with a GraphError in the kit's result JSON
 (assembly.json or fit.json), exit 1. param_fit does not fit params that feed an asset function, because its mesh is
@@ -53,7 +54,7 @@ def project_functions(gdir):
 
 
 def asset_function(fn, gdir, sha):
-    """The stand-in for asset function fn: the JSON mesh custom_mesh.py made for these args, as a bmesh."""
+    """The stand-in for asset function fn: the JSON mesh custom_mesh.py made for these args, as (verts, faces)."""
     def build(*args):
         where = PP.mesh_dir(gdir)
         run = f"run `PY T/custom_mesh.py --work {gdir}` after each change to part_graph.json or {PP.FILE}"
@@ -64,7 +65,7 @@ def asset_function(fn, gdir, sha):
             raise G.GraphError(f"no JSON mesh of {fn}{tuple(args)} in {where}: {run}")
         if same[0].get("source_sha256") != sha:
             raise G.GraphError(f"the JSON mesh of {fn} in {where} was made from another {PP.FILE}: {run}")
-        return MJ.to_bmesh(same[0])
+        return same[0]["verts"], same[0]["faces"]
     return build
 
 
@@ -75,10 +76,6 @@ def approved_lib(gdir):
     if not custom:
         return None
     own, sha = project_functions(gdir)
-    try:
-        import bpy  # noqa: F401  (with the bpy pip module, bmesh loads only after bpy)
-    except ImportError:
-        pass
     import custom_lib
     fns = dict(custom_lib.FUNCTIONS)
     clash = sorted(set(own) & set(fns))
@@ -92,6 +89,18 @@ def approved_lib(gdir):
                            f"available: {', '.join(fns)}")
     FED.update(a for p in G.expand_parts(graph) if p.get("fn") in own for a in p.get("args", []) if isinstance(a, str))
     return types.SimpleNamespace(**fns)
+
+
+def mesh_arrays(mesh):
+    """The kit asks bmesh_arrays for the (vertices, triangles) of what a custom function returned."""
+    try:
+        verts, faces = mesh
+    except (TypeError, ValueError):
+        raise G.GraphError("a custom function must return (verts, faces)") from None
+    errs = MJ.errors(verts, faces)
+    if errs:
+        raise G.GraphError(f"a custom function returned a bad mesh: {'; '.join(errs[:3])}")
+    return MJ.arrays(verts, faces)
 
 
 def fit_params(graph, _kit=G.fit_params):
@@ -110,6 +119,7 @@ def main():
     target = args[0]
     sys.argv = sys.argv[:len(sys.argv) - len(args)] + args[1:]
     G.load_parts_lib = approved_lib
+    G.bmesh_arrays = mesh_arrays
     G.fit_params = fit_params
     runpy.run_path(os.path.join(KIT, f"{target}.py"), run_name="__main__")
 
