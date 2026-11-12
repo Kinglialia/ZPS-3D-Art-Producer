@@ -393,6 +393,19 @@ def install(dist, project, *args, edition="claude"):
                           env=env, capture_output=True, text=True)
 
 
+def test_a_stop_hook_of_the_user_stays_and_the_installer_adds_the_producer_stop_hook_beside_it_d39_1(dist, tmp_path):
+    """Claude Code runs every Stop hook and one refusal is enough, so the two hooks live side by side."""
+    s = tmp_path / ".claude/settings.json"
+    s.parent.mkdir()
+    mine = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo my-stop"}]}]}}
+    s.write_text(json.dumps(mine), encoding="utf-8")
+    assert install(dist, tmp_path).returncode == 0
+    stop = json.loads(s.read_text(encoding="utf-8"))["hooks"]["Stop"]
+    assert [h["command"].rsplit(" ", 1)[-1] for g in stop for h in g["hooks"]] == ["my-stop", "on-main-stop"]
+    before = s.read_bytes()
+    assert (install(dist, tmp_path).returncode, s.read_bytes()) == (0, before)
+
+
 def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_keeps_every_existing_key_d30_7(
         dist, tmp_path):
     """Without the rules every background subagent stops on a permission prompt; without the hook a new session does
@@ -415,7 +428,8 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
         "model": "opus", "env": {"BASH_DEFAULT_TIMEOUT_MS": "600000", "BASH_MAX_TIMEOUT_MS": "3600000"},
         "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "echo mine"}]},
                                    {"hooks": [{"type": "command", "command": f"{p} next --session"}]}],
-                  "SubagentStop": [{"hooks": [{"type": "command", "command": f"{p} on-stop"}]}]}}
+                  "SubagentStop": [{"hooks": [{"type": "command", "command": f"{p} on-stop"}]}],
+                  "Stop": [{"hooks": [{"type": "command", "command": f"{p} on-main-stop"}]}]}}
     diff = r.stdout.split(f"+++ {s.resolve()}\n", 1)[1]
     assert f'+      "Bash({bl}:*)",\n' in diff and f'+            "command": "{p} next --session"\n' in diff
     before = s.read_bytes()
@@ -488,9 +502,9 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
         assert r.returncode == 0, r.stderr
         return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
     out, gap = preflight()
-    assert (".claude/settings.json thiếu 8 allow rule, hook SessionStart, hook SubagentStop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
+    assert (".claude/settings.json thiếu 8 allow rule, hook SessionStart, hook SubagentStop, hook Stop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
             "(Bash timeout, D33.4) → chạy lại install.py của bản cài") in out
-    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (8, ["SessionStart", "SubagentStop"])
+    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (8, ["SessionStart", "SubagentStop", "Stop"])
     sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
     assert [r for r in gap["missing"]["allow"] if "run_tool" in r or "assemble.py" in r] == [
         f"Bash({sk}/scripts/run_tool.py:*)",
