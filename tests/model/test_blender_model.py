@@ -22,6 +22,8 @@ SOURCES = {"layout": {"w": 4.0, "d": 4.0, "h": 3.7, "includes_base": True, "sour
            "door_h": 1.8, "character_h": 1.6, "camera": {"azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40}}
 STEP = {"name": "step", "primitive": "box", "dims": ["step_w", "step_d", "step_h"], "material": "STONE", "role": "mass",
         "attach": {"type": "on_top", "to": "base", "offset_uv": [0.0, -0.9]}}
+EAVE = {"name": "eave", "primitive": "box", "dims": ["eave_w", "eave_d", "eave_h"], "material": "TIMBER", "role": "mass",
+        "attach": {"type": "center_on_face", "to": "walls", "face": "-Y", "offset_uv": [0.0, 1.0]}}
 INLAY = {"name": "inlay", "primitive": "box", "dims": ["inlay_s", "inlay_s", "inlay_h"], "material": "STONE", "role": "marker",
          "attach": {"type": "inset_into", "to": "base", "face": "+Z", "offset_uv": [0.0, -0.875], "depth": "inlay_h"}}
 pytestmark = [pytest.mark.blender,
@@ -51,18 +53,20 @@ def build(d: Path, extra=(), **params):
     d.mkdir(parents=True)
     g = copy.deepcopy(HUT)
     g["parts"] += list(extra)
-    g["params"] |= {"step_w": 1.0, "step_d": 0.3, "step_h": 0.15, "inlay_s": 0.3, "inlay_h": 0.05} | params
+    g["params"] |= {"step_w": 1.0, "step_d": 0.3, "step_h": 0.15, "inlay_s": 0.3, "inlay_h": 0.05, "eave_w": 3.0,
+                    "eave_d": 0.5, "eave_h": 0.1} | params
     (d / "part_graph.json").write_text(json.dumps(g), encoding="utf-8")
     (d / "sources.json").write_text(json.dumps(SOURCES), encoding="utf-8")
     rc, out = sh(VPY, TOOLS / "self_build/assembly.py", "--work", d)
     assert rc == 0, out
 
 
-def model(final: Path, blockout: Path):
+def model(final: Path, blockout: Path, **spec):
     rc, out = sh(VPY, TOOLS / "make_spec.py", "--final", final, "--blockout", blockout,
                  "--card", PILOT / "_approved/pilot-house/asset-card.yaml", "--profile", PILOT / "PROJECT-PROFILE.yaml",
                  "--preset", ROOT / "src/zps-3dp-producer/presets/topdown-mobile-lowpoly.yaml")
     assert rc == 0, out
+    (final / "spec.json").write_text(json.dumps(read(final / "spec.json") | spec), encoding="utf-8")
     for script in ("join_mesh.py", "unwrap.py"):
         rc, out = blender(script, "--final", final)
         assert rc == 0, out
@@ -72,16 +76,24 @@ def model(final: Path, blockout: Path):
 def built(tmp_path_factory):
     t = tmp_path_factory.mktemp("model")
     b, f, g, wb, w = t / "blockout", t / "final", t / "inlay", t / "wide_blockout", t / "wide"
+    e, under, flip = t / "eave", t / "bottom_visible", t / "inside_out"
     build(b)
     build(f, [STEP])
     build(g, [INLAY])
     build(wb, wall_w=3.8, wall_d=3.8)
     build(w, wall_w=3.8, wall_d=3.8)
+    build(e, [EAVE])
+    build(under, [EAVE])
+    build(flip, [STEP])
+    inside_out(flip / "parts/step.glb")
     model(f, b)
     model(g, b)
     model(w, wb)
+    model(e, b)
+    model(under, b, bottom_visible=True)
+    model(flip, b)
+    rc = {"inside_out": sh(VPY, TOOLS / "check_mesh.py", "--final", flip, "--before-join")[0]}
     glb = f / "pilot-house-untextured.glb"
-    rc = {}
     for name in ("mesh", "uv_edge"):
         rc[name] = sh(VPY, TOOLS / f"check_{name}.py", "--final", f)[0]
     rc["detail"] = sh(VPY, TOOLS / "check_detail.py", "--final", f, "--blockout", b, "--pilot", "none")[0]
@@ -92,16 +104,24 @@ def built(tmp_path_factory):
     blender("self_build/render_views.py", "--work", f, "--mode", "critic", "--outdir", f / "review/renders")
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
-    return {"final": f, "inlay": g, "wide": w, "rc": rc}
+    return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "inside_out": flip, "rc": rc}
 
 
-def heights_up(glb: Path, xy) -> list[float]:
-    """Heights of the up-facing triangles a vertical line through xy crosses."""
+def inside_out(glb: Path):
+    sys.path.insert(0, str(TOOLS / "lib"))
+    import glbread
+    from test_model_tools import write_glb
+    g = glbread.load(glb)
+    write_glb(glb, g["v"], g["f"][:, ::-1])
+
+
+def heights_up(glb: Path, xy, up=True) -> list[float]:
+    """Heights of the up-facing (or down-facing) triangles a vertical line through xy crosses."""
     sys.path.insert(0, str(TOOLS / "lib"))
     import glbread
     g = glbread.load(glb)
     t = g["v"][g["f"]]
-    up = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])[:, 2] > 0
+    up = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])[:, 2] * (1 if up else -1) > 0
     out = []
     for a, b, c in t[up]:
         m = np.array([[a[0] - c[0], b[0] - c[0]], [a[1] - c[1], b[1] - c[1]]])
@@ -120,9 +140,33 @@ def test_unwrap_runs_the_kit_xatlas_in_blender_without_the_rebake_mode_checklist
 def test_join_keeps_parts_apart_drops_the_faces_parts_hide_and_splits_sharp_edges(built):
     overall, c = checks(built["final"] / "review/join.json")
     assert {k: v for k, v in c.items() if k != "join.sharp_edges_split"} == {
-        "join.parts": ("info", 7), "join.hidden_faces_removed": ("info", 18),
-        "join.removed_faces_seen": ("pass", 0), "join.origin_offset_m": ("info", [0.0, 0.0, 0.0])}
-    assert read(built["final"] / "review/join.json")["data"]["tris"] == 62
+        "join.parts": ("info", 7), "join.hidden_faces_removed": ("info", 20), "join.removed_faces_seen": ("pass", 0),
+        "join.bottom_visible": ("info", False), "join.origin_offset_m": ("info", [0.0, 0.0, 0.0])}
+    assert read(built["final"] / "review/join.json")["data"]["tris"] == 60
+
+
+def test_the_ground_hides_the_underside_of_the_base_but_not_the_underside_of_an_eave(built):
+    """A prop stands on the ground: its base underside is never on screen and only costs tris and texels. An eave
+    high up looks down too, yet a low camera sees it, so only faces resting on the ground go."""
+    glb = built["eave"] / "pilot-house-untextured.glb"
+    assert (heights_up(glb, (1.9, 1.9), up=False), heights_up(glb, (0.7, -1.75), up=False)) == ([], [2.6])
+    assert checks(built["eave"] / "review/join.json")[1]["join.removed_faces_seen"] == ("pass", 0)
+
+
+def test_a_spec_with_a_visible_bottom_keeps_the_base_underside(built):
+    glb = built["bottom_visible"] / "pilot-house-untextured.glb"
+    assert heights_up(glb, (1.9, 1.9), up=False) == [0.0]
+    assert checks(built["bottom_visible"] / "review/join.json")[1]["join.bottom_visible"] == ("info", True)
+
+
+def test_a_part_built_inside_out_vanishes_in_the_join_unseen_so_check_mesh_fails_it_before(built):
+    """Its faces look inwards, so every ray from them runs into the part and the join deletes all of it; the deleted
+    faces show only their back to the view rays, so join.removed_faces_seen still passes."""
+    d = built["inside_out"]
+    assert (checks(d / "review/join.json")[1]["join.removed_faces_seen"], heights_up(d / "pilot-house-untextured.glb",
+                                                                                     (0.0, -1.8))) == (("pass", 0), [0.3])
+    assert (built["rc"]["inside_out"], checks(d / "review/checks/mesh_build.json")[1]) == (
+        1, {"mesh.part_winding": ("fail", ["step"])})
 
 
 def test_join_keeps_the_10_cm_base_top_rim_around_3_8_m_walls_on_a_4_m_base(built):
@@ -143,9 +187,10 @@ def test_the_joined_mesh_passes_the_model_checks(built):
     f, rc = built["final"], built["rc"]
     assert (rc["mesh"], rc["uv_edge"], rc["detail"]) == (0, 0, 0)
     assert checks(f / "review/checks/mesh.json") == ("pass", {
-        "mesh.structure": ("pass", {"nodes": 1, "meshes": 1, "materials": 1}), "mesh.coplanar_overlap": ("pass", 0)})
+        "mesh.part_winding": ("pass", []), "mesh.structure": ("pass", {"nodes": 1, "meshes": 1, "materials": 1}),
+        "mesh.coplanar_overlap": ("pass", 0)})
     _, c = checks(f / "review/checks/detail.json")
-    assert (c["detail.more_tris"], c["detail.cap"]) == (("pass", 80), ("pass", 62))
+    assert (c["detail.more_tris"], c["detail.cap"]) == (("pass", 80), ("pass", 60))
     overall, c = checks(f / "review/checks/uv_edge.json")
     assert overall == "pass" and c["uv.edge_margin_px"][1] >= 16
 

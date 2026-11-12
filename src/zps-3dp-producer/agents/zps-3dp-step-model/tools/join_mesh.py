@@ -8,8 +8,12 @@ Reads F/spec.json (asset id), F/assembly.json (part order) and F/parts/<part>.gl
   point moved 1.5 cm towards the incentre, edge points first. Sampling only near the corners deleted the 10 cm base-top
   rim around 3.8 m walls on a 4 m base, because every corner sat under the walls. Coplanar faces of two flush parts
   facing the same way stay; check_mesh.py reports them.
+- The asset stands on the ground: a ground plane under the footprint (bbox + 5 % of the diagonal, 0.01 % of the
+  diagonal below the lowest point) blocks the rays, so faces resting on the ground are deleted too. Only the
+  footprint: a face high up that looks down (eave, table top) still sees past it and stays.
+  spec.json bottom_visible: true (default false) leaves the ground out.
 - join.removed_faces_seen fails when a deleted face is the first hit of a 200 x 200 orthographic ray grid along the
-  6 axes or from 45 deg above on the 4 diagonals.
+  6 axes (not from below unless bottom_visible) or from 45 deg above on the 4 diagonals.
 - Split the vertices of every edge sharper than 20 deg; every face smooth-shaded.
 - Origin at the bottom centre of the whole asset.
 Saves F/<id>.blend (object, mesh and material named <id>, no UV yet: unwrap.py next).
@@ -36,6 +40,8 @@ N_DIRS = 64
 EDGE_M = 0.015
 GRID_M = 0.05
 SEEN_RES = 200
+GROUND_MARGIN = 0.05
+GROUND_DROP = 1e-4
 
 
 def part_arrays(final):
@@ -82,15 +88,24 @@ def hidden(v, f, tree):
     return out
 
 
-def seen(v, f, gone, tree):
-    """Ids of gone faces that an orthographic ray grid hits first, front side, along the 6 axes and from 45 deg above
-    on the 4 diagonals."""
+def ground(v):
+    """Vertices and triangles of the ground plane under the footprint of v."""
+    lo, hi = v.min(0), v.max(0)
+    diag = float(np.linalg.norm(hi - lo)) or 1.0
+    (x0, y0), (x1, y1) = lo[:2] - GROUND_MARGIN * diag, hi[:2] + GROUND_MARGIN * diag
+    z = lo[2] - GROUND_DROP * diag
+    return np.array([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)]), np.array([(0, 1, 2), (0, 2, 3)])
+
+
+def seen(v, f, gone, tree, bottom):
+    """Ids of gone faces that an orthographic ray grid hits first, front side, along the 6 axes (bottom only when
+    `bottom`) and from 45 deg above on the 4 diagonals."""
     import raster
     lo, hi = v.min(0), v.max(0)
     c, diag = (lo + hi) / 2, float(np.linalg.norm(hi - lo)) or 1.0
     t = v[f]
     n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
-    views = [raster.VIEW_DIRS[k] for k in ("front", "back", "left", "right", "top", "bottom")]
+    views = [raster.VIEW_DIRS[k] for k in ("front", "back", "left", "right", "top") + (("bottom",) if bottom else ())]
     out = set()
     for d in np.asarray(views + [raster.camera_dir(az, 45) for az in (45, 135, 225, 315)], float):
         u = np.cross(d, (0, 0, 1) if abs(d[2]) < 0.9 else (0, 1, 0))
@@ -110,12 +125,16 @@ def run(final):
     import bpy
     import optbpy
     from mathutils.bvhtree import BVHTree
-    aid = common.read_json(os.path.join(final, "spec.json"))["asset"]
+    spec = common.read_json(os.path.join(final, "spec.json"))
+    aid, bottom = spec["asset"], bool(spec.get("bottom_visible", False))
     names, v, f = part_arrays(final)
     optbpy.reset_scene()
     tree = BVHTree.FromPolygons(v.tolist(), f.tolist(), all_triangles=True)
-    interior = hidden(v, f, tree)
-    shown = seen(v, f, interior, tree)
+    gv, gf = ground(v)
+    occluder = tree if bottom else BVHTree.FromPolygons(np.concatenate([v, gv]).tolist(),
+                                                        np.concatenate([f, gf + len(v)]).tolist(), all_triangles=True)
+    interior = hidden(v, f, occluder)
+    shown = seen(v, f, interior, tree, bottom)
     f = f[~interior]
     lo, hi = v[np.unique(f)].min(0), v[np.unique(f)].max(0)
     offset = np.array([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]])
@@ -141,6 +160,7 @@ def run(final):
     checks = [common.check("join.parts", "info", len(names)),
               common.check("join.hidden_faces_removed", "info", int(interior.sum())),
               common.check("join.removed_faces_seen", "fail" if shown else "pass", len(shown), 0),
+              common.check("join.bottom_visible", "info", bottom),
               common.check("join.sharp_edges_split", "info", len(sharp), SHARP_DEG),
               common.check("join.origin_offset_m", "info", [common.r(x, 4) for x in offset])]
     return checks, {"parts": names, "tris": len(f), "blend": blend}
