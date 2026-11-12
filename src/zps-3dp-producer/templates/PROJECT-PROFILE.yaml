@@ -20,7 +20,8 @@ style:
 texture_simple:
   max_materials: 2
   max_color_clusters: 6
-counts_keys: {}                              # khóa `counts` mà thẻ asset của dự án dùng: {khóa: nghĩa}, AD hoặc người dùng duyệt
+counts_keys: {}                              # khóa `counts` mà thẻ asset của dự án dùng: {khóa: nghĩa}, AD hoặc người dùng duyệt.
+#                                            # Có khóa mà thẻ ghi counts: {} thì `intake` cảnh báo
 #   doors: số cửa ra vào                     # ví dụ: mỗi dự án tự đặt khóa theo vật của mình
 #   trunks: số thân cây
 #   legs: số chân bàn

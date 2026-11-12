@@ -812,3 +812,127 @@ def test_guideline_tells_agents_to_name_the_env_path_and_never_attach_the_file_d
     g = (tmp_path / "concepts/GUIDELINE.md").read_text(encoding="utf-8")
     assert ("- Key API nằm trong file `.env` của project. Khi cần nói về key, chỉ nêu đường dẫn file `.env`. Không đính "
             "kèm và không dán nội dung `.env` vào chat: nội dung vào context và lộ mọi key trong đó.") in g.splitlines()
+
+
+STONE_RGB, TIMBER_RGB, PAPER = (143, 138, 128), (90, 64, 48), (238, 238, 238)
+TABLE = """# Material Handoff
+
+BG: #EEEEEE
+
+| Mã | Tên | Màu chính (hex) | Ô lấy màu |
+|---|---|---|---|
+| STONE | Đá | #8F8A80 | 120, 120, 100, 100 |
+| TIMBER | Gỗ | #5A4030 | 420, 120, 100, 100 |
+"""
+
+
+def with_handoff(proj, aid: str, table: str = TABLE, **card) -> Path:
+    """An asset whose concept holds a stone patch at 100..300 and a timber patch at 400..600, both from y 100."""
+    d = proj.asset(aid, card=mutated(**card))
+    im = Image.new("RGB", (1024, 1024), PAPER)
+    im.paste(STONE_RGB, (100, 100, 300, 300))
+    im.paste(TIMBER_RGB, (400, 100, 600, 300))
+    im.save(d / "concept_albedo.png")
+    (d / f"{aid}.material.md").write_text(table, encoding="utf-8")
+    return d
+
+
+def intake_warnings(proj, aid: str) -> list[str]:
+    out = proj.run("intake", aid, check=True).stdout.splitlines()
+    return [l for l in out if l.startswith("cảnh báo:")]
+
+
+def colors_of(proj, aid: str) -> dict | None:
+    f = proj.root / f"production/assets/{aid}/concept_colors.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+
+
+def test_intake_measures_each_box_and_writes_the_kit_colour_file_so_no_worker_picks_boxes_d43_1(proj):
+    with_handoff(proj, "01-a")
+    assert intake_warnings(proj, "01-a") == []
+    assert colors_of(proj, "01-a") == {"STONE": "#8F8A80", "TIMBER": "#5A4030"}
+
+
+def test_intake_reads_the_table_by_its_header_so_column_order_and_spaces_do_not_matter(proj):
+    table = ("BG: #EEEEEE\n\n|Ô lấy màu|  Mã  |Tên|\n|---|---|---|\n"
+             "|  420,120 , 100,100 |TIMBER|Gỗ|\n| 120, 120, 100, 100|STONE|Đá|\n")
+    with_handoff(proj, "01-a", table)
+    assert intake_warnings(proj, "01-a") == []
+    assert colors_of(proj, "01-a") == {"STONE": "#8F8A80", "TIMBER": "#5A4030"}
+
+
+def test_intake_writes_the_measured_colour_not_the_written_one_and_warns_with_both_when_they_differ_by_over_de_6(proj):
+    """The written hex is what the artist believes; the pixels are what the texture is compared with."""
+    with_handoff(proj, "01-a", TABLE.replace("#5A4030", "#8A4030"))
+    warns = intake_warnings(proj, "01-a")
+    assert len(warns) == 1 and warns[0].startswith("cảnh báo: 01-a: TIMBER: hex #8A4030 lệch màu đo #5A4030 (dE ")
+    assert colors_of(proj, "01-a")["TIMBER"] == "#5A4030"
+
+
+def test_intake_does_not_warn_for_a_hex_within_de_6_of_the_measure(proj):
+    with_handoff(proj, "01-a", TABLE.replace("#5A4030", "#5B4131"))
+    assert intake_warnings(proj, "01-a") == []
+
+
+def test_intake_warns_when_a_box_lies_outside_the_image_and_leaves_that_code_out_of_the_file(proj):
+    with_handoff(proj, "01-a", TABLE.replace("420, 120, 100, 100", "980, 120, 100, 100"))
+    assert intake_warnings(proj, "01-a") == ["cảnh báo: 01-a: TIMBER: ô 980, 120, 100, 100 nằm ngoài ảnh 1024x1024"]
+    assert colors_of(proj, "01-a") == {"STONE": "#8F8A80"}
+
+
+def test_intake_warns_for_a_code_with_no_box(proj):
+    with_handoff(proj, "01-a", TABLE.replace("420, 120, 100, 100", ""))
+    assert intake_warnings(proj, "01-a") == ["cảnh báo: 01-a: TIMBER: không có ô lấy màu"]
+    assert colors_of(proj, "01-a") == {"STONE": "#8F8A80"}
+
+
+def test_intake_warns_for_a_box_cell_that_is_not_four_numbers(proj):
+    with_handoff(proj, "01-a", TABLE.replace("420, 120, 100, 100", "420, 120"))
+    assert intake_warnings(proj, "01-a") == ['cảnh báo: 01-a: TIMBER: ô lấy màu "420, 120" sai, cần x, y, w, h']
+
+
+def test_an_old_handoff_without_the_box_column_writes_no_file_and_tells_that_the_worker_picks_boxes(proj):
+    old = "# Material Handoff\n\n| Mã | Tên | Màu chính (hex) |\n|---|---|---|\n| STONE | Đá | #8F8A80 |\n"
+    with_handoff(proj, "01-a", old)
+    assert intake_warnings(proj, "01-a") == [
+        'cảnh báo: 01-a: Material Handoff không có cột "Ô lấy màu": không ghi concept_colors.json, worker tự chọn ô']
+    assert colors_of(proj, "01-a") is None
+
+
+def test_a_handoff_with_no_table_at_all_is_an_old_handoff_too(proj):
+    with_handoff(proj, "01-a", "- STONE: đá xám\n")
+    assert len(intake_warnings(proj, "01-a")) == 1 and colors_of(proj, "01-a") is None
+
+
+def test_intake_warns_when_the_written_bg_is_not_the_colour_at_the_image_border(proj):
+    with_handoff(proj, "01-a", TABLE.replace("BG: #EEEEEE", "BG: #D0E0FF"))
+    warns = intake_warnings(proj, "01-a")
+    assert len(warns) == 1 and warns[0].startswith("cảnh báo: 01-a: BG #D0E0FF lệch màu nền đo ở viền ảnh #EEEEEE (dE ")
+    assert colors_of(proj, "01-a") == {"STONE": "#8F8A80", "TIMBER": "#5A4030"}
+
+
+COUNTS_EMPTY = ("cảnh báo: 01-a: thẻ có counts rỗng mà profile có counts_keys (doors): ghi số đếm, "
+                "hoặc để {} nếu asset không có thành phần lặp lại")
+
+
+@pytest.mark.parametrize("keys, counts, expected", [
+    ({"doors": "số cửa"}, {}, [COUNTS_EMPTY]),
+    ({"doors": "số cửa"}, {"doors": 1}, []),
+    ({}, {}, []),
+    (None, {}, []),
+])
+def test_intake_warns_about_an_empty_counts_only_when_the_profile_names_count_keys_c18(proj, keys, counts, expected):
+    proj.profile(**({} if keys is None else {"counts_keys": keys}))
+    with_handoff(proj, "01-a", counts=counts)
+    assert intake_warnings(proj, "01-a") == expected
+
+
+def test_the_colour_statistic_is_the_median_function_of_the_views_tool_loaded_without_touching_other_modules():
+    from core import intake
+    before_path, before_mods = list(sys.path), {n: sys.modules.get(n) for n in ("common", "measure_views")}
+    mod = intake.colors_tool()
+    assert mod.__name__ != "concept_colors" and mod.__file__.endswith("zps-3dp-step-views/tools/concept_colors.py")
+    assert (sys.path, {n: sys.modules.get(n) for n in before_mods}) == (before_path, before_mods)
+    im = Image.new("RGB", (10, 10), (10, 20, 30))
+    im.paste((200, 0, 0), (0, 0, 10, 3))
+    assert mod.median_hex(im, (0, 0, 10, 10)) == "#0A141E"

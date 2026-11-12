@@ -2,22 +2,34 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib.util
+import json
 import os
 import re
 import shutil
+import sys
+import unicodedata
 from pathlib import Path
+
+from PIL import Image
 
 import check_card
 import check_profile
 
 from .estimate import batch_line
 from .hashes import warnings_for
-from .state import (ARCHIVE, ASSETS, FINISHED, ROOT, TEMPLATES, all_status, die, ledger, load_st, now, rel,
-                    rubric_approved, save_st)
+from .state import (ARCHIVE, ASSETS, FINISHED, ROOT, SKILL_DIR, TEMPLATES, agent_name, all_status, die, ledger, load_st,
+                    now, rel, rubric_approved, save_st)
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 PROFILE = ROOT / "PROJECT-PROFILE.yaml"
 ERROR_LABELS = {"files": "Thiếu file", "type": "Loại chưa hỗ trợ v1", "card": "Thẻ sai"}
+
+COLORS_FILE = "concept_colors.json"
+BOX_HEADER, HEX_HEADER, CODE_HEADER = "ô lấy màu", "hex", "mã"
+HEX = re.compile(r"#[0-9A-Fa-f]{6}\b")
+BG_LINE = re.compile(r"^[\s>*_-]*BG:\s*(#[0-9A-Fa-f]{6})\b", re.M)
+BORDER_PX = 4
 
 FEEDBACK_TMPL = """# Feedback — {title}
 
@@ -67,6 +79,114 @@ def ignore_env():
     if ".env" not in (l.strip() for l in lines):
         g.write_text("".join(l + "\n" for l in lines) + ".env\n", encoding="utf-8")
         print("thêm .env vào .gitignore")
+
+
+_colors_mod = None
+
+
+def colors_tool():
+    """concept_colors.py of the views step, loaded by path under a private name: it puts its tools folder on
+    sys.path and binds `common` and `measure_views`, names other tool folders use for other modules. The median that
+    intake takes is the one the views tool takes (D43.1)."""
+    global _colors_mod
+    if _colors_mod is None:
+        tools = SKILL_DIR / "agents" / agent_name("step-views") / "tools"
+        names = ("common", "measure_views")
+        saved_path, saved_mods = list(sys.path), {n: sys.modules.pop(n, None) for n in names}
+        try:
+            spec = importlib.util.spec_from_file_location("_zps_views_concept_colors", tools / "concept_colors.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        finally:
+            sys.path[:] = saved_path
+            for n in names:
+                sys.modules.pop(n, None)
+                if saved_mods[n] is not None:
+                    sys.modules[n] = saved_mods[n]
+        _colors_mod = mod
+    return _colors_mod
+
+
+def handoff_rows(text: str) -> tuple[list[str] | None, list[dict[str, str]]]:
+    """The Material Handoff table by its header row: (headers, rows keyed by header), headers lower case; (None, [])
+    when no table has a `Mã` column."""
+    cells = lambda line: [unicodedata.normalize("NFC", c.strip()) for c in line.strip().strip("|").split("|")]
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        head = [c.lower() for c in cells(line)] if line.lstrip().startswith("|") else []
+        if CODE_HEADER not in head:
+            continue
+        rows = []
+        for l in lines[i + 1:]:
+            if not l.lstrip().startswith("|"):
+                break
+            row = cells(l)
+            if not set("".join(row)) <= set("-: "):
+                rows.append(dict(zip(head, row)))
+        return head, rows
+    return None, []
+
+
+def measure_handoff(aid: str, d: Path, dest: Path) -> list[str]:
+    """D43.1: median colour of the box of each material code in `<id>.material.md`, written to dest in the format of
+    the views tool's concept_colors.json. Returns the warning lines."""
+    warn = lambda m: f"cảnh báo: {aid}: {m}"
+    text = (d / f"{aid}.material.md").read_text(encoding="utf-8", errors="replace")
+    head, rows = handoff_rows(text)
+    box_col = next((h for h in head or [] if BOX_HEADER in h), None)
+    if box_col is None:
+        return [warn('Material Handoff không có cột "Ô lấy màu": không ghi concept_colors.json, worker tự chọn ô')]
+    hex_col = next((h for h in head if HEX_HEADER in h), None)
+    cc = colors_tool()
+    out, found = [], {}
+    with Image.open(d / "concept_albedo.png") as im:
+        im.load()
+        w, h = im.size
+        for row in rows:
+            code, cell = row.get(CODE_HEADER, ""), row.get(box_col, "")
+            if not code:
+                continue
+            if not cell:
+                out.append(warn(f"{code}: không có ô lấy màu"))
+                continue
+            nums = re.findall(r"-?\d+", cell)
+            if len(nums) != 4 or int(nums[2]) <= 0 or int(nums[3]) <= 0:
+                out.append(warn(f'{code}: ô lấy màu "{cell}" sai, cần x, y, w, h'))
+                continue
+            x, y, bw, bh = map(int, nums)
+            if x < 0 or y < 0 or x + bw > w or y + bh > h:
+                out.append(warn(f"{code}: ô {x}, {y}, {bw}, {bh} nằm ngoài ảnh {w}x{h}"))
+                continue
+            try:
+                found[code] = cc.median_hex(im, (x, y, x + bw, y + bh))
+            except ValueError:
+                out.append(warn(f"{code}: ô {x}, {y}, {bw}, {bh} không có pixel đặc"))
+                continue
+            written = HEX.search(row.get(hex_col, "")) if hex_col else None
+            de = cc.mv.delta_e(cc.mv.hex_rgb(written[0]), cc.mv.hex_rgb(found[code])) if written else 0
+            if de > cc.mv.TH["delta_e"][0]:
+                out.append(warn(f"{code}: hex {written[0].upper()} lệch màu đo {found[code]} (dE {de:.1f} > 6)"))
+        if bg := BG_LINE.search(text):
+            try:
+                edge = cc.median_hex(im, (0, 0, w, min(h, BORDER_PX)))
+            except ValueError:
+                edge = None
+            de = cc.mv.delta_e(cc.mv.hex_rgb(bg[1]), cc.mv.hex_rgb(edge)) if edge else 0
+            if de > cc.mv.TH["delta_e"][0]:
+                out.append(warn(f"BG {bg[1].upper()} lệch màu nền đo ở viền ảnh {edge} (dE {de:.1f} > 6)"))
+    if found:
+        dest.write_text(json.dumps(found, indent=1), encoding="utf-8")
+    return out
+
+
+def empty_counts_warning(aid: str, d: Path, prof: dict) -> list[str]:
+    """C18: a card with `counts: {}` in a project that names count keys may have left out a count."""
+    keys = prof.get("counts_keys")
+    card = check_profile.load_yaml(d / check_card.CARD)
+    if keys and isinstance(card, dict) and card.get("counts") == {}:
+        return [f"cảnh báo: {aid}: thẻ có counts rỗng mà profile có counts_keys ({', '.join(keys)}): ghi số đếm, "
+                "hoặc để {} nếu asset không có thành phần lặp lại"]
+    return []
 
 
 def create_asset(cfg: dict, aid: str, title: str, typ: str, priority: int, deadline: str | None,
@@ -194,6 +314,9 @@ def run(a, cfg: dict):
                             check_profile.load_yaml(root / aid / check_card.CARD)["type"], a.priority, a.deadline,
                             root / aid) for aid in ids]
     print(f"Đã đăng ký {len(ids)}: {', '.join(ids)}.")
+    for aid in ids:
+        for line in measure_handoff(aid, root / aid, ASSETS / aid / COLORS_FILE) + empty_counts_warning(aid, root / aid, prof):
+            print(line)
     print(batch_line(len(ids), bool((prof.get("paths") or {}).get("env_file"))))
     drafts = [st["id"] for st in created if st["state"] == "draft"]
     if drafts:
