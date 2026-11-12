@@ -1,8 +1,10 @@
 import copy
 import hashlib
 import json
+import struct
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 
 import pytest
@@ -54,6 +56,20 @@ def write_build(work: Path, graph=None, rows=None, sources=None, stale=False):
     (work / "assembly.json").write_text(json.dumps(asm), encoding="utf-8")
     (work / "sources.json").write_text(json.dumps(sources or HUT_SOURCES), encoding="utf-8")
     return work
+
+
+def write_mask(path, w, h, pad=20):
+    """A grey PNG: black border, white object of w x h pixels (the form concept_mask.py writes)."""
+    W, H = w + 2 * pad, h + 2 * pad
+    rows = [bytes([0]) + bytes(W) if not pad <= y < pad + h else bytes([0]) + bytes(pad) + b"\xff" * w + bytes(pad)
+            for y in range(H)]
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 0, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
+    path.write_bytes(png)
 
 
 class Result:

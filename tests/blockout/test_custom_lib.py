@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from conftest import HUT_SOURCES, TOOLS, hut, part, write_build
+from conftest import HUT_SOURCES, TOOLS, hut, part, write_build, write_mask
 
 sys.path.insert(0, str(TOOLS))
 import project_parts as PP  # noqa: E402
@@ -385,6 +385,27 @@ def test_param_fit_leaves_alone_the_params_that_feed_an_asset_function(tmp_path)
                        capture_output=True, text=True)
     held = "[blockout/build_parts] not fitted, they feed a custom_parts.py function: roof_h, wall_d, wall_w"
     assert (held in r.stdout.splitlines(), read(f / "fit.json")["overall"]) == (True, "skipped"), r.stdout
+
+
+@pytest.mark.blender
+@needs_blender
+def test_param_fit_of_a_graph_with_a_custom_part_runs_only_in_blender_because_the_asset_mesh_is_a_bmesh(tmp_path):
+    """The JSON mesh of an asset function becomes a bmesh, and bmesh exists only inside Blender. Fitting is on, so the
+    search builds the graph: plain Python stops at the first build, Blender fits."""
+    f = asset_dir(tmp_path, roof_graph(), ROOF)
+    assert meshes(f)[0] == 0
+    write_mask(tmp_path / "front.png", 400, 370)
+    spec = tmp_path / "spec.json"
+    spec.write_text(json.dumps({"concept": {"views": {"front": "front.png"}}, "config": {"self_build": {
+        "param_fit": {"enabled": True, "max_evals": 6, "time_limit_s": 60, "raster_size": 64}}}}), encoding="utf-8")
+    fit = f / "fit.json"
+    subprocess.run([str(VPY), str(TOOLS / "build_parts.py"), "param_fit", "--work", str(f), "--spec", str(spec)],
+                   capture_output=True, text=True)
+    assert read(fit)["overall"] == "error" and "bmesh" in read(fit)["data"]["error"]
+    fit.unlink()
+    r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python", str(TOOLS / "build_parts.py"), "--",
+                        "param_fit", "--work", str(f), "--spec", str(spec)], capture_output=True, text=True)
+    assert read(fit)["overall"] != "error" and "search_after" in read(fit)["data"], (r.stdout[-600:], read(fit)["data"])
 
 
 def test_build_parts_refuses_a_kit_tool_other_than_assembly_or_param_fit(tmp_path):

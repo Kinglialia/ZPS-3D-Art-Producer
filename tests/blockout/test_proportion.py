@@ -3,30 +3,14 @@
 The concept has no scale, so only the width : height ratio of the silhouette box is compared. The model box comes from
 assembly.json, the concept box from the mask file the spec names for that view."""
 import json
-import struct
 import subprocess
-import zlib
 
 import pytest
 
-from conftest import HUT_ROWS, HUT_SOURCES, TOOLS, hut, write_build
+from conftest import HUT_ROWS, TOOLS, write_mask, write_build
 
 VPY = TOOLS / ".deps/venv/bin/python"
 pytestmark = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh (numpy, cv2)")
-
-
-def write_mask(path, w, h, pad=20):
-    """A grey PNG: black border, white object of w x h pixels (the form concept_mask.py writes)."""
-    W, H = w + 2 * pad, h + 2 * pad
-    rows = [bytes([0]) + bytes(W) if not pad <= y < pad + h else bytes([0]) + bytes(pad) + b"\xff" * w + bytes(pad)
-            for y in range(H)]
-
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
-
-    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", W, H, 8, 0, 0, 0, 0))
-           + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
-    path.write_bytes(png)
 
 
 def box_rows(w, d, h):
