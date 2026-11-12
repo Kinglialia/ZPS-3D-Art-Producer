@@ -19,7 +19,9 @@ Reads F/spec.json (asset id), F/assembly.json (part order) and F/parts/<part>.gl
   custom part with "round": true in F/part_graph.json (a mirror_of part follows its source). 60 deg keeps an
   8-segment side (45 deg) and the steps of a 1-2 segment bevel (30-45 deg) smooth and splits caps and corners (90).
 - Custom normals, weighted_normals(): a large flat face keeps its own normal beside a bevel and only the bevel strip
-  blends. Plain averaged normals tilted the faces of a bevel_box 11.25 deg towards its bevel, a light gradient.
+  blends. Plain averaged normals tilted the faces of a bevel_box 11.25 deg towards its bevel, a light gradient. Where
+  no flat face of several triangles is FLAT_RATIO times its neighbours (a rock, a sphere) the normals are the corner
+  angle average.
 - Origin at the bottom centre of the whole asset.
 Saves F/<id>.blend (object, mesh and material named <id>, no UV yet: unwrap.py next).
 Writes F/review/join.json; data.code_hash is the one of F/assembly.json, the build of the joined parts. Exit 0, 1 on error.
@@ -49,6 +51,7 @@ SEEN_RES = 200
 GROUND_MARGIN = 0.05
 GROUND_DROP = 1e-4
 FLAT_DEG = 1.0
+FLAT_RATIO = 4.0  # provisional: rock and sphere faces measured at most 3.15 times their neighbours, a box face 6.4 times its bevel
 
 
 def part_arrays(final):
@@ -143,7 +146,10 @@ def seen(v, f, gone, tree, bottom):
 def weighted_normals(v, f):
     """Unit normal per vertex: the normals of its triangles weighted by corner angle times the squared area of the flat
     face each triangle belongs to (edge-connected triangles within FLAT_DEG of one plane). A flat face many times the
-    size of the bevel faces beside it outweighs them, however it is cut into triangles; faces of one size average."""
+    size of the bevel faces beside it outweighs them, however it is cut into triangles; faces of one size average.
+    The squared areas count only at a vertex where a flat face of more than one triangle is at least FLAT_RATIO times
+    the smallest face at that vertex. Elsewhere (a rock, a canopy, a sphere: faces of one triangle, or of near sizes)
+    the corner angle alone weighs: squared areas moved the normals of a low-poly rock up to 42 deg."""
     t = v[f]
     cr = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
     area = np.linalg.norm(cr, axis=1) / 2
@@ -162,10 +168,15 @@ def weighted_normals(v, f):
             parent[root(j)] = root(k // 3)
     face = np.array([root(i) for i in range(len(f))])
     flat = np.bincount(face, area)[face]
+    big, small = np.zeros(len(v)), np.full(len(v), np.inf)
+    np.maximum.at(big, f.ravel(), np.repeat(np.where(np.bincount(face)[face] > 1, flat, 0), 3))
+    np.minimum.at(small, f.ravel(), np.repeat(flat, 3))
+    by_face = (big >= FLAT_RATIO * small)[f]
     a, b = t[:, [1, 2, 0]] - t, t[:, [2, 0, 1]] - t
     corner = np.arctan2(np.linalg.norm(np.cross(a, b), axis=2), np.einsum("mkj,mkj->mk", a, b))
     n = np.zeros_like(v, dtype=float)
-    np.add.at(n, f.ravel(), ((corner * (flat ** 2)[:, None])[:, :, None] * fn[:, None]).reshape(-1, 3))
+    w = corner * np.where(by_face, (flat ** 2)[:, None], 1.0)
+    np.add.at(n, f.ravel(), (w[:, :, None] * fn[:, None]).reshape(-1, 3))
     return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-30)
 
 
