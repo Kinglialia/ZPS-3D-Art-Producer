@@ -1174,3 +1174,50 @@ def test_a_pass_after_the_evidence_of_a_rereview_offers_the_judged_version_not_t
     assert (st["state"], st["offer"], st["evidence"], st["versions"]) == ("waiting_human", 1, None, {"blockout": 3})
     flow.human("approve", "giữ v1")
     assert (flow.st["approved"], flow.st["rejected"]) == ({"blockout": 1}, {"blockout": [2, 3]})
+
+
+CAM_MARK = {"n": 1, "image": "review/game_cam.png", "shape": "rect", "coords": [0.1, 0.2, 0.3, 0.6], "note": "cửa lệch trái"}
+
+
+def blockout_waiting_with_a_picture(f):
+    from PIL import Image
+    p = f.root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false', 'id = "views_front"'),
+                 encoding="utf-8")
+    f.work()
+    f.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
+    (f.v(1) / "final/review").mkdir(parents=True)
+    Image.new("RGB", (200, 100), "white").save(f.v(1) / "final/review/game_cam.png")
+    assert f.st["state"] == "waiting_human"
+
+
+def test_marks_sent_with_an_approve_become_a_minor_note_the_next_step_brief_lists_c10(flow):
+    """The reproduction: the marks became open `major` H findings on the approved version, and no later brief reads them,
+    so the user's marks were lost."""
+    blockout_waiting_with_a_picture(flow)
+    ok, msg = loop.act(AID, "approve", "đạt, nhớ cửa", None, [CAM_MARK])
+    assert (ok, msg.splitlines()[0]) == (True, "house-a: đã duyệt blockout v1 → views_front/todo; khoanh 1 vùng → H1. "
+                                              "Tiếp: giao worker → `brief house-a`")
+    h1 = findings.load(AID, "blockout", 1)["findings"]["H1"]
+    assert (h1["kind"], h1["priority"], h1["status"], h1["repair"], h1["mark"]["n"]) == (
+        "note", "minor", "open", "cửa lệch trái", 1)
+    brief = flow.text(flow.brief())
+    assert (f"Ghi chú còn mở của reviewer `blockout` v1: H1 trong `production/assets/{AID}/blockout/v1/findings.json`"
+            in brief) is True
+
+
+def test_marks_sent_with_a_redo_stay_major_findings_of_the_step_kind_c10(flow):
+    blockout_waiting_with_a_picture(flow)
+    loop.act(AID, "redo", "", "blockout", [CAM_MARK])
+    h1 = findings.load(AID, "blockout", 1)["findings"]["H1"]
+    assert (h1["kind"], h1["priority"]) == ("structure", "major")
+
+
+def test_a_step_with_note_kinds_stores_the_marks_of_an_approve_as_its_first_note_kind_c10(flow):
+    cfg = load_cfg()
+    views_rest = next(s for s in cfg["steps"] if s["id"] == "views_rest")
+    texture = next(s for s in cfg["steps"] if s["id"] == "texture")
+    for step, kind in ((views_rest, "note_exception"), (texture, "note")):
+        findings.add_human(AID, step, 1, None, [{"n": 1, "image": "back.png", "png": "p/x.png", "note": "n"}])
+        assert loop.marks_as_notes(AID, step, 1, ["H1"]) == ["H1"]
+        assert findings.load(AID, step["id"], 1)["findings"]["H1"]["kind"] == kind

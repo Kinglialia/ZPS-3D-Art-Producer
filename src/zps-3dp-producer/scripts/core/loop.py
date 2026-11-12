@@ -645,6 +645,18 @@ def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str | Non
     return ids
 
 
+def marks_as_notes(aid: str, step: dict, n: int, ids: list[str]) -> list[str]:
+    """C10: marks sent with an approve are notes for the later steps, not open `major` findings on a version nobody fixes.
+    The kind is the first `note*` kind of the step; a step with none uses `note`, which every brief reads."""
+    if ids:
+        doc = findings.load(aid, step["id"], n)
+        kind = next((k for k in step["top_fix"] if k in findings.NOTE), "note")
+        for i in ids:
+            doc["findings"][i] |= {"kind": kind, "priority": "minor", "consequence": "người dùng duyệt kèm vùng khoanh"}
+        findings.save(aid, step["id"], doc)
+    return ids
+
+
 def retry(a):
     st = load_st(a.id)
     if st["state"] == "done_enabled":
@@ -781,9 +793,10 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         folder = annotate.save(aid, tag, marks, files) if marks else None
         append_feedback(aid, target, n, action, text + (f" · khoanh: {rel(folder)}" if folder else ""))
 
-    def settle() -> list[str]:
+    def settle(approved: bool = False) -> list[str]:
         keep()
-        return findings.add_human(aid, step, n, None, marks) if marks and waiting else []
+        ids = findings.add_human(aid, step, n, None, marks) if marks and waiting else []
+        return marks_as_notes(aid, step, n, ids) if approved else ids
 
     ids, msg, armed, finished = [], "đã ghi feedback", False, False
     if answer:
@@ -793,7 +806,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
     elif action == "approve" and waiting:
         decide()
         approve(cfg, st, step, n, policy.BY["human" if by == "user" else "producer"])
-        ids = settle()
+        ids = settle(approved=True)
         if not step.get("reviewer"):
             findings.close_human(aid, target, n)
         msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
