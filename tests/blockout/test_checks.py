@@ -529,3 +529,28 @@ def test_foot_crop_with_a_base_tag_keeps_the_frame_on_the_base_top(render_review
     rows = [row("plinth", [-2.0, -2.0, 0.0], [2.0, 2.0, 0.5]), row("hall", [-1.0, -1.0, 0.5], [1.0, 1.0, 3.0])]
     f = render_review.foot_frame(rows, {"parts": [{"name": "plinth", "tag": "base"}, {"name": "hall"}]})
     assert f == {"base": True, "scale": 2.0, "left": [2.0, -2.0, 0.5], "right": [-2.0, -2.0, 0.5]}
+
+
+# ---------------------------------------------------------------- clear_gates
+def test_clear_gates_removes_the_gate_json_of_an_old_build_and_leaves_the_checks_alone(tmp_path):
+    """A gate JSON counts as a result as long as it lies in review/gates/. One for a part that the graph no longer has
+    sends the worker back to fix a part that is gone, and a pass for a part that changed hides its new fault."""
+    import subprocess
+    review = tmp_path / "final" / "review"
+    (review / "gates").mkdir(parents=True)
+    (review / "checks").mkdir()
+    for name, overall in (("walls", "pass"), ("old_porch", "fail")):
+        (review / "gates" / f"{name}.json").write_text(json.dumps({"overall": overall}), encoding="utf-8")
+    (review / "checks" / "layout.json").write_text(json.dumps({"overall": "pass"}), encoding="utf-8")
+    p = subprocess.run([sys.executable, str(TOOLS / "clear_gates.py"), "--work", str(tmp_path / "final")],
+                       capture_output=True, text=True)
+    assert (p.returncode, p.stdout.strip().splitlines()) == (0, ["[blockout/clear_gates] 2 gate JSON removed"]), p.stderr
+    assert (sorted(x.name for x in (review / "gates").iterdir()), (review / "checks" / "layout.json").is_file()) == (
+        [], True)
+
+
+def test_clear_gates_with_no_gates_folder_removes_nothing_and_succeeds(tmp_path):
+    import subprocess
+    p = subprocess.run([sys.executable, str(TOOLS / "clear_gates.py"), "--work", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert (p.returncode, p.stdout.strip()) == (0, "[blockout/clear_gates] 0 gate JSON removed"), p.stderr
