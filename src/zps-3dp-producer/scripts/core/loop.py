@@ -470,6 +470,11 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     for w in warns:
         ledger(f"{aid} · {sid} v{n} · cảnh báo report reviewer · {w}")
     st["rereview"] = None
+    pol = policy.load()
+    if rv["pick"] and rv["pick"] != "a" and (why := take_variant(d, rv["pick"], outputs_of(step, st))):
+        move(st, "stuck")
+        st["note"] = why
+        return f"review {rv['verdict']} PICK {rv['pick']}", why
     if pend := (st.get("waive_pending") or {}).pop(sid, None):
         findings.waive(aid, sid, st["versions"][sid], pend, doc)
         tf = doc["top_fix"]
@@ -481,11 +486,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     if step["gate"] == "review":
         who = "reviewer"
     elif rv["verdict"] == "PASS" and step["gate"] == "review_human":
-        who = policy.approver(policy.load(), sid, aid)
-    if rv["pick"] and rv["pick"] != "a" and (why := take_variant(d, rv["pick"], outputs_of(step, st))):
-        move(st, "stuck")
-        st["note"] = why
-        return f"review {rv['verdict']} PICK {rv['pick']}", why
+        who = policy.approver(pol, sid, aid)
     findings.save(aid, sid, doc)
     rvs = st.setdefault("round_versions", [])
     if n not in rvs:

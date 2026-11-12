@@ -486,6 +486,28 @@ def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_varia
     assert flow.st["state"] == "waiting_human"
 
 
+def test_a_review_that_dies_on_its_pick_writes_no_waive_so_the_corrected_report_still_ingests(flow):
+    """The waive went to disk before PICK named a missing variant. The brief's PRIOR still listed the waived id, so the
+    corrected report was refused with "PRIOR có id không đang mở"."""
+    fix_v1(flow, 2, "param")
+    flow.work(fixed="F1, F2")
+    b = flow.v(2) / "variants/b"
+    b.mkdir(parents=True)
+    for o in OUTPUTS:
+        (b / o).write_text("b", encoding="utf-8")
+    variant_results(b)
+    out = flow.brief()
+    waive(flow, "F2")
+    review = dict(verdict="FIX", top_fix="param: F2", counts=counts(major=1), rubric="massing=pass",
+                  compare="F1=better; F2=same", prior=["- F1: resolved | evidence: clay_front", "- F2: open"])
+    with pytest.raises(ProducerError, match="PICK c: không có"):
+        flow.review(out=out, pick="c", **review)
+    assert (findings.load(AID, "blockout", 1)["findings"]["F2"]["status"], list(flow.st["waive_pending"]["blockout"])) == (
+        "open", ["F2"])
+    assert flow.review(out=out, pick="b", **review).startswith("house-a: review PASS (0 mở) → blockout/waiting_human")
+    assert findings.load(AID, "blockout", 2)["findings"]["F2"]["status"] == "waived"
+
+
 def test_assemble_approval_copies_final_to_deliver_and_a_later_redo_marks_the_delivered_readme(flow):
     st = flow.st
     st |= {"stage": "assemble", "state": "waiting_human", "versions": {"blockout": 1, "assemble": 1},
