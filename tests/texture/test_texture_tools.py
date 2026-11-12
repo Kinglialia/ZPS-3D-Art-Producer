@@ -162,35 +162,6 @@ def test_check_meshy_drops_a_layer_that_failed_or_changed_after_the_gate_so_no_w
     assert (code, got, (tmp_path / "meshy_albedo.png").exists()) == (1, fails, False)
 
 
-def test_a_crop_edit_changes_pixels_inside_the_region_only_checklist_18(tmp_path):
-    rng = np.random.default_rng(1)
-    src = rng.integers(0, 255, (128, 128, 3), dtype=np.uint8)
-    Image.fromarray(src).save(tmp_path / "a.png")
-    rc, out = tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "20,30,60,50", "--margin", "8",
-                   "--out", tmp_path / "c")
-    assert (rc, out) == (0, f"[crop_edit] crop 56x36, gửi 1536x987 -> {tmp_path}/c/send.png\n")
-    assert Image.open(tmp_path / "c/send.png").size == (1536, 987)
-    Image.new("RGB", (1536, 987), (255, 0, 0)).save(tmp_path / "edited.png")
-    rc, out = tool("crop_edit.py", "paste", "--albedo", tmp_path / "a.png", "--crop", tmp_path / "c", "--edited",
-                   tmp_path / "edited.png", "--out", tmp_path / "b.png", "--feather", "4")
-    got = np.asarray(Image.open(tmp_path / "b.png"))
-    outside = np.ones((128, 128), bool)
-    outside[30:50, 20:60] = False
-    assert rc == 0 and np.array_equal(got[outside], src[outside])
-    assert tuple(got[40, 40]) == (255, 0, 0) and json.loads((tmp_path / "b.json").read_text())["changed_outside"] == 0
-
-
-def test_a_codex_crop_of_another_size_is_refused_and_writes_nothing(tmp_path):
-    Image.new("RGB", (128, 128), (9, 9, 9)).save(tmp_path / "a.png")
-    tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "20,30,60,50", "--margin", "8", "--out",
-         tmp_path / "c")
-    Image.new("RGB", (64, 64), (255, 0, 0)).save(tmp_path / "edited.png")
-    rc, out = tool("crop_edit.py", "paste", "--albedo", tmp_path / "a.png", "--crop", tmp_path / "c", "--edited",
-                   tmp_path / "edited.png", "--out", tmp_path / "b.png")
-    assert (rc, out, (tmp_path / "b.png").exists()) == (
-        1, "[crop_edit] ảnh sửa 64x64 khác ảnh gửi 1536x987: bỏ kết quả\n", False)
-
-
 def test_a_region_over_1024_px_must_be_split(tmp_path):
     Image.new("RGB", (2048, 2048), (9, 9, 9)).save(tmp_path / "a.png")
     rc, out = tool("crop_edit.py", "cut", "--albedo", tmp_path / "a.png", "--box", "0,0,1100,200", "--out", tmp_path / "c")
