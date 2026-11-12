@@ -14,7 +14,7 @@ MESSAGE = "LỖI: không thấy production/pipeline.toml: chạy lệnh từ g�
 
 GUARDED = [
     "scripts/assemble.py", "scripts/assemble_glb.py", "scripts/check_counts.py", "scripts/gen_image_codex.py",
-    "scripts/meshy_call.py", "scripts/producer.py", "scripts/review_sheet.py",
+    "scripts/meshy_call.py", "scripts/producer.py", "scripts/review_sheet.py", "scripts/run_tool.py",
     *(f"agents/zps-3dp-step-blockout/tools/{n}.py" for n in (
         "build_parts", "check_base", "check_fix", "check_inputs", "check_layout", "check_markers", "check_materials",
         "check_schema", "check_support", "concept_mask", "custom_mesh", "fit_view", "render_review")),
