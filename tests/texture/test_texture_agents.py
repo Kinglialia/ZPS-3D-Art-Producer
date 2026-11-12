@@ -74,7 +74,7 @@ def test_rubric_template_texture_keys_are_the_check_texture_keys(rubric):
 
 def commands():
     text = front(WORKER)[1] + REF.read_text(encoding="utf-8")
-    return text, re.findall(r"`(?:PY|BL) T/([\w/]+\.py)([^`]*)`", text)
+    return text, re.findall(r"`RUN (?:bl )?([\w./-]+\.py)([^`]*)`", text)
 
 
 def test_worker_points_only_at_references_and_tools_that_exist():
@@ -84,8 +84,8 @@ def test_worker_points_only_at_references_and_tools_that_exist():
     tools = {s for s, _ in calls}
     assert tools == {"check_inputs.py", "texture_complexity.py", "id_map.py", "render_texture.py", "tex_measure.py",
                      "check_meshy.py", "tone_fix.py", "base_fill.py", "render_paint_views.py", "project_views.py",
-                     "seam_fix.py", "crop_edit.py"}
-    assert all((AGENT / "tools" / t).is_file() for t in tools)
+                     "seam_fix.py", "crop_edit.py", "../../zps-3dp-step-views/tools/concept_colors.py"}
+    assert all((AGENT / "tools" / t).resolve().is_file() for t in tools)
 
 
 def test_every_flag_the_worker_passes_is_one_its_tool_accepts():
@@ -104,10 +104,13 @@ def test_meshy_runs_only_through_the_wrapper_with_the_brief_lines_and_never_read
     assert "MESHY_CALLS" in body and "Không sửa file budget." in body
 
 
-def test_every_blender_command_goes_through_the_brief_blender_path():
-    text, _ = commands()
-    assert re.findall(r"(?<![A-Z_])blender -b", text) == []
-    assert "`BL` = `BLENDER -b --python-exit-code 1 --python`" in front(WORKER)[1]
+def test_every_tool_command_is_a_run_line_so_the_exit_code_and_the_log_come_from_run_tool_d36_1():
+    text, calls = commands()
+    body = front(WORKER)[1]
+    assert re.findall(r"(?<![A-Z_])blender -b", text) == [] and re.findall(r"`(?:PY|BL) T/", text) == []
+    assert "`RUN bl <tool> <args>` chạy tool trong Blender" in body
+    assert set(re.findall(r"`RUN bl ([\w./-]+\.py)", text)) == {"render_texture.py", "render_paint_views.py"}
+    assert not re.search(r"\bBL\b|dòng PID|nohup|disown|không `&`", text)
 
 
 def test_a_fix_round_keeps_the_review_evidence_of_the_version_it_fixes_and_rerenders_only_what_steps_5_and_6_write():
@@ -116,3 +119,35 @@ def test_a_fix_round_keeps_the_review_evidence_of_the_version_it_fixes_and_reren
             "của lớp đang sửa), trừ file bước 5–6 ghi lại: `review/lit_*`, `review/unlit_*`, `review/thumb.png`, "
             "`review/renders.json`, `review/render_texture.json`, `review/checks/tex_measure.json`.") in body
     assert "trừ `review/`" not in body
+
+
+def steps():
+    return {int(n): line for n, line in re.findall(r"^(\d+)\. (.*)$", front(WORKER)[1].split("## Quy trình")[1].split("## Vòng sửa")[0], re.M)}
+
+
+def test_the_albedo_is_measured_before_it_is_rendered_so_a_fix_never_leaves_a_stale_render_d36_11():
+    s = steps()
+    measure = [n for n, line in s.items() if "`RUN tex_measure.py" in line]
+    render = [n for n, line in s.items() if "`RUN bl render_texture.py" in line]
+    assert (measure, render) == ([5], [6])
+    assert "sha256" in s[6] and "chạy lại bước 5 và 6" in s[6]
+
+
+def test_the_resolution_is_res_and_r_is_only_the_references_folder_t15():
+    text, _ = commands()
+    assert not re.search(r"<R>|--res R\b|`R` = độ phân giải", text)
+    assert "`R` = `T/../references`" in front(WORKER)[1] and "`RES` = độ phân giải" in front(WORKER)[1]
+    assert "--res RES" in text and "albedo_<RES>.png" in text
+
+
+def test_meshy_text_says_one_run_waits_28_minutes_and_has_no_dry_run_step_t16():
+    body, ref = front(WORKER)[1], REF.read_text(encoding="utf-8")
+    assert "--dry-run" not in body.replace("không chạy `--dry-run`", "") and "--dry-run" not in ref.replace(
+        "không chạy `--dry-run`", "")
+    assert "khoảng 28 phút (1700 s)" in body and "khoảng 28 phút (1700 s)" in ref and not re.search(r"\b8 phút", body + ref)
+
+
+def test_tone_fix_and_seam_fix_get_the_inputs_the_new_checks_need():
+    text, calls = commands()
+    got = {s: a for s, a in calls}
+    assert "--concept-colors" in got["tone_fix.py"] and "--model M" in got["seam_fix.py"]

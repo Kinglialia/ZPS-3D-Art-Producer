@@ -14,26 +14,28 @@ JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không 
 
 ## Tool
 
-- `T` = dòng `TOOLS:` của brief. `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.
+- `T` = dòng `TOOLS:` của brief. `RUN` = dòng `RUN:` của brief.
+- `RUN <tool> <args>` chạy tool Python của `T`. `RUN bl <tool> <args>` chạy tool trong Blender (`render_texture.py`, `render_paint_views.py`). `<tool>` tính từ `T`. `RUN` chạy ở foreground và chờ xong.
+- `RUN` in một dòng: `<tool> pass`, `<tool> fail <JSON>` hoặc `<tool> error <log>`. Fail: đọc JSON, không đọc log. Error: đọc log. Log đầy đủ ở `V/work/logs/<tool>.log`.
+- `PY` = `T/.deps/venv/bin/python`, chỉ cho lệnh gen ảnh và Meshy.
 - `R` = `T/../references` (tài liệu của agent này).
-- `F` = `V/final/`. `B`, `VF`, `VR`, `M` = `final/` đã duyệt của `blockout`, `views_front`, `views_rest`, `model` trong brief. `C` = thư mục concept. `G` = `M/<id>-untextured.glb` (mesh đã khóa). `R` = độ phân giải trong tên `albedo_<R>.png` của dòng "Bắt buộc có".
-- `BL` = `BLENDER -b --python-exit-code 1 --python`, với `BLENDER` là dòng `BLENDER:` của brief. Mọi lệnh `BL` chạy qua dòng PID của brief.
+- `F` = `V/final/`. `B`, `VF`, `VR`, `M` = `final/` đã duyệt của `blockout`, `views_front`, `views_rest`, `model` trong brief. `C` = thư mục concept. `G` = `M/<id>-untextured.glb` (mesh đã khóa). `RES` = độ phân giải trong tên `albedo_<RES>.png` của dòng "Bắt buộc có".
 - Gen ảnh: `PY "<GEN_IMAGE>" <GEN_ARGS> --prompt V/work/prompts/<tên>.md --image <ảnh> [...] --out V/work/gen/<tên>.png`. Mỗi lần tốn lượt Codex.
 - Không tự thêm `--approve-for-me` (flag này tự duyệt mọi yêu cầu quyền, D30.21). Codex bị chặn vì xin quyền: `STATUS: BLOCKED`, chép lỗi vào `ISSUES`. Người dùng quyết định chạy lại với `--approve-for-me "<lý do>"`; ledger ghi lý do.
-- Meshy: chỉ khi brief có dòng `MESHY:`. `PY "<MESHY>" texture <MESHY_ARGS> --model G --style-image C/concept_albedo.png --out V/work/meshy/call-<k>` (thư mục mới mỗi lần), trước đó cùng lệnh thêm `--dry-run` để xem giá. Mỗi lần gọi tốn credit; số lần còn được gọi là dòng `MESHY_CALLS:`. Wrapper tự thử lại lỗi kỹ thuật; thoát 1 là đã hết 3 lần: `STATUS: BLOCKED`. Thoát 4 là topology fail: lớp đó đã tốn credit nhưng không dùng được. Thoát 5 là `pending` (Meshy chưa xong sau 8 phút, không phải lỗi): chạy lại đúng lệnh đó, cùng `--out`, thêm `--resume`; không tạo thư mục mới (D33.5). Không sửa file budget.
+- Meshy: chỉ khi brief có dòng `MESHY:`. `PY "<MESHY>" texture <MESHY_ARGS> --model G --style-image C/concept_albedo.png --out V/work/meshy/call-<k>` (thư mục mới mỗi lần). Giá và số lần còn được gọi nằm ở dòng `MESHY_CALLS:` của brief: không chạy `--dry-run`. Mỗi lần gọi tốn credit. Một lần chạy chờ tối đa khoảng 28 phút (1700 s). Wrapper tự thử lại lỗi kỹ thuật; thoát 1 là đã hết 3 lần: `STATUS: BLOCKED`. Thoát 4 là topology fail: lớp đó đã tốn credit nhưng không dùng được. Thoát 5 là `pending` (Meshy chưa xong sau 1700 s, không phải lỗi): chạy lại đúng lệnh đó, cùng `--out`, thêm `--resume`; không tạo thư mục mới (D33.5). Không sửa file budget.
 - Dòng `MESHY_DONE:` là lớp Meshy mà version này đã trả credit. Topology pass: dùng `base_color.png` của thư mục đó, không gọi lại. Topology fail: không dùng lớp đó. Chỉ có task: chạy lại lệnh Meshy với đúng `--out` đó; wrapper chờ tiếp task cũ.
-- Mỗi tool in một dòng. Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail; khi đó đọc JSON, không đọc log.
+- Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail.
 
 Chi tiết từng chế độ, `notes.md`, `texture_spec.json`: `R/texture.md`.
 
 ## Quy trình
 
-1. `PY T/check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Brief có dòng `VIEWS: none`: không có `VF`, `VR`, bỏ cờ của chúng ở mọi tool. TEXTURE NOTE, NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và `C/<id>.material.md`. Màu concept: mỗi mã vật liệu một ô pixel nằm trọn trong vùng đó trên `C/concept_albedo.png`, rồi `PY T/../../zps-3dp-step-views/tools/concept_colors.py --final F --concept C/concept_albedo.png --box <MÃ>=x0,y0,x1,y1 ...`; `VF/concept_colors.json` ở các bước sau thành `F/concept_colors.json`. Fail: `STATUS: NEEDS_CONTEXT`.
-2. `PY T/texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> --mode <meshy|paint>` (`meshy` khi brief có `MODE: Meshy SỬA`, `paint` khi có `MODE: VẼ MỚI`), rồi `PY T/id_map.py --final F --model M --res R`.
+1. `RUN check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Brief có dòng `VIEWS: none`: không có `VF`, `VR`, bỏ cờ của chúng ở mọi tool. TEXTURE NOTE, NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và `C/<id>.material.md`. Màu concept: mỗi mã vật liệu một ô pixel nằm trọn trong vùng đó trên `C/concept_albedo.png`, rồi `RUN ../../zps-3dp-step-views/tools/concept_colors.py --final F --concept C/concept_albedo.png --box <MÃ>=x0,y0,x1,y1 ...`; `VF/concept_colors.json` ở các bước sau thành `F/concept_colors.json`. Fail: `STATUS: NEEDS_CONTEXT`.
+2. `RUN texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> --mode <meshy|paint>` (`meshy` khi brief có `MODE: Meshy SỬA`, `paint` khi có `MODE: VẼ MỚI`), rồi `RUN id_map.py --final F --model M --res RES`.
 3. Chọn chế độ (`R/texture.md` mục 1): theo dòng `MODE:` của brief (script chọn, D30.11). `MODE: Meshy SỬA`: dòng `MESHY_DONE:` có topology pass thì SỬA trên lớp đó, không thì gọi Meshy. Ghi `used` và `reason` (một dòng) vào `F/texture_spec.json`.
-4. Làm theo chế độ: SỬA (`R/texture.md` mục 2) hoặc VẼ MỚI (mục 3). Kết quả là `F/albedo_<R>.png`.
-5. `BL T/render_texture.py -- --glb G --albedo F/albedo_<R>.png --spec M/spec.json --concept C/concept_shadow.png --final F`.
-6. `PY T/tex_measure.py --final F --glb G --model M --albedo F/albedo_<R>.png --concept-colors VF/concept_colors.json --profile <profile> --pilot <dòng PILOT của brief, none khi không có>`. Fail: sửa bằng script trước (`tone_fix.py`, `seam_fix.py`), rồi sửa theo crop; đo lại.
+4. Làm theo chế độ: SỬA (`R/texture.md` mục 2) hoặc VẼ MỚI (mục 3). Kết quả là `F/albedo_<RES>.png`.
+5. `RUN tex_measure.py --final F --glb G --model M --albedo F/albedo_<RES>.png --concept-colors VF/concept_colors.json --profile <profile> --pilot <dòng PILOT của brief, none khi không có>`. Fail: sửa bằng script trước (`tone_fix.py`, `seam_fix.py`), rồi sửa theo crop; đo lại cho tới khi pass. Chưa có ảnh render: `read.hf_noise` là `not_checked`, không phải lỗi.
+6. `RUN bl render_texture.py --glb G --albedo F/albedo_<RES>.png --spec M/spec.json --concept C/concept_shadow.png --final F`. Chỉ chạy sau khi bước 5 pass. Sửa albedo sau bước này thì chạy lại bước 5 và 6: `review/renders.json` ghi sha256 của albedo đã render.
 7. Mở `F/final_lit_vs_concept.png`, `F/review/lit_34_front.png`, `F/review/thumb.png`. Viết `F/notes.md` (`R/texture.md` mục 4). Ghi báo cáo theo brief, thêm dòng `UNFIXABLE: yes|no`. Rồi dừng.
 
 ## Vòng sửa
@@ -48,7 +50,7 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 
 ## Quy tắc
 
-- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`), với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
+- Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`, `MESHY`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
 - Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
 - Lớp Meshy hỏng cả style hoặc phần lớn bề mặt, không sửa được: `UNFIXABLE: yes`, lý do ở `ISSUES`. Script hỏi người dùng có gọi Meshy thêm một lần không.
