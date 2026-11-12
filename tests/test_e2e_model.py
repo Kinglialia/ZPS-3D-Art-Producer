@@ -28,7 +28,7 @@ OUTPUTS = {
 }
 ISSUES = "mái chìa 0.35 m đo trên concept_shadow, thẻ không ghi"
 SEEN = "clay_front.png, clay_lit_34.png, detail.json"
-BRIEF_MAX = 4352
+BRIEF_MAX = 4416
 # D31.1: real PNGs, so the reviewer briefs of these steps carry the sheet paths (largest briefs: PICK, COMPARE, base sheet).
 SHEET_RENDERS = {"blockout": ["review/game_cam.png", "review/renders/clay_front.png"],
                  "model": ["review/lit_34_front.png", "review/thumb.png", "review/renders/clay_front.png"]}

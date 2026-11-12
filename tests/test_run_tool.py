@@ -5,6 +5,7 @@ small script, stands in for the real one: no test starts Blender."""
 import importlib.util
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -349,15 +350,28 @@ def briefed(tmp_path, monkeypatch, capsys):
     return tmp_path.resolve()
 
 
-def test_the_worker_brief_gets_a_run_line_with_everything_fixed_for_the_dispatch_and_keeps_the_pid_line(briefed, capsys):
+def test_the_worker_brief_gets_a_run_line_with_everything_fixed_for_the_dispatch_and_no_pid_wrapper(briefed, capsys):
     briefs.run(Namespace(id="a-hut"))
     capsys.readouterr()
     text = (briefed / "production/assets/a-hut/blockout/v1/brief-worker.md").read_text(encoding="utf-8").splitlines()
     want = "RUN: " + shlex.join([f"{SKILL_DIR}/scripts/run_tool.py", "--blender", "blender", "--agent", "zps-3dp-step-blockout",
                                  "--version-dir", "production/assets/a-hut/blockout/v1"])
     assert text.index(want) == text.index("BLENDER: blender") + 1
-    assert ("- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/a-hut.pid; wait $!; "
-            "rm -f production/pids/blender/a-hut.pid`.") in text
+    assert not re.search(r"echo \$!|wait \$!|PID", "\n".join(text))
+
+
+def test_the_shipped_skill_folder_has_no_pid_wrapper_left_for_a_worker_to_copy():
+    """D36.1: run_tool.py writes and removes the pid file, so `<cmd> & echo $! > f; wait $!; rm -f f` leaves two files for one
+    process and hides the exit code."""
+    hits = []
+    for path in SKILL_DIR.rglob("*"):
+        if path.suffix not in {".py", ".md", ".toml", ".json", ".yaml", ".sh"} or ".deps" in path.parts \
+                or "__pycache__" in path.parts or not path.is_file():
+            continue
+        for n, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            if "echo $!" in line or "wait $!" in line:
+                hits.append(f"{path.relative_to(SKILL_DIR)}:{n}")
+    assert hits == []
 
 
 def test_the_run_line_names_the_blender_of_the_preflight_and_a_step_without_blender_gets_no_blender_flag(briefed):

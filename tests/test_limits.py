@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 from argparse import Namespace
 
@@ -118,11 +119,11 @@ def test_wait_wakes_when_an_asset_can_go_out_now_and_names_it_c17(proj):
     assert watch.wake(w) == ["không có việc nào đang chạy → `next`", "b-barn: giao được ngay (blockout/fix) → `brief b-barn`"]
 
 
-def test_worker_brief_tells_the_worker_where_to_write_the_blender_pid(proj, capsys):
+def test_worker_brief_has_no_pid_wrapper_because_run_tool_writes_the_blender_pid(proj, capsys):
     briefs.run(Namespace(id="a-hut"))
     text = (proj / "production/assets/a-hut/blockout/v1/brief-worker.md").read_text(encoding="utf-8")
-    assert ("- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/a-hut.pid; wait $!; "
-            "rm -f production/pids/blender/a-hut.pid`.") in text.splitlines()
+    assert [l for l in text.splitlines() if l.startswith("RUN: ")]
+    assert not re.search(r"echo \$!|wait \$!|PID", text)
     assert (proj / "production/pids/blender").is_dir()
 
 

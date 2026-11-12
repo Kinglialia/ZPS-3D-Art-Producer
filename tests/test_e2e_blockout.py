@@ -207,12 +207,12 @@ def test_the_worker_brief_names_only_the_handoff_files_so_old_drafts_beside_them
     assert "kể cả thư mục con" not in flow["v1 brief"]["text"]
 
 
-def test_the_agent_file_sends_the_worker_to_the_run_line_of_the_brief_and_no_longer_to_the_pid_line(flow):
+def test_the_agent_file_sends_the_worker_to_the_run_line_of_the_brief_and_the_brief_has_no_pid_wrapper(flow):
     agent = (AGENT / "zps-3dp-step-blockout.md").read_text(encoding="utf-8")
     assert "`RUN` = dòng `RUN:` của brief" in agent
     assert "dòng PID của brief" not in agent
     assert [l for l in flow["v1 brief"]["text"].splitlines() if l.startswith("RUN: ")]
-    assert f"`<lệnh> & echo $! > {PIDS}; wait $!; rm -f {PIDS}`" in flow["v1 brief"]["text"]
+    assert not re.search(r"echo \$!|wait \$!|PID", flow["v1 brief"]["text"])
 
 
 def test_two_live_blender_pids_hold_the_fix_dispatch_because_slots_count_processes_not_states(flow):

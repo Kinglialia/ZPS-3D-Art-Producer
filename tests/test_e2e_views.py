@@ -137,9 +137,8 @@ def test_the_front_brief_names_the_approved_blockout_only_the_concept_files_view
                  f"GEN_IMAGE: {SKILL / 'scripts/gen_image_codex.py'}",
                  "GEN_ARGS: --model gpt-6-astra --reasoning medium --pid-file production/pids/codex_image/pilot-house.pid "
                  "--timeout 900",
-                 f"7. Đầu ra đã duyệt của bước `blockout`: `{A}/blockout/v1/final/`.",
-                 f"- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/{AID}.pid; wait $!; "
-                 f"rm -f production/pids/blender/{AID}.pid`.") == []
+                 f"7. Đầu ra đã duyệt của bước `blockout`: `{A}/blockout/v1/final/`.") == []
+    assert not re.search(r"echo \$!|wait \$!|PID", b["text"])
     concept = [l for l in b["text"].splitlines() if "Concept đã duyệt" in l]
     assert len(concept) == 1 and concept[0].endswith(
         ": chỉ đọc `concept_albedo.png`, `asset-card.yaml`, `pilot-house.material.md`. Bỏ qua file và thư mục khác (bản nháp cũ).")

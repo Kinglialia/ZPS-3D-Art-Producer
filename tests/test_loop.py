@@ -592,9 +592,8 @@ def test_worker_brief_names_the_rubric_section_profile_preset_and_blender_path(f
     assert f"2. `production/assets/{AID}/rubric.md` mục `## blockout` — tiêu chí chấm; tự check trước khi báo cáo." in text
     assert (f"4. `production/PROJECT-PROFILE.yaml` — profile dự án; "
             f"`{SCRIPTS.parent / 'presets/topdown-mobile-lowpoly.yaml'}` — preset của profile.") in text
-    pid = [l for l in text.splitlines() if l.startswith("- Mỗi lệnh Blender")]
-    assert pid == ["- Mỗi lệnh Blender: `<lệnh> & echo $! > production/pids/blender/house-a.pid; wait $!; "
-                   "rm -f production/pids/blender/house-a.pid`."]
+    assert [l for l in text.splitlines() if l.startswith("RUN: ")]
+    assert not re.search(r"echo \$!|wait \$!|PID", text)
 
 
 def test_review_brief_names_the_rubric_section_of_the_step(flow):

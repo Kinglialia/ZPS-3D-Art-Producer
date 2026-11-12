@@ -14,7 +14,7 @@ production/                     # trong project Claude Code; chỉ script và su
   policy.yaml                   # ai duyệt; chỉ P approvals / P delegate ghi
   preflight.json                # P preflight ghi; P next, P brief đọc
   hash-cache.json               # tree_hash nhớ theo thư mục: {<thư mục>|<skip>: {sig (đường dẫn, mtime_ns, cỡ của từng file), hash}}; script ghi, xóa được, mất thì tính lại
-  pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; gen_image_codex.py ghi <id>-<pid>.pid mỗi lần chạy; P next đếm PID còn sống
+  pids/<tài nguyên>/<id>.pid    # run_tool.py (Blender) và gen_image_codex.py (Codex) ghi <id>-<pid>.pid mỗi lần chạy và xóa khi xong; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: `- <giờ> · <runtime> · <sự kiện>` + RULING
   session.json                  # P next --session ghi JSON hook SessionStart nhận qua stdin: {session_id, source, transcript_path, at, transcripts[]} (D30.10)

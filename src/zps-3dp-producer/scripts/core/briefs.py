@@ -198,13 +198,6 @@ def custom_parts_line(st, step) -> list[str]:
     return [f"CUSTOM_PARTS: {rel(ASSETS / st['id'] / 'custom_parts.py')}", ""]
 
 
-def pid_line(st, step) -> list[str]:
-    if "blender" not in step["uses"]:
-        return []
-    f = rel(ROOT / "pids" / "blender" / f"{st['id']}.pid")
-    return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}`."]
-
-
 def profile_item(step, preset: Path) -> str:
     """The texture tools read the profile themselves from `--profile`, so its worker gets the path and no reason to
     open the file (it holds the path of the env file)."""
@@ -308,7 +301,6 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         f"script, log, bản trung gian vào `{rel(d / 'work')}/`."
         + (" `final/` có sẵn, không chép tay." if fix and src and step.get("fix_copy_exclude") else ""),
     ]
-    lines += pid_line(st, step)
     if cfg["preview"]["spec"]:
         lines.append(f"- Preview: {cfg['preview']['spec']}")
     if step["outputs"]:
@@ -508,7 +500,6 @@ def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> s
         f"của các id này trong `{rel(findings.path(aid, sid, n))}`.",
         f"- Chỉ render các ảnh đó, ghi vào `{rel(ed)}/`. Không tạo version mới.",
         f"- Không sửa `{rel(vdir(aid, sid, n) / 'final')}/`. Script so hash trước và sau; đổi thì bỏ kết quả vòng này.",
-        *pid_line(st, step),
         "",
         "## Báo cáo",
         f"Ghi `{rel(ed / 'worker-out.md')}`, các dòng đầu đúng format:",
