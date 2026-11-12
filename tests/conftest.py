@@ -92,10 +92,11 @@ def fixed_line(root, aid) -> str:
     return f"FIXED: {', '.join(ids)}\n" if ids else ""
 
 
-def report(verdict="FIX", counts="blocker=0; major=1; minor=0; preference=0; unclear=0",
-           top_fix="structure: F1", evidence="clay_front.png, clay_side.png", rubric="massing=fail",
+def report(verdict="FIX", counts=None, top_fix="structure: F1", evidence="clay_front.png, clay_side.png", rubric="massing=fail",
            findings=(), prior=(), compare=None, pick=None, extra=""):
-    lines = [f"VERDICT: {verdict}", f"RUBRIC: {rubric}", f"COUNTS: {counts}"]
+    lines = [f"VERDICT: {verdict}", f"RUBRIC: {rubric}"]
+    if counts:
+        lines.append(f"COUNTS: {counts}")
     if top_fix:
         lines.append(f"TOP_FIX: {top_fix}")
     lines.append(f"EVIDENCE_OPENED: {evidence}")

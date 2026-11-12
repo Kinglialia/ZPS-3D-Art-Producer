@@ -334,6 +334,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     warns = []
     doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv,
                                     step | {"regions": asset_card.regions(step, st)}, n, warns))
+    rv = rv | {"top_fix": doc["top_fix"]}
     for w in warns:
         ledger(f"{aid} · {sid} v{n} · cảnh báo report reviewer · {w}")
     st["rereview"] = None

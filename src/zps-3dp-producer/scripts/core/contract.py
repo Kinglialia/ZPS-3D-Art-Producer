@@ -174,7 +174,7 @@ def parse_findings(lines: list[str], labels: list[str], errs: list[str]) -> dict
 def parse_review(text: str) -> tuple[dict, list[str]]:
     errs = []
     c = parse_contract(text, REVIEW_KEYS, errs)
-    errs += [f"thiếu {k}" for k in ("VERDICT", "RUBRIC", "COUNTS", "EVIDENCE_OPENED") if not c.get(k)]
+    errs += [f"thiếu {k}" for k in ("VERDICT", "RUBRIC", "EVIDENCE_OPENED") if not c.get(k)]
     v = c.get("VERDICT")
     v = (word(v).upper() or v) if v else v
     if v and v not in VERDICTS:
@@ -186,20 +186,17 @@ def parse_review(text: str) -> tuple[dict, list[str]]:
         else:
             errs.append(f"RUBRIC {k}: '{val}' phải là {'|'.join(RUBRIC_VALUES)}")
     counts = None
-    if c.get("COUNTS"):
-        cp = {k.lower(): x for k, x in pairs(PAREN.sub("", c["COUNTS"]))}
-        if set(cp) == set(PRIORITIES) and all(re.match(r"\d+", x) for x in cp.values()):
-            counts = {k: int(re.match(r"\d+", cp[k]).group()) for k in PRIORITIES}
-        else:
-            errs.append("COUNTS phải là " + "; ".join(f"{k}=N" for k in PRIORITIES))
+    cp = {k.lower(): x for k, x in pairs(PAREN.sub("", c.get("COUNTS", "")))}
+    if set(cp) == set(PRIORITIES) and all(re.match(r"\d+", x) for x in cp.values()):
+        counts = {k: int(re.match(r"\d+", cp[k]).group()) for k in PRIORITIES}
     top_fix = None
     tf = c.get("TOP_FIX", "")
     if tf.lower() not in NONE and word(tf) != "none":
-        m = re.match(rf"^(\w+)\s*:\s*((?:{FID}\s*,?\s*)+)$", tf)
+        m = re.match(rf"^{MARK}(\w+){MARK}\s*(?::\s*((?:{FID}\s*,?\s*)+))?", tf)
         if m:
-            top_fix = {"kind": m.group(1), "ids": re.findall(FID, m.group(2))}
+            top_fix = {"kind": m.group(1), "ids": re.findall(FID, m.group(2) or "")}
         else:
-            errs.append("TOP_FIX phải là <loại>: F<n>[, F<m>]")
+            errs.append("TOP_FIX phải là <loại>[: F<n>]")
     labels = [l.strip() for l in re.split(r"[;,]", c.get("EVIDENCE_OPENED", "")) if l.strip()]
     compare = {}
     for k, val in value_pairs(c.get("COMPARE", "")):
@@ -233,6 +230,6 @@ def parse_review(text: str) -> tuple[dict, list[str]]:
         if s == "resolved" and not (ev and cites(ev.group(1), labels)):
             errs.append(f"PRIOR {fid}: resolved cần evidence dẫn nhãn trong EVIDENCE_OPENED")
         prior[fid] = s
-    return {"verdict": v, "rubric": rubric, "counts": counts, "top_fix": top_fix,
+    return {"verdict": v, "rubric": rubric, "counts": counts, "counts_text": c.get("COUNTS", ""), "top_fix": top_fix,
             "evidence": labels, "compare": compare, "pick": pick, "findings": findings, "prior": prior,
             "confirmed": note_ids(c, "RESOLVED_CONFIRMED", errs)}, errs

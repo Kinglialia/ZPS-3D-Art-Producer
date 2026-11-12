@@ -152,7 +152,9 @@ def compare_ids(base: dict | None) -> list[str]:
 
 
 def apply(base: dict | None, rv: dict, step: dict, n: int, warns: list[str] | None = None) -> tuple[dict, list[str]]:
-    """warns collects COMPARE ids outside the TOP_FIX of the base: D30.4 ignores them, their status comes from PRIOR."""
+    """warns collects what the script ignores: COMPARE ids outside the TOP_FIX of the base (D30.4, their status comes
+    from PRIOR), a COUNTS line that differs from the open findings, and batch TOP_FIX ids that differ from the script's.
+    The saved top_fix always holds the ids the script computed."""
     errs = []
     fs = {i: dict(f) for i, f in (base or {}).get("findings", {}).items()}
     was = list(open_of(base))
@@ -199,32 +201,34 @@ def apply(base: dict | None, rv: dict, step: dict, n: int, warns: list[str] | No
     if notes := list(dict.fromkeys((base or {}).get("resolved_notes", []) + rv.get("confirmed", []))):
         doc["resolved_notes"] = notes
     c = open_counts(doc)
-    if rv["counts"] != c:
-        errs.append("COUNTS phải là " + "; ".join(f"{k}={v}" for k, v in c.items()))
+    if rv["counts_text"] and rv["counts"] != c and warns is not None:
+        warns.append(f"COUNTS '{rv['counts_text'][:80]}' khác số script tính ({short(c)}): dùng số của script")
     unclear_keys = sum(v == "unclear" for v in rv["rubric"].values())
     if unclear_keys > c["unclear"]:
         errs.append(f"RUBRIC có {unclear_keys} key unclear nhưng chỉ {c['unclear']} finding unclear đang mở")
-    errs += check_top_fix(rv, open_of(doc), step)
+    top_errs, doc["top_fix"] = check_top_fix(rv, open_of(doc), step, warns)
+    errs += top_errs
     if rv["pick"] and not (tf and tf["kind"] == "param"):
         errs.append("PICK chỉ dùng khi TOP_FIX vòng trước là param")
     return doc, errs
 
 
-def check_top_fix(rv: dict, op: dict, step: dict) -> list[str]:
+def check_top_fix(rv: dict, op: dict, step: dict, warns: list[str] | None = None) -> tuple[list[str], dict | None]:
+    """Errors and the top_fix to save. A batch kind takes its ids from the open findings; the reviewer's ids only warn."""
     v, t = rv["verdict"], rv["top_fix"]
     bm = {i: f for i, f in op.items() if f["priority"] in BM}
     uc = [i for i, f in op.items() if f["priority"] == "unclear"]
     if v == "PASS" and (bm or uc):
-        return [f"PASS nhưng còn {short(open_counts({'findings': op}), BM + ('unclear',))} đang mở"]
+        return [f"PASS nhưng còn {short(open_counts({'findings': op}), BM + ('unclear',))} đang mở"], t
     if v != "FIX":
-        return ["TOP_FIX chỉ ghi khi FIX"] if t else []
+        return (["TOP_FIX chỉ ghi khi FIX"] if t else []), t
     if not (bm or uc):
-        return ["FIX nhưng không còn blocker/major/unclear đang mở"]
+        return ["FIX nhưng không còn blocker/major/unclear đang mở"], t
     if not t:
-        return ["FIX cần TOP_FIX"]
+        return ["FIX cần TOP_FIX"], t
     k, kinds = t["kind"], top_fix_kinds(step)
     if k not in kinds:
-        return [f"TOP_FIX '{k}' không dùng ở bước {step['id']} ({'|'.join(kinds)})"]
+        return [f"TOP_FIX '{k}' không dùng ở bước {step['id']} ({'|'.join(kinds)})"], t
     errs = []
     if bm:
         rank = {i: (BM[::-1].index(f["priority"]), TIE_RANK.get(f["kind"], 0)) for i, f in bm.items()}
@@ -237,12 +241,14 @@ def check_top_fix(rv: dict, op: dict, step: dict) -> list[str]:
     elif k != "need_evidence":
         errs.append("chỉ còn unclear: TOP_FIX phải là need_evidence")
     if errs:
-        return errs
+        return errs, t
     want = uc if k == "need_evidence" else [i for i, f in op.items() if f["kind"] == k and f["priority"] in BATCH_PRIO]
     if k in SINGLE:
-        return [] if len(t["ids"]) == 1 and t["ids"][0] in want else [
-            f"TOP_FIX {k}: đúng một id trong {', '.join(want)}"]
-    return [] if sorted(t["ids"]) == sorted(want) else [f"TOP_FIX {k}: phải đủ {', '.join(want)}"]
+        return ([] if len(t["ids"]) == 1 and t["ids"][0] in want else [
+            f"TOP_FIX {k}: đúng một id trong {', '.join(want)}"]), t
+    if t["ids"] and sorted(t["ids"]) != sorted(want) and warns is not None:
+        warns.append(f"TOP_FIX {k}: ghi {', '.join(t['ids'])}, script dùng {', '.join(want)}")
+    return [], {"kind": k, "ids": want}
 
 
 def progress(base: dict, doc: dict) -> bool:

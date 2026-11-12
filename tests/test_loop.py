@@ -607,6 +607,29 @@ def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_
     assert "mức `minor`" not in text
 
 
+def test_a_reviewer_that_omits_counts_and_the_batch_ids_is_ingested_and_the_script_fills_both(flow):
+    """The script counts and lists the batch ids, so a reviewer is never sent back for what it cannot get wrong."""
+    flow.work()
+    out = flow.review(top_fix="param", counts=None, findings=[finding("F1", "major", "param"), finding("F2", "minor", "param")])
+    assert out.splitlines()[0] == "house-a: review FIX (major=1 minor=1) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    doc = json.loads((flow.v(1) / "findings.json").read_text(encoding="utf-8"))
+    assert doc["top_fix"] == {"kind": "param", "ids": ["F1", "F2"]}
+    assert "cảnh báo report reviewer" not in flow.ledger()
+    assert "Sửa đúng `TOP_FIX: param: F1, F2`" in flow.text(flow.brief())
+
+
+def test_a_reviewer_that_writes_wrong_counts_and_wrong_batch_ids_is_warned_in_the_ledger_not_rejected(flow):
+    flow.work()
+    flow.review(top_fix="param: F1", counts=counts(major=3), findings=[
+        finding("F1", "major", "param"), finding("F2", "minor", "param")])
+    doc = json.loads((flow.v(1) / "findings.json").read_text(encoding="utf-8"))
+    assert (flow.st["state"] != "reviewing", doc["top_fix"]) == (True, {"kind": "param", "ids": ["F1", "F2"]})
+    assert [l.rsplit(" · ", 1)[1] for l in flow.ledger().splitlines() if "cảnh báo report reviewer" in l] == [
+        "COUNTS 'blocker=0; major=3; minor=0; preference=0; unclear=0' khác số script tính (major=1 minor=1): "
+        "dùng số của script",
+        "TOP_FIX param: ghi F1, script dùng F1, F2"]
+
+
 def test_a_report_the_producer_saved_from_a_reply_is_ingested_and_logged_as_a_fallback_by_role_d27_5(flow):
     """The fallback must stay rare, so every one is counted: in the ledger and on the dispatch (`P stats`)."""
     flow.work()

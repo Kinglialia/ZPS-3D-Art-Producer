@@ -19,7 +19,6 @@ def test_finding_block_keeps_every_kit_field_so_ad_and_human_findings_share_one_
         "repair": "nâng mái 0.3 m", "preserve": "chiều cao tường", "acceptance": "đỉnh mái 3.2 m trên clay_front"}}
     assert (rv["verdict"], rv["top_fix"], rv["evidence"]) == (
         "FIX", {"kind": "structure", "ids": ["F1"]}, ["clay_front.png", "clay_side.png"])
-    assert rv["counts"] == {"blocker": 0, "major": 1, "minor": 0, "preference": 0, "unclear": 0}
 
 
 def test_contract_fields_equal_the_kit_issue_fields_minus_header_keys():
@@ -70,14 +69,25 @@ def test_unknown_priority_and_confidence_are_rejected():
     assert errs == ["F1: mức 'critical' không hợp lệ", "F1: confidence phải là high|medium|low"]
 
 
-def test_missing_counts_and_evidence_opened_are_rejected_because_producer_reads_only_verdict_and_counts():
+def test_missing_evidence_opened_is_rejected_but_missing_counts_is_not_because_the_script_counts():
     _, errs = parse_review("VERDICT: PASS\nRUBRIC: massing=pass\n")
-    assert errs == ["thiếu COUNTS", "thiếu EVIDENCE_OPENED"]
+    assert errs == ["thiếu EVIDENCE_OPENED"]
 
 
-def test_counts_need_all_five_priorities():
-    _, errs = parse_review(report(counts="blocker=0; major=1"))
-    assert errs == ["COUNTS phải là blocker=N; major=N; minor=N; preference=N; unclear=N"]
+def test_counts_a_reviewer_still_writes_are_read_when_whole_and_dropped_when_not_and_never_reject():
+    rv, errs = parse_review(report(counts="blocker=0; major=1; minor=0; preference=0; unclear=0"))
+    assert (errs, rv["counts"]) == ([], {"blocker": 0, "major": 1, "minor": 0, "preference": 0, "unclear": 0})
+    rv, errs = parse_review(report(counts="blocker=0; major=1"))
+    assert (errs, rv["counts"], rv["counts_text"]) == ([], None, "blocker=0; major=1")
+    rv, errs = parse_review(report(counts=None))
+    assert (errs, rv["counts"], rv["counts_text"]) == ([], None, "")
+
+
+def test_top_fix_with_a_kind_only_parses_to_no_ids_so_the_script_fills_a_batch():
+    rv, errs = parse_review(report(top_fix="param"))
+    assert (errs, rv["top_fix"]) == ([], {"kind": "param", "ids": []})
+    rv, errs = parse_review(report(top_fix="structure: F1 (mái thấp nhất)"))
+    assert (errs, rv["top_fix"]) == ([], {"kind": "structure", "ids": ["F1"]})
 
 
 def test_prior_resolved_needs_evidence_label_because_resolved_means_acceptance_was_proven():

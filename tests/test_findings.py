@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts"))
 
 from core.contract import parse_review  # noqa: E402
-from core.findings import apply, best_version, progress  # noqa: E402
+from core.findings import apply, best_version, open_counts, progress  # noqa: E402
 from test_contract import finding, report  # noqa: E402
 from shared import brief_hash, write_profile  # noqa: E402
 
@@ -28,6 +28,12 @@ def rv(**kw):
 
 def errs_of(base, n=1, step=STEP, **kw):
     return apply(base, rv(**kw), step, n)[1]
+
+
+def warned(base, n=1, step=STEP, **kw):
+    warns = []
+    doc, errs = apply(base, rv(**kw), step, n, warns)
+    return doc, errs, warns
 
 
 def v1():
@@ -100,9 +106,29 @@ def test_structure_top_fix_takes_exactly_one_id_so_each_structural_change_is_iso
         "TOP_FIX structure: đúng một id trong F1, F2"]
 
 
-def test_param_top_fix_lists_every_open_param_finding_so_one_round_fixes_the_batch():
-    assert errs_of(None, counts=counts(major=1, minor=1), top_fix="param: F1", findings=[
-        finding("F1", "major", "param"), finding("F2", "minor", "param")]) == ["TOP_FIX param: phải đủ F1, F2"]
+def test_a_batch_top_fix_with_only_its_kind_gets_every_open_finding_of_that_kind_from_the_script():
+    doc, errs, warns = warned(None, top_fix="param", findings=[
+        finding("F1", "major", "param"), finding("F2", "minor", "param"), finding("F3", "preference", "param")])
+    assert (errs, warns, doc["top_fix"]) == ([], [], {"kind": "param", "ids": ["F1", "F2"]})
+
+
+def test_a_batch_top_fix_with_the_wrong_ids_warns_and_the_script_ids_win_so_one_round_fixes_the_batch():
+    doc, errs, warns = warned(None, top_fix="param: F1", findings=[
+        finding("F1", "major", "param"), finding("F2", "minor", "param")])
+    assert (errs, doc["top_fix"]) == ([], {"kind": "param", "ids": ["F1", "F2"]})
+    assert warns == ["TOP_FIX param: ghi F1, script dùng F1, F2"]
+
+
+def test_need_evidence_with_only_its_kind_gets_every_unclear_finding():
+    doc, errs, _ = warned(None, top_fix="need_evidence", counts=None, rubric="props=unclear", findings=[
+        finding("F1", "unclear", "param"), finding("F2", "unclear", "param")])
+    assert (errs, doc["top_fix"]) == ([], {"kind": "need_evidence", "ids": ["F1", "F2"]})
+
+
+def test_a_single_id_top_fix_still_needs_its_id_because_only_the_reviewer_knows_which_change_comes_first():
+    f = [finding("F1", "major", "structure"), finding("F2", "major", "structure")]
+    assert errs_of(None, top_fix="structure", findings=f) == ["TOP_FIX structure: đúng một id trong F1, F2"]
+    assert errs_of(None, top_fix="structure: F2", findings=f) == []
 
 
 def test_param_batch_skips_preference_and_unclear_findings():
@@ -154,9 +180,23 @@ def test_each_unclear_rubric_key_needs_an_unclear_finding():
         "RUBRIC có 1 key unclear nhưng chỉ 0 finding unclear đang mở"]
 
 
-def test_counts_must_match_open_findings_because_producer_reports_them_unchecked():
-    assert errs_of(None, counts=counts(major=2), findings=[finding("F1", "major", "structure")]) == [
-        "COUNTS phải là blocker=0; major=1; minor=0; preference=0; unclear=0"]
+def test_a_wrong_counts_line_only_warns_because_the_script_counts_the_open_findings_itself():
+    doc, errs, warns = warned(None, counts=counts(major=2), findings=[finding("F1", "major", "structure")])
+    assert errs == []
+    assert warns == ["COUNTS 'blocker=0; major=2; minor=0; preference=0; unclear=0' khác số script tính "
+                     "(major=1): dùng số của script"]
+    assert open_counts(doc) == {"blocker": 0, "major": 1, "minor": 0, "preference": 0, "unclear": 0}
+
+
+def test_a_report_without_counts_or_with_the_right_counts_gives_no_warning():
+    f = [finding("F1", "major", "structure")]
+    assert warned(None, counts=None, findings=f)[1:] == ([], [])
+    assert warned(None, counts=counts(major=1), findings=f)[1:] == ([], [])
+
+
+def test_a_counts_line_missing_a_priority_only_warns():
+    assert warned(None, counts="blocker=0; major=1", findings=[finding("F1", "major", "structure")])[1:] == (
+        [], ["COUNTS 'blocker=0; major=1' khác số script tính (major=1): dùng số của script"])
 
 
 def test_pick_is_only_valid_after_a_param_round():
