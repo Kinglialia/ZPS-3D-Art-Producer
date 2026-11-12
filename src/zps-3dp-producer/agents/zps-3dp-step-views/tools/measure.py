@@ -2,6 +2,7 @@
 
 Usage: python3 tools/measure.py --final <V/final> --guides <views_front final>/guides --views front[,back,left,right,top]
            [--front <views_front final>/front.png] [--concept-colors <views_front final>/concept_colors.json] [--mirror-right]
+           [--pick-best <V/work/gen>]
 G1 (docs/review-kit-v0.10.4-vs-process.md): the kit keeps only background that touches the image border, so a
 closed gap between columns counts as object. Here every pixel near the background colour is background.
 Images: <final>/<view>.png; --front when front.png lives in views_front (views_rest).
@@ -17,6 +18,15 @@ again never leaves a stale right that the colour match then fails.
 V15: per view, the checks border (the object touches the image border: fail), components (the count of separate shapes
 differs from the guide: fail), ring (share of the object rim near the background colour: info), light (luminance change
 across each material region, a share of its mean: info).
+L9 --pick-best <gen dir>: for a view in `regen` whose first image <gen dir>/<view>-1.png differs from <final>/<view>.png
+(the regen), the first image is measured too, with the same options. The view keeps the image with the better measure:
+the first image wins only when it has fewer failing checks of that view (the checks named `*.<view>` with status fail),
+or the same number and a higher IoU (`views.<view>` value `iou`; no IoU counts as -1). A tie keeps the regen. When the
+first image wins it is copied to <final>/<view>.png and the whole set is measured again, so report/ and measure.json
+describe the kept images. `data.picked` is {view: first|regen}. A compared view that still fails also gets
+`data.accepted_fail` (`ACCEPTED_FAIL: measure.json — <view> (ảnh lần 1|2): <numbers>`) and `data.ngoai_le` (the same
+text without the prefix, for the NGOẠI LỆ section of README.md); both are printed as the last two lines. The front of
+views_rest (--front) and the right view with --mirror-right are never compared.
 Writes <final>/report/{report.json, report.md, overlay_sheet.png, overlay_<view>.png} and
 <final>/review/checks/measure.json (fail: a view in `regen`, or a missing image). Exit 0 pass, 1 fail, 2 error.
 """
@@ -26,6 +36,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 
@@ -242,6 +253,104 @@ def view_list(arg):
     return [v for v in mv.VIEWS if v in names]
 
 
+def measure_final(a, final, views):
+    """One measure of the images in `final`: its report/ folder, the report and the extra checks."""
+    report_dir = os.path.join(final, "report")
+    os.makedirs(report_dir, exist_ok=True)
+    if a.mirror_right and {"left", "right"} <= set(views):
+        ImageOps.mirror(Image.open(os.path.join(final, "left.png"))).save(os.path.join(final, "right.png"))
+    with tempfile.TemporaryDirectory() as d:
+        gen_dir(d, final, views, a.front)
+        concept = a.concept_colors
+        if a.front and concept and "front" in views:
+            concept = rest_concept(a.guides, a.front, concept, a.bg_threshold, d)
+        elif concept:
+            REFERENCE.update(common.read_json(concept))
+        sys.argv = ["measure_views.py", "--blockout", a.guides, "--gen", d, "--out", report_dir,
+                    "--views", ",".join(views), "--bg-threshold", str(a.bg_threshold),
+                    *(["--concept-colors", concept] if concept else [])]
+        with contextlib.redirect_stdout(io.StringIO()):
+            mv.main()
+        extra = overlays(a.guides, d, report_dir, views, a.bg_threshold, bool(a.front))
+    rep = drop_front(report_dir) if a.front else common.read_json(os.path.join(report_dir, "report.json"))
+    return rep, extra
+
+
+def view_of(check):
+    return check["check"].rpartition(".")[2]
+
+
+def view_score(checks, view):
+    """(failing checks of the view, IoU); no IoU is -1."""
+    mine = [c for c in checks if view_of(c) == view]
+    iou = next((c["value"].get("iou") for c in mine if c["check"] == f"views.{view}" and isinstance(c.get("value"), dict)), None)
+    return sum(c["status"] == "fail" for c in mine), -1.0 if iou is None else iou
+
+
+def keep_first(first, now, view):
+    """True when the first image beats the regen: fewer failing checks, else the same number and a higher IoU."""
+    (f_fails, f_iou), (n_fails, n_iou) = view_score(first, view), view_score(now, view)
+    return (f_fails, -f_iou) < (n_fails, -n_iou)
+
+
+def reason(checks, view, kept):
+    parts = []
+    for c in checks:
+        if view_of(c) != view or c["status"] != "fail":
+            continue
+        v, kind = c.get("value"), c["check"].partition(".")[0]
+        if kind == "views" and isinstance(v, dict):
+            parts += [f"{k} {round(v[k], 2)}" for k in ("iou", "aspect_err", "detail", "max_delta_e") if v.get(k) is not None]
+        elif kind == "border":
+            parts.append(f"chạm mép {v} px")
+        elif kind == "components":
+            parts.append(f"số khối rời {v['image']}, guide {v['guide']}")
+        else:
+            parts.append(c["check"] + (f": {c['note']}" if c.get("note") else ""))
+    return f"{view} (ảnh lần {1 if kept == 'first' else 2}): " + ", ".join(parts)
+
+
+def accepted_lines(checks, picked):
+    """(ACCEPTED_FAIL line, NGOẠI LỆ line) for the compared views that still fail, or None."""
+    why = [reason(checks, v, k) for v, k in picked.items() if any(c["status"] == "fail" and view_of(c) == v for c in checks)]
+    if not why:
+        return None
+    text = "measure.json — " + " / ".join(why)
+    return "ACCEPTED_FAIL: " + text, text
+
+
+def first_images(a, rep, views):
+    """{view: first image} for the views in `regen` that were made again."""
+    out = {}
+    for v in rep["regen"]:
+        first, now = os.path.join(a.pick_best, f"{v}-1.png"), os.path.join(a.final, f"{v}.png")
+        if (v in views and not (a.front and v == "front") and not (a.mirror_right and v == "right")
+                and os.path.isfile(first) and os.path.isfile(now) and common.file_sha256(first) != common.file_sha256(now)):
+            out[v] = first
+    return out
+
+
+def pick_best(a, rep, extra, views):
+    """L9: measure the first images, keep the better image of each view, and measure the kept set again."""
+    firsts = first_images(a, rep, views)
+    if not firsts:
+        return rep, extra, {}
+    with tempfile.TemporaryDirectory() as t:
+        for v in views:
+            if os.path.isfile(os.path.join(a.final, f"{v}.png")):
+                shutil.copyfile(os.path.join(a.final, f"{v}.png"), os.path.join(t, f"{v}.png"))
+        for v, src in firsts.items():
+            shutil.copyfile(src, os.path.join(t, f"{v}.png"))
+        rep_first, extra_first = measure_final(a, t, views)
+    now, first = checks_of(rep, views, bool(a.front), extra), checks_of(rep_first, views, bool(a.front), extra_first)
+    swap = [v for v in firsts if keep_first(first, now, v)]
+    for v in swap:
+        shutil.copyfile(firsts[v], os.path.join(a.final, f"{v}.png"))
+    if swap:
+        rep, extra = measure_final(a, a.final, views)
+    return rep, extra, {v: "first" if v in swap else "regen" for v in firsts}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--final", required=True)
@@ -251,38 +360,30 @@ def main():
     p.add_argument("--concept-colors")
     p.add_argument("--bg-threshold", type=float, default=40)
     p.add_argument("--mirror-right", action="store_true")
+    p.add_argument("--pick-best")
     a = p.parse_args()
     try:
         views = view_list(a.views)
     except ValueError as e:
         print(f"[{TOOL}] error: {e}")
         sys.exit(2)
-    report_dir = os.path.join(a.final, "report")
     out = os.path.join(a.final, "review", "checks", "measure.json")
     try:
-        os.makedirs(report_dir, exist_ok=True)
-        if a.mirror_right and {"left", "right"} <= set(views):
-            ImageOps.mirror(Image.open(os.path.join(a.final, "left.png"))).save(os.path.join(a.final, "right.png"))
-        with tempfile.TemporaryDirectory() as d:
-            gen_dir(d, a.final, views, a.front)
-            concept = a.concept_colors
-            if a.front and concept and "front" in views:
-                concept = rest_concept(a.guides, a.front, concept, a.bg_threshold, d)
-            elif concept:
-                REFERENCE.update(common.read_json(concept))
-            sys.argv = ["measure_views.py", "--blockout", a.guides, "--gen", d, "--out", report_dir,
-                        "--views", ",".join(views), "--bg-threshold", str(a.bg_threshold),
-                        *(["--concept-colors", concept] if concept else [])]
-            with contextlib.redirect_stdout(io.StringIO()):
-                mv.main()
-            extra = overlays(a.guides, d, report_dir, views, a.bg_threshold, bool(a.front))
-        rep = drop_front(report_dir) if a.front else common.read_json(os.path.join(report_dir, "report.json"))
+        rep, extra = measure_final(a, a.final, views)
+        picked = {}
+        if a.pick_best:
+            rep, extra, picked = pick_best(a, rep, extra, views)
     except Exception as e:  # noqa: BLE001
         common.write_error(out, TOOL, e)
         sys.exit(2)
-    r = common.write_result(out, TOOL, checks_of(rep, views, bool(a.front), extra),
-                            data={"regen": rep["regen"], "overall_score": rep["overall_score"],
-                                  "report": os.path.join(report_dir, "report.json")})
+    checks = checks_of(rep, views, bool(a.front), extra)
+    lines = accepted_lines(checks, picked) if picked else None
+    data = {"regen": rep["regen"], "overall_score": rep["overall_score"], "report": os.path.join(a.final, "report", "report.json")}
+    if picked:
+        data |= {"picked": picked, **({"accepted_fail": lines[0], "ngoai_le": lines[1]} if lines else {})}
+    r = common.write_result(out, TOOL, checks, data=data)
+    if lines:
+        print("\n".join(lines))
     sys.exit(1 if r["overall"] == "fail" else 0)
 
 
