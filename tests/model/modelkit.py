@@ -2,12 +2,15 @@
 import copy
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "src/zps-3dp-producer/agents/zps-3dp-step-model/tools"
+WORKER = ROOT / "src/zps-3dp-producer/agents/zps-3dp-step-model/zps-3dp-step-model.md"
 BLOCKOUT_TOOLS = ROOT / "src/zps-3dp-producer/agents/zps-3dp-step-blockout/tools"
 VPY = TOOLS / ".deps/venv/bin/python"
 BLENDER = shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/Blender"
@@ -22,6 +25,8 @@ EAVE = {"name": "eave", "primitive": "box", "dims": ["eave_w", "eave_d", "eave_h
         "attach": {"type": "center_on_face", "to": "walls", "face": "-Y", "offset_uv": [0.0, 1.0]}}
 INLAY = {"name": "inlay", "primitive": "box", "dims": ["inlay_s", "inlay_s", "inlay_h"], "material": "STONE", "role": "marker",
          "attach": {"type": "inset_into", "to": "base", "face": "+Z", "offset_uv": [0.0, -0.875], "depth": "inlay_h"}}
+BIN = {"name": "bin", "primitive": "box", "dims": ["crate_s", "crate_s", "crate_s"], "material": "TIMBER", "role": "mass",
+       "attach": {"type": "on_top", "to": "base", "offset_uv": [0.9, 0.9]}}
 ROUND = {"schema": "blockout-1", "version": "v01", "units": "m", "up": "+Z", "front": "-Y",
          "params": {"base_w": 2.0, "base_d": 1.0, "base_h": 0.2, "post_r": 0.2, "post_h": 0.8, "chest_w": 0.6,
                     "chest_d": 0.5, "chest_h": 0.4, "bevel_r": 0.05},
@@ -83,14 +88,22 @@ def make_spec(final: Path, blockout: Path, **spec):
     (final / "spec.json").write_text(json.dumps(read(final / "spec.json") | spec), encoding="utf-8")
 
 
-def gate_args(blockout: Path, pilot="none", joined=False):
-    """The flags of `RUN gate_all.py` in the model folder, as the agent file gives them. The call before the join skips
-    check_uv_edge and gives check_detail and check_mesh --before-join; the call after the join runs all three."""
-    detail = f"check_detail=--blockout '{blockout}' --pilot '{pilot}'" + ("" if joined else " --before-join")
-    args = ["--check-flag", "final", "--skip", "check_inputs", "--check-args", detail]
-    return args + (["--check-args", "check_mesh=--before-join", "--skip", "check_uv_edge"] if not joined else [])
+def gate_args(blockout: Path, joined=False):
+    """The arguments of `RUN gate_all.py` as the agent file writes them: step 3 before the join, step 5 after it."""
+    commands = re.findall(r"`RUN gate_all\.py --work F ([^`]+)`", WORKER.read_text(encoding="utf-8"))
+    assert len(commands) == 2
+    return shlex.split(commands[joined].replace("'B'", f"'{blockout}'").replace("'<PILOT>'", "'none'"))
 
 
 def gate_all(final: Path, *args):
     rc, out = sh(VPY, TOOLS / "gate_all.py", "--work", final, *args)
     return rc, out.strip().splitlines()
+
+
+def counting_blender(tmp_path: Path):
+    """A Blender that logs each start. `exec` keeps the real Blender as the process the caller waits for."""
+    log = tmp_path / "blender-starts.log"
+    wrapper = tmp_path / "blender_count.sh"
+    wrapper.write_text(f'#!/bin/sh\necho start >> "{log}"\nexec "{BLENDER}" "$@"\n')
+    wrapper.chmod(0o755)
+    return wrapper, log

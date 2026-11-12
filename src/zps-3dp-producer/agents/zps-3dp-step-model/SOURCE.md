@@ -28,6 +28,10 @@ Không sửa file chép nguyên. `tests/model/test_model_source.py` so sha256 v�
 
 `asset_checks/export_check.py` chỉ chạy glTF-Validator khi máy có `gltf_validator` trên PATH, hoặc `node` cùng gói npm `gltf-validator` (qua `gltf_validate.mjs`). `setup_deps.sh` không cài validator, vì cần mạng và node. Khi đó check `gltf_validator` của `qa_export_check.json` là `not_checked`: `export_check` không validate glTF, chỉ xuất lại và so số.
 
+## Chép từ blockout
+
+`tools/gate_all.py` là bản chép từng byte của `zps-3dp-step-blockout/tools/gate_all.py`. Không sửa ở đây. `tests/model/test_model_gate_all.py` so hai file.
+
 ## Chưa chép
 
 - `finalize.py`, `report.py`: chỉ `assemble.py` của Producer dùng (GĐ 4).
