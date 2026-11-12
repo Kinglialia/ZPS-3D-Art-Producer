@@ -78,7 +78,11 @@ def job(st: dict) -> dict | None:
 
 
 def report_of(rec: dict):
-    b = Path(rec["brief"]) if rec.get("brief") else None  # relative to the project folder, where P runs
+    """The report path the dispatch went out with; a record made before it was stored has the report beside its brief.
+    Both are relative to the project folder, where P runs."""
+    if rec.get("report"):
+        return Path(rec["report"])
+    b = Path(rec["brief"]) if rec.get("brief") else None
     return b.with_name(REPORT[b.name]) if b and b.name in REPORT else None
 
 

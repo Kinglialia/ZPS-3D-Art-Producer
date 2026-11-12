@@ -1851,6 +1851,30 @@ def test_a_crop_served_from_disk_goes_back_to_the_reviewer_that_asked_with_a_sho
     assert [x.get("evidence") for x in flow.st["dispatches"]] == [None, None, 1]
 
 
+def test_the_report_of_a_resumed_reviewer_is_seen_by_every_watcher_so_a_finished_review_is_never_redone(flow):
+    """The resumed brief sits in review/evidence-k/ while the report goes to vN/review-out.md. A report path derived from
+    the brief never exists: `P wait` slept, the Stop hook let the turn end, on-stop said no_report, and the stall
+    ladder set the finished report aside for a new reviewer."""
+    from core import watch
+    out = json.loads(asks_crop(flow).splitlines()[-1])
+    rep = flow.root / out["report"]
+    rep.write_text(judged_all(rep, report(verdict="PASS", top_fix=None, rubric="props=pass", evidence="game_cam, game_cam-crop1",
+                                          prior=["- F1: resolved | evidence: game_cam-crop1"])), encoding="utf-8")
+    st = flow.st
+    rec = watch.job(st)
+    assert str(watch.report_of(rec)) == out["report"]
+    assert watch.wake(policy.watch(policy.load()))[0] == f"{AID}: có báo cáo {out['report']} → `ingest {AID}`"
+    assert watch.main_stop_reason([st], Path.exists, lambda s, r: True) == (
+        f"Còn report chưa ingest: chạy `P ingest {AID} --agent-id <id subagent>`")
+    rec["agent_id"] = "r1"
+    save_st(st)
+    watch.on_stop(json.dumps({"agent_type": "zps-3dp-check-blockout", "agent_id": "r1"}))
+    assert watch.job(flow.st)["stopped"] == "report"
+    assert watch.check(flow.st, watch.job(flow.st), policy.watch(policy.load()))["stalled"] is False
+    old = {"step": "blockout", "v": 1, "role": "worker", "brief": f"production/assets/{AID}/blockout/v1/brief-worker.md"}
+    assert str(watch.report_of(old)) == f"production/assets/{AID}/blockout/v1/worker-out.md"
+
+
 def test_without_the_agent_id_of_the_reviewer_a_served_crop_goes_to_a_new_reviewer_with_the_full_brief_q4(flow):
     out = json.loads(asks_crop(flow, agent_id=None).splitlines()[-1])
     assert (out["resume"], out["brief"]) == (None, f"production/assets/{AID}/blockout/v1/brief-review.md")

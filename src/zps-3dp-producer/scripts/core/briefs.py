@@ -865,7 +865,8 @@ def run(a):
         if not again:
             from .watch import deadline, kind_of
             t0 = stamp()
-            rec = {"step": sid, "v": n, "role": out["role"], "model": out["model"], "at": t0, "brief": out["brief"]} | (
+            rec = {"step": sid, "v": n, "role": out["role"], "model": out["model"], "at": t0, "brief": out["brief"],
+                   "report": out["report"]} | (
                 {"scope": st["review_scope"]} if out["role"] == "reviewer" else {}) | (
                 {"evidence": st["evidence"]["k"]} if out["role"] == "reviewer" and st.get("evidence") else {})
             mine = [x for x in st.get("dispatches", []) if x.get("step") == sid and x.get("role") == out["role"]]
