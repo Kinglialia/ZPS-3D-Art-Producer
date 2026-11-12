@@ -153,3 +153,89 @@ def test_resolved_notes_and_their_confirmation_name_a_note_by_step_version_and_i
     rv, errs = parse_review(report(extra="RESOLVED_CONFIRMED: views_rest v2 F2\n"))
     assert (rv["confirmed"], errs) == (["views_rest v2 F2"], [])
     assert parse_review(report())[0]["confirmed"] == []
+
+
+def test_a_note_in_brackets_after_a_rubric_value_keeps_the_value_so_a_good_review_is_not_sent_back_for_form():
+    rv, errs = parse_review(report(rubric="roof=pass (ok); door=Fail (thấp 0.2 m, chưa đủ); base=pass"))
+    assert errs == []
+    assert rv["rubric"] == {"roof": "pass", "door": "fail", "base": "pass"}
+
+
+def test_a_note_in_brackets_after_a_compare_value_keeps_the_value():
+    rv, errs = parse_review(report(compare="F1=better (door matches now); F3=Same"))
+    assert errs == []
+    assert rv["compare"] == {"F1": "better", "F3": "same"}
+
+
+def test_a_finding_field_wrapped_onto_a_second_indented_line_joins_its_value():
+    wrapped = "\n".join([
+        "- F1 [major] structure",
+        "  region: mái | viewing_condition: front ortho, 512 px | evidence: clay_front: mái thấp",
+        "    0.4 m so với concept",
+        "  consequence: sai silhouette | confidence: high",
+        "  repair: nâng mái 0.3 m",
+        "  và giữ độ dốc | preserve: chiều cao tường | acceptance: đỉnh mái 3.2 m trên clay_front"])
+    rv, errs = parse_review(report(findings=[wrapped]))
+    assert errs == []
+    assert rv["findings"]["F1"]["evidence"] == "clay_front: mái thấp 0.4 m so với concept"
+    assert rv["findings"]["F1"]["repair"] == "nâng mái 0.3 m và giữ độ dốc"
+    assert rv["findings"]["F1"]["preserve"] == "chiều cao tường"
+
+
+def test_a_capitalised_prior_status_is_read_as_the_status():
+    rv, errs = parse_review(report(prior=["- F1: Resolved | evidence: clay_front", "- F2: OPEN", "- F3: Regressed."]))
+    assert errs == []
+    assert rv["prior"] == {"F1": "resolved", "F2": "open", "F3": "regressed"}
+
+
+@pytest.mark.parametrize("line", ["**VERDICT:** PASS", "**VERDICT**: PASS", "`VERDICT`: PASS", "verdict: pass",
+                                  "VERDICT: **PASS** (đủ)", "VERDICT: Pass."])
+def test_verdict_is_read_through_bold_backticks_case_and_a_trailing_note(line):
+    text = report(verdict="PASS", top_fix=None).replace("VERDICT: PASS", line)
+    rv, errs = parse_review(text)
+    assert (errs, rv["verdict"]) == ([], "PASS")
+
+
+def test_a_wrapped_rubric_line_keeps_every_key():
+    rv, errs = parse_review(report(rubric="massing=fail;\n  props=pass; base=pass"))
+    assert errs == []
+    assert rv["rubric"] == {"massing": "fail", "props": "pass", "base": "pass"}
+
+
+@pytest.mark.parametrize("dash", ["—", "–", "-"])
+def test_accepted_fail_takes_a_dash_between_the_file_and_the_reason(dash):
+    c, errs = parse_worker(f"STATUS: DONE\nPROFILE_HASH: abc\nACCEPTED_FAIL: final/review/checks/size-fit.json {dash} "
+                           f"dài 0.4 m so với 0.3 m; final/review/join.json {dash} lệch 2 mm\n")
+    assert errs == []
+    assert c["ACCEPTED_FAIL"] == [("final/review/checks/size-fit.json", "dài 0.4 m so với 0.3 m"),
+                                  ("final/review/join.json", "lệch 2 mm")]
+
+
+def test_accepted_fail_without_a_separated_dash_is_still_rejected():
+    _, errs = parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nACCEPTED_FAIL: final/review/checks/size-fit.json lệch 2 mm\n")
+    assert errs == ["ACCEPTED_FAIL: 'final/review/checks/size-fit.json lệch 2 mm' phải là <file JSON> — <lý do có số>"]
+
+
+def test_prose_between_findings_that_would_drop_a_later_finding_is_an_error_naming_the_line():
+    """Run 4: a reviewer wrote a sentence between F3 and F4; F4 was dropped without a word."""
+    text = report(findings=[finding("F3", "minor", "param"), "Còn một lỗi nữa ở mái:", finding("F4", "major")])
+    _, errs = parse_review(text)
+    assert errs == ["dòng không thụt lề trong FINDINGS: 'Còn một lỗi nữa ở mái:'; mục sau nó '- F4 [major] structure' "
+                    "không được đọc"]
+
+
+def test_prose_before_the_first_finding_is_an_error_because_the_whole_list_would_be_dropped():
+    _, errs = parse_review(report(findings=["Các lỗi tôi thấy:", finding("F1")]))
+    assert len(errs) == 1 and errs[0].startswith("dòng không thụt lề trong FINDINGS: 'Các lỗi tôi thấy:'")
+
+
+def test_prose_between_prior_lines_that_would_drop_a_later_line_is_an_error_naming_the_line():
+    _, errs = parse_review(report(prior=["- F1: open", "Hai mục dưới chưa đổi:", "- F2: open"]))
+    assert errs == ["dòng không thụt lề trong PRIOR: 'Hai mục dưới chưa đổi:'; mục sau nó '- F2: open' không được đọc"]
+
+
+def test_a_closing_note_after_the_last_item_does_not_reject_the_report_because_nothing_is_lost():
+    rv, errs = parse_review(report(findings=[finding()], prior=["- F2: open"],
+                                   extra="Xong.\n\n## Ghi chú\n- đã xem đủ ảnh\n"))
+    assert errs == []
+    assert (list(rv["findings"]), rv["prior"]) == (["F1"], {"F2": "open"})
