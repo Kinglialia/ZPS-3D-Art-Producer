@@ -20,8 +20,8 @@ GUARDED = [
         "check_materials", "check_proportion", "check_schema", "check_support", "concept_mask", "custom_mesh", "fit_view",
         "gate_all", "init_sources", "make_variant", "prep_overlay", "render_critic", "render_review", "render_sides")),
     *(f"agents/zps-3dp-step-model/tools/{n}.py" for n in (
-        "check_detail", "check_inputs", "check_mesh", "check_uv_edge", "join_mesh", "make_spec", "render_review",
-        "unwrap")),
+        "build_model", "check_detail", "check_inputs", "check_mesh", "check_uv_edge", "gate_all", "join_mesh", "make_spec",
+        "qa_all", "render_all", "render_review", "unwrap")),
     *(f"agents/zps-3dp-step-texture/tools/{n}.py" for n in (
         "base_fill", "check_inputs", "check_meshy", "crop_edit", "id_map", "project_views", "render_paint_views",
         "render_texture", "seam_fix", "tex_measure", "texture_complexity", "tone_fix")),
@@ -35,6 +35,7 @@ READ_ONLY = {"scripts/check_card.py", "scripts/check_profile.py"}
 LIBRARIES = {"scripts/root_guard.py", "scripts/settings_merge.py", "scripts/heartbeat.py", "agents/zps-3dp-step-blockout/tools/custom_lib.py",
              "agents/zps-3dp-step-blockout/tools/project_parts.py", "agents/zps-3dp-step-blockout/tools/mesh_from_json.py",
              "agents/zps-3dp-step-model/tools/lib/cli.py", "agents/zps-3dp-step-model/tools/lib/glbread.py",
+             "agents/zps-3dp-step-model/tools/lib/session.py",
              "agents/zps-3dp-step-texture/tools/lib/tex.py"}
 
 

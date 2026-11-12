@@ -55,10 +55,24 @@ ACCEPTED = ("JSON fail trong `final/review/{gates,checks}/` trả thẳng về b
             "(inputs, package, schema, export_check, meshy) không bao giờ được khai.")
 
 
-@pytest.mark.parametrize("step", ["blockout", "model", "views", "texture"])
+@pytest.mark.parametrize("step", ["blockout", "views", "texture"])
 def test_each_worker_knows_a_failed_check_comes_back_to_it_and_how_to_accept_one_d31_3(step):
     rows = (AGENTS / f"zps-3dp-step-{step}" / f"zps-3dp-step-{step}.md").read_text(encoding="utf-8").splitlines()
     assert ACCEPTED in rows
+
+
+def test_the_model_worker_knows_a_failed_check_comes_back_to_it_and_reads_how_to_accept_one_in_fix_md_d31_3():
+    """K19 (Q11) moved the steps of ACCEPTED_FAIL to references/fix.md, which a first build does not read. The agent
+    file keeps the rule that a failed JSON comes back and the hard gates, counts included."""
+    agent = AGENTS / "zps-3dp-step-model"
+    rows = (agent / "zps-3dp-step-model.md").read_text(encoding="utf-8").splitlines()
+    assert ("JSON fail trong `final/review/{gates,checks}/`, `final/review/join.json` và `unwrap.json` trả thẳng về bạn, "
+            "không qua reviewer: sửa cho pass. Check không sửa được và có trong danh sách `ACCEPTED_FAIL` của brief: "
+            "đọc mục `ACCEPTED_FAIL` của `R/fix.md`. Gate cứng (inputs, package, schema, counts, export_check, meshy) "
+            "không bao giờ được khai.") in rows
+    fix = (agent / "references/fix.md").read_text(encoding="utf-8")
+    assert ("ghi `ACCEPTED_FAIL: <file JSON> — <lý do có số>` trong report. Ghi cùng dòng đó vào mục `## NGOẠI LỆ` của "
+            "`final/README.md` (tạo mục nếu chưa có).") in fix
 
 
 SCOPE = ("- `REVIEW_SCOPE` ở đầu brief. `full`: chấm đủ mọi key rubric, không dùng `not_checked`. `fix`: chỉ chấm id trong "
