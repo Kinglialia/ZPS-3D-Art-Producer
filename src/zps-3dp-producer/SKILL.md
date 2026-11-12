@@ -22,7 +22,7 @@ Cách tạo subagent, resume, hook mở phiên, gửi file và lệnh mở phiê
 
 ## Mở session
 
-Kiểm profile: chạy `<venv python> .claude/skills/zps-3dp-producer/scripts/check_profile.py production/PROJECT-PROFILE.yaml`. Không in gì là đủ. Thiếu file hoặc có lỗi thì nạp skill `zps-3dp-project-setup` và làm cùng người dùng; không sinh brief khi profile chưa hợp lệ.
+Kiểm profile: chạy `.claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/check_profile.py production/PROJECT-PROFILE.yaml`. Không in gì là đủ. Thiếu file hoặc có lỗi thì nạp skill `zps-3dp-project-setup` và làm cùng người dùng; không sinh brief khi profile chưa hợp lệ.
 
 Chạy `P preflight` một lần mỗi phiên (và khi đổi tool hoặc cấu hình), không chạy cho từng asset. Lệnh in một dòng: tính năng bật, tắt. Bước cần tính năng đang tắt thì `P next` ghi "không giao" và `P brief` từ chối: báo người dùng sửa môi trường.
 
@@ -43,14 +43,18 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
    Lời giao việc chỉ gồm file role và brief: file role là agent `agent` (Codex: `agent_file`), brief là prompt trên. Không thêm gì vào prompt. Không hướng dẫn cách ghi file: không heredoc, không `cat >`, không `tee`, không python. Agent ghi report bằng tool ghi file, theo brief.
 3. Nhiều asset khác nhau giao song song được. Mỗi asset chỉ có một subagent chạy tại một thời điểm.
-4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash với `timeout` 3600000 (D33.4), chờ xong, rồi `P ingest <id>`.
+4. `role` là `script` (bước `assemble`): không tạo subagent. Chạy đúng `command` bằng Bash với `timeout` 3600000, chờ xong, rồi `P ingest <id>`.
 5. `P brief` in một dòng thay cho JSON khi bước `texture` dừng trước khi giao (thiếu key Meshy, câu hỏi Meshy): làm theo phần "Tiếp" của dòng đó.
 
-**Chế độ giao việc** (D33): không kết thúc lượt để chờ thông báo. Việc xong hay chưa đọc từ file trên đĩa (`P next`, file report).
+**Chế độ giao việc**: việc xong hay chưa đọc từ file trên đĩa (`P next`, file report). Chỉ kết thúc lượt để chờ khi đang có một `P wait` chạy nền.
 - Người dùng đổi chế độ: `P approvals set dispatch <foreground|background> --by "<nguyên văn>"`.
 - Mặc định (`dispatch: foreground`, hoặc `policy.yaml` không có khóa này): giao subagent ở chế độ thường, không chạy nền. Cần song song thì giao nhiều subagent trong cùng một lượt.
-- `policy.yaml` có `dispatch: background` (lô nhiều asset): giao chạy nền, rồi chạy nền một `P wait`. Chỉ một `P wait` tại một thời điểm; script từ chối cái thứ hai. `P wait` thoát khi có report, khi việc kẹt, hoặc hết giờ: làm theo dòng nó in.
-- `P next` in dưới mỗi asset đang chạy một dòng `↳` (bước, version, vai trò, thời gian, nhịp tim, hạn chót, `OK` hoặc `KẸT`). Dòng `KẸT` → chạy `P stall <id> --agent-id <id subagent đang chạy>` và làm đúng dòng nó in: gửi câu nudge tới agent đó, hoặc giao theo dòng JSON (agent mới, không resume), hoặc báo người dùng. Script chọn bậc, bạn không tự chọn.
+- `policy.yaml` có `dispatch: background` (lô nhiều asset): giao chạy nền, rồi chạy nền một `P wait`. Chỉ một `P wait` tại một thời điểm; script từ chối cái thứ hai. `P wait` thoát khi có report, khi việc kẹt, khi có asset giao được, khi không còn việc chạy, hoặc sau 50 phút; thông báo của lệnh đó mở lượt mới: làm theo dòng nó in.
+- `P next` in dưới mỗi asset đang chạy một dòng `↳` (bước, version, vai trò, thời gian, nhịp tim, hạn chót, `OK` hoặc `KẸT`). Dòng `KẸT` → chạy `P stall <id> --agent-id <id subagent đang chạy>` và làm đúng dòng nó in. Script chọn bậc, bạn không tự chọn:
+  - Dòng nudge: gửi đúng câu đó tới agent đó.
+  - Dòng `chưa giao lại: agent X chưa dừng`: dừng agent X (`references/runtime.md`, mục Gọi agent), rồi chạy lại `P stall`. Không dừng được thì để đó: agent im thêm `stall_min` phút (`watch` của `policy.yaml`) thì lần `P stall` sau giao cho agent mới.
+  - Dòng JSON: giao như bước 2 của "Giao việc" (agent mới, không resume).
+  - Dòng `waiting_human`: báo người dùng.
 
 **Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`). Ba luật đầu không có ngoại lệ. Lý do: thông báo của subagent có thể không đến, nên một lượt kết thúc sớm làm pipeline đứng im cho tới khi người dùng nhắn.
 1. Chạy `P ingest <id> --agent-id <id subagent>` ngay, cho mọi vai trò. Worker cũng cần id, để vòng sửa sau resume được.
@@ -60,12 +64,12 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 5. `P brief` gọi lại khi subagent chưa trả về chỉ in lại dòng giao việc. Không giao thêm.
 6. Script đọc report, kiểm tra output bắt buộc, chuyển state và in bước tiếp theo. Đừng tự diễn giải report thay script.
 7. Bạn không bao giờ sửa report của worker hay reviewer.
-8. Script báo report sai contract thì giao lại cho chính agent đó (gửi tiếp tới đúng subagent đó, `references/runtime.md` mục Resume): "Report sai contract: <dòng lỗi của script>. Sửa `<report>` rồi trả lại các dòng brief yêu cầu.".
+8. Script báo report sai contract thì giao lại cho chính agent đó (gửi tiếp tới đúng subagent đó, `references/runtime.md` mục Resume): "Report sai contract: <dòng lỗi của script>. Viết lại `<report>` (bản cũ đã thành `.rejected-<k>.md`), rồi trả lại các dòng brief yêu cầu.".
 9. Script cảnh báo mà không báo lỗi (ví dụ `COMPARE` cho id ngoài `TOP_FIX`) thì không giao lại.
 
 `P stats <id>` in bảng theo bước: thời gian và token của worker, reviewer, khoảng chờ Producer.
 
-**Lệnh đổi state cũng in lệnh giao việc:** `P feedback ... --action approve|redo`, `P waive`, `P retry` làm asset đổi state thì in thêm đúng dòng JSON của `P brief` ở dòng cuối (hoặc dòng dừng của bước texture). Giao ngay theo dòng đó, trong cùng lượt. Trang duyệt (`P serve`, `P board pull`) không giao: sau đó chạy `P next`.
+**Lệnh đổi state cũng in lệnh giao việc:** `P feedback ... --action approve|redo`, `P waive`, `P retry`, `P meshy <id> paint` làm asset đổi state thì in thêm đúng dòng JSON của `P brief` ở dòng cuối (hoặc dòng dừng của bước texture). Giao ngay theo dòng đó, trong cùng lượt. Lệnh đổi state (cả `P ingest`) in `<id>: chờ slot <tài nguyên>, chưa giao` thay cho dòng JSON: chưa giao; chạy `P next` sau. Trang duyệt (`P serve`, `P board pull`) không giao: sau đó chạy `P next`.
 
 **Ngoại lệ (waive):** người dùng chấp nhận một finding là ngoại lệ, ở bất kỳ state nào → `P waive <id> F<n> "<nguyên văn lý do>"` (`--step <bước>` khi finding thuộc bước khác bước hiện tại). Finding đó không còn trong brief sau. Waive finding chặn cuối cùng thì reviewer chấm lại chính version đó, không gọi worker. Bạn chỉ tự waive (`--by producer`) khi `policy.yaml` có `test_mode: true`; người dùng bật bằng `P approvals set test_mode true --by "<nguyên văn>"`. Dự án thật: không tự waive.
 
@@ -73,14 +77,14 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **blocked:** đọc ghi chú. Nếu thông tin thiếu là thứ bạn có (từ brief, art direction, hoặc lời người dùng trong chat), bổ sung vào mục "Làm rõ" của `assets/<id>/brief.md`, rồi chạy `P retry <id>` và giao lại. Nếu chỉ người dùng trả lời được thì hỏi người dùng.
 
-**Bước view gọi Codex** (`views`): chỉ chạy khi thẻ có `views` khác `none`. Mặt bên tô theo mã vật liệu (`mat_*`) đã có ở cổng blockout. Mỗi ảnh tốn lượt Codex của người dùng. Ghi chú blocked có lỗi `gen_image_codex` (3 lần lỗi kỹ thuật) thì hỏi người dùng cách xử lý; không tự đổi sang tool ảnh khác (D15.2). Ghi lựa chọn bằng `P rule`, rồi `P retry <id>`.
+**Bước view gọi Codex** (`views`): chỉ chạy khi thẻ có `views` khác `none`. Mặt bên tô theo mã vật liệu (`mat_*`) đã có ở cổng blockout. Mỗi ảnh tốn lượt Codex của người dùng. Ghi chú blocked có lỗi `gen_image_codex` (3 lần lỗi kỹ thuật) thì hỏi người dùng cách xử lý; không tự đổi sang tool ảnh khác. Ghi lựa chọn bằng `P rule`, rồi `P retry <id>`.
 
-**Project của v0.7.1:** `P next` nêu `migrate <id>` cho asset còn bước view cũ: chạy đúng lệnh đó. Lệnh lỗi vì `pipeline.toml` còn bước cũ: làm theo dòng lỗi (`references/setup.md`, mục Nâng cấp từ v0.7.1).
+**Project của v0.7.1:** mọi lệnh `P` dừng với một dòng nêu `pipeline.toml` còn bước cũ: sửa `pipeline.toml` đúng như dòng đó (`references/setup.md`, mục Nâng cấp từ v0.7.1). Sau đó `P next` nêu `migrate <id>`: chạy đúng lệnh đó cho từng asset.
 
 **Bước model** (DUYỆT 1): duyệt `model` thì script khóa sha256 của `<id>-untextured.glb` (`locked` trong status.json). Từ đó không ai sửa mesh hay UV. Người dùng muốn sửa: `P feedback <id> "<nguyên văn>" --action redo --step model`. Reviewer texture trả `fix_uv_mesh` thì script tự mở lại `model`; lần thứ hai trong một đợt feedback thì hỏi người dùng.
 
 **Bước texture** (Meshy tốn credit của người dùng): script kiểm key Meshy và mở budget theo hash mesh trước khi giao; worker chỉ gọi Meshy qua `meshy_call.py`. Không đọc, in hay chép `.env`. Ba trường hợp `waiting_human` cần người dùng trả lời, không tự quyết:
-- `meshy_regen` (reviewer) hoặc `UNFIXABLE` (worker): lớp Meshy không sửa được. Người dùng cho gọi thêm một lần → `P feedback <id> "<nguyên văn>" --action approve`; chọn VẼ MỚI → `P meshy <id> paint --by "<nguyên văn>"`.
+- `meshy_regen` (reviewer) hoặc `UNFIXABLE` (worker): lớp Meshy không sửa được. Người dùng cho gọi thêm một lần → `P feedback <id> "<nguyên văn>" --action approve`; chọn VẼ MỚI → `P meshy <id> paint --by "<nguyên văn>"`. Cả hai lệnh in dòng giao việc: giao ngay.
 - Mesh đổi (sau `fix_uv_mesh` hoặc làm lại `model`): "Gọi lại Meshy hay VẼ MỚI?". Trả lời như trên.
 - `blocked` vì thiếu key: người dùng thêm key vào file `env_file` của profile, rồi `P retry <id>`.
 Người dùng hỏi về ngưỡng chọn chế độ texture: `P texture-stats` (một dòng).
@@ -89,7 +93,7 @@ Người dùng hỏi về ngưỡng chọn chế độ texture: `P texture-stats
 
 **Báo cáo sai hash:** `ingest` báo `PROFILE_HASH ... khác brief` thì yêu cầu worker chép đúng dòng `PROFILE_HASH` ở đầu brief. `ingest` hoặc `brief` báo "final/ đã duyệt bị sửa" thì hỏi người dùng làm lại bước đó hay không.
 
-**waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`. Mỗi lần đưa duyệt chỉ nhận một Duyệt hoặc Cần sửa; `redo` cho bản đã duyệt mở vòng mới và version mới. Người dùng khoanh vùng trên trang thì script tự lưu ảnh khoanh và ghi finding `H<n>`; bạn không làm gì thêm. Trang hỏi Meshy bằng hai nút "Gọi Meshy thêm" và "VẼ MỚI".
+**waiting_human:** không tự quyết. Báo người dùng mở review page (`P serve`, http://127.0.0.1:8765). Người dùng feedback qua chat thì ghi nguyên văn: `P feedback <id> "<nguyên văn>" --action approve|redo|note [--step <bước>]`. Mỗi lần đưa duyệt chỉ nhận một Duyệt hoặc Cần sửa; `redo` cho bản đã duyệt mở vòng mới và version mới. Bản có nhãn "chưa chấm" không duyệt được, vì chưa reviewer nào chấm. Dừng vì check fail: người dùng chọn Cần sửa kèm lời, hoặc sửa thẻ hay profile rồi `P retry <id>`. Dừng vì kẹt: `P retry <id>` giao lại. Người dùng khoanh vùng trên trang thì script tự lưu ảnh khoanh và ghi finding `H<n>`; bạn không làm gì thêm. Trang hỏi Meshy bằng hai nút "Gọi Meshy thêm" và "VẼ MỚI".
 
 **Xem kết quả:** "Cho anh xem <asset>" → `P show <id>` (một version: thêm `--step <bước> --version <N>`). Người dùng ở điện thoại hoặc Remote Control → thêm `--bundle`. Script in đường dẫn file; gửi file theo `references/runtime.md` (mục Gửi file), không mở file.
 
@@ -121,6 +125,7 @@ Mỗi thư mục cần đủ `concept_albedo.png`, `concept_shadow.png`, `asset-
 - "Còn gì chưa làm?" → `P intake` (chỉ liệt kê). Báo lại theo nhóm: asset đủ file, thiếu file, thẻ sai, loại chưa hỗ trợ, tên sai quy ước, file rời. Các nhóm lỗi là việc người dùng hoặc Concept Artist cần sửa.
 - "Làm hết" → `P intake --all`. Asset lỗi bị bỏ qua và được liệt kê.
 - `P intake` in một dòng ước lượng thời gian và credit Meshy của lô. Báo người dùng tổng credit một lần; người dùng đồng ý thì ghi `P rule "<lô>: duyệt <N> credit Meshy — <nguyên văn>"`.
+- `P intake` in dòng `cảnh báo:` (thiếu ô lấy màu, ô sai, hex lệch số đo, `counts` rỗng): báo người dùng theo asset. Đó là việc Concept Artist sửa. Người dùng bảo làm tiếp thì ghi `P rule "<id>: làm tiếp với cảnh báo — <nguyên văn>"`.
 - "Làm trước X, Y" → `P intake x y --priority 1`. Có asset lỗi thì không đăng ký asset nào.
 - Profile có `pilot_asset: null`: `--all` và nhiều id bị từ chối. Chỉ đăng ký từng asset, và chỉ khi không còn asset nào đang chạy. Báo người dùng lý do, không tự lách.
 
@@ -130,7 +135,7 @@ Muốn chỉnh rubric cho một asset riêng: sửa `assets/<id>/rubric.md` củ
 
 Asset không đến từ `_approved/`: `P new <id> --title "..." [--priority 1-3] [--deadline YYYY-MM-DD]`, rồi ghi yêu cầu của người dùng vào `assets/<id>/brief.md`, sát nguyên văn.
 
-## Phân loại thay đổi (D34)
+## Phân loại thay đổi
 
 Skill dùng chung cho mọi loại vật. Người dùng muốn đổi quy tắc, số mặc định, từ vựng hay cách làm: phân loại trước khi đề xuất hay ghi. Đề xuất nào cũng ghi rõ loại; đây là bước bắt buộc.
 - *chung*: thay đổi của skill. Bạn không sửa skill: báo người dùng để chuyển cho bên code.

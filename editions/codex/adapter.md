@@ -7,6 +7,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 - Codex không có file agent riêng. Gọi `spawn_agent` với đúng nội dung sau:
   > Vai của bạn nằm trong `<agent_file>`: đọc file đó trước tiên. Rồi đọc `<brief>`: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 - `agent_file` là khóa của `P brief`. Dòng `tools:` trong file agent không áp dụng trên Codex.
+- Dừng agent: Producer không dừng được sub-agent; chỉ người dùng dừng được. `P stall` không chờ ghi nhận dừng trên Codex: lần `stall` sau bậc nudge giao ngay cho agent mới.
 - Sub-agent dùng chung quyền mạng và sandbox của phiên gốc. `production/` và `production-*/` nằm trong thư mục project, nên sandbox `workspace-write` cho ghi report ở đó mà không cần thêm writable root.
 
 ## Resume
@@ -25,7 +26,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 - Không có hook SessionStart. Chạy `P next --session` khi mở phiên.
 - Không có hook Stop: `P on-main-stop` không chạy, nên không có gì chặn Producer kết thúc lượt. Luật trong `SKILL.md` "Nhận kết quả" là chỗ chặn duy nhất; giữ nó đúng từng chữ.
-- Không có hook SubagentStop (D33.20): `P on-stop` không chạy. Nhịp tim, hạn chót, `P stall`, `P wait` dựa trên file nên dùng như bản Claude. Chưa chạy thử bản Codex để biết có đứng im như Run 5 không.
+- Không có hook SubagentStop: `P on-stop` không chạy. Nhịp tim, hạn chót, `P stall`, `P wait` dựa trên file nên dùng như bản Claude. Chưa chạy thử bản Codex để biết có đứng im như Run 5 không.
 - DUYỆT 2 xóa file trung gian ngay trong lệnh duyệt, như bản Claude. Không cần hook.
 
 ## Gửi file
@@ -45,7 +46,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 - `run_tool.py` chỉ nhận Blender ghi trong `production/preflight.json`. Trên Codex nó chỉ nhận tool trong `agents/*/tools/`, và từ chối `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py`, `self_build/assembly.py`, `self_build/param_fit.py` và `custom_mesh.py`, để rule của nó không mở lối quanh các quy tắc dưới đây. Chạy các script đó, và mọi script trong `scripts/`, bằng lệnh riêng như trước.
 - `meshy_call.py` và `gen_image_codex.py` cần mạng. Xin người dùng duyệt từng lần chạy. Rule không bao giờ cho phép hai script này.
 - `self_build/assembly.py`, `param_fit.py` chạy `parts_lib.py` do agent viết. Rule không cho phép hai script này. Lệnh Blender của chúng (part `custom`) chạy ngoài sandbox thì xin người dùng duyệt từng lần.
-- `build_parts.py` chỉ chạy `custom_lib.py` và dựng lưới từ JSON bằng `mesh_from_json.py`; không chạy `custom_parts.py` do agent viết (D32.2). Rule cho phép script này như trước `3a4f64b`. `custom_mesh.py` chạy `custom_parts.py` do agent viết bằng Python của tool, trong sandbox; chạy trong Blender thì script tự dừng. Rule không bao giờ cho phép `custom_mesh.py`.
+- `build_parts.py` chỉ chạy `custom_lib.py` và dựng lưới từ JSON bằng `mesh_from_json.py`; không chạy `custom_parts.py` do agent viết. Rule cho phép script này như trước `3a4f64b`. `custom_mesh.py` chạy `custom_parts.py` do agent viết bằng Python của tool, trong sandbox; chạy trong Blender thì script tự dừng. Rule không bao giờ cho phép `custom_mesh.py`.
 
 ## Phiên mới
 
