@@ -2,9 +2,9 @@
 
 Usage: python3 tools/check_mesh.py --final F
   mesh.structure        F/<id>-untextured.glb has 1 node with a mesh, 1 mesh, 1 material
-  mesh.coplanar_overlap pairs of triangles in the same plane (normals within 0.8 deg, offset within 0.1 mm), facing
-                        the same way, whose areas overlap: a join without boolean leaves them where a part sits flush
-                        in another. > 0 fails; data.pairs lists up to 10 centroids
+  mesh.coplanar_overlap pairs of triangles in the same plane (normals within 0.8 deg, offset under the 1 mm of
+                        model.md), facing the same way, whose areas overlap: a join without boolean leaves them where
+                        a part sits flush in another. > 0 fails; data.pairs lists up to 10 centroids
 Hidden faces and flipped faces: kit mesh_check (hidden_face_ratio, flipped_faces) on the same GLB.
 Writes F/review/checks/mesh.json. Exit 0 pass, 1 fail, 2 error.
 """
@@ -22,7 +22,8 @@ from root_guard import require_root  # noqa: E402
 
 TOOL = "model/check_mesh"
 COS_MAX = np.cos(np.radians(0.8))
-PLANE_TOL_M = 1e-4
+PLANE_TOL_M = 1e-3
+FLOAT32_SLACK_M = 1e-5
 SEP_EPS_M = 1e-6
 CHUNK = 512
 
@@ -50,7 +51,7 @@ def coplanar_pairs(v, f):
     out = []
     for s in range(0, len(keep), CHUNK):
         cos = n[s:s + CHUNK] @ n.T
-        near = np.abs(d[s:s + CHUNK, None] - d[None, :]) < PLANE_TOL_M
+        near = np.abs(d[s:s + CHUNK, None] - d[None, :]) < PLANE_TOL_M - FLOAT32_SLACK_M
         for i, j in zip(*np.nonzero((cos > COS_MAX) & near)):
             i += s
             if j <= i:

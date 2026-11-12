@@ -256,6 +256,17 @@ def test_check_mesh_finds_the_z_fight_of_an_inlay_flush_with_its_parent_top(tmp_
         {"faces": [2, 14], "at": [1.333, 0.667, 0.5]}, {"faces": [3, 15], "at": [0.667, 1.333, 0.5]}])
 
 
+@pytest.mark.parametrize("top, want", [(0.3005, ("fail", 2)), (0.301, ("pass", 0))])
+def test_an_inlay_under_1_mm_above_its_parent_is_z_fighting_and_1_mm_is_not(tmp_path, top, want):
+    """model.md tells the worker to raise a part at least 1 mm; a 0.5 mm step still flickers on a phone depth buffer,
+    and the check that enforces the rule must not fail the 1 mm the rule allows (stored as float32 in the GLB)."""
+    f = tmp_path / "final"
+    spec_of(f)
+    write_glb(f / "pilot-house-untextured.glb", *join(box((0, 0, 0), (2, 2, 0.3)), box((0.5, 0.5, 0.2), (1, 1, top))))
+    tool("check_mesh", "--final", f)
+    assert result(f, "mesh")[1]["mesh.coplanar_overlap"] == want
+
+
 def test_check_mesh_passes_a_box_standing_on_another_and_fails_two_materials(tmp_path):
     f = tmp_path / "final"
     spec_of(f)
