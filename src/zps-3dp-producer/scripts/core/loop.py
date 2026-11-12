@@ -448,7 +448,8 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     rv = valid(rep, parse_review(read_report(rep)))
     from .briefs import prefilled
     pre = {k: v for k, (v, _) in prefilled(st, step, n).items()}
-    if changed := [f"{k}={rv['rubric'][k]} (script điền {v})" for k, v in pre.items() if rv["rubric"].get(k, v) != v]:
+    if changed := [f"{k}={rv['rubric'][k]} (script điền {v})" for k, v in pre.items()
+                   if rv["rubric"].get(k, v) not in (v, "not_checked")]:
         reject(rep, f"RUBRIC đổi key script đã điền từ JSON: {', '.join(changed)}")
     rv["rubric"] = {**rv["rubric"], **pre}
     scope = st.get("review_scope") or "full"

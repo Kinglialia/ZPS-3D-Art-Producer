@@ -111,7 +111,7 @@ def test_the_brief_that_replaces_those_lines_states_them(flow):  # noqa: F811
     out = flow.work()
     rv = flow.text(json.loads(out.splitlines()[-1]))
     for stated in ("- `preserve`: tên chi tiết", "Không ghi COUNTS", "FINDINGS chỉ ghi finding mới", "PRIOR: thay `?` bằng",
-                   "COMPARE: so ảnh cùng góc"):
+                   "COMPARE: so ảnh cùng góc", "- Sai số thành phần (cửa, chân bàn, đá) so với concept hoặc `blockout.md`: luôn `structure`"):
         assert stated in rv, stated
 
 
@@ -164,3 +164,9 @@ def test_the_rubric_templates_say_four_to_eight_criteria_because_two_steps_have_
     assert most == 8
     assert "Giữ 4–8 tiêu chí mỗi bước" in (rubrics / "default.md").read_text(encoding="utf-8")
     assert "4–7" not in "".join(f.read_text(encoding="utf-8") for f in rubrics.glob("*.md"))
+
+
+@pytest.mark.parametrize("step", ["blockout", "clay"])
+def test_the_param_rule_tells_the_reviewer_that_a_variant_sheet_can_have_further_pages_q5(step):
+    """The model sheet has 12 tiles, so sheet-b.png comes with sheet-b-2.png; the brief names only sheet-<b|c>.png."""
+    assert "`sheet-<b|c>-2.png`" in reviewer(step)

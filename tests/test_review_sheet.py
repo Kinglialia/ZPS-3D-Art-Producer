@@ -208,12 +208,9 @@ def test_served_rounds_stop_at_served_evidence_and_the_next_ask_goes_to_the_work
         "→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`")
 
 
-# D38.6, D38.8: summary.json, the part legend and the rubric keys a result JSON decides.
-import shutil
 import subprocess
-from pathlib import Path
 
-from core import briefs, loop
+from core import briefs
 from core.state import load_cfg, step_of
 from flowkit import blockout_files
 from shared import SCRIPTS
@@ -246,13 +243,26 @@ def test_the_summary_names_each_part_with_its_primitive_material_size_and_gate_v
     assert flow.root / out == flow.v(1) / "review/summary.json"
     doc = json.loads((flow.root / out).read_text(encoding="utf-8"))
     assert doc["parts"] == [
-        {"n": 1, "name": "base", "prim": "box", "mat": "STONE", "tag": "base", "size": [4.0, 4.0, 0.3], "gate": "pass"},
-        {"n": 2, "name": "walls", "prim": "box", "mat": "TIMBER", "size": [3.0, 3.0, 2.4], "gate": "pass"},
-        {"n": 3, "name": "roof_f", "prim": "wedge", "mat": "TEAL", "tag": "roof", "size": [3.0, 1.5, 1.0], "gate": "pass"},
-        {"n": 4, "name": "roof_b", "prim": "wedge", "mat": "TEAL", "tag": "roof", "size": [3.0, 1.5, 1.0], "gate": "pass"},
-        {"n": 5, "name": "door", "prim": "box", "mat": "TIMBER", "size": [0.9, 0.05, 1.8], "gate": "pass"}]
+        {"n": 1, "name": "base", "prim": "box", "mat": "STONE", "tag": "base", "size": [4.0, 4.0, 0.3]},
+        {"n": 2, "name": "walls", "prim": "box", "mat": "TIMBER", "size": [3.0, 3.0, 2.4]},
+        {"n": 3, "name": "roof_f", "prim": "wedge", "mat": "TEAL", "tag": "roof", "size": [3.0, 1.5, 1.0]},
+        {"n": 4, "name": "roof_b", "prim": "wedge", "mat": "TEAL", "tag": "roof", "size": [3.0, 1.5, 1.0]},
+        {"n": 5, "name": "door", "prim": "box", "mat": "TIMBER", "size": [0.9, 0.05, 1.8]}]
+    assert doc["gate"] == "pass unless a part says otherwise"
     assert doc["numbers"] == {"relief_m": {"door": 0.05}, "size_m": [4.0, 4.0, 3.7]}
-    assert len((flow.root / out).read_bytes()) < 100 * 5 + 1024
+    assert len((flow.root / out).read_bytes()) < 85 * 5 + 300
+
+
+@needs_venv
+def test_a_part_whose_gate_did_not_pass_or_has_no_result_says_so_in_the_summary(flow, held):  # noqa: F811
+    flow.work(out=flow.brief())
+    fd = gated_pilot(flow)
+    (fd / "review/gates/door.json").write_text(json.dumps({"overall": "fail"}), encoding="utf-8")
+    (fd / "review/gates/roof_f.json").unlink()
+    got = {p["name"]: p.get("gate") for p in json.loads(
+        (flow.root / briefs.write_summary(flow.st | {"accepted": {"v": 1, "items": ["door.json — x"]}}, blockout_step(), 1)
+         ).read_text(encoding="utf-8"))["parts"]}
+    assert got == {"base": None, "walls": None, "roof_f": "none", "roof_b": None, "door": "fail (accepted)"}
 
 
 @needs_venv
@@ -319,8 +329,7 @@ def model_prefill(flow, **checks):  # noqa: F811
 
 def test_density_and_blockout_match_are_filled_from_the_detail_and_mesh_json_that_say_pass(flow):  # noqa: F811
     got = model_prefill(flow, detail=DETAIL, qa_mesh_check=QA_MESH)
-    assert got == {"density": ("pass", "detail.json: vs_pilot 0.93"),
-                   "blockout_match": ("pass", "detail.json: bbox, fixed_params; qa_mesh_check.json: dimensions, pivot")}
+    assert got == {"density": ("pass", "detail.json"), "blockout_match": ("pass", "detail.json, qa_mesh_check.json")}
 
 
 @pytest.mark.parametrize("name, detail, qa_mesh, left", [
@@ -359,17 +368,23 @@ def test_the_script_fills_nothing_for_a_key_the_asset_rubric_does_not_have(flow)
 
 
 @needs_venv
-def test_the_review_brief_lists_the_filled_keys_with_their_source_and_the_keys_left_to_judge(flow, held, monkeypatch):  # noqa: F811
-    monkeypatch.setitem(briefs.PREFILL, "blockout", {"props": lambda fr, acc: ("pass", "counts.json: window 2")})
+def test_the_review_brief_lists_the_filled_keys_with_their_source(flow, held, monkeypatch):  # noqa: F811
+    monkeypatch.setitem(briefs.PREFILL, "blockout", {"props": lambda fr, acc: ("pass", "counts.json")})
     flow.work(out=flow.brief())
     text = flow.text(flow.brief())
-    line = next(l for l in text.splitlines() if l.startswith("- Key script đã điền"))
-    assert line.startswith("- Key script đã điền từ JSON (nguồn trong ngoặc): props=pass (counts.json: window 2). Chép nguyên "
-                           "vào RUBRIC, không chấm lại; report đổi giá trị bị từ chối. Key cần chấm: ")
-    assert "props" not in line.split("Key cần chấm: ")[1] and "mass" in line.split("Key cần chấm: ")[1]
+    assert ("- Key script đã điền từ JSON, chép nguyên vào RUBRIC, không chấm lại (report đổi giá trị bị từ chối): "
+            "props=pass (counts.json).") in text.splitlines()
 
 
-def prefilled_review(flow, monkeypatch, rubric):  # noqa: F811
+def test_the_filled_key_bullet_fits_in_what_the_heaviest_model_review_brief_leaves():
+    """`m3 review brief` of tests/test_e2e_model.py (variants, base version, open PRIOR) measured 3981 bytes before the
+    bullet, paths left out; the new sheet line is shorter than the old one, so 60 bytes cover its pages."""
+    bullet = briefs.prefill_line({"density": ("pass", "detail.json"), "blockout_match": ("pass", "detail.json, qa_mesh_check.json")})
+    assert len(bullet.encode()) <= 220
+    assert 3981 + len(bullet.encode()) + 1 + 60 < 4416
+
+
+def prefilled_review(flow, monkeypatch):  # noqa: F811
     monkeypatch.setitem(briefs.PREFILL, "blockout", {"props": lambda fr, acc: ("pass", "counts.json: window 2")})
     out = flow.brief()
     flow.work(out=out)
@@ -377,7 +392,7 @@ def prefilled_review(flow, monkeypatch, rubric):  # noqa: F811
 
 
 def test_ingest_refuses_a_report_that_changes_a_filled_key_and_keeps_it_when_the_reviewer_leaves_it_out(flow, held, monkeypatch):  # noqa: F811
-    out = prefilled_review(flow, monkeypatch, None)
+    prefilled_review(flow, monkeypatch)
     out = flow.brief()
     with pytest.raises(Exception) as e:
         flow.review(out=out, verdict="PASS", counts=counts(), top_fix=None, rubric="mass=pass; props=fail")
@@ -416,6 +431,7 @@ def test_the_model_numbers_hold_the_budget_the_density_the_uv_stretch_and_the_sc
         "density": {"tris": 412, "cap": 600, "tris_m2": 31.5, "vs_pilot": 0.93},
         "blockout_match": {"bbox_ratio": [1, 1, 1], "fixed_params_diff": "none"},
         "uv": {"texel_px_m": 410.0, "stretch_share": 0.012}, "screen_tris": {"small_tri_ratio": 0.04, "thin": 0}}
+    assert len(json.dumps(briefs.drop_empty(briefs.model_numbers(tmp_path)), separators=(",", ":"))) < 400
 
 
 def test_the_texture_numbers_group_the_measured_part_under_the_rubric_key_the_reviewer_still_judges(tmp_path):
@@ -428,4 +444,19 @@ def test_the_texture_numbers_group_the_measured_part_under_the_rubric_key_the_re
         "light": {"side_spread_L": {"STONE": 1.2}, "shaded_share": {"STONE": 0.004}, "highlight_share": {"STONE": 0.03}},
         "material": {"dE_concept": {"STONE": 1.8}}, "seams": {"p90_dE": 2.4},
         "mirrored_uv": {"faces": 12, "note": "chữ có thể bị lật gương ở mã SIGN (12 mặt lật UV)"}}
+    assert len(json.dumps(briefs.drop_empty(briefs.texture_numbers(tmp_path)), ensure_ascii=False, separators=(",", ":")).encode()) < 600
     assert set(briefs.PREFILL["model"]) == {"density", "blockout_match"} and "texture" not in briefs.PREFILL
+
+
+def test_a_fix_round_report_may_write_not_checked_for_a_filled_key_and_the_script_keeps_its_value(flow, held, monkeypatch):  # noqa: F811
+    """The role files tell the reviewer to write not_checked for a key a fix round does not judge. A filled key is a fact of
+    a JSON, so that line is not a change of the value: refusing it would reject every fix-round report."""
+    from test_loop import fix_v1
+    monkeypatch.setitem(briefs.PREFILL, "blockout", {"props": lambda fr, acc: ("pass", "counts.json")})
+    fix_v1(flow)
+    flow.work()
+    rb = flow.brief()
+    assert flow.st["review_scope"] == "fix"
+    flow.review(out=rb, verdict="PASS", counts=counts(), top_fix=None, rubric="mass=not_checked; props=not_checked",
+                prior=["- F1: resolved | evidence: clay_front.png", "- F2: resolved | evidence: clay_front.png"], compare="F1=better; F2=better")
+    assert flow.st["last_rubric"] == "mass=not_checked; props=pass"

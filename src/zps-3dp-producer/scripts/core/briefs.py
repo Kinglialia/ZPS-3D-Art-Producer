@@ -412,7 +412,7 @@ def density_rule(fr: Path, accepted: set[str]):
     c = checks_of(fr / "checks" / "detail.json").get("detail.vs_pilot")
     v = c.get("value") if c else None
     ok = c and c.get("status") == "info" and isinstance(v, (int, float)) and not isinstance(v, bool) and 0.5 <= v <= 2
-    return ("pass", f"detail.json: vs_pilot {v}") if ok else None
+    return ("pass", "detail.json") if ok else None
 
 
 def blockout_match_rule(fr: Path, accepted: set[str]):
@@ -423,7 +423,7 @@ def blockout_match_rule(fr: Path, accepted: set[str]):
     pairs = [("detail.json", detail[k].get("status")) for k in ("detail.bbox", "detail.fixed_params")] + [
         ("qa_mesh_check.json", c.get("status")) for n, c in qa.items() if n.endswith((".dimensions", ".pivot_bottom_center"))]
     v = decide(pairs, accepted)
-    return (v, "detail.json: bbox, fixed_params; qa_mesh_check.json: dimensions, pivot") if v else None
+    return (v, "detail.json, qa_mesh_check.json") if v else None
 
 
 # Rubric keys a result JSON decides alone. A key that also asks for a look at the renders (texture light, material,
@@ -439,6 +439,11 @@ def prefilled(st, step, n: int) -> dict[str, tuple[str, str]]:
     return {k: got for k, rule in PREFILL.get(step["id"], {}).items() if k in keys and (got := rule(fr, acc))}
 
 
+def prefill_line(pre: dict[str, tuple[str, str]]) -> str:
+    return ("- Key script đã điền từ JSON, chép nguyên vào RUBRIC, không chấm lại (report đổi giá trị bị từ chối): "
+            + "; ".join(f"{k}={v} ({src})" for k, (v, src) in pre.items()) + ".")
+
+
 def parts_of(vd: Path, accepted: set[str]) -> list[dict]:
     """One row per part in the order the renders number them (assembly.json index, else the order of the graph)."""
     fd = vd / "final"
@@ -449,11 +454,11 @@ def parts_of(vd: Path, accepted: set[str]) -> list[dict]:
     out = []
     for i, p in enumerate(graph["parts"], 1):
         r, name = rows.get(p.get("name"), {}), p.get("name")
-        gate = (read_json(fd / "review" / "gates" / f"{name}.json") or {}).get("overall")
+        gate = (read_json(fd / "review" / "gates" / f"{name}.json") or {}).get("overall") or "none"
         row = {"n": r.get("index", i), "name": name, "prim": r.get("primitive") or p.get("primitive"),
                "mat": p.get("material"), "tag": p.get("tag"),
                "size": [round(x, 2) for x in r["extents"]] if r.get("extents") else None,
-               "gate": gate and (gate if gate != "fail" or f"{name}.json" not in accepted else "fail (accepted)")}
+               "gate": None if gate == "pass" else "fail (accepted)" if gate == "fail" and f"{name}.json" in accepted else gate}
         out.append({k: v for k, v in row.items() if v is not None})
     return sorted(out, key=lambda r: r["n"])
 
@@ -518,7 +523,7 @@ def write_summary(st, step, n: int) -> Path | None:
     if not (parts or numbers):
         return None
     dump = lambda x: json.dumps(x, ensure_ascii=False, separators=(",", ":"))  # noqa: E731
-    body = (['"parts":[\n' + ",\n".join(dump(p) for p in parts) + "\n]"] if parts else []) + (
+    body = ([f'"gate":"pass unless a part says otherwise","parts":[\n' + ",\n".join(dump(p) for p in parts) + "\n]"] if parts else []) + (
         [f'"numbers":{dump(numbers)}'] if numbers else [])
     out = vd / "review" / SUMMARY
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -679,10 +684,7 @@ def review_brief(cfg, st, step, n) -> str:
         + "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi "
         "loại, script điền mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- Không ghi COUNTS. Mỗi key unclear trong RUBRIC cần một finding unclear.",
-        *([f"- Key script đã điền từ JSON (nguồn trong ngoặc): " + "; ".join(f"{k}={v} ({src})" for k, (v, src) in pre.items())
-           + ". Chép nguyên vào RUBRIC, không chấm lại; report đổi giá trị bị từ chối."
-           + (f" Key cần chấm: {', '.join(k for k in rubric_keys(aid, sid) if k not in pre)}." if pre else "")]
-          if pre else []),
+        *([prefill_line(pre)] if pre else []),
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]
