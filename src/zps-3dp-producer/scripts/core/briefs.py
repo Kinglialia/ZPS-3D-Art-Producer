@@ -205,7 +205,7 @@ def profile_item(step, preset: Path) -> str:
 
 
 def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path, prof: dict,
-                 extra: list[str] = ()) -> str:
+                 extra: list[str] = (), why: str | None = None) -> str:
     aid = st["id"]
     d = vdir(aid, step["id"], n)
     a = ASSETS / aid
@@ -221,6 +221,9 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         *counts_line(st, step),
         *card_lines(st, step),
         *custom_parts_line(st, step),
+        *(["## Lần giao trước", f"Lần giao trước của bạn dừng ở: {why}.",
+           "Bạn là phiên đó, làm tiếp. Giữ phần đã làm trong thư mục version; chỉ bổ sung phần thiếu. Không dựng lại cả bước.",
+           ""] if why else []),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
@@ -573,6 +576,7 @@ def run(a):
         d = vdir(a.id, sid, n)
         (d / "final").mkdir(parents=True, exist_ok=True)
         (d / "work").mkdir(parents=True, exist_ok=True)
+        why = st.get("retry_why") if s == "running" else None
         fix = s == "fix" or (s == "running" and (st.get("fix_round", 0) > 0 or bool(st.get("direct"))))
         hashes.record_inputs(cfg, st, i, n, ph)
         if step["script"]:
@@ -582,10 +586,10 @@ def run(a):
             out = {"role": "script", "command": shlex.join(cmd), "report": rel(d / "report-script.md")}
         else:
             bp = d / "brief-worker.md"
-            bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset, prof, extra), encoding="utf-8")
+            bp.write_text(worker_brief(cfg, st, step, n, fix, ph, pf, preset, prof, extra, why), encoding="utf-8")
             model = step.get("model")
             resume = None
-            if fix and st.get("fix_round", 0) <= r["resume_rounds"]:
+            if fix and st.get("fix_round", 0) <= r["resume_rounds"] or why:
                 resume = st.get("worker_agent_id")
             elif fix and step.get("escalate_model"):
                 model = step["escalate_model"]

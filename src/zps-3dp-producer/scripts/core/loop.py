@@ -49,7 +49,7 @@ MOVES = {
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0, "evidence_served": 0,
             "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None, "direct_rounds": 0,
-            "direct_names": None}
+            "direct_names": None, "retry_why": None}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -295,7 +295,7 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
 
 def on_worker(cfg, st, step, d, n, a) -> tuple[str, str]:
     script = not step.get("agent")
-    st["direct"] = None
+    st |= {"direct": None, "retry_why": None}
     rep = d / ("report-script.md" if script else "worker-out.md")
     c = worker_report(st, rep, a.agent_id, step["id"], n)
     st["last_rubric"] = c.get("RUBRIC", "")
@@ -722,7 +722,10 @@ def retry(a):
         move(st, "retry_todo")
         st["note"] = ""
     else:
-        move(st, "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo")
+        ev = "retry_evidence" if st.get("evidence") else "retry" if st["versions"].get(st["stage"]) else "retry_todo"
+        move(st, ev)
+        if ev == "retry" and st.get("note"):
+            st["retry_why"] = st["note"].replace("thiếu output bắt buộc:", "thiếu output:", 1)
         st["note"] = ""
     if st["state"] == "running":
         set_aside(vdir(a.id, st["stage"], st["versions"][st["stage"]]) / "worker-out.md")

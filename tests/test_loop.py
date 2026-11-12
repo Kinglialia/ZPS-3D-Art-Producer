@@ -37,7 +37,7 @@ class Flow:
     def text(self, out):
         return (self.root / out["brief"]).read_text(encoding="utf-8")
 
-    def work(self, status="DONE", out=None, extra="", checks=None, fixed="", raw=None):
+    def work(self, status="DONE", out=None, extra="", checks=None, fixed="", raw=None, skip=()):
         """checks: {name: overall} of result JSON the worker leaves in final/review/checks/. raw: {name: text} written as
         is, for a file that does not parse. fixed: the FIXED line; a DONE
         that names every open finding gets a `full` review (D31.2)."""
@@ -51,6 +51,8 @@ class Flow:
                 write_json(rep.parent / "final/review/checks" / name, {"overall": overall})
             for name, text in (raw or {}).items():
                 (rep.parent / "final/review/checks" / name).write_text(text, encoding="utf-8")
+            for o in skip:
+                (rep.parent / "final" / o).unlink()
         rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n"
                        + (f"FIXED: {fixed}\n" if fixed else "") + extra, encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
@@ -1481,7 +1483,7 @@ def test_brief_after_a_retry_builds_again_because_no_agent_is_out_c13(flow, monk
     monkeypatch.setattr(loop, "dispatch_next", lambda *a: None)
     flow.call(loop.retry, Namespace(id=AID))
     sent = json.loads(flow.call(briefs.run, Namespace(id=AID)))
-    assert (flow.root / sent["brief"]).is_file()
+    assert (flow.root / sent["brief"]).is_file() and sent["resume"] == "w1"
     assert flow.call(briefs.run, Namespace(id=AID)) == json.dumps(sent, ensure_ascii=False) + "\n"
 
 
@@ -1511,3 +1513,30 @@ def test_a_fix_dispatch_takes_its_deadline_from_the_median_of_fix_rounds_not_of_
     rec = flow.st["dispatches"][-1]
     assert (rec["role"], rec["v"]) == ("worker", 2)
     assert dt.datetime.fromisoformat(rec["deadline"]) - dt.datetime.fromisoformat(rec["at"]) == dt.timedelta(minutes=80)
+
+
+def test_a_retry_after_a_missing_output_resumes_the_same_worker_and_names_the_file_l16(flow):
+    """Run 5: a worker that forgot one file was replaced by a fresh agent that rebuilt the whole step."""
+    out = flow.brief()
+    flow.work(out=out, skip=["blockout.md"])
+    assert (flow.st["state"], flow.st["note"]) == ("blocked", "thiếu output bắt buộc: final/blockout.md")
+    head, line = flow.call(loop.retry, Namespace(id=AID)).splitlines()
+    sent = json.loads(line)
+    assert (sent["resume"], sent["report"], flow.st["versions"]) == ("w1", out["report"], {"blockout": 1})
+    text = flow.text(sent)
+    assert "## Lần giao trước" in text and "dừng ở: thiếu output: final/blockout.md." in text.replace("\n", " ")
+    assert "Bản gốc:" not in text and "Giữ phần đã làm trong thư mục version" in text
+
+
+def test_a_retry_after_needs_context_resumes_the_same_worker_with_its_note_l16(flow):
+    flow.work(status="NEEDS_CONTEXT", extra="ISSUES: thiếu file layout\n")
+    sent = json.loads(flow.call(loop.retry, Namespace(id=AID)).splitlines()[-1])
+    assert sent["resume"] == "w1"
+    assert "dừng ở: NEEDS_CONTEXT: thiếu file layout." in flow.text(sent)
+
+
+def test_the_first_ingest_after_a_retry_drops_the_reason_so_a_later_brief_has_no_stale_section_l16(flow):
+    flow.work(status="NEEDS_CONTEXT")
+    flow.call(loop.retry, Namespace(id=AID))
+    flow.work()
+    assert flow.st["retry_why"] is None
