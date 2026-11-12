@@ -242,3 +242,15 @@ def test_a_kit_check_that_crashes_does_not_stop_the_other_checks_or_the_compare_
     session = json.loads((r["d"] / "work/evidence/session.json").read_text(encoding="utf-8"))
     assert session["stages"] == {"export": "ok", "mesh_check": "ok", "uv_check": "error: exit 1", "export_check": "ok",
                                  "screen_tris_check": "ok", "compare": "ok"}
+
+
+def test_a_compare_render_that_fails_points_the_fail_point_at_the_error_file_l13(base, tmp_path):
+    def bad(a):
+        p = a / "texture/v1/final/review/renders.json"
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        doc["renders"]["unlit_game"]["camera"] = None
+        p.write_text(json.dumps(doc), encoding="utf-8")
+    r = assemble(base, tmp_path, bad)
+    assert (r["rc"], r["report"].splitlines()[0]) == (1, "STATUS: BLOCKED")
+    assert "compare unlit_game: render GLB lỗi error: exit 1, xem work/compare/render.json" in r["report"].splitlines()[2]
+    assert json.loads((r["d"] / "work/compare/render.json").read_text(encoding="utf-8"))["overall"] == "error"

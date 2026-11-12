@@ -279,8 +279,8 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
                                 "finalize.py không từ chối"))
     (final / "review").mkdir(parents=True, exist_ok=True)
     stage = done["stages"].get("compare")
-    cfails, data["compare"] = compare_renders(tf, work, final, views, stage == "ok",
-                                              stage or (out.strip().splitlines() or [""])[-1])
+    why = f"{stage}, xem work/compare/render.json" if stage and stage != "ok" else (out.strip().splitlines() or [""])[-1]
+    cfails, data["compare"] = compare_renders(tf, work, final, views, stage == "ok", why)
     fails += cfails
     (final / "texture").mkdir(parents=True, exist_ok=True)
     shutil.copy2(albedo, final / "texture" / albedo.name)
