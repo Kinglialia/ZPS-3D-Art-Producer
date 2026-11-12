@@ -67,8 +67,15 @@ def test_rubric_template_has_one_section_per_step_and_blockout_keys_are_the_revi
 
 def test_param_variants_run_their_own_checks_so_a_picked_variant_carries_its_own_json():
     _, body = front(WORKER)
-    assert ("chạy gate, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào "
+    assert ("gate từng part, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào "
             "`V/variants/<b|c>/review/`") in body
+
+
+def test_a_variant_clears_the_gate_json_it_copied_from_variant_a_before_it_gates_its_own_parts():
+    """B3: the copy of F brings the gates of variant a. They describe other values, so they must not count."""
+    _, body = front(WORKER)
+    line = next(l for l in body.splitlines() if l.startswith("- `param`"))
+    assert line.index("clear_gates.py --work V/variants/<b|c>/") < line.index("gate từng part")
 
 
 def test_worker_reads_blockout_md_sections_from_a_shipped_reference_with_the_summary_first():

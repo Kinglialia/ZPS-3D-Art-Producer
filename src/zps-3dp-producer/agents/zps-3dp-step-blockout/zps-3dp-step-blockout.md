@@ -50,7 +50,7 @@ Brief ghi bản gốc và `TOP_FIX`. Chép `part_graph.json`, `parts_lib.py`, `s
   3. `RUN check_fix.py --work F --old <bản gốc>/final/part_graph.json --finding <F>`.
   4. Fail: chép lại từ `V/work/edits/<F>/`, dựng lại, ghi lý do vào báo cáo. Không sửa `fixed_params`.
 - `structure`: đúng một finding.
-- `param`: mọi finding trong `TOP_FIX`. Giá trị ở `F` là phương án `a`. Dựng thêm 1–2 phương án (`b`, `c`): chép `F` sang `V/variants/<b|c>/`, đổi giá trị, dựng, chạy gate, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào `V/variants/<b|c>/review/`. Reviewer chọn phương án nào thì thư mục đó thành `final/`, nên mỗi phương án giữ JSON của chính nó. Ghi giá trị của từng phương án vào `blockout.md`.
+- `param`: mọi finding trong `TOP_FIX`. Giá trị ở `F` là phương án `a`. Dựng thêm 1–2 phương án (`b`, `c`): chép `F` sang `V/variants/<b|c>/`, đổi giá trị, dựng, chạy `RUN clear_gates.py --work V/variants/<b|c>/` (gate của phương án `a` không được tính), gate từng part, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào `V/variants/<b|c>/review/`. Reviewer chọn phương án nào thì thư mục đó thành `final/`, nên mỗi phương án giữ JSON của chính nó. Ghi giá trị của từng phương án vào `blockout.md`.
 - Sau đó chạy lại bước 7–8. Ghi `FIXED:` theo brief. Mục "Thay đổi so với version trước" của `blockout.md`: part nào, param nào đổi, vì sao.
 
 Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<k>/`. Không sửa `final/`.
@@ -67,7 +67,7 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 - `check_schema` báo `schema.mirror`: viết các part đó tường minh, không dùng `mirror_of` (gate của kit lỗi khi part gốc dùng `inset_into`, `through_axis` hoặc part cha lệch khỏi mặt phẳng gương).
 - Mái dốc dùng `wedge` hoặc `custom`. Marker nhô ít nhất 2 cm. Props là part rời. Chép nguyên ghi chú real/texture_only của thẻ vào `blockout.md`.
 - Dáng cần hàm mới: dùng `box`, `wedge`, `cylinder` và hàm chung trước. Không đủ thì viết hàm vào file `CUSTOM_PARTS:` của brief (D32). File này là file duy nhất ngoài `V` được ghi.
-  - Python thuần, chỉ `import math`. Mỗi hàm trả `(verts, faces)`: `verts` là danh sách `(x, y, z)`, `faces` là danh sách chỉ số đỉnh (≥ 3), lưới kín, tâm tại bbox; 3 tham số đầu là w, d, h. Không class, `with`, `open`, `exec`, `eval`, `getattr`, `import` khác, tên `__…__`; chỉ builtin số học (`range`, `len`, `min`, `max`, `abs`, `int`, `float`, ...). `custom_mesh.py` và `check_schema.py` từ chối file sai.
+  - Python thuần, chỉ `import math`. Mỗi hàm trả `(verts, faces)`: `verts` là danh sách `(x, y, z)`, `faces` là danh sách chỉ số đỉnh (≥ 3), lưới kín (mỗi cạnh thuộc đúng 2 mặt, các mặt dùng chung chỉ số đỉnh, không chép đỉnh), tâm tại bbox; 3 tham số đầu là w, d, h. Không class, `with`, `open`, `exec`, `eval`, `getattr`, `import` khác, tên `__…__`; chỉ builtin số học (`range`, `len`, `min`, `max`, `abs`, `int`, `float`, ...). `custom_mesh.py` và `check_schema.py` từ chối file sai.
   - Không đặt tên trùng hàm của `T/custom_lib.py`. Không sửa `T/custom_lib.py`.
   - Chỉ thêm hàm. Không sửa, không xóa hàm mà một version đã dùng: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó. Cần dáng khác: thêm hàm tên mới.
   - Ghi tên từng hàm mới và lý do vào `blockout.md`. Reviewer đọc code này.
