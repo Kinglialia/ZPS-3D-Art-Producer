@@ -584,7 +584,8 @@ def test_two_jobs_with_two_free_slots_finish_in_about_the_time_of_one_call_so_th
     p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, delay=f"*:{PARALLEL_SECS}")
     print(f"L8 two jobs, two free slots: {secs:.2f} s for {PARALLEL_SECS} s calls")
     assert p.returncode == 0, p.stdout
-    assert secs < 1.6 * PARALLEL_SECS, secs
+    first, second = sorted(c["t0"] for c in calls)
+    assert second - first < PARALLEL_SECS, "the second call started only after the first one could have ended"
     assert sorted(c["outs"][0] for c in calls) == ["back.png", "left.png"]
     assert {len(c["pid_names"]) for c in calls} == {2}
     assert {n: r["status"] for n, r in recs.items()} == {"back": "ok", "left": "ok"}

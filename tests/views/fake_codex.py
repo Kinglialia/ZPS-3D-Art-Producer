@@ -10,7 +10,7 @@ FAKE_CODEX_ERROR: the error text of fail:<n> and fail_for (default "internal err
 FAKE_CODEX_SESSION set: the `codex exec` header has a `session id:` line, and CODEX_HOME images of this call go under
 generated_images/<that id>/ (default folder: sess, and no session line).
 Each mode applies to every OUTPUT_PATH of the prompt. An --image file that does not exist exits 1, as codex does.
-Logs each call to FAKE_CODEX_LOG with the parsed image list and the output names.
+Logs each call to FAKE_CODEX_LOG with the parsed image list, the output names and its start time (t0, epoch seconds).
 FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr.
 FAKE_CODEX_DELAY=<output name or *>:<s>: the call sleeps s seconds before it makes that file (every file with *).
 `codex --version` prints FAKE_CODEX_VERSION (default codex-cli 0.164.0). `codex exec --help` prints the option lines of
@@ -73,7 +73,7 @@ def main():
              "outs": [Path(o).name for o, _ in jobs],
              "api_keys": sorted(k for k in os.environ if k.endswith("_API_KEY")),
              "pid_file": own[0].read_text(encoding="utf-8").strip() if own else None,
-             "pid_name": own[0].name if own else None, "pid_names": holds}
+             "pid_name": own[0].name if own else None, "pid_names": holds, "t0": time.time()}
     with log.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
     if missing := [i for i in images if not Path(i).is_file()]:
