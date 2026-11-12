@@ -64,7 +64,26 @@ def write_glb(path, v, f, uv=None, materials=1):
     optlib.write_glb(str(path), doc, binary)
 
 
-def tool(name, *args):
+GLB_CHECKS = ("check_mesh", "check_uv_edge", "check_detail")
+
+
+def code_hash(final):
+    sys.path[:0] = [str(TOOLS / "lib"), str(TOOLS / "self_build")]
+    import graph
+    return graph.code_hash(str(final))
+
+
+def unwrapped(final, recorded=None):
+    """F/review/unwrap.json as unwrap.py writes it beside the GLB: the code_hash of the build the GLB comes from."""
+    path = Path(final) / "review/unwrap.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"overall": "pass", "data": {"code_hash": recorded or code_hash(final)}}), encoding="utf-8")
+
+
+def tool(name, *args, fresh=True):
+    """fresh: the GLB the test wrote by hand counts as built from the files in F now, as after build_model."""
+    if fresh and name in GLB_CHECKS and "--before-join" not in args:
+        unwrapped(args[args.index("--final") + 1])
     r = subprocess.run([sys.executable, str(TOOLS / f"{name}.py"), *map(str, args)], capture_output=True, text=True)
     return r
 
@@ -560,3 +579,27 @@ def test_round_parts_are_cylinders_bevel_boxes_and_custom_parts_marked_round_wit
     sys.path.insert(0, str(TOOLS))
     import join_mesh
     assert join_mesh.round_parts(tmp_path) == {"post", "chest", "knob", "knob_r"}
+
+
+@pytest.mark.parametrize("name, extra", [("check_mesh", ()), ("check_uv_edge", ()),
+                                         ("check_detail", ("--blockout", "B", "--pilot", "none"))])
+@pytest.mark.parametrize("recorded", ["0" * 64, None])
+def test_a_glb_built_from_another_part_graph_is_refused_with_one_note_to_build_again(detail, name, extra, recorded):
+    """A failed join left the GLB of the run before, and nothing tied the GLB to part_graph.json: every GLB check then
+    measured an old mesh. unwrap.json records the code_hash of the build; no record counts as another build."""
+    b, f = detail
+    spec_of(f)
+    if recorded:
+        unwrapped(f, recorded)
+    r = tool(name, "--final", f, *[b if x == "B" else x for x in extra], fresh=False)
+    stem = name.removeprefix("check_")
+    assert (r.returncode, result(f, stem)[1]) == (1, {"glb.fresh": ("fail", None)}), r.stdout + r.stderr
+    note = json.loads((f / f"review/checks/{stem}.json").read_text(encoding="utf-8"))["checks"][0]["note"]
+    assert note == "GLB không dựng từ part_graph.json + parts_lib.py hiện tại: chạy lại build_model.py"
+
+
+def test_the_part_checks_before_the_join_need_no_glb_record(detail):
+    b, f = detail
+    spec_of(f)
+    assert tool("check_mesh", "--final", f, "--before-join", fresh=False).returncode == 0
+    assert tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none", "--before-join", fresh=False).returncode == 0

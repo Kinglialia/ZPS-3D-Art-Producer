@@ -113,4 +113,4 @@ def check(a):
 
 if __name__ == "__main__":
     require_root()
-    cli.run(TOOL, "uv_edge", __doc__, lambda p: None, check)
+    cli.run(TOOL, "uv_edge", __doc__, lambda p: None, check, glb=True)

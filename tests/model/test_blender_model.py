@@ -245,3 +245,17 @@ def test_the_uv_checker_shows_the_colour_grid_on_the_model_not_the_clay(built):
     im = np.asarray(Image.open(read(built["final"] / "review/review.json")["artifacts"]["uv_checker"]).convert("RGB"), int)
     colours = {tuple(c) for c in (im[::8, ::8] // 32).reshape(-1, 3).tolist()}
     assert len(colours) >= 12
+
+
+def test_a_failed_join_leaves_no_glb_or_blend_of_the_build_before(tmp_path):
+    """The GLB checks would read the old mesh and pass it."""
+    f = tmp_path / "final"
+    (f / "parts").mkdir(parents=True)
+    (f / "spec.json").write_text(json.dumps({"asset": "pilot-house"}), encoding="utf-8")
+    (f / "assembly.json").write_text(json.dumps({"data": {"parts": [{"name": "gone"}], "code_hash": "1" * 64}}),
+                                     encoding="utf-8")
+    for old in ("pilot-house-untextured.glb", "pilot-house.blend"):
+        (f / old).write_bytes(b"old build")
+    rc, out = blender("build_model.py", "--final", f)
+    assert (rc, read(f / "review/join.json")["overall"]) == (1, "error"), out
+    assert sorted(p.name for p in f.iterdir()) == ["assembly.json", "parts", "review", "spec.json"]

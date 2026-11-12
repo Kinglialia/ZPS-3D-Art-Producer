@@ -7,7 +7,8 @@ xatlas packs charts to about 0.5 px from the atlas border, so the UVs are scaled
 m = padding / resolution: the border gets the same padding as the gap between charts (check_uv_edge.py).
 No xatlas: error, no Smart UV Project fallback, because a non-deterministic unwrap breaks the mesh lock.
 Saves F/<id>.blend with the UV (no .blend1 backup; stray ones in F are removed) and exports F/<id>-untextured.glb.
-Writes F/review/unwrap.json (data.how: in-process or system python3). Exit 0, 1 on error.
+Writes F/review/unwrap.json (data.how: in-process or system python3; data.code_hash: the one of join.json, so the
+GLB checks know which build the GLB comes from). Exit 0, 1 on error.
 """
 import glob
 import os
@@ -53,7 +54,8 @@ def run(final):
     optbpy.export_glb(glb, [ob])
     checks = [common.check("unwrap.how", "info", how), common.check("unwrap.border_inset_px", "info", pad),
               common.check("unwrap.occupancy", "info", common.r(bake.uv_occupancy(uvt), 3))]
-    return checks, {"how": how, "resolution": res, "padding_px": pad, "tris": len(f), "glb": glb}, warnings
+    built = common.read_json(os.path.join(final, "review", "join.json"))["data"].get("code_hash")
+    return checks, {"how": how, "resolution": res, "padding_px": pad, "tris": len(f), "glb": glb, "code_hash": built}, warnings
 
 
 def main():

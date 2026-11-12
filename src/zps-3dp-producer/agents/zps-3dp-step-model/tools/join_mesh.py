@@ -22,7 +22,7 @@ Reads F/spec.json (asset id), F/assembly.json (part order) and F/parts/<part>.gl
   blends. Plain averaged normals tilted the faces of a bevel_box 11.25 deg towards its bevel, a light gradient.
 - Origin at the bottom centre of the whole asset.
 Saves F/<id>.blend (object, mesh and material named <id>, no UV yet: unwrap.py next).
-Writes F/review/join.json. Exit 0, 1 on error.
+Writes F/review/join.json; data.code_hash is the one of F/assembly.json, the build of the joined parts. Exit 0, 1 on error.
 """
 import os
 import sys
@@ -220,7 +220,8 @@ def run(final):
               common.check("join.bottom_visible", "info", bottom),
               common.check("join.sharp_edges_split", "info", len(sharp), {"deg": SHARP_DEG, "round_deg": ROUND_DEG}),
               common.check("join.origin_offset_m", "info", [common.r(x, 4) for x in offset])]
-    return checks, {"parts": names, "round_parts": sorted(soft), "sharp_edges": per_part, "tris": len(f), "blend": blend}
+    return checks, {"parts": names, "round_parts": sorted(soft), "sharp_edges": per_part, "tris": len(f), "blend": blend,
+                    "code_hash": common.read_json(os.path.join(final, "assembly.json"))["data"].get("code_hash")}
 
 
 def main():

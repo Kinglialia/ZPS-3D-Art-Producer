@@ -115,4 +115,4 @@ def check(a):
 
 if __name__ == "__main__":
     require_root()
-    cli.run(TOOL, "mesh", __doc__, args, check)
+    cli.run(TOOL, "mesh", __doc__, args, check, glb=True)
