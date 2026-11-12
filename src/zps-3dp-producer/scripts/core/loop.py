@@ -440,7 +440,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         tf = doc["top_fix"]
         doc["top_fix"] = tf and ({**tf, "ids": ids} if (ids := [i for i in tf["ids"] if i not in pend]) else None)
         if rv["verdict"] == "FIX" and not findings.blocking(doc):
-            rv = rv | {"verdict": "PASS", "top_fix": None}
+            rv = rv | {"verdict": "PASS", "top_fix": None, "waived_pass": True}
             doc["top_fix"] = None
     who = "human"
     if step["gate"] == "review":
@@ -469,7 +469,8 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     if asks:
         event, reason = "served", None
     best = findings.best_version([findings.load(aid, sid, v) for v in rvs])
-    if event in ("approve", "await_approval") and scope == "fix":
+    if event in ("approve", "await_approval") and scope == "fix" and (
+            rv.get("waived_pass") or "not_checked" in rv["rubric"].values()):
         event, reason = "full_again", f"PASS ở vòng fix → reviewer chấm full lại v{n}, không gọi worker"
     if event == "full_again":
         move(st, event)

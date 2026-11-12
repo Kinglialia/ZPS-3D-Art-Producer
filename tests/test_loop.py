@@ -522,8 +522,6 @@ def test_redo_of_an_unreviewed_version_files_the_user_text_as_H1_so_the_next_rev
     assert "REVIEW_SCOPE: fix" in rb.splitlines()  # the worker did not name H1 in FIXED
     flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass", compare="H1=better",
                 prior=["- H1: resolved | evidence: clay_front"])
-    assert pick(flow.st)["state"] == "review"  # D31.2: a PASS at a fix round is judged once more in full
-    flow.review(out=flow.brief(), verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass")
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 1, "fix_base": 1, "offer": 2, "label": "",
                              "note": "duyệt blockout v2"}
 
@@ -1687,4 +1685,30 @@ def test_a_fallback_reviewer_model_outside_the_names_is_refused_too_a1(flow):
     with pytest.raises(ProducerError) as e:
         load_cfg()
     assert str(e.value) == "pipeline.toml [review] reviewer_model = 'gpt' phải là opus | sonnet | haiku"
+
+
+def rounds(f):
+    return [(x["role"], x["v"], x.get("scope")) for x in f.st["dispatches"]]
+
+
+def test_a_fix_round_that_leaves_a_minor_finding_open_costs_two_reviewers_not_three_q3(flow):
+    """The fix brief names only the TOP_FIX ids, so a real worker leaves the minor finding out of FIXED. Run 5 paid a third
+    reviewer for each such round: a `fix` review, then a `full` one on the same version."""
+    flow.work()
+    flow.review(findings=[finding("F1", "major", "structure"), finding("F2", "minor", "param")])
+    flow.work(fixed="F1")
+    assert flow.review(verdict="PASS", top_fix=None, rubric="massing=pass", compare="F1=better",
+                       prior=["- F1: resolved | evidence: clay_front", "- F2: open | evidence: clay_front"]) == (
+        "house-a: review PASS (minor=1) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
+    assert rounds(flow) == [("worker", 1, None), ("reviewer", 1, "full"), ("worker", 2, None), ("reviewer", 2, "full")]
+
+
+def test_a_pass_in_a_fix_round_that_judged_every_rubric_key_is_final_without_another_reviewer_q3(flow):
+    """A `fix` review that wrote no `not_checked` judged every key: a `full` review of the same version adds nothing."""
+    fix_v1(flow, 1)
+    flow.work()
+    assert flow.review(verdict="PASS", top_fix=None, rubric="massing=pass; props=pass", compare="F1=better",
+                       prior=["- F1: resolved | evidence: clay_front"]) == (
+        "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
+    assert rounds(flow) == [("worker", 1, None), ("reviewer", 1, "full"), ("worker", 2, None), ("reviewer", 2, "fix")]
 

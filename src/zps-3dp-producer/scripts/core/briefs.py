@@ -361,9 +361,10 @@ def sheet_of(st, step, n: int, variant: str | None = None) -> Path | None:
 
 
 def review_scope(st, sid: str, n: int) -> str:
-    """D31.2: `full` for a review with no reviewed base, for the same version judged again, and for a version whose
-    worker reports DONE with every open finding of the base in FIXED; `fix` otherwise. An evidence round keeps the scope
-    of the review that asked for it."""
+    """D31.2, D38.3: `full` for a review with no reviewed base, for the same version judged again, and for a version
+    whose worker reports DONE with every open blocker, major and unclear finding of the base in FIXED; `fix` otherwise.
+    The fix brief names only the TOP_FIX ids, so an open minor or preference finding must not make the scope `fix`. An
+    evidence round keeps the scope of the review that asked for it."""
     if st.get("evidence"):
         return st.get("review_scope") or "full"
     m = review_base(st, n)
@@ -372,7 +373,7 @@ def review_scope(st, sid: str, n: int) -> str:
     wr = vdir(st["id"], sid, n) / "worker-out.md"
     c = parse_worker(wr.read_text(encoding="utf-8"))[0] if wr.exists() else {}
     fixed = set(re.findall(r"[FH]\d+", c.get("FIXED", "")))
-    return "full" if c.get("STATUS") == "DONE" and set(findings.open_of(base)) <= fixed else "fix"
+    return "full" if c.get("STATUS") == "DONE" and set(findings.blocking(base)) <= fixed else "fix"
 
 
 def review_brief(cfg, st, step, n) -> str:
