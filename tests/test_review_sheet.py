@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from shared import finding
-from test_loop import AID, counts, flow  # noqa: F401  (flow is the blockout-only fixture)
+from test_loop import AID, counts, flow, held  # noqa: F401  (flow is the blockout-only fixture)
 
 import review_sheet
 from core.state import TEMPLATES, save_st
@@ -206,3 +206,226 @@ def test_served_rounds_stop_at_served_evidence_and_the_next_ask_goes_to_the_work
     save_st(st)
     assert ask(flow, "xin ảnh game_cam").splitlines()[0].endswith(
         "→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`")
+
+
+# D38.6, D38.8: summary.json, the part legend and the rubric keys a result JSON decides.
+import shutil
+import subprocess
+from pathlib import Path
+
+from core import briefs, loop
+from core.state import load_cfg, step_of
+from flowkit import blockout_files
+from shared import SCRIPTS
+
+TOOLS = SCRIPTS.parent / "agents/zps-3dp-step-blockout/tools"
+VPY = TOOLS / ".deps/venv/bin/python"
+needs_venv = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh")
+
+
+def gated_pilot(flow, n=1):  # noqa: F811
+    """The pilot graph of tests/fixtures with the gate and check results gate_all.py writes for it (a real run)."""
+    fd = flow.v(n) / "final"
+    blockout_files(fd, "x", files=False)
+    run = subprocess.run([str(VPY), str(TOOLS / "gate_all.py"), "--work", str(fd), "--skip", "check_inputs"],
+                         capture_output=True, text=True, cwd=flow.root)
+    assert run.returncode == 0, run.stdout + run.stderr
+    return fd
+
+
+def blockout_step():
+    return step_of(load_cfg(), "blockout")[1]
+
+
+@needs_venv
+def test_the_summary_names_each_part_with_its_primitive_material_size_and_gate_verdict_in_the_render_order(flow, held):  # noqa: F811
+    """A reviewer read assembly.json (8.7 KB) and one gate JSON per part (2-3 KB each), all `pass` by construction."""
+    flow.work(out=flow.brief())
+    gated_pilot(flow)
+    out = briefs.write_summary(flow.st, blockout_step(), 1)
+    assert flow.root / out == flow.v(1) / "review/summary.json"
+    doc = json.loads((flow.root / out).read_text(encoding="utf-8"))
+    assert doc["parts"] == [
+        {"n": 1, "name": "base", "prim": "box", "mat": "STONE", "tag": "base", "size": [4.0, 4.0, 0.3], "gate": "pass"},
+        {"n": 2, "name": "walls", "prim": "box", "mat": "TIMBER", "size": [3.0, 3.0, 2.4], "gate": "pass"},
+        {"n": 3, "name": "roof_f", "prim": "wedge", "mat": "TEAL", "tag": "roof", "size": [3.0, 1.5, 1.0], "gate": "pass"},
+        {"n": 4, "name": "roof_b", "prim": "wedge", "mat": "TEAL", "tag": "roof", "size": [3.0, 1.5, 1.0], "gate": "pass"},
+        {"n": 5, "name": "door", "prim": "box", "mat": "TIMBER", "size": [0.9, 0.05, 1.8], "gate": "pass"}]
+    assert doc["numbers"] == {"relief_m": {"door": 0.05}, "size_m": [4.0, 4.0, 3.7]}
+    assert len((flow.root / out).read_bytes()) < 100 * 5 + 1024
+
+
+@needs_venv
+def test_the_blockout_review_brief_names_the_summary_the_pages_and_the_part_legend_in_one_bullet(flow, held):  # noqa: F811
+    """B8: the part numbers on parts_* are small on a sheet; the reviewer needs "number = name" to write `region: <part>`."""
+    out = flow.brief()
+    flow.work(out=out)
+    gated_pilot(flow)
+    for r in FULL:
+        png(flow.v(1) / "final" / r, (400, 300))
+    text = flow.text(flow.brief())
+    sheet = f"production/assets/{AID}/blockout/v1/review/sheet.png"
+    assert (f"- Sheet: `{sheet}`, `sheet-2.png`, `sheet-3.png`. Số liệu: `summary.json` cùng thư mục. "
+            "Số = tên part: 1 base, 2 walls, 3 roof_f, 4 roof_b, 5 door.") in text.splitlines()
+    assert "Số liệu: JSON trong" not in text and "final/review/gates" not in text
+    assert (flow.v(1) / "review/sheet-3.png").is_file()
+    assert len(text.replace(str(flow.root.resolve()), "").encode()) < 4096
+
+
+@needs_venv
+def test_a_part_legend_that_would_take_the_brief_over_its_budget_stays_in_the_summary_and_the_brief_says_so(flow, held, monkeypatch):  # noqa: F811
+    """B8: with the pilot parts the legend fits; the real blockout brief of a fix round is within 20 bytes of its 4096, so
+    a longer legend or a third sheet page must not push it over."""
+    out = flow.brief()
+    flow.work(out=out)
+    gated_pilot(flow)
+    for r in FULL:
+        png(flow.v(1) / "final" / r, (400, 300))
+    inline = flow.text(flow.brief())
+    monkeypatch.setattr(briefs, "BRIEF_BYTES", len(inline.replace(str(flow.root.resolve()), "").encode()) - 1)
+    short = briefs.review_brief(load_cfg(), flow.st, blockout_step(), 1)
+    assert "Số = tên part: 1 base" in inline and "roof_f" not in short
+    sheet = f"production/assets/{AID}/blockout/v1/review/sheet.png"
+    assert (f"- Sheet: `{sheet}`, `sheet-2.png`, `sheet-3.png`. Số liệu và số = tên part (`n`): `summary.json` cùng thư mục."
+            in short.splitlines())
+    assert "roof_f" in (flow.v(1) / "review/summary.json").read_text(encoding="utf-8")
+
+
+def test_a_sheet_without_a_parts_render_has_no_legend_line(tmp_path):
+    (tmp_path / "summary.json").write_text(json.dumps({"parts": [{"n": 1, "name": "base"}]}), encoding="utf-8")
+    (tmp_path / "sheet.json").write_text(json.dumps({"clay_34": {"page": "sheet.png"}}), encoding="utf-8")
+    line, short = briefs.sheet_line(tmp_path / "sheet.png", tmp_path / "summary.json", 1)
+    assert "Số = tên part" not in line and short is None
+
+
+def model_final(flow, **checks):  # noqa: F811
+    """final/review/checks/ of a model version: {file: {check name: (status, value)}}."""
+    fr = flow.v(1, "model") / "final/review/checks"
+    fr.mkdir(parents=True, exist_ok=True)
+    for name, rows in checks.items():
+        (fr / f"{name}.json").write_text(json.dumps({"overall": "pass", "checks": [
+            {"check": c, "status": s, "value": v} for c, (s, v) in rows.items()]}), encoding="utf-8")
+
+
+DETAIL = {"detail.bbox": ("pass", [4.0, 4.0, 3.7]), "detail.fixed_params": ("pass", []), "detail.vs_pilot": ("info", 0.93)}
+QA_MESH = {"pilot.dimensions": ("pass", [4, 4, 3.7]), "pilot.pivot_bottom_center": ("pass", [0, 0, 0])}
+
+
+def model_prefill(flow, **checks):  # noqa: F811
+    model_final(flow, **checks)
+    step = step_of(load_cfg(), "model")[1]
+    return briefs.prefilled(flow.st, step, 1)
+
+
+def test_density_and_blockout_match_are_filled_from_the_detail_and_mesh_json_that_say_pass(flow):  # noqa: F811
+    got = model_prefill(flow, detail=DETAIL, qa_mesh_check=QA_MESH)
+    assert got == {"density": ("pass", "detail.json: vs_pilot 0.93"),
+                   "blockout_match": ("pass", "detail.json: bbox, fixed_params; qa_mesh_check.json: dimensions, pivot")}
+
+
+@pytest.mark.parametrize("name, detail, qa_mesh, left", [
+    ("a ratio outside 0.5-2 needs the reason of model.md", DETAIL | {"detail.vs_pilot": ("info", 2.4)}, QA_MESH, "density"),
+    ("no pilot: the reviewer writes pass with its note", DETAIL | {"detail.vs_pilot": ("not_checked", None)}, QA_MESH, "density"),
+    ("a size the spec does not give is only info", DETAIL, {"pilot.dimensions": ("info", [4, 4, 3.7])}, "blockout_match"),
+    ("no mesh result", DETAIL, None, "blockout_match"),
+    ("fixed_params that moved fail the check", DETAIL | {"detail.fixed_params": ("fail", ["door_h: 1.8 → 2"])}, QA_MESH,
+     "blockout_match"),
+])
+def test_a_key_stays_with_the_reviewer_when_its_json_does_not_say_pass_alone(flow, name, detail, qa_mesh, left):  # noqa: F811
+    """Conservative: only a missing or unclear result leaves a key to the reviewer; a fail that no one accepted never
+    reaches the review, so it is not a case to fill either."""
+    got = model_prefill(flow, detail=detail, **({"qa_mesh_check": qa_mesh} if qa_mesh else {}))
+    assert left not in got and len(got) == 1, name
+
+
+def test_a_missing_detail_json_fills_no_key(flow):  # noqa: F811
+    assert model_prefill(flow, qa_mesh_check=QA_MESH) == {}
+
+
+def test_a_failed_json_the_worker_accepted_fills_the_key_with_fail(flow):  # noqa: F811
+    """K08 rule: fail with a valid ACCEPTED_FAIL is `fail`. No model key reads an acceptable JSON today, so the
+    mechanism is shown with a mesh result the pipeline would list as acceptable."""
+    st = flow.st | {"accepted": {"v": 1, "items": ["qa_mesh_check.json — kích thước lệch 3% do diềm 0.2 m"]}}
+    model_final(flow, detail=DETAIL, qa_mesh_check={"pilot.dimensions": ("fail", [4.2, 4, 3.7])})
+    step = step_of(load_cfg(), "model")[1]
+    assert briefs.prefilled(st, step, 1)["blockout_match"][0] == "fail"
+    assert "blockout_match" not in briefs.prefilled(flow.st, step, 1)
+
+
+def test_the_script_fills_nothing_for_a_key_the_asset_rubric_does_not_have(flow):  # noqa: F811
+    rubric = flow.root / f"production/assets/{AID}/rubric.md"
+    rubric.write_text(rubric.read_text(encoding="utf-8").replace("- density:", "- tris_budget:"), encoding="utf-8")
+    assert "density" not in model_prefill(flow, detail=DETAIL, qa_mesh_check=QA_MESH)
+
+
+@needs_venv
+def test_the_review_brief_lists_the_filled_keys_with_their_source_and_the_keys_left_to_judge(flow, held, monkeypatch):  # noqa: F811
+    monkeypatch.setitem(briefs.PREFILL, "blockout", {"props": lambda fr, acc: ("pass", "counts.json: window 2")})
+    flow.work(out=flow.brief())
+    text = flow.text(flow.brief())
+    line = next(l for l in text.splitlines() if l.startswith("- Key script đã điền"))
+    assert line.startswith("- Key script đã điền từ JSON (nguồn trong ngoặc): props=pass (counts.json: window 2). Chép nguyên "
+                           "vào RUBRIC, không chấm lại; report đổi giá trị bị từ chối. Key cần chấm: ")
+    assert "props" not in line.split("Key cần chấm: ")[1] and "mass" in line.split("Key cần chấm: ")[1]
+
+
+def prefilled_review(flow, monkeypatch, rubric):  # noqa: F811
+    monkeypatch.setitem(briefs.PREFILL, "blockout", {"props": lambda fr, acc: ("pass", "counts.json: window 2")})
+    out = flow.brief()
+    flow.work(out=out)
+    return out
+
+
+def test_ingest_refuses_a_report_that_changes_a_filled_key_and_keeps_it_when_the_reviewer_leaves_it_out(flow, held, monkeypatch):  # noqa: F811
+    out = prefilled_review(flow, monkeypatch, None)
+    out = flow.brief()
+    with pytest.raises(Exception) as e:
+        flow.review(out=out, verdict="PASS", counts=counts(), top_fix=None, rubric="mass=pass; props=fail")
+    assert "RUBRIC đổi key script đã điền từ JSON: props=fail (script điền pass)" in str(e.value)
+    assert (flow.root / out["report"].replace("review-out.md", "review-out.rejected-1.md")).is_file()
+    out = flow.brief()
+    flow.review(out=out, verdict="PASS", counts=counts(), top_fix=None, rubric="mass=pass")
+    assert flow.st["last_rubric"] == "mass=pass; props=pass"
+
+
+def results(fr, **files):
+    """Result JSON as the tools write them: {file: {"checks": {name: (status, value, note)}, "data": {...}}}."""
+    for name, doc in files.items():
+        (fr / "checks").mkdir(parents=True, exist_ok=True)
+        (fr / "checks" / f"{name}.json").write_text(json.dumps({"overall": "pass", "data": doc.get("data", {}), "checks": [
+            {"check": c, "status": s, "value": v, "threshold": t, "note": note}
+            for c, (s, v, t, note) in doc.get("checks", {}).items()]}), encoding="utf-8")
+
+
+def test_the_blockout_numbers_hold_the_counts_the_proportion_ratios_the_marks_and_the_size(tmp_path):
+    results(tmp_path, counts={"checks": {"counts.window": ("pass", [], 2, None), "counts.leg": ("pass", [], 4, None)}},
+            proportion={"data": {"ratios": {"front": {"model": 1.1, "concept": 1.08, "deviation": 0.019}}},
+                        "checks": {"proportion.front": ("pass", 0.019, 0.1, None), "proportion.mark.eave": ("pass", 0.02, 0.2, None)}},
+            markers={"data": {"relief": {"door": 0.05}}}, layout={"data": {"built": [4.0, 4.0, 3.7]}})
+    assert briefs.drop_empty(briefs.blockout_numbers(tmp_path)) == {
+        "counts": {"window": 2, "leg": 4}, "proportion": {"front": 0.019}, "marks_off_m": {"eave": 0.02},
+        "relief_m": {"door": 0.05}, "size_m": [4.0, 4.0, 3.7]}
+
+
+def test_the_model_numbers_hold_the_budget_the_density_the_uv_stretch_and_the_screen_ratio(tmp_path):
+    results(tmp_path, detail={"data": {"tris": 412, "cap": 600, "tris_per_m2": 31.5, "pilot": {"ratio": 0.93}, "bbox_ratio": [1, 1, 1]},
+                              "checks": {"detail.fixed_params": ("pass", [], None, None)}},
+            uv_edge={"checks": {"uv.texel_px_per_m": ("pass", 410.0, 256, None), "uv.stretch": ("pass", 0.012, 0.05, None)}},
+            qa_screen_tris_check={"checks": {"screen.small_tri_ratio": ("pass", 0.04, 0.1, None), "screen.thin_tris": ("pass", 0, 5, None)}})
+    assert briefs.drop_empty(briefs.model_numbers(tmp_path)) == {
+        "density": {"tris": 412, "cap": 600, "tris_m2": 31.5, "vs_pilot": 0.93},
+        "blockout_match": {"bbox_ratio": [1, 1, 1], "fixed_params_diff": "none"},
+        "uv": {"texel_px_m": 410.0, "stretch_share": 0.012}, "screen_tris": {"small_tri_ratio": 0.04, "thin": 0}}
+
+
+def test_the_texture_numbers_group_the_measured_part_under_the_rubric_key_the_reviewer_still_judges(tmp_path):
+    """light, material and seams also ask for a look at the renders, so the script fills none of them."""
+    results(tmp_path, tex_measure={"checks": {
+        "light.side_spread_L.STONE": ("pass", 1.2, 3, None), "light.shaded_share.STONE": ("pass", 0.004, 0.02, None),
+        "light.highlight_share.STONE": ("info", 0.03, 0.02, "vượt ngưỡng"), "material.dE_concept.STONE": ("pass", 1.8, 3, None),
+        "seam.p90_dE": ("pass", 2.4, 4, None), "uv.mirrored_faces": ("info", 12, None, "chữ có thể bị lật gương ở mã SIGN (12 mặt lật UV)")}})
+    assert briefs.drop_empty(briefs.texture_numbers(tmp_path)) == {
+        "light": {"side_spread_L": {"STONE": 1.2}, "shaded_share": {"STONE": 0.004}, "highlight_share": {"STONE": 0.03}},
+        "material": {"dE_concept": {"STONE": 1.8}}, "seams": {"p90_dE": 2.4},
+        "mirrored_uv": {"faces": 12, "note": "chữ có thể bị lật gương ở mã SIGN (12 mặt lật UV)"}}
+    assert set(briefs.PREFILL["model"]) == {"density", "blockout_match"} and "texture" not in briefs.PREFILL

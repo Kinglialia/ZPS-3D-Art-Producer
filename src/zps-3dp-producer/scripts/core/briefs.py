@@ -360,6 +360,201 @@ def sheet_of(st, step, n: int, variant: str | None = None) -> Path | None:
     return out
 
 
+SUMMARY = "summary.json"
+BRIEF_BYTES = 4096  # the budget of a reviewer brief, project and install paths left out; the part legend leaves it when it does not fit
+
+
+def read_json(p: Path):
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def checks_of(p: Path) -> dict[str, dict]:
+    """The `checks` of a result JSON by name; {} for a missing, unreadable or odd file."""
+    doc = read_json(p)
+    rows = doc.get("checks") if isinstance(doc, dict) else None
+    return {c["check"]: c for c in rows if isinstance(c, dict) and "check" in c} if isinstance(rows, list) else {}
+
+
+def by_code(checks: dict[str, dict], prefix: str) -> dict:
+    """{code: value} of the checks `<prefix><code>`."""
+    return {name[len(prefix):]: c.get("value") for name, c in checks.items() if name.startswith(prefix)}
+
+
+def accepted_names(st, n: int) -> set[str]:
+    """Names of the failed JSON that the worker of version n accepted and ingest allowed."""
+    acc = st.get("accepted") or {}
+    return {i.split(" — ")[0] for i in acc.get("items", [])} if acc.get("v") == n else set()
+
+
+def rubric_keys(aid: str, sid: str) -> list[str]:
+    """The keys of the section `## <step>` in the rubric.md of the asset."""
+    try:
+        text = (ASSETS / aid / "rubric.md").read_text(encoding="utf-8")
+    except OSError:
+        return []
+    m = re.search(rf"^## {re.escape(sid)}[ \t]*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return re.findall(r"^- ([a-z0-9_]+):", m.group(1), re.M) if m else []
+
+
+def decide(pairs: list[tuple[str, str]], accepted: set[str]) -> str | None:
+    """pairs of (result file, status): `pass` when all pass, `fail` when each file that does not pass failed and the worker
+    accepted it, else None, which leaves the key to the reviewer."""
+    if pairs and all(s == "pass" for _, s in pairs):
+        return "pass"
+    bad = {f for f, s in pairs if s != "pass"}
+    return "fail" if bad and all(s in ("pass", "fail") for _, s in pairs) and bad <= accepted else None
+
+
+def density_rule(fr: Path, accepted: set[str]):
+    c = checks_of(fr / "checks" / "detail.json").get("detail.vs_pilot")
+    v = c.get("value") if c else None
+    ok = c and c.get("status") == "info" and isinstance(v, (int, float)) and not isinstance(v, bool) and 0.5 <= v <= 2
+    return ("pass", f"detail.json: vs_pilot {v}") if ok else None
+
+
+def blockout_match_rule(fr: Path, accepted: set[str]):
+    detail, qa = checks_of(fr / "checks" / "detail.json"), checks_of(fr / "checks" / "qa_mesh_check.json")
+    dims = {n: c for n, c in qa.items() if n.endswith(".dimensions")}
+    if not (dims and "detail.bbox" in detail and "detail.fixed_params" in detail):
+        return None
+    pairs = [("detail.json", detail[k].get("status")) for k in ("detail.bbox", "detail.fixed_params")] + [
+        ("qa_mesh_check.json", c.get("status")) for n, c in qa.items() if n.endswith((".dimensions", ".pivot_bottom_center"))]
+    v = decide(pairs, accepted)
+    return (v, "detail.json: bbox, fixed_params; qa_mesh_check.json: dimensions, pivot") if v else None
+
+
+# Rubric keys a result JSON decides alone. A key that also asks for a look at the renders (texture light, material,
+# seams) is not here: its numbers go to the summary and the reviewer judges the key.
+PREFILL = {"model": {"density": density_rule, "blockout_match": blockout_match_rule}}
+
+
+def prefilled(st, step, n: int) -> dict[str, tuple[str, str]]:
+    """{rubric key: (value, source)} the script fills for the review of version n. Only a key of the asset rubric, and
+    only from a JSON that exists."""
+    fr = vdir(st["id"], step["id"], n) / "final" / "review"
+    keys, acc = rubric_keys(st["id"], step["id"]), accepted_names(st, n)
+    return {k: got for k, rule in PREFILL.get(step["id"], {}).items() if k in keys and (got := rule(fr, acc))}
+
+
+def parts_of(vd: Path, accepted: set[str]) -> list[dict]:
+    """One row per part in the order the renders number them (assembly.json index, else the order of the graph)."""
+    fd = vd / "final"
+    graph, asm = read_json(fd / "part_graph.json"), read_json(fd / "assembly.json")
+    if not (isinstance(graph, dict) and isinstance(graph.get("parts"), list)):
+        return []
+    rows = {r.get("name"): r for r in ((asm or {}).get("data") or {}).get("parts") or [] if isinstance(r, dict)}
+    out = []
+    for i, p in enumerate(graph["parts"], 1):
+        r, name = rows.get(p.get("name"), {}), p.get("name")
+        gate = (read_json(fd / "review" / "gates" / f"{name}.json") or {}).get("overall")
+        row = {"n": r.get("index", i), "name": name, "prim": r.get("primitive") or p.get("primitive"),
+               "mat": p.get("material"), "tag": p.get("tag"),
+               "size": [round(x, 2) for x in r["extents"]] if r.get("extents") else None,
+               "gate": gate and (gate if gate != "fail" or f"{name}.json" not in accepted else "fail (accepted)")}
+        out.append({k: v for k, v in row.items() if v is not None})
+    return sorted(out, key=lambda r: r["n"])
+
+
+def legend_of(parts: list[dict]) -> str:
+    return ", ".join(f"{p['n']} {p['name']}" for p in parts)
+
+
+def blockout_numbers(fr: Path) -> dict:
+    counts = {n[len("counts."):]: c.get("threshold") for n, c in checks_of(fr / "checks" / "counts.json").items()}
+    prop = read_json(fr / "checks" / "proportion.json")
+    ratios = ((prop or {}).get("data") or {}).get("ratios") if isinstance(prop, dict) else None
+    marks = by_code(checks_of(fr / "checks" / "proportion.json"), "proportion.mark.")
+    layout = read_json(fr / "checks" / "layout.json")
+    relief = read_json(fr / "checks" / "markers.json")
+    pick = lambda d, k: ((d or {}).get("data") or {}).get(k) if isinstance(d, dict) else None  # noqa: E731
+    return {"counts": counts, "proportion": {v: r.get("deviation") for v, r in (ratios or {}).items()}, "marks_off_m": marks,
+            "relief_m": pick(relief, "relief"), "size_m": pick(layout, "built")}
+
+
+def model_numbers(fr: Path) -> dict:
+    detail_doc = read_json(fr / "checks" / "detail.json")
+    d = (detail_doc or {}).get("data") or {} if isinstance(detail_doc, dict) else {}
+    detail, uv, screen = (checks_of(fr / "checks" / f"{f}.json") for f in ("detail", "uv_edge", "qa_screen_tris_check"))
+    val = lambda checks, name: (checks.get(name) or {}).get("value")  # noqa: E731
+    moved = val(detail, "detail.fixed_params")
+    return {"density": {"tris": d.get("tris"), "cap": d.get("cap"), "tris_m2": d.get("tris_per_m2"),
+                        "vs_pilot": (d.get("pilot") or {}).get("ratio")},
+            "blockout_match": {"bbox_ratio": d.get("bbox_ratio"), "fixed_params_diff": "none" if moved == [] else moved},
+            "uv": {"texel_px_m": val(uv, "uv.texel_px_per_m"), "stretch_share": val(uv, "uv.stretch")},
+            "screen_tris": {"small_tri_ratio": val(screen, "screen.small_tri_ratio"), "thin": val(screen, "screen.thin_tris")}}
+
+
+def texture_numbers(fr: Path) -> dict:
+    t = checks_of(fr / "checks" / "tex_measure.json")
+    val = lambda name: (t.get(name) or {}).get("value")  # noqa: E731
+    mirrored = t.get("uv.mirrored_faces") or {}
+    return {"light": {"side_spread_L": by_code(t, "light.side_spread_L."), "top_vs_side_L": by_code(t, "light.top_vs_side_L."),
+                      "shaded_share": by_code(t, "light.shaded_share."), "highlight_share": by_code(t, "light.highlight_share.")},
+            "material": {"dE_concept": by_code(t, "material.dE_concept.")},
+            "seams": {"p90_dE": val("seam.p90_dE"), "unpainted_share": val("seam.unpainted_share"),
+                      "padding_empty_share": val("seam.padding_empty_share")},
+            "mirrored_uv": {"faces": mirrored.get("value"), "note": mirrored.get("note")}}
+
+
+NUMBERS = {"blockout": blockout_numbers, "model": model_numbers, "texture": texture_numbers}
+
+
+def drop_empty(x):
+    if isinstance(x, dict):
+        return {k: v for k, v in ((k, drop_empty(v)) for k, v in x.items()) if v not in (None, {}, [])}
+    return x
+
+
+def write_summary(st, step, n: int) -> Path | None:
+    """vN/review/summary.json: per part its number, name, primitive, material, tag, size in metres and gate verdict, then the
+    numbers each rubric key needs. A reviewer reads this instead of assembly.json and every gate JSON, which all pass
+    because a failed check never reaches the reviewer. None when the step has neither parts nor numbers."""
+    vd = vdir(st["id"], step["id"], n)
+    parts = parts_of(vd, accepted_names(st, n)) if builds_parts(step) else []
+    numbers = drop_empty(NUMBERS[step["id"]](vd / "final" / "review")) if step["id"] in NUMBERS else {}
+    if not (parts or numbers):
+        return None
+    dump = lambda x: json.dumps(x, ensure_ascii=False, separators=(",", ":"))  # noqa: E731
+    body = (['"parts":[\n' + ",\n".join(dump(p) for p in parts) + "\n]"] if parts else []) + (
+        [f'"numbers":{dump(numbers)}'] if numbers else [])
+    out = vd / "review" / SUMMARY
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("{" + ",\n".join(body) + "}\n", encoding="utf-8")
+    return out
+
+
+def sheet_files(sheet: Path) -> str:
+    """The first page of a sheet by path, the further pages by name: they sit in the same folder."""
+    from review_sheet import pages
+    first, *more = pages(sheet)
+    return ", ".join([f"`{rel(first)}`", *(f"`{p.name}`" for p in more)])
+
+
+def sheet_line(sheet: Path, summary: Path | None, n: int) -> tuple[str, str | None]:
+    """The bullet that names the sheet pages and where the numbers are, and the same bullet without the part legend
+    ("n = name" of the parts_* renders) for a brief that would pass BRIEF_BYTES with it. With a summary the reviewer file
+    carries the sheet rules."""
+    if not summary:
+        return f"- Sheet: {sheet_files(sheet)} (nhãn ô = tên ảnh; ảnh lẻ qua need_evidence). Số liệu: JSON trong `final/`, `work/` của v{n}.", None
+    parts = (read_json(summary) or {}).get("parts") or []
+    tiles = read_json(sheet.with_suffix(".json")) or {}
+    head = f"- Sheet: {sheet_files(sheet)}."
+    if not (parts and any(label.startswith("parts_") for label in tiles)):
+        return f"{head} Số liệu: `{SUMMARY}` cùng thư mục.", None
+    return (f"{head} Số liệu: `{SUMMARY}` cùng thư mục. Số = tên part: {legend_of(parts)}.",
+            f"{head} Số liệu và số = tên part (`n`): `{SUMMARY}` cùng thư mục.")
+
+
+def brief_size(text: str) -> int:
+    """Bytes of a brief without the project and install paths, which differ per machine."""
+    for p in (ROOT.resolve(), SKILL_DIR.resolve()):
+        text = text.replace(str(p), "")
+    return len(text.encode())
+
+
 def review_scope(st, sid: str, n: int) -> str:
     """D31.2, D38.3: `full` for a review with no reviewed base, for the same version judged again, and for a version
     whose worker reports DONE with every open blocker, major and unclear finding of the base in FIXED; `fix` otherwise.
@@ -397,6 +592,9 @@ def review_brief(cfg, st, step, n) -> str:
     scope = st.get("review_scope") or "full"
     sheet = sheet_of(st, step, n)
     msheet = sheet_of(st, step, m) if sheet and base and m != n else None
+    summary = write_summary(st, step, n)
+    pre = prefilled(st, step, n)
+    sheet_bullet, short_bullet = sheet_line(sheet, summary, n) if sheet else (None, None)
     lines = [
         f"# Review brief — {st['title']} · bước `{sid}` · v{n}",
         "",
@@ -406,8 +604,7 @@ def review_brief(cfg, st, step, n) -> str:
         "",
         *views_line(st, step),
         "## Chấm cái gì",
-        f"- Sheet: `{rel(sheet)}` (nhãn ô = tên ảnh; ảnh lẻ qua need_evidence). Số liệu: JSON trong `final/`, "
-        f"`work/` của v{n}." if sheet else
+        sheet_bullet if sheet else
         f"- Output: `{rel(d / 'final')}/` (ảnh preview) và số liệu trong `{rel(d / 'work')}/` nếu có.",
         f"- Báo cáo tự check của worker: `{rel(d / 'worker-out.md')}` — tham khảo, không tin thay bằng chứng.",
         *([f"- Hàm `custom` riêng của asset (code, đọc như bằng chứng; nhãn `custom_parts.py`): `{rel(cp)}`."]
@@ -427,7 +624,7 @@ def review_brief(cfg, st, step, n) -> str:
            f"finding đủ trường `{rel(findings.path(aid, sid, n))}`."] if m == n and st.get("evidence") else
           [f"- Chấm lại toàn bộ v{n}, không có bản mới; finding đủ trường `{rel(findings.path(aid, sid, n))}`."]
           if m == n else
-          [f"- Bản gốc v{m}: " + (f"sheet `{rel(msheet)}`" if msheet else f"ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`")
+          [f"- Bản gốc v{m}: " + (f"sheet {sheet_files(msheet)}" if msheet else f"ảnh cùng góc `{rel(vdir(aid, sid, m) / 'final')}/`")
            + "; finding đủ trường "
            f"`{rel(findings.path(aid, sid, m))}`."] if base else []),
         *([f"- Worker khai ACCEPTED_FAIL (check fail không sửa được): {'; '.join(st['accepted']['items'])}. Chấm lý do: "
@@ -482,10 +679,15 @@ def review_brief(cfg, st, step, n) -> str:
         + "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi "
         "loại, script điền mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- Không ghi COUNTS. Mỗi key unclear trong RUBRIC cần một finding unclear.",
+        *([f"- Key script đã điền từ JSON (nguồn trong ngoặc): " + "; ".join(f"{k}={v} ({src})" for k, (v, src) in pre.items())
+           + ". Chép nguyên vào RUBRIC, không chấm lại; report đổi giá trị bị từ chối."
+           + (f" Key cần chấm: {', '.join(k for k in rubric_keys(aid, sid) if k not in pre)}." if pre else "")]
+          if pre else []),
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]
-    return "\n".join(lines) + "\n"
+    text = "\n".join(lines) + "\n"
+    return text.replace(sheet_bullet, short_bullet) if short_bullet and brief_size(text) > BRIEF_BYTES else text
 
 
 def resumed_review_brief(st, step, n, ed) -> str:
