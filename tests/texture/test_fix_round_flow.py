@@ -64,7 +64,8 @@ def test_a_fix_round_gets_final_prepared_from_its_base_minus_what_the_render_and
     """One wrong copy by hand left a stale measure or render in the new version; the script copies by the step's list."""
     assert set(flow.prepared) == {ALBEDO, "notes.md", "texture_spec.json", "review/id_map.png", "notes/kept.txt"}
     assert flow.prepared[ALBEDO] == (flow.vd1 / "final" / ALBEDO).read_bytes()
-    assert "`production/assets/pilot-house/texture/v2/final/` đã chuẩn bị sẵn" in flow.cp["t2 brief"]["text"]
+    assert "`final/` có sẵn, không chép tay." in flow.cp["t2 brief"]["text"]
+    assert "`final/` có sẵn" not in flow.cp["t1 brief"]["text"]
 
 
 def test_a_render_of_the_current_albedo_reaches_the_reviewer_t2(flow):

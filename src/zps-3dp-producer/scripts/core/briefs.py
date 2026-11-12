@@ -306,9 +306,8 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "",
         "## Đầu ra",
         f"- Sản phẩm vào `{rel(d / 'final')}/`; JSON gate và check vào `{rel(d / 'final' / 'review')}/gates/`, `checks/`; "
-        f"script, log, bản trung gian vào `{rel(d / 'work')}/`.",
-        *([f"- `{rel(d / 'final')}/` đã chuẩn bị sẵn từ bản gốc (trừ `fix_copy_exclude`). Không chép tay."]
-          if fix and src and step.get("fix_copy_exclude") else []),
+        f"script, log, bản trung gian vào `{rel(d / 'work')}/`."
+        + (" `final/` có sẵn, không chép tay." if fix and src and step.get("fix_copy_exclude") else ""),
     ]
     lines += pid_line(st, step)
     if cfg["preview"]["spec"]:
