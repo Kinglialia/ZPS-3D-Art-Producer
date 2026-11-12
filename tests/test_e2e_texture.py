@@ -309,6 +309,8 @@ def test_assemble_compares_only_the_views_the_texture_step_rendered_and_still_bl
     fails, results = assemble.compare_renders(tf, work, final, assemble.recorded_views(renders), True, [])
     assert ([f["region"] for f in fails], list(results)) == (["unlit_game"], ["unlit_34_front"])
 
+    renders.unlink()
+    assert assemble.recorded_views(renders) == []
     renders.write_text(json.dumps({"renders": {}}), encoding="utf-8")
     fails, _ = assemble.compare_renders(tf, work, final, assemble.recorded_views(renders), True, [])
     assert [f["region"] for f in fails] == ["renders.json"]

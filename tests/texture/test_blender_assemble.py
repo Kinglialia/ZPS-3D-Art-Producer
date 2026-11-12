@@ -240,8 +240,8 @@ def test_a_kit_check_that_crashes_does_not_stop_the_other_checks_or_the_compare_
         "mesh_check": "pass", "uv_check": "error", "export_check": "pass", "screen_tris_check": "info"}, r["report"]
     assert sorted(r["compare"]["views"]) == ["unlit_34_front", "unlit_game"]
     session = json.loads((r["d"] / "work/evidence/session.json").read_text(encoding="utf-8"))
-    assert session["stages"] == {"export": "ok", "mesh_check": "ok", "uv_check": "error: exit 1", "export_check": "ok",
-                                 "screen_tris_check": "ok", "compare": "ok"}
+    assert session["stages"] == {"export": "ok", "spec": "ok", "mesh_check": "ok", "uv_check": "error: exit 1",
+                                 "export_check": "ok", "screen_tris_check": "ok", "compare": "ok"}
 
 
 def test_a_compare_render_that_fails_points_the_fail_point_at_the_error_file_l13(base, tmp_path):

@@ -1,11 +1,12 @@
 """Blender side of assemble.py in one session (D37.4): GLB export, the kit QA checks, the compare render.
 
 Usage: BLENDER -b --python scripts/assemble_qa.py -- --glb <locked GLB> --albedo <png> --name <id> --out <final/model>
-          --probe <GLB copy for the checks> --spec <checks spec> --checks a,b --qa-dir <dir> [--cameras <renders.json>
-          --views v1,v2 --outdir <dir>] --result <session.json>
-Stages run in this order: export (assemble_glb.build), copy of the GLB to --probe, each check, the render of
-render_texture.py in camera mode. Each frozen kit script resets the scene and reads sys.argv, so the driver sets sys.argv
-per stage and calls the script's own main. A check writes its result JSON to <qa-dir>/<check>.json as it does alone.
+          --probe <GLB copy for the checks> --spec <model spec> --qa-spec <spec the checks read> --checks a,b
+          --qa-dir <dir> --result <session.json> [--cameras <renders.json> --views v1,v2 --outdir <dir>]
+Stages run in this order: export (assemble_glb.build), copy of the GLB to --probe, the checks spec (the model spec with
+`export` pointing at the probe), each check, the render of render_texture.py in camera mode.
+Each frozen kit script resets the scene and reads sys.argv, so the driver sets sys.argv per stage and calls the main of
+the script. A check writes its result JSON to <qa-dir>/<check>.json as it does alone.
 A stage that fails does not stop the next one, except the export. <session.json> holds the export data and one line per
 stage: "ok" or "error: ...". Exit 0, 1 when the export fails.
 """
@@ -36,10 +37,19 @@ def stage(result: dict, name: str, fn):
         result["stages"][name] = f"error: {e!r}"
 
 
+def write_checks_spec(a):
+    with open(a.spec, encoding="utf-8") as f:
+        spec = json.load(f)
+    spec["export"] = {"path": os.path.relpath(a.probe, os.path.dirname(os.path.abspath(a.qa_spec))), "skip_export": True,
+                      "expect_unlit": True}
+    with open(a.qa_spec, "w", encoding="utf-8") as f:
+        json.dump(spec, f, ensure_ascii=False, indent=1)
+
+
 def check(a, name: str):
     import ac_common
     mod = importlib.import_module(name)
-    sys.argv = ["blender", "--", "--input", a.probe, "--spec", a.spec, "--out", os.path.join(a.qa_dir, f"{name}.json")]
+    sys.argv = ["blender", "--", "--input", a.probe, "--spec", a.qa_spec, "--out", os.path.join(a.qa_dir, f"{name}.json")]
     ac_common.run_main(mod.main, name)
 
 
@@ -54,7 +64,7 @@ def render(a, glb: str):
 
 def main():
     p = argparse.ArgumentParser()
-    for k in ("--glb", "--albedo", "--name", "--out", "--probe", "--spec", "--checks", "--qa-dir", "--result"):
+    for k in ("--glb", "--albedo", "--name", "--out", "--probe", "--spec", "--qa-spec", "--checks", "--qa-dir", "--result"):
         p.add_argument(k, required=True)
     for k in ("--cameras", "--views", "--outdir"):
         p.add_argument(k, default="")
@@ -81,6 +91,7 @@ def main():
         save()
         print(json.dumps({"error": repr(e)}))
         sys.exit(1)
+    stage(result, "spec", lambda: write_checks_spec(a))
     save()
     for name in filter(None, a.checks.split(",")):
         stage(result, name, lambda name=name: check(a, name))

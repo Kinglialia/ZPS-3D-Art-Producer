@@ -103,7 +103,8 @@ def compare(ref: Path, got: Path, side: Path) -> dict:
 
 def recorded_views(renders: Path) -> list[str]:
     """The compare views the texture step rendered. A spec with no camera has no `unlit_game` (T1)."""
-    return [v for v in COMPARE if v in json.loads(renders.read_text(encoding="utf-8")).get("renders", {})]
+    doc = json.loads(renders.read_text(encoding="utf-8")) if renders.is_file() else {}
+    return [v for v in COMPARE if v in doc.get("renders", {})]
 
 
 def compare_renders(tf: Path, work: Path, final: Path, views: list[str], rendered: bool, why) -> tuple[list[dict], dict]:
@@ -247,16 +248,13 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
                            "làm lại texture đúng texture_res (`redo --step texture`)", f"albedo {res}x{res}")], data
     glb = final / "model" / f"{a.id}.glb"
     probe = work / "qa_input" / glb.name
-    spec = json.loads((mf / "spec.json").read_text(encoding="utf-8"))
-    spec["export"] = {"path": f"qa_input/{glb.name}", "skip_export": True, "expect_unlit": True}
-    (work / "spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
     renders = tf / "review" / "renders.json"
     views = recorded_views(renders)
     data["skipped_views"] = [v for v in COMPARE if v not in views]
     session = work / "evidence" / "session.json"
     _, out = blender(a.blender, SCRIPTS / "assemble_qa.py", d, "--glb", locked, "--albedo", albedo, "--name", a.id,
-                      "--out", final / "model", "--probe", probe, "--spec", work / "spec.json", "--checks", ",".join(QA),
-                      "--qa-dir", work / "evidence" / "qa", "--result", session,
+                      "--out", final / "model", "--probe", probe, "--spec", mf / "spec.json", "--qa-spec", work / "spec.json",
+                      "--checks", ",".join(QA), "--qa-dir", work / "evidence" / "qa", "--result", session,
                       *(["--cameras", renders, "--views", ",".join(views), "--outdir", work / "compare"] if views else []))
     done = json.loads(session.read_text(encoding="utf-8")) if session.is_file() else {}
     if "export" not in done or not glb.is_file():
