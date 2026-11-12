@@ -248,8 +248,9 @@ def test_a_blockout_redo_after_the_set_keeps_the_old_views_as_prior_so_the_next_
         "prior": {"views": 3}, "stale": {"views v1": "blockout v1", "views v2": "blockout v1", "views v3": "blockout v1"}}
 
 
-KEYS = {"blockout": "; mass=pass; silhouette=pass; identity=pass; open_closed=pass; props=pass; foot=pass; own_decisions=pass",
-        "views": "; shape=pass; light=pass; inventory=pass; sync=pass; hidden_sides=pass; props=pass"}
+RUBRIC_KEYS = {
+    "blockout": "; mass=pass; silhouette=pass; identity=pass; open_closed=pass; props=pass; foot=pass; own_decisions=pass",
+    "views": "; shape=pass; light=pass; inventory=pass; sync=pass; hidden_sides=pass; props=pass"}
 
 
 def test_the_ledger_records_one_views_step_with_its_rounds(flow):
@@ -262,18 +263,18 @@ def test_the_ledger_records_one_views_step_with_its_rounds(flow):
                 f"{aid} · {step} v{n} · review {review}"]
     assert flow["ledger"] == [
         "pilot-house · tạo mới (draft, rubric chưa duyệt)", "pilot-house · ready",
-        *rnd("blockout", 1, "PASS (0 mở) · style=pass" + KEYS["blockout"]),
+        *rnd("blockout", 1, "PASS (0 mở) · style=pass" + RUBRIC_KEYS["blockout"]),
         "pilot-house · blockout v1 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt",
-        *rnd("views", 1, "FIX (major=1 minor=1) · style=pass" + KEYS["views"], accepted=True),
-        *rnd("views", 2, f"FIX (minor=1 unclear=1) · style=pass{KEYS['views']} · script lấy ảnh có sẵn, không giao worker: "
-                         "left-crop1.png"),
+        *rnd("views", 1, "FIX (major=1 minor=1) · style=pass" + RUBRIC_KEYS["views"], accepted=True),
+        *rnd("views", 2, f"FIX (minor=1 unclear=1) · style=pass{RUBRIC_KEYS['views']} · script lấy ảnh có sẵn, không giao "
+                         "worker: left-crop1.png"),
         "pilot-house · views v2 · giao reviewer (zps-3dp-check-views, opus)",
-        "pilot-house · views v2 · review PASS (minor=1) · style=pass" + KEYS["views"],
+        "pilot-house · views v2 · review PASS (minor=1) · style=pass" + RUBRIC_KEYS["views"],
         "pilot-house · người dùng redo views · back tối quá so với front",
-        *rnd("views", 3, "PASS (minor=1) · style=pass" + KEYS["views"]),
+        *rnd("views", 3, "PASS (minor=1) · style=pass" + RUBRIC_KEYS["views"]),
         "pilot-house · views v3 · duyệt bởi người dùng", "pilot-house · người dùng approve views · đạt",
         "pilot-house · người dùng redo blockout · mái cao thêm 20 cm",
-        *rnd("blockout", 2, "PASS (0 mở) · style=pass" + KEYS["blockout"]),
+        *rnd("blockout", 2, "PASS (0 mở) · style=pass" + RUBRIC_KEYS["blockout"]),
         "pilot-house · blockout v2 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt",
         "pilot-house · views v4 · giao worker (zps-3dp-step-views, opus)"]
 
