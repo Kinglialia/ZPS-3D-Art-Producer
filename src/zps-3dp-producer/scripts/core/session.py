@@ -143,13 +143,18 @@ def agent_files(agent_id: str | None, brief: str | None, path: str | None = None
     return [p for d in dirs for p in sorted(d.glob("agent-*.jsonl")) if any(asks_for(x, brief) for x in lines_of(p))]
 
 
-def agent_numbers(files: list[Path], start: str, end: str | None) -> tuple[int | None, int | None]:
-    """(tokens, duration ms) of one dispatch from its transcript: messages between the dispatch and the ingest only, as
-    a resumed worker keeps one cumulative transcript. Each API message counts once, also across copies of the file.
-    Nothing in the window, or nothing readable: (None, None), shown as "không có số"."""
+SPLIT = {"input_tokens": "input", "output_tokens": "output", "cache_read_input_tokens": "cache_read",
+         "cache_creation_input_tokens": "cache_creation"}
+
+
+def agent_usage(files: list[Path], start: str, end: str | None) -> dict | None:
+    """The usage of one dispatch from its transcript: messages between the dispatch and the ingest only, as a resumed
+    worker keeps one cumulative transcript. Each API message counts once, also across copies of the file. The four
+    usage fields stay apart, with the duration in ms. Nothing in the window, or nothing readable: None, shown as
+    "không có số"."""
     lo = dt.datetime.fromisoformat(start)
     hi = dt.datetime.fromisoformat(end) + dt.timedelta(seconds=1) if end else None  # stamps keep whole seconds
-    seen, total, times = set(), 0, []
+    seen, split, times = set(), dict.fromkeys(SPLIT.values(), 0), []
     for p in files:
         for d in lines_of(p):
             try:
@@ -166,16 +171,27 @@ def agent_numbers(files: list[Path], start: str, end: str | None) -> tuple[int |
             if key is not None and key in seen:
                 continue
             try:
-                n = sum(int(m["usage"].get(k) or 0) for k in USAGE)
+                part = {v: int(m["usage"].get(k) or 0) for k, v in SPLIT.items()}
             except (TypeError, ValueError):
                 continue
             if key is not None:
                 seen.add(key)
-            total += n
+            for k, n in part.items():
+                split[k] += n
     if not seen:
-        return None, None
-    return total, round((max(times) - min(times)).total_seconds() * 1000)
+        return None
+    return split | {"duration_ms": round((max(times) - min(times)).total_seconds() * 1000)}
+
+
+def agent_numbers(files: list[Path], start: str, end: str | None) -> tuple[int | None, int | None]:
+    """(tokens, duration ms) of one dispatch: the four usage fields added up."""
+    u = agent_usage(files, start, end)
+    return (sum(u[k] for k in SPLIT.values()), u["duration_ms"]) if u else (None, None)
 
 
 def dispatch_numbers(rec: dict, end: str | None) -> tuple[int | None, int | None]:
     return agent_numbers(agent_files(rec.get("agent_id"), rec.get("brief"), rec.get("transcript")), rec["at"], end)
+
+
+def dispatch_usage(rec: dict, end: str | None) -> dict | None:
+    return agent_usage(agent_files(rec.get("agent_id"), rec.get("brief"), rec.get("transcript")), rec["at"], end)
