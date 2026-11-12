@@ -80,12 +80,13 @@ def failed_checks(vd) -> list[str]:
 
 
 def concept_files(st, step, review: bool = False) -> list[str]:
-    from check_card import required_files
+    from check_card import IMAGE_34, required_files
     d = Path(st["concept_dir"])
     alone = asset_card.views(st) == "none" and not step.get("views_set")
     want = step["review_concept"] if review and step["review_concept"] is not None and not alone else step["concept"]
     want = want and [*want, *(step.get("no_views_concept") or [] if alone else [])]
     names = [x.format(id=st["id"]) for x in want] if want else required_files(st["id"], True)
+    names += [IMAGE_34] if step["id"] == "blockout" and (d / IMAGE_34).is_file() else []
     return [x for x in names if not x.endswith(".layout.md") or (d / x).is_file()]
 
 
@@ -120,6 +121,38 @@ def counts_line(st, step) -> list[str]:
     return lines(yaml.safe_load(card.read_text(encoding="utf-8")) or {})
 
 
+COLORS_NONE = "CONCEPT_COLORS: none (Material Handoff không có Ô lấy màu): tự chọn ô như trước"
+
+
+def concept_colors_line(st, step) -> list[str]:
+    """D43.1: the colours intake measured, for a step that reads or makes the concept colours."""
+    if not (step.get("views_set") or step["id"] == texture.STEP):
+        return []
+    f = ASSETS / st["id"] / "concept_colors.json"
+    return [f"CONCEPT_COLORS: {rel(f)}" if f.is_file() else COLORS_NONE]
+
+
+def camera_fit_file(st) -> Path | None:
+    """The fitted concept camera of the approved blockout: fit_view.py writes it to work/, or to final/ with --out."""
+    v = (st.get("approved") or {}).get("blockout")
+    return next((f for sub in ("final", "work") if v and (f := vdir(st["id"], "blockout", v) / sub / "camera_fit.json").is_file()),
+                None)
+
+
+def card_lines(st, step) -> list[str]:
+    """D43: the card fields and measured files a worker would otherwise guess, one line each."""
+    card = asset_card.card(st)
+    light = card.get("light")
+    out = []
+    if step["id"] == "blockout" and card.get("view_side"):
+        out.append(f"VIEW_SIDE: {card['view_side']}")
+    if step["id"] == "model":
+        out += [f"LIGHT: from={light['from']} elevation={light['elevation_deg']:g}"] if light else []
+        out += [f"CAMERA_FIT: {rel(f)}"] if (f := camera_fit_file(st)) else []
+    out += concept_colors_line(st, step)
+    return [*out, ""] if out else []
+
+
 def builds_parts(step) -> bool:
     """D32: a step whose output holds parts_lib.py builds a part graph, so it may use the asset's own functions, and
     its reviewer reads them."""
@@ -140,6 +173,15 @@ def pid_line(st, step) -> list[str]:
     return [f"- Mỗi lệnh Blender: `<lệnh> & echo $! > {f}; wait $!; rm -f {f}`."]
 
 
+def profile_item(step, preset: Path) -> str:
+    """The texture tools read the profile themselves from `--profile`, so its worker gets the path and no reason to
+    open the file (it holds the path of the env file)."""
+    f = rel(ROOT / "PROJECT-PROFILE.yaml")
+    if step["id"] == texture.STEP:
+        return f"`{f}` — đường dẫn profile dự án. Chỉ truyền cho tool qua `--profile`; không mở file này."
+    return f"`{f}` — profile dự án; `{preset}` — preset của profile."
+
+
 def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: Path, prof: dict,
                  extra: list[str] = ()) -> str:
     aid = st["id"]
@@ -155,12 +197,13 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra), cfg=cfg, n=n),
         *views_line(st, step),
         *counts_line(st, step),
+        *card_lines(st, step),
         *custom_parts_line(st, step),
         "## Đầu vào (đọc theo thứ tự)",
         f"1. `{rel(a / 'brief.md')}` — yêu cầu gốc của người dùng.",
         f"2. `{rel(a / 'rubric.md')}` mục `## {step['id']}` — tiêu chí chấm; tự check trước khi báo cáo.",
         f"3. `{rel(a / 'feedback.md')}` — đọc mục \"Hiện hành\" và các dòng log gần nhất.",
-        f"4. `{rel(ROOT / 'PROJECT-PROFILE.yaml')}` — profile dự án; `{preset}` — preset của profile.",
+        f"4. {profile_item(step, preset)}",
     ]
     k = 5
     if st.get("concept_dir"):

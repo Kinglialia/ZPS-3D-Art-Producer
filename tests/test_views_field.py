@@ -191,3 +191,118 @@ def test_texture_complexity_with_views_none_reads_the_motif_from_the_material_fi
     assert r.returncode == 0, r.stdout
     spec = json.loads((f / "texture_spec.json").read_text(encoding="utf-8"))
     assert (spec["simple"], spec["scores"]["motif"]) == (False, ["| WOOD | gỗ | biển chữ TAVERN trên mái |"])
+
+
+@pytest.fixture
+def at_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def step_of(sid):
+    return {"concept": None, "review_concept": None} | next(s for s in cfg()["steps"] if s["id"] == sid)
+
+
+def card_asset(tmp_path, **card):
+    d = make_asset(tmp_path / "_approved", card=mutated(**card))
+    return {"id": "05-warehouse", "concept_dir": str(d), "approved": {"blockout": 2}}
+
+
+def test_blockout_brief_names_the_view_side_of_a_34_concept_so_fit_view_does_not_guess_it_g4(at_root):
+    from core import briefs
+    st = card_asset(at_root, view="34", view_side="left")
+    assert briefs.card_lines(st, step_of("blockout")) == ["VIEW_SIDE: left", ""]
+    assert briefs.card_lines(st, step_of("model")) == []
+
+
+def test_brief_has_no_view_side_line_for_a_card_without_the_field_g4(at_root):
+    from core import briefs
+    assert briefs.card_lines(card_asset(at_root), step_of("blockout")) == []
+
+
+@pytest.mark.parametrize("elevation, text", [(45, "45"), (30.5, "30.5")])
+def test_model_brief_names_the_light_of_the_card_so_make_spec_does_not_guess_the_sun_g4(at_root, elevation, text):
+    from core import briefs
+    st = card_asset(at_root, light={"from": "right", "elevation_deg": elevation})
+    assert briefs.card_lines(st, step_of("model")) == [f"LIGHT: from=right elevation={text}", ""]
+    assert briefs.card_lines(st, step_of("blockout")) == []
+
+
+def test_model_brief_names_the_fitted_camera_file_of_the_approved_blockout_only_when_it_exists_c21(at_root):
+    from core import briefs
+    st = card_asset(at_root)
+    assert briefs.card_lines(st, step_of("model")) == []
+    work = at_root / "production/assets/05-warehouse/blockout/v2/work"
+    work.mkdir(parents=True)
+    (work / "camera_fit.json").write_text("{}", encoding="utf-8")
+    assert briefs.card_lines(st, step_of("model")) == [
+        "CAMERA_FIT: production/assets/05-warehouse/blockout/v2/work/camera_fit.json", ""]
+    final = at_root / "production/assets/05-warehouse/blockout/v2/final"
+    final.mkdir()
+    (final / "camera_fit.json").write_text("{}", encoding="utf-8")
+    assert briefs.card_lines(st, step_of("model")) == [
+        "CAMERA_FIT: production/assets/05-warehouse/blockout/v2/final/camera_fit.json", ""]
+
+
+def test_camera_fit_of_another_blockout_version_is_not_named_c21(at_root):
+    from core import briefs
+    st = card_asset(at_root)
+    other = at_root / "production/assets/05-warehouse/blockout/v1/work"
+    other.mkdir(parents=True)
+    (other / "camera_fit.json").write_text("{}", encoding="utf-8")
+    assert briefs.card_lines(st, step_of("model")) == []
+
+
+@pytest.mark.parametrize("sid", ["views_front", "views_rest", "texture"])
+def test_brief_of_a_step_that_reads_concept_colours_points_at_the_intake_file_c22(at_root, sid):
+    from core import briefs
+    st = card_asset(at_root)
+    f = at_root / "production/assets/05-warehouse/concept_colors.json"
+    f.parent.mkdir(parents=True)
+    f.write_text("{}", encoding="utf-8")
+    assert briefs.card_lines(st, step_of(sid)) == ["CONCEPT_COLORS: production/assets/05-warehouse/concept_colors.json", ""]
+
+
+@pytest.mark.parametrize("sid", ["views_front", "views_rest", "texture"])
+def test_brief_says_the_worker_picks_the_boxes_when_intake_wrote_no_colour_file_g3(at_root, sid):
+    from core import briefs
+    lines = briefs.card_lines(card_asset(at_root), step_of(sid))
+    assert lines == ["CONCEPT_COLORS: none (Material Handoff không có Ô lấy màu): tự chọn ô như trước", ""]
+
+
+@pytest.mark.parametrize("sid", ["blockout", "model"])
+def test_steps_that_do_not_read_concept_colours_get_no_colour_line(at_root, sid):
+    from core import briefs
+    f = at_root / "production/assets/05-warehouse/concept_colors.json"
+    f.parent.mkdir(parents=True)
+    f.write_text("{}", encoding="utf-8")
+    assert briefs.card_lines(card_asset(at_root), step_of(sid)) == []
+
+
+def test_blockout_brief_reads_concept_34_when_the_artist_gave_one_g9(at_root):
+    from core import briefs
+    st = card_asset(at_root)
+    assert "concept_34.png" not in briefs.concept_files(st, step_of("blockout"))
+    Image.new("RGB", (1024, 1024)).save(Path(st["concept_dir"]) / "concept_34.png")
+    assert briefs.concept_files(st, step_of("blockout")) == [
+        "concept_albedo.png", "concept_shadow.png", "asset-card.yaml", "05-warehouse.material.md", "concept_34.png"]
+    assert "concept_34.png" not in briefs.concept_files(st, step_of("model"))
+
+
+def test_texture_brief_gives_the_profile_path_to_pass_to_tools_and_does_not_ask_to_open_it_c23(none_flow):
+    text = none_flow.cp["t1"]["text"]
+    item = next(l for l in text.splitlines() if l.startswith("4. "))
+    assert item == ("4. `production/PROJECT-PROFILE.yaml` — đường dẫn profile dự án. Chỉ truyền cho tool qua "
+                    "`--profile`; không mở file này.")
+    assert ".env" not in text
+
+
+def test_other_steps_keep_the_profile_item_of_the_brief_because_their_agents_cite_it(none_flow):
+    item = next(l for l in none_flow.cp["m1 brief"]["text"].splitlines() if l.startswith("4. "))
+    assert item.startswith("4. `production/PROJECT-PROFILE.yaml` — profile dự án; `") and "preset của profile" in item
+
+
+def test_texture_brief_of_the_pilot_points_at_the_colour_file_that_intake_wrote_d43_1(none_flow):
+    assert "CONCEPT_COLORS: production/assets/pilot-house/concept_colors.json" in none_flow.cp["t1"]["text"].splitlines()
+    colors = none_flow.root / "production/assets/pilot-house/concept_colors.json"
+    assert json.loads(colors.read_text(encoding="utf-8")) == {"STONE": "#808080", "TIMBER": "#A06E3C", "TEAL": "#288C8C"}
