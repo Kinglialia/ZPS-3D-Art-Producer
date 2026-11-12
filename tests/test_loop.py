@@ -61,10 +61,10 @@ class Flow:
                        + (f"FIXED: {fixed}\n" if fixed else "") + extra, encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
 
-    def review(self, out=None, **kw):
+    def review(self, out=None, agent_id=None, **kw):
         out = out or self.brief()
         (self.root / out["report"]).write_text(report(**kw), encoding="utf-8")
-        return self.call(loop.ingest, Namespace(id=AID, agent_id=None))
+        return self.call(loop.ingest, Namespace(id=AID, agent_id=agent_id))
 
     def human(self, action, text="", step=None):
         return loop.human_action(AID, action, text, step)
@@ -1724,3 +1724,64 @@ def test_two_structure_findings_on_different_parts_are_fixed_and_judged_in_one_r
                        prior=["- F1: resolved | evidence: clay_front", "- F2: resolved | evidence: clay_front"]) == (
         "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v2 (review page)\n")
 
+
+def game_cam(f, n=1):
+    from PIL import Image
+    p = f.v(n) / "final/review/game_cam.png"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (400, 300), (90, 60, 30)).save(p)
+
+
+def asks_crop(f, agent_id="r1"):
+    """The v1 reviewer asks for a crop of a sheet tile; the script serves it from disk."""
+    out = f.brief()
+    game_cam(f)
+    f.work(out=out)
+    return f.review(agent_id=agent_id, rubric="props=unclear", top_fix="need_evidence", evidence="game_cam",
+                    findings=[finding("F1", "unclear", "param", evidence="game_cam: mờ",
+                                      viewing_condition="xin ảnh game_cam box 0,0,0.5,0.5")])
+
+
+def test_a_crop_served_from_disk_goes_back_to_the_reviewer_that_asked_with_a_short_brief_q4(flow):
+    """Run 5: a new reviewer re-read the concept, the sheet, the base and the rubric to judge one crop."""
+    from core.contract import FALLBACK
+    out = json.loads(asks_crop(flow).splitlines()[-1])
+    v1 = f"production/assets/{AID}/blockout/v1"
+    assert (out["role"], out["resume"], out["brief"], out["report"]) == (
+        "reviewer", "r1", f"{v1}/review/evidence-1/brief-review.md", f"{v1}/review-out.md")
+    assert flow.text(out).splitlines() == [
+        "# Review brief — House A · bước `blockout` · v1 · tiếp", "", "REVIEW_SCOPE: full", "",
+        f"Ảnh bạn xin đã có: `{v1}/review/evidence-1/game_cam-crop1.png`.",
+        f"Chấm lại v1 với ảnh này. Report cùng format như lần trước, ghi vào `{v1}/review-out.md`.",
+        "- PRIOR: mọi id đang mở F1, kể cả id bạn vừa ghi. Không ghi COMPARE.",
+        "- FINDINGS: chỉ finding mới, id từ F2, hoặc `FINDINGS: none`.",
+        "- EVIDENCE_OPENED: thêm tên ảnh mới.",
+        "", f"Tin nhắn trả về cho Producer: chỉ dòng VERDICT. {FALLBACK}"]
+    assert flow.review(out=out, agent_id="r1", verdict="PASS", top_fix=None, rubric="props=pass",
+                       evidence="game_cam, game_cam-crop1", prior=["- F1: resolved | evidence: game_cam-crop1"]) == (
+        "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v1 (review page)\n")
+    assert rounds(flow) == [("worker", 1, None), ("reviewer", 1, "full"), ("reviewer", 1, "full")]
+
+
+def test_without_the_agent_id_of_the_reviewer_a_served_crop_goes_to_a_new_reviewer_with_the_full_brief_q4(flow):
+    out = json.loads(asks_crop(flow, agent_id=None).splitlines()[-1])
+    assert (out["resume"], out["brief"]) == (None, f"production/assets/{AID}/blockout/v1/brief-review.md")
+
+
+def test_a_resumed_reviewer_that_stalls_is_replaced_by_a_new_one_with_the_full_brief_q4(flow):
+    """The stall rung gives the same work to a new agent; that agent has no first brief to go back to."""
+    sent = json.loads(asks_crop(flow).splitlines()[-1])
+    assert json.loads(flow.call(briefs.run, Namespace(id=AID))) == sent
+    st = flow.st
+    st["dispatches"][-1]["ended"] = {"at": "2026-11-12 10:00:00", "why": "no_report"}
+    save_st(st)
+    again = flow.brief()
+    assert (again["resume"], again["brief"]) == (None, f"production/assets/{AID}/blockout/v1/brief-review.md")
+
+
+def test_the_review_of_a_new_version_never_resumes_the_reviewer_of_the_old_one_q4(flow):
+    """A reviewer anchored on its own findings of v1 would judge v2 against them, not against the concept."""
+    flow.work()
+    flow.review(agent_id="r1", findings=[finding("F1", "major", "structure")])
+    out = json.loads(flow.work().splitlines()[-1])
+    assert (out["role"], out["resume"]) == ("reviewer", None)

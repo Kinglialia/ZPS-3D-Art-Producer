@@ -501,7 +501,8 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         k = 1 + sum(1 for _ in (d / "review").glob("evidence-*"))
         names = serve(d, asks, k)
         st["evidence_served"] = st.get("evidence_served", 0) + 1
-        st |= {"evidence": {"version": n, "k": k, "hash": hashes.tree_hash(d / "final"), "served": True},
+        st |= {"evidence": {"version": n, "k": k, "hash": hashes.tree_hash(d / "final"), "served": True,
+                            "agent_id": getattr(a, "agent_id", None)},
                "note": f"ảnh trên đĩa cho {', '.join(rv['top_fix']['ids'])}: {', '.join(names)}"}
         reason = f"script lấy ảnh có sẵn, không giao worker: {', '.join(names)}"
     elif event == "fix":

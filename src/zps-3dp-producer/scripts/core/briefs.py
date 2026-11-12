@@ -491,6 +491,27 @@ def review_brief(cfg, st, step, n) -> str:
     return "\n".join(lines) + "\n"
 
 
+def resumed_review_brief(st, step, n, ed) -> str:
+    """D38.4: the reviewer that asked for images already on disk judges them in the same review of the same version. It
+    has read everything else, so the brief names the images and what the report changes: the base is now version n."""
+    doc = findings.load(st["id"], step["id"], n)
+    lines = [
+        f"# Review brief — {st['title']} · bước `{step['id']}` · v{n} · tiếp",
+        "",
+        f"REVIEW_SCOPE: {st.get('review_scope') or 'full'}",
+        "",
+        f"Ảnh bạn xin đã có: {', '.join(f'`{rel(p)}`' for p in sorted(ed.glob('*.png')))}.",
+        f"Chấm lại v{n} với ảnh này. Report cùng format như lần trước, ghi vào "
+        f"`{rel(vdir(st['id'], step['id'], n) / 'review-out.md')}`.",
+        f"- PRIOR: mọi id đang mở {', '.join(findings.open_of(doc))}, kể cả id bạn vừa ghi. Không ghi COMPARE.",
+        f"- FINDINGS: chỉ finding mới, id từ F{doc['next_id']}, hoặc `FINDINGS: none`.",
+        "- EVIDENCE_OPENED: thêm tên ảnh mới.",
+        "",
+        "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> str:
     aid, sid = st["id"], step["id"]
     tf = findings.load(aid, sid, n)["top_fix"]
@@ -616,11 +637,18 @@ def run(a):
         d = vdir(a.id, sid, n)
         if s == "review" or not st.get("review_scope"):
             st["review_scope"] = review_scope(st, sid, n)
-        bp = d / "brief-review.md"
-        bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
+        ev = st.get("evidence") or {}
+        resume = ev.pop("agent_id", None) if ev.get("served") else None
+        if resume:
+            ed = d / "review" / f"evidence-{ev['k']}"
+            bp = ed / "brief-review.md"
+            bp.write_text(resumed_review_brief(st, step, n, ed), encoding="utf-8")
+        else:
+            bp = d / "brief-review.md"
+            bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
         out = {"role": "reviewer", "agent": agent_name(step["reviewer"]),
                "model": step.get("reviewer_model") or r["reviewer_model"],
-               "resume": None, "brief": rel(bp), "report": rel(d / "review-out.md")}
+               "resume": resume, "brief": rel(bp), "report": rel(d / "review-out.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")
     again = s in ("running", "reviewing", "evidence_running") and open_dispatch(st, sid, n, out["role"]) is not None
@@ -637,7 +665,8 @@ def run(a):
             from .watch import deadline, kind_of
             t0 = stamp()
             rec = {"step": sid, "v": n, "role": out["role"], "model": out["model"], "at": t0, "brief": out["brief"]} | (
-                {"scope": st["review_scope"]} if out["role"] == "reviewer" else {})
+                {"scope": st["review_scope"]} if out["role"] == "reviewer" else {}) | (
+                {"evidence": st["evidence"]["k"]} if out["role"] == "reviewer" and st.get("evidence") else {})
             mine = [x for x in st.get("dispatches", []) if x.get("step") == sid and x.get("role") == out["role"]]
             due = deadline(cfg, sid, out["role"], t0, kind=kind_of([*mine, rec], rec))
             st.setdefault("dispatches", []).append(rec | ({"deadline": due} if due else {}))
