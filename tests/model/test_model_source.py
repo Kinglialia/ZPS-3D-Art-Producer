@@ -18,7 +18,8 @@ def sha(p):
 
 
 OWN = {"setup_deps.sh", "check_inputs.py", "make_spec.py", "join_mesh.py", "unwrap.py", "check_detail.py",
-       "check_mesh.py", "check_uv_edge.py", "render_review.py", "cli.py", "glbread.py"}
+       "check_mesh.py", "check_uv_edge.py", "render_review.py", "cli.py", "glbread.py", "gate_all.py", "build_model.py",
+       "qa_all.py", "render_all.py", "session.py"}
 
 
 def test_source_lists_every_kit_file_in_tools_and_nothing_else():

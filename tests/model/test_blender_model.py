@@ -1,60 +1,20 @@
 """Model tools on a real build in Blender (coding-checklist rows 6, 7): the hut blockout plus one detail part goes
 through join, the kit xatlas unwrap, the model checks and the kit QA; an inlay flush with the base shows z-fighting.
 Needs the model tools/setup_deps.sh and Blender."""
-import copy
 import json
 import os
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-TOOLS = ROOT / "src/zps-3dp-producer/agents/zps-3dp-step-model/tools"
-VPY = TOOLS / ".deps/venv/bin/python"
-BLENDER = shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/Blender"
-PILOT = ROOT / "tests/fixtures/pilot"
-HUT = json.loads((ROOT / "tests/blockout/fixtures/hut/part_graph.json").read_text(encoding="utf-8"))
-SOURCES = {"layout": {"w": 4.0, "d": 4.0, "h": 3.7, "includes_base": True, "source": "asset-card.yaml size_m"},
-           "door_h": 1.8, "character_h": 1.6, "camera": {"azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40}}
-STEP = {"name": "step", "primitive": "box", "dims": ["step_w", "step_d", "step_h"], "material": "STONE", "role": "mass",
-        "attach": {"type": "on_top", "to": "base", "offset_uv": [0.0, -0.9]}}
-EAVE = {"name": "eave", "primitive": "box", "dims": ["eave_w", "eave_d", "eave_h"], "material": "TIMBER", "role": "mass",
-        "attach": {"type": "center_on_face", "to": "walls", "face": "-Y", "offset_uv": [0.0, 1.0]}}
-INLAY = {"name": "inlay", "primitive": "box", "dims": ["inlay_s", "inlay_s", "inlay_h"], "material": "STONE", "role": "marker",
-         "attach": {"type": "inset_into", "to": "base", "face": "+Z", "offset_uv": [0.0, -0.875], "depth": "inlay_h"}}
-ROUND = {"schema": "blockout-1", "version": "v01", "units": "m", "up": "+Z", "front": "-Y",
-         "params": {"base_w": 2.0, "base_d": 1.0, "base_h": 0.2, "post_r": 0.2, "post_h": 0.8, "chest_w": 0.6,
-                    "chest_d": 0.5, "chest_h": 0.4, "bevel_r": 0.05},
-         "fixed_params": ["base_w"],
-         "parts": [{"name": "base", "primitive": "box", "dims": ["base_w", "base_d", "base_h"], "attach": None,
-                    "material": "STONE", "role": "mass"},
-                   {"name": "post", "primitive": "cylinder", "dims": ["post_r", "post_h"], "segments": 8,
-                    "attach": {"type": "on_top", "to": "base", "offset_uv": [-0.5, 0.0]}, "material": "STONE",
-                    "role": "mass"},
-                   {"name": "chest", "primitive": "custom", "fn": "bevel_box",
-                    "args": ["chest_w", "chest_d", "chest_h", "bevel_r", 2, 15],
-                    "attach": {"type": "on_top", "to": "base", "offset_uv": [0.5, 0.0]}, "material": "STONE",
-                    "role": "mass"}]}
+from modelkit import (BLENDER, EAVE, INLAY, PILOT, ROUND, ROOT, STEP, TOOLS, VPY, blender, build, build_shared, make_spec,
+                      read, sh)
+
 pytestmark = [pytest.mark.blender,
               pytest.mark.skipif(not (VPY.is_file() and os.access(BLENDER, os.X_OK)),
                                  reason="needs Blender and the model tools/setup_deps.sh")]
-
-
-def sh(*args):
-    r = subprocess.run([str(a) for a in args], capture_output=True, text=True)
-    return r.returncode, r.stdout + r.stderr
-
-
-def blender(script, *args):
-    return sh(BLENDER, "-b", "--factory-startup", "--python-exit-code", "1", "--python", TOOLS / script, "--", *args)
-
-
-def read(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def checks(path):
@@ -62,34 +22,8 @@ def checks(path):
     return r["overall"], {c["check"]: (c["status"], c.get("value")) for c in r["checks"]}
 
 
-def build(d: Path, extra=(), **params):
-    d.mkdir(parents=True)
-    g = copy.deepcopy(HUT)
-    g["parts"] += list(extra)
-    g["params"] |= {"step_w": 1.0, "step_d": 0.3, "step_h": 0.15, "inlay_s": 0.3, "inlay_h": 0.05, "eave_w": 3.0,
-                    "eave_d": 0.5, "eave_h": 0.1} | params
-    (d / "part_graph.json").write_text(json.dumps(g), encoding="utf-8")
-    (d / "sources.json").write_text(json.dumps(SOURCES), encoding="utf-8")
-    rc, out = sh(VPY, TOOLS / "self_build/assembly.py", "--work", d)
-    assert rc == 0, out
-
-
-def build_in_blender(d: Path, graph: dict):
-    """A graph with a shared custom function (bevel_box needs bmesh), built the way the worker does."""
-    d.mkdir(parents=True)
-    (d / "part_graph.json").write_text(json.dumps(graph), encoding="utf-8")
-    (d / "sources.json").write_text(json.dumps(SOURCES), encoding="utf-8")
-    rc, out = sh(BLENDER, "-b", "--factory-startup", "--python-exit-code", "1", "--python",
-                 TOOLS / "../../zps-3dp-step-blockout/tools/build_parts.py", "--", "assembly", "--work", d)
-    assert rc == 0, out
-
-
 def model(final: Path, blockout: Path, **spec):
-    rc, out = sh(VPY, TOOLS / "make_spec.py", "--final", final, "--blockout", blockout,
-                 "--card", PILOT / "_approved/pilot-house/asset-card.yaml", "--profile", PILOT / "PROJECT-PROFILE.yaml",
-                 "--preset", ROOT / "src/zps-3dp-producer/presets/topdown-mobile-lowpoly.yaml")
-    assert rc == 0, out
-    (final / "spec.json").write_text(json.dumps(read(final / "spec.json") | spec), encoding="utf-8")
+    make_spec(final, blockout, **spec)
     for script in ("join_mesh.py", "unwrap.py"):
         rc, out = blender(script, "--final", final)
         assert rc == 0, out
@@ -101,7 +35,7 @@ def built(tmp_path_factory):
     b, f, g, wb, w = t / "blockout", t / "final", t / "inlay", t / "wide_blockout", t / "wide"
     e, under, flip, rnd = t / "eave", t / "bottom_visible", t / "inside_out", t / "round"
     mask(t / "work")
-    build_in_blender(rnd, ROUND)
+    build_shared(rnd, ROUND)
     model(rnd, rnd)
     build(b)
     build(f, [STEP])
