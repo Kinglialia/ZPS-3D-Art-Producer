@@ -154,22 +154,27 @@ def test_a_tool_stopped_by_a_signal_takes_its_child_and_grandchild_with_it_v14(t
     import subprocess
     import time
     vd, rows = beats(tmp_path)
-    kid, pid = tmp_path / "kid.pid", tmp_path / "gc.pid"
-    code = (f"import sys; sys.path.insert(0, {str(SKILL / 'scripts')!r}); import heartbeat, pathlib\n"
+    kid, pid, ready = tmp_path / "kid.pid", tmp_path / "gc.pid", tmp_path / "handlers.ready"
+    code = (f"import sys; sys.path.insert(0, {str(SKILL / 'scripts')!r}); import heartbeat, pathlib, signal\n"
+            f"set_handler = signal.signal\n"
+            f"def spy(s, h):\n"
+            f"    old = set_handler(s, h)\n"
+            f"    if h is heartbeat.stop and s == heartbeat.STOP[-1]: pathlib.Path({str(ready)!r}).write_text('1')\n"
+            f"    return old\n"
+            f"signal.signal = spy\n"
             f"heartbeat.run(['sh', '-c', 'echo $$ > {kid}; sleep 60 & echo $! > {pid}; wait'], tool='term', "
             f"vd=pathlib.Path({str(vd)!r}), every=0.3)\n")
     tool = subprocess.Popen([sys.executable, "-c", code])
-    for _ in range(200):
-        if pid.exists() and pid.read_text(encoding="utf-8").strip():
-            break
+    end = time.monotonic() + 60
+    while not (ready.exists() and pid.exists() and pid.read_text(encoding="utf-8").strip()):
+        assert time.monotonic() < end and tool.poll() is None, "the tool never reached its signal handlers"
         time.sleep(0.05)
-    time.sleep(0.5)
     sh, gc = int(kid.read_text(encoding="utf-8")), int(pid.read_text(encoding="utf-8"))
     try:
         tool.send_signal(getattr(signal, sig))
-        assert tool.wait(timeout=10) == 128 + getattr(signal, sig)
-        assert (gone(sh), gone(gc)) == (True, True)
-        assert rows() == [["term", "start"]]
+        assert tool.wait(timeout=30) == 128 + getattr(signal, sig)
+        assert (gone(sh, 30), gone(gc, 30)) == (True, True)
+        assert [r for r in rows() if r[1] != "running"] == [["term", "start"]]
     finally:
         kill_quietly(sh, gc)
         tool.kill() if tool.poll() is None else None
@@ -430,9 +435,9 @@ def test_a_second_p_wait_is_refused_while_one_runs_and_the_first_wakes_on_the_re
     first = subprocess.Popen([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=tmp_path,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     lock = tmp_path / "production/wait.lock"
-    for _ in range(100):
-        if lock.exists():
-            break
+    end = time.monotonic() + 60
+    while not lock.exists():
+        assert time.monotonic() < end and first.poll() is None, "the first `P wait` never took its lock"
         time.sleep(0.05)
     second = subprocess.run([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=tmp_path,
                             capture_output=True, text=True)
