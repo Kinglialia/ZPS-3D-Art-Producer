@@ -267,3 +267,17 @@ def test_the_worker_does_not_start_blockout_md_by_hand_because_blockout_md_py_ma
     _, body = front(WORKER)
     assert "V/work/notes.md" in body and "Đừng tạo `blockout.md` bằng tay" in body
     assert "Khi `RUN` in `error`, đọc log" in body and "đủ mục" not in body
+
+
+def test_the_side_of_a_34_concept_comes_from_the_view_side_line_and_the_card_reaches_the_proportion_check_g5():
+    """The worker used to look at the picture and guess the side. The brief line is the card's answer."""
+    _, body = front(WORKER)
+    step5 = next(l for l in body.splitlines() if l.startswith("5. "))
+    step4 = next(l for l in body.splitlines() if l.startswith("4. "))
+    assert "`<VIEW_SIDE>` là giá trị dòng `VIEW_SIDE:` của brief, chép nguyên, không đoán." in step5
+    assert "--view front=<concept_albedo.png> --view 34=<concept_34.png> --side <VIEW_SIDE>" in step5
+    assert "--view 34=<concept_albedo.png> --side <VIEW_SIDE>" in step5 and "`STATUS: NEEDS_CONTEXT`" in step5
+    assert "--card '<_approved/<id>>/asset-card.yaml'" in step5
+    assert "check_proportion=--card '<_approved/<id>>/asset-card.yaml'" in step4
+    for tool in ("prep_overlay.py", "check_proportion.py"):
+        assert '"--card"' in (TOOLS / tool).read_text(encoding="utf-8"), tool

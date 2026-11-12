@@ -9,7 +9,9 @@ breaks where the concept's does (the near bottom corner, which splits side face 
 IoU, and refines at 1°.
 --side: image side where the concept shows the prop's side face (left = camera toward -X, azimuth < 0). Pass it
 for a near-square footprint: a square box looks the same from -30° and +60°.
-Output: camera_fit.json, and --write-spec stores spec.concept.cameras for render_views.py.
+Output: <work>/camera_fit.json, and --write-spec stores spec.concept.cameras for render_views.py. prep_overlay.py passes
+--work F, so the file lands in the blockout's final/, which the brief's CAMERA_FIT: line names and make_spec.py reads.
+--side is the card's view_side, as the brief's VIEW_SIDE: line gives it (left: the -X face of the object shows).
 A view whose break matches no camera within 0.05 of the bbox width fails and is not written. Exit 1 on fail.
 """
 import os

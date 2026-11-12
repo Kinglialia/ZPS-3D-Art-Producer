@@ -1,8 +1,9 @@
 """Mask, spec, camera fit and proportion check, in one command, after the full build. Plain Python.
 
-Usage: PY T/prep_overlay.py --work <F> --view <view>=<concept image> [--view ...] [--side left|right] [--spec <spec.json>]
+Usage: PY T/prep_overlay.py --work <F> --view <view>=<concept image> [--view ...] [--side left|right] [--card <asset-card.yaml>] [--spec <spec.json>]
   view   front, back, left, right, top (orthographic) or 34 (the 3/4 view).
-  --side the image side of a 3/4 concept that shows the object's side face. Required with a 34 view.
+  --side the image side of a 3/4 concept that shows the object's side face, the card's view_side. Required with a 34 view.
+  --card the asset card; check_proportion.py compares its `marks` with the blockout (the rerun in step 4 must keep them).
   --spec default <vN>/work/spec.json of the version folder.
 Steps:
   1. concept_mask.py's mask() of each image -> <spec folder>/masks/<view>.png.
@@ -62,13 +63,14 @@ def main():
     ap.add_argument("--work", required=True)
     ap.add_argument("--view", action="append", default=[], metavar="VIEW=IMAGE")
     ap.add_argument("--side", choices=("left", "right"))
+    ap.add_argument("--card")
     ap.add_argument("--spec")
     a = ap.parse_args()
     views = parse_views(a.view)
     if not views:
         refuse("give at least one --view")
     if THREE_QUARTER in views and not a.side:
-        refuse("a 34 view needs --side left|right: the image side that shows the object's side face")
+        refuse("a 34 view needs --side left|right, the card's view_side (brief line VIEW_SIDE:). The brief has none: the card needs view_side")
     work = os.path.abspath(a.work)
     spec_path = os.path.abspath(a.spec or default_spec(work))
     spec = common.read_json(spec_path) if os.path.isfile(spec_path) else {}
@@ -82,7 +84,7 @@ def main():
         lines += [x for x in [gate_all.failing(fit, "camera_fit.json")] if x]
         if p.returncode and not lines:
             lines.append(f"fit_view: exit {p.returncode}: {(p.stdout or p.stderr).strip()[-140:]}")
-    lines += gate_all.run_check("check_proportion", work, "--work", ["--spec", spec_path])
+    lines += gate_all.run_check("check_proportion", work, "--work", ["--spec", spec_path, *(["--card", a.card] if a.card else [])])
     if lines:
         print("\n".join(l[:gate_all.LINE_MAX] for l in lines))
         print(f"{NAME} fail: {len(lines)} failing")

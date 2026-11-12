@@ -6,6 +6,7 @@ import json
 import subprocess
 
 import pytest
+import yaml
 
 from conftest import HUT_ROWS, TOOLS, write_mask, write_build
 
@@ -29,9 +30,13 @@ def spec_for(tmp_path, **views):
     return path
 
 
-def run_proportion(tmp_path, work, spec=None):
+def run_proportion(tmp_path, work, spec=None, marks=None):
     out = tmp_path / "proportion.result.json"
     cmd = [str(VPY), str(TOOLS / "check_proportion.py"), "--work", str(work), "--out", str(out)]
+    if marks is not None:
+        card = tmp_path / "asset-card.yaml"
+        card.write_text(yaml.safe_dump({"marks": marks}), encoding="utf-8")
+        cmd += ["--card", str(card)]
     r = subprocess.run(cmd + (["--spec", str(spec)] if spec else []), capture_output=True, text=True)
     return r, (json.loads(out.read_text(encoding="utf-8")) if out.is_file() else None)
 
@@ -109,3 +114,48 @@ def test_a_stale_assembly_fails_instead_of_comparing_an_old_build(tmp_path):
     work = write_build(tmp_path / "w", stale=True)
     r, res = run_proportion(tmp_path, work, spec_for(tmp_path, front=(400, 370)))
     assert (r.returncode, res["overall"]) == (1, "fail")
+
+
+def mark(name, z_m):
+    return {"name": name, "z_m": z_m}
+
+
+def test_marks_that_sit_on_a_part_edge_pass_without_any_concept_image_g5(tmp_path):
+    """The hut is 3.7 m high; its parts end at 0.3, 0.6, 2.1, 2.7 and 3.7 m. A mark must be the height of one of them."""
+    work = write_build(tmp_path / "w", rows=HUT_ROWS)
+    r, res = run_proportion(tmp_path, work, marks=[mark("mép mái", 2.7), mark("mặt bệ", 0.3)])
+    assert (r.returncode, res["overall"], len(r.stdout.strip().splitlines())) == (0, "pass", 1), r.stdout
+    assert statuses(res) == {"assembly.fresh": "pass", "proportion.spec": "not_checked", "proportion.mark.mép mái": "pass",
+                             "proportion.mark.mặt bệ": "pass"}
+
+
+def test_a_mark_that_no_part_edge_is_near_fails_and_names_the_mark_and_the_nearest_edge_g5(tmp_path):
+    """1.5 m: the nearest edge is the door top at 2.1 m, 0.6 m away, more than 10 % of 3.7 m. This is the worker who built
+    the wall at the wrong height, or put the break in the middle of one part."""
+    work = write_build(tmp_path / "w", rows=HUT_ROWS)
+    r, res = run_proportion(tmp_path, work, marks=[mark("gờ giữa", 1.5), mark("mép mái", 2.7)])
+    assert (r.returncode, res["overall"]) == (1, "fail")
+    got = next(c for c in res["checks"] if c["check"] == "proportion.mark.gờ giữa")
+    assert (got["status"], got["value"], got["threshold"]) == ("fail", 0.6, 0.37)
+    assert "gờ giữa" in got["note"] and "door.top 2.10 m" in got["note"]
+    assert statuses(res)["proportion.mark.mép mái"] == "pass"
+
+
+def test_the_tolerance_is_ten_percent_of_the_height_but_never_less_than_five_centimetres_g5(tmp_path):
+    """A 0.2 m prop: 10 % is 2 cm, so the floor of 5 cm decides. 0.155 m is 4.5 cm from the top, 0.14 m is 6 cm."""
+    work = write_build(tmp_path / "w", rows=box_rows(1.0, 1.0, 0.2))
+    r, res = run_proportion(tmp_path, work, marks=[mark("a", 0.155), mark("b", 0.14)])
+    assert (r.returncode, statuses(res)["proportion.mark.a"], statuses(res)["proportion.mark.b"]) == (1, "pass", "fail")
+
+
+def test_marks_are_checked_beside_the_view_ratios_and_a_failed_mark_is_not_hidden_by_them_g5(tmp_path):
+    work = write_build(tmp_path / "w", rows=HUT_ROWS)
+    r, res = run_proportion(tmp_path, work, spec_for(tmp_path, front=(400, 370)), marks=[mark("gờ giữa", 1.5)])
+    assert (r.returncode, statuses(res)["proportion.front"], statuses(res)["proportion.mark.gờ giữa"]) == (1, "pass", "fail")
+
+
+@pytest.mark.parametrize("marks", [None, []])
+def test_a_card_without_marks_adds_no_check(tmp_path, marks):
+    work = write_build(tmp_path / "w", rows=HUT_ROWS)
+    r, res = run_proportion(tmp_path, work, marks=marks)
+    assert (r.returncode, res["overall"], [c for c in statuses(res) if "mark" in c]) == (0, "not_checked", [])

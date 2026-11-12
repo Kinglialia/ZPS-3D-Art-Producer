@@ -95,8 +95,8 @@ def test_a_34_concept_gets_its_camera_from_fit_view_on_the_side_given_and_needs_
     img = tmp_path / "34.png"
     subprocess.run([str(VPY), "-c", SILHOUETTE, str(TOOLS), str(f / "assembled.glb"), "-35", "20", str(img)], check=True)
     rc, lines = prep(f, "--view", f"34={img}")
-    assert (rc, lines) == (2, ["prep_overlay refused: a 34 view needs --side left|right: the image side that shows the "
-                               "object's side face"])
+    assert (rc, lines) == (2, ["prep_overlay refused: a 34 view needs --side left|right, the card's view_side (brief line "
+                               "VIEW_SIDE:). The brief has none: the card needs view_side"])
     assert not (f.parent / "work/spec.json").exists()
     rc, lines = prep(f, "--view", f"34={img}", "--side", "left")
     cam = json.loads((f.parent / "work/spec.json").read_text(encoding="utf-8"))["concept"]["cameras"]["34"]
@@ -114,3 +114,17 @@ def test_a_missing_view_a_wrong_view_name_and_a_missing_image_are_refused_before
     f = final(tmp_path)
     rc, lines = prep(f, *args)
     assert (rc, lines, (f.parent / "work").exists()) == (2, [f"prep_overlay refused: {why}"], False)
+
+
+@needs_venv
+def test_the_card_goes_on_to_the_proportion_check_so_the_rerun_keeps_the_marks_g5(tmp_path):
+    """gate_all.py runs check_proportion with the card; prep_overlay reruns it and writes the same file, so a rerun without
+    the card would erase a failed mark."""
+    f = final(tmp_path)
+    card = tmp_path / "asset-card.yaml"
+    card.write_text("marks:\n- {name: gờ giữa, z_m: 1.5}\n- {name: mép mái, z_m: 2.7}\n", encoding="utf-8")
+    rc, lines = prep(f, "--view", f"front={concept(tmp_path / 'front.png', 400, 370)}", "--card", str(card))
+    assert rc == 1 and lines[0].startswith("review/checks/proportion.json: proportion.mark.gờ giữa 0.6 (limit 0.37)")
+    assert lines[-1] == "prep_overlay fail: 1 failing"
+    rc, lines = prep(f, "--view", f"front={concept(tmp_path / 'front.png', 400, 370)}")
+    assert (rc, len(lines)) == (0, 1)
