@@ -31,6 +31,7 @@ Part mới theo hợp đồng part graph của blockout. Hai mặt trùng khít 
 - Padding của preset tính ở 2048. `make_spec.py` nhân với `texture_res` / 2048 (8 px ở 1024).
 - `check_uv_edge.py` `uv.stretch`: phần diện tích có tỉ lệ hai giá trị kỳ dị của Jacobian UV lớn hơn `spec.model.uv_stretch.max_ratio`. Ngưỡng là số tạm, chưa đo trên asset thật. `review/uv_checker.png` cho thấy chỗ kéo giãn.
 - Quy ước góc cho `sun`, `concept_cam`, `camera` và `concept.cameras` của `spec.json`: `azimuth_deg` 0 = camera (hoặc nắng) ở phía trước (−Y), nhìn về +Y; số dương đưa camera sang +X, bên phải người nhìn mặt trước; `elevation_deg` = số độ trên mặt đất. `camera_fit.json` của blockout dùng cùng quy ước.
+- `make_spec.py --light "<giá trị dòng LIGHT:>"` ghi `sun` từ thẻ. `from` tính theo ảnh `concept_shadow.png`: `azimuth_deg` của `sun` = azimuth camera concept + (`left` −45°, `right` +45°, `front` 0°), `elevation_deg` giữ nguyên. Camera concept là `concept_cam` đã có trong spec, hoặc camera 3/4 đã khớp khi thẻ ghi `view: '34'`, còn lại là góc nhìn chính diện (azimuth 0).
 - `make_spec.py` chép mask concept của blockout (`work/spec.json` của blockout) vào `F/concept/`, và camera đã khớp (`camera_fit.json`) vào `spec.concept`. `render_views.py --spec F/spec.json` vẽ `overlay_*` từ đó.
 - Camera game của `spec.json` cố định (`distance_m`): asset cao `target_px_height` px trên màn 1080 px. `screen_tris_check` đo ở đúng cỡ đó.
 - Làm và giao ở `texture_res` của spec. Không đổi độ phân giải.

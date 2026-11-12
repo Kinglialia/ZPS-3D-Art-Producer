@@ -1,6 +1,7 @@
 """Write F/spec.json, the kit task spec every model tool and kit QA check reads (docs/agents/3d-artist.md §2, §6).
 
 Usage: python3 tools/make_spec.py --final F --blockout B --card C/asset-card.yaml --profile <profile> --preset <preset>
+       [--light "from=<left|right|front> elevation=<deg>"]
 Geometry comes only from B/sources.json (D22.13): W x D x H, character_h, door_h, camera azimuth, elevation, fov.
 includes_base: false takes W x D x H from B/assembly.json instead, because layout then leaves the base out.
 Other numbers follow D13, later wins: skill default < preset < profile `overrides` < asset card.
@@ -19,12 +20,19 @@ The views of B/../work/spec.json (the blockout's own spec) are copied to F/conce
 concept.cameras, then data.cameras of B/camera_fit.json when that file exists. No blockout masks: no concept key.
 spec["sources"] names the layer of every number ("mặc định" = skill default).
 Keeps `sun` and `concept_cam` of an existing F/spec.json: the worker sets them at A7.
+--light (the value of the brief's LIGHT: line) writes `sun` instead, and replaces a kept one. `from` is the side of the
+image of concept_shadow.png that the light comes from (left: the lit side is at the left edge, the shadow falls to the
+right). azimuth_deg = azimuth of the concept camera + (left -45, right +45, front 0), wrapped to -180..180; elevation_deg
+as given. The concept camera is the `concept_cam` of an existing spec, else concepts.cameras["34"] when the card says
+view: '34' (concept_shadow.png is then the 3/4 image), else the front view (azimuth 0).
+`bottom_visible` of the card (a bool) goes to the spec; a card without it keeps the value of an existing spec.
 Prints one line. Exit 0, 2 on error.
 """
 import argparse
 import json
 import math
 import os
+import re
 import shutil
 import sys
 
@@ -37,7 +45,9 @@ TOOL = "model/make_spec"
 # uv_stretch: provisional, not yet measured on a real asset; preset or profile overrides replace it.
 DEFAULTS = {"texture_res": 2048, "detail": {"relief_min_px": 3, "alpha_min_px": 16},
             "uv_stretch": {"max_ratio": 2.0, "max_share": 0.05}}
-KEPT = ("sun", "concept_cam")
+KEPT = ("sun", "concept_cam", "bottom_visible")
+LIGHT = re.compile(r"from=(left|right|front) elevation=(-?\d+(?:\.\d+)?)")
+LIGHT_OFFSET_DEG = {"left": -45.0, "right": 45.0, "front": 0.0}
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
         "bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "uv_stretch.max_ratio", "uv_stretch.max_share",
         "dimensions", "px_per_m")
@@ -107,6 +117,19 @@ def concept(blockout, final):
     return {"views": views, "cameras": cams} | ({"background": c["background"]} if c.get("background") else {})
 
 
+def sun_of(light, card, spec, old):
+    """(sun, concept camera azimuth) for a `--light` value; see the docstring."""
+    m = LIGHT.fullmatch(light.strip())
+    if not m:
+        raise ValueError(f"--light {light!r}: want 'from=<left|right|front> elevation=<deg>'")
+    cam = (old.get("concept_cam") or {}).get("azimuth_deg")
+    if cam is None and str(card.get("view")) == "34":
+        cam = ((spec.get("concept") or {}).get("cameras") or {}).get("34", {}).get("azimuth_deg")
+    cam = float(cam or 0)
+    az = (cam + LIGHT_OFFSET_DEG[m[1]] + 180) % 360 - 180
+    return {"azimuth_deg": round(az, 2), "elevation_deg": float(m[2])}, cam
+
+
 def build(a):
     s = common.read_json(os.path.join(a.blockout, "sources.json"))
     card, prof, preset = yaml_load(a.card), yaml_load(a.profile), yaml_load(a.preset)
@@ -166,6 +189,12 @@ def build(a):
     out = os.path.join(a.final, "spec.json")
     old = common.read_json(out) if os.path.isfile(out) else {}
     spec |= {k: old[k] for k in KEPT if k in old}
+    if a.light:
+        spec["sun"], cam = sun_of(a.light, card, spec, old)
+        spec["sources"]["sun"] = f"thẻ light ({a.light}), camera concept az {cam:g}"
+    if isinstance(card.get("bottom_visible"), bool):
+        spec["bottom_visible"] = card["bottom_visible"]
+        spec["sources"]["bottom_visible"] = "thẻ asset"
     common.write_json(out, spec)
     return out, spec
 
@@ -174,6 +203,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     for k in ("final", "blockout", "card", "profile", "preset"):
         p.add_argument(f"--{k}", required=True)
+    p.add_argument("--light")
     a = p.parse_args()
     try:
         out, s = build(a)

@@ -223,3 +223,14 @@ def test_model_reference_states_the_bbox_rule_the_bevel_exception_and_the_angle_
                  "`azimuth_deg` 0 = camera (hoặc nắng) ở phía trước (−Y), nhìn về +Y; số dương đưa camera sang +X",
                  '`"round": true`'):
         assert rule in text, rule
+
+
+def test_the_light_line_of_the_brief_goes_to_make_spec_so_the_worker_no_longer_guesses_the_sun_g6():
+    _, body = front(WORKER)
+    step2 = next(l for l in body.split("## Quy trình")[1].splitlines() if l.startswith("2. "))
+    step7 = next(l for l in body.split("## Quy trình")[1].splitlines() if l.startswith("7. "))
+    assert 'Brief có dòng `LIGHT:`: thêm `--light "<giá trị sau LIGHT:>"`' in step2
+    assert "`make_spec.py` đã ghi `sun`, không ước lượng lại" in step7 and "ghi thêm hướng nắng" in step7
+    assert "--light" in (AGENT / "tools/make_spec.py").read_text(encoding="utf-8")
+    text = (AGENT / "references/model.md").read_text(encoding="utf-8")
+    assert "(`left` −45°, `right` +45°, `front` 0°)" in text and "`from` tính theo ảnh `concept_shadow.png`" in text

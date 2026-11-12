@@ -85,7 +85,7 @@ def spec_of(final, **over):
 
 @pytest.fixture
 def make_spec(tmp_path):
-    def run(card=None, profile=None, old=None, sources=SOURCES):
+    def run(card=None, profile=None, old=None, sources=SOURCES, light=None, expect=0):
         b, f = tmp_path / "blockout", tmp_path / "final"
         b.mkdir(exist_ok=True)
         f.mkdir(exist_ok=True)
@@ -96,8 +96,10 @@ def make_spec(tmp_path):
         if old:
             (f / "spec.json").write_text(json.dumps(old), encoding="utf-8")
         r = tool("make_spec", "--final", f, "--blockout", b, "--card", tmp_path / "card/asset-card.yaml",
-                 "--profile", tmp_path / "profile.yaml", "--preset", PRESET)
-        assert r.returncode == 0, r.stdout + r.stderr
+                 "--profile", tmp_path / "profile.yaml", "--preset", PRESET, *(["--light", light] if light else []))
+        assert r.returncode == expect, r.stdout + r.stderr
+        if expect:
+            return r.stdout, None
         return r.stdout, json.loads((f / "spec.json").read_text(encoding="utf-8"))
     return run
 
@@ -218,6 +220,69 @@ def test_a_blockout_without_masks_gives_the_model_spec_no_concept(make_spec):
 def test_a_rerun_keeps_the_sun_and_concept_camera_the_worker_set(make_spec):
     _, s = make_spec(old={"sun": {"azimuth_deg": 300, "elevation_deg": 40}, "budget": {"max_tris_total": 1}})
     assert (s["sun"], s["budget"]["max_tris_total"]) == ({"azimuth_deg": 300, "elevation_deg": 40}, 3000)
+
+
+def with_camera_fit(tmp_path, az, el=20.0):
+    (tmp_path / "blockout").mkdir(exist_ok=True)
+    (tmp_path / "work/masks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "work/masks/front.png").write_bytes(b"x")
+    (tmp_path / "work/spec.json").write_text(json.dumps({"concept": {"views": {"front": "masks/front.png"}}}), encoding="utf-8")
+    (tmp_path / "blockout/camera_fit.json").write_text(json.dumps({"data": {"cameras": {
+        "34": {"azimuth_deg": az, "elevation_deg": el}}}}), encoding="utf-8")
+
+
+@pytest.mark.parametrize("light, sun", [
+    ("from=left elevation=45", {"azimuth_deg": -45.0, "elevation_deg": 45.0}),
+    ("from=right elevation=50", {"azimuth_deg": 45.0, "elevation_deg": 50.0}),
+    ("from=front elevation=30", {"azimuth_deg": 0.0, "elevation_deg": 30.0})])
+def test_the_light_of_the_card_gives_the_sun_in_the_front_view_when_no_concept_camera_is_known_g6(make_spec, light, sun):
+    """Image left is -X in the front view, and sun azimuth 0 is the camera side, positive toward +X (render_review.light)."""
+    out, s = make_spec(light=light)
+    assert (s["sun"], s["sources"]["sun"]) == (sun, f"thẻ light ({light}), camera concept az 0")
+
+
+@pytest.mark.parametrize("light, az", [("from=left elevation=45", -80.0), ("from=right elevation=45", 10.0),
+                                       ("from=front elevation=45", -35.0)])
+def test_a_34_concept_turns_the_sun_with_the_camera_that_drew_concept_shadow_g6(make_spec, tmp_path, light, az):
+    """`left` is the left edge of the image, so with the camera at -35 deg the sun sits 45 deg further toward -X."""
+    with_camera_fit(tmp_path, -35.0)
+    _, s = make_spec(card={"view": "34", "view_side": "left"}, light=light)
+    assert s["sun"] == {"azimuth_deg": az, "elevation_deg": 45.0}
+
+
+def test_a_front_card_ignores_the_fitted_camera_of_concept_34_because_concept_shadow_shares_the_front_frame_g6(
+        make_spec, tmp_path):
+    with_camera_fit(tmp_path, -35.0)
+    _, s = make_spec(card={"view": "front", "view_side": "left"}, light="from=left elevation=45")
+    assert s["sun"]["azimuth_deg"] == -45.0
+
+
+def test_the_concept_camera_the_worker_wrote_wins_and_the_azimuth_wraps_at_180_g6(make_spec):
+    _, s = make_spec(old={"concept_cam": {"azimuth_deg": -150.0, "elevation_deg": 30}}, light="from=left elevation=45")
+    assert s["sun"]["azimuth_deg"] == 165.0
+
+
+def test_light_replaces_the_kept_sun_and_a_rerun_without_it_keeps_the_sun_g6(make_spec):
+    old = {"sun": {"azimuth_deg": 300, "elevation_deg": 40}}
+    _, s = make_spec(old=old, light="from=right elevation=20")
+    assert s["sun"] == {"azimuth_deg": 45.0, "elevation_deg": 20.0}
+    _, s = make_spec(old=old)
+    assert s["sun"] == old["sun"] and "sun" not in s["sources"]
+
+
+@pytest.mark.parametrize("light", ["from=up elevation=45", "from=left", "left 45"])
+def test_a_light_value_that_is_not_the_brief_line_is_one_error_line_g6(make_spec, light):
+    out, _ = make_spec(light=light, expect=2)
+    assert out.startswith("[model/make_spec] error: ") and len(out.splitlines()) == 1
+
+
+@pytest.mark.parametrize("card, old, want", [
+    ({"bottom_visible": True}, None, True), ({"bottom_visible": False}, {"bottom_visible": True}, False),
+    ({}, {"bottom_visible": True}, True), ({}, None, "absent")])
+def test_bottom_visible_comes_from_the_card_and_survives_a_rerun_g6(make_spec, card, old, want):
+    """The pilot-house card has no bottom_visible, so only the card or the earlier spec can set it."""
+    _, s = make_spec(card=card, old=old)
+    assert s.get("bottom_visible", "absent") == want
 
 
 def inputs_of(tmp_path, card, views=True):
