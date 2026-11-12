@@ -1,15 +1,17 @@
 # Vòng sửa
 
-Đọc file này khi brief có `TOP_FIX`, dòng "Bản đã duyệt trước", hoặc xin bằng chứng, và khi một check fail mà bạn không sửa được. Ở lần dựng đầu, đừng đọc trước.
+Đọc file này khi brief có dòng `Bản gốc:`, dòng "Bản đã duyệt trước", hoặc khi là brief bằng chứng; và khi một check fail mà bạn không sửa được. Ở lần dựng đầu, đừng đọc trước.
 
-Các lệnh `RUN` và `F`, `B`, `C`, `V` có nghĩa như trong file agent. "Gate" là lệnh `RUN gate_all.py` ở bước 3 của quy trình.
+Các lệnh `RUN` và `F`, `B`, `BT`, `C`, `V` có nghĩa như trong file agent. "Gate" là lệnh `RUN gate_all.py` ở bước 3 của quy trình. `<bản gốc>` là thư mục ở dòng `Bản gốc:` của brief. Mỗi finding có id `<Fid>` (ví dụ `F3`, hoặc `H1` cho feedback của người dùng).
 
 ## Mở đầu
 
-Brief ghi bản gốc `P` và `TOP_FIX`. Mỗi finding có id `<Fid>` (ví dụ `F3`).
-
-1. Chép `P/final/` vào `F`, trừ `review/`.
+1. Chép `<bản gốc>/final/` vào `F`, trừ `review/`.
 2. Đọc trước các file JSON fail mà brief liệt kê. Rồi mới tới finding.
+3. Sửa theo đúng thứ tự brief nêu:
+   - JSON fail (vòng trả thẳng): sửa ở bước 3 của quy trình cho JSON đó pass.
+   - `H<n>`: mỗi id một lần sửa theo mục `structure`, theo nguyên văn yêu cầu trong `acceptance`.
+   - `TOP_FIX`: theo mục cùng tên loại.
 
 ## `structure`
 
@@ -42,7 +44,7 @@ Trong `V/variants/<b|c>/`, `RUN` không thấy JSON fail. Đọc `overall` của
 
 ## Bản đã duyệt trước
 
-Brief có dòng "Bản đã duyệt trước của bước này" (`P`) khi blockout vừa làm lại. Dựng từ part graph mới của `B`. Part còn đúng tên và param như blockout cũ: dựng lại chi tiết theo bảng detail pass của `P/model.md`.
+Brief có dòng "Bản đã duyệt trước của bước này" khi blockout vừa làm lại. `P` là thư mục mà dòng đó nêu. Dựng từ part graph mới của `B`. Part còn đúng tên và param như blockout cũ: dựng lại chi tiết theo bảng detail pass của `P/model.md`.
 
 ## `ACCEPTED_FAIL`
 

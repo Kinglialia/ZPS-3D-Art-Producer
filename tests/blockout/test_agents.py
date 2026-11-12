@@ -30,15 +30,23 @@ def test_reviewer_is_read_only():
 
 
 def test_reviewer_carries_the_common_rules():
+    """P29: the brief states the report format, the 8 fields, TOP_FIX, PRIOR words, VERDICT and the reply rule
+    (tests/test_reviewer_rules.py checks the brief); the role file keeps how to judge."""
     _, body = front(REVIEWER)
     for rule in ("Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí.",
-                 "Không tự đo", "EVIDENCE_OPENED", "`PRIOR`", "**mọi** finding đang mở", "`COMPARE`", "`PICK`",
-                 "`structure` đúng một id", "`param` mọi finding", "`need_evidence`", "`superseded`", "`preference`",
-                 "giữa dòng `--- report ---` và dòng `--- end ---`", "Chỉ chấm trong phạm vi bước"):
+                 "Không tự đo",
+                 "EVIDENCE_OPENED",
+                 "`PRIOR`",
+                 "vẫn `open`",
+                 "`superseded`",
+                 "`COMPARE`",
+                 "`TOP_FIX: need_evidence`",
+                 "Chỉ chấm trong phạm vi bước",
+                 "`acceptance` là điều thấy được",
+                 "`PICK`",
+                 "`structure` (thiếu, thừa",
+                 "`param` (đúng part, sai kích thước)"):
         assert rule in body, rule
-    for field in ("region", "viewing_condition", "evidence", "consequence", "confidence", "repair", "preserve",
-                  "acceptance"):
-        assert f"`{field}`" in body, field
 
 
 SKILL = AGENT.parents[1]
@@ -230,10 +238,10 @@ def test_a_finding_id_is_written_fid_and_f_means_only_the_final_folder():
     assert "<F>" not in body + fix and "<Fid>" in fix and "`F` = `V/final/`" in body
 
 
-def test_decision_tags_are_gone_from_the_agent_file_and_its_references_except_the_two_other_tests_pin():
-    """Q11: tests/test_watch.py pins "D33.2" and "(D33.8)" in every step agent file; no other tag stays."""
+def test_decision_tags_are_gone_from_the_agent_file_and_its_references():
+    """Q11, P25: the worker cannot open docs/decisions.md, so a tag in its prompt is noise it may read as a rule."""
     _, body = front(WORKER)
-    assert TAG.findall(body) == ["D33.2", "D33.8"]
+    assert TAG.findall(body) == []
     for name in REFERENCES:
         assert TAG.findall((AGENT / "references" / name).read_text(encoding="utf-8")) == [], name
 
@@ -274,9 +282,10 @@ def test_the_side_of_a_34_concept_comes_from_the_view_side_line_and_the_card_rea
     _, body = front(WORKER)
     step5 = next(l for l in body.splitlines() if l.startswith("5. "))
     step4 = next(l for l in body.splitlines() if l.startswith("4. "))
-    assert "`<VIEW_SIDE>` là giá trị dòng `VIEW_SIDE:` của brief, chép nguyên, không đoán." in step5
+    assert "`<VIEW_SIDE>` là giá trị dòng `VIEW_SIDE:` của brief, chép nguyên, không đoán: nửa ảnh 3/4 có mặt bên của vật." in step5
     assert "--view front=<concept_albedo.png> --view 34=<concept_34.png> --side <VIEW_SIDE>" in step5
-    assert "--view 34=<concept_albedo.png> --side <VIEW_SIDE>" in step5 and "`STATUS: NEEDS_CONTEXT`" in step5
+    # check_card refuses a 3/4 card without view_side at intake, so a branch for a missing VIEW_SIDE line is dead text.
+    assert "--view 34=<concept_albedo.png> --side <VIEW_SIDE>" in step5 and "NEEDS_CONTEXT" not in step5
     assert "--card '<_approved/<id>>/asset-card.yaml'" in step5
     assert "check_proportion=--card '<_approved/<id>>/asset-card.yaml'" in step4
     for tool in ("prep_overlay.py", "check_proportion.py"):

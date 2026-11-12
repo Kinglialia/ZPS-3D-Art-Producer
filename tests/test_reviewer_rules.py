@@ -16,7 +16,7 @@ COUNT = {
     "views": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
              "`regen`, không bao giờ là `note_texture`.",
 }
-KEPT = {"views"}  # K08 (Q10) trimmed the three reviewers below; views is K25's file and still holds its lines
+KEPT = set()  # K08 (Q10) trimmed blockout, clay, texture; P29 trimmed views the same way: the brief states preserve
 STEPS = ["blockout", "clay", "texture", "views"]
 
 
@@ -31,11 +31,12 @@ FALLBACK = "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- rep
 
 @pytest.mark.parametrize("step", STEPS)
 def test_each_step_reviewer_writes_its_report_file_and_replies_two_lines_with_text_only_as_fallback_d27_5(step):
-    """D22.6 stays: a report saved by the Producer passes through its context, so text is the exception."""
+    """D22.6 stays: a report saved by the Producer passes through its context, so text is the exception. Every review
+    brief, the resumed one too, ends with the reply and fallback rule (P29), so the role file keeps only "read only"."""
+    from core import briefs
     body = (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8")
     assert ("- Chỉ đọc. Không sửa file nào ngoài report brief chỉ định. Không chạy lại script." in body.splitlines(),
-            "- Ghi report vào file brief chỉ định. Tin nhắn trả về cho Producer: chỉ dòng `VERDICT`. "
-            + FALLBACK in body.splitlines()) == (True, True)
+            FALLBACK in body, briefs.FALLBACK == FALLBACK) == (True, False, True)
 
 
 def test_the_ab_judge_writes_its_report_file_and_replies_done_with_text_only_as_fallback_d27_5():
@@ -88,7 +89,7 @@ def test_each_step_reviewer_knows_what_a_fix_round_judges_and_when_its_pass_is_f
     assert SCOPE in (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8").splitlines()
 
 
-TRIMMED = ["blockout", "clay", "texture"]
+TRIMMED = ["blockout", "clay", "texture", "views"]
 
 
 def reviewer(step):
@@ -101,7 +102,8 @@ def test_a_reviewer_file_holds_no_line_that_the_brief_states_or_the_script_decid
     the approval, so a rule about approval by delegation only gave the reviewer a second thing to get wrong."""
     text = reviewer(step)
     gone = ["Duyệt theo ủy quyền", "ủy quyền", "Không ghi `COUNTS`", "Vòng sửa: so ảnh cùng góc", "`resolved` chỉ khi ảnh mới chứng minh",
-            "- `preserve` nêu tên", "- Finding có id `F<n>`, giữ id qua các vòng. `FINDINGS` chỉ ghi finding mới"]
+            "- `preserve` nêu tên", "- Finding có id `F<n>`, giữ id qua các vòng.", "Mỗi finding đủ 8 trường",
+            "`preference` (khẩu vị) không chặn PASS", "- `TOP_FIX` chỉ khi FIX", "Tin nhắn trả về cho Producer"]
     assert [g for g in gone if g in text] == []
 
 
@@ -111,11 +113,16 @@ def test_the_brief_that_replaces_those_lines_states_them(flow):  # noqa: F811
     out = flow.work()
     rv = flow.text(json.loads(out.splitlines()[-1]))
     for stated in ("- `preserve`: tên chi tiết", "Không ghi COUNTS", "FINDINGS chỉ ghi finding mới", "PRIOR: thay `?` bằng",
-                   "COMPARE: so ảnh cùng góc", "- Sai số thành phần (cửa, chân bàn, đá) so với concept hoặc `blockout.md`: luôn `structure`"):
+                   "COMPARE: so ảnh cùng góc", "- Sai số thành phần (cửa, chân bàn, đá) so với concept hoặc `blockout.md`: luôn `structure`",
+                   "  region: … | viewing_condition: … | evidence: <nhãn trong EVIDENCE_OPENED> …",
+                   "  consequence: … | confidence: high|medium|low", "  repair: … | preserve: … | acceptance: …",
+                   "preference không chặn PASS", "rubric mâu thuẫn brief → ESCALATE",
+                   "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó",
+                   "structure 1 id mỗi part, region `<part>: …`", "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK):
         assert stated in rv, stated
 
 
-@pytest.mark.parametrize("step", TRIMMED)
+@pytest.mark.parametrize("step", ["blockout", "clay", "texture"])
 def test_a_reviewer_file_has_one_image_rule_that_covers_sheet_pages_and_crops_q10(step):
     rows = [r for r in reviewer(step).splitlines() if r.startswith("- Ảnh: ")]
     assert len(rows) == 1 and "`sheet-2.png`" in rows[0] and "không mở ảnh lẻ trong `final/`" in rows[0]
@@ -124,18 +131,19 @@ def test_a_reviewer_file_has_one_image_rule_that_covers_sheet_pages_and_crops_q1
     assert "xin ảnh <nhãn ô> box x0,y0,x1,y1" in text and "…_crop" in text
 
 
-@pytest.mark.parametrize("step", ["blockout", "clay"])
-def test_the_param_rule_names_the_priorities_the_script_fills_q10(step):
+def test_the_brief_names_the_priorities_the_script_fills_for_a_batch_kind_q10():
     """The script fills every open finding of the kind with a priority in BATCH_PRIO; `preference` and `unclear` are not
-    filled. The old line said every open `param` finding."""
-    from core import findings
-    assert f"`param` mọi finding `param` đang mở mức {', '.join(findings.BATCH_PRIO)}: chỉ ghi loại, script điền id." in reviewer(step)
+    filled. The old line said every open `param` finding; the rule now lives in the brief only (P29)."""
+    from core import briefs, findings
+    import inspect
+    assert findings.BATCH_PRIO == ("blocker", "major", "minor")
+    assert "script điền mọi finding blocker/major/minor đang mở của loại đó" in inspect.getsource(briefs.review_brief)
 
 
 @pytest.mark.parametrize("step", TRIMMED)
-def test_a_reviewer_file_keeps_only_the_decision_tags_a_test_of_the_watch_pins_q10(step):
+def test_a_reviewer_file_carries_no_decision_tag_q10(step):
     import re
-    assert sorted(set(re.findall(r"\bD\d+(?:\.\d+)*\b", reviewer(step)))) == ["D33.2", "D33.8"]
+    assert re.findall(r"\bD\d+(?:\.\d+)*\b", reviewer(step)) == []
 
 
 @pytest.mark.parametrize("step, dead", [

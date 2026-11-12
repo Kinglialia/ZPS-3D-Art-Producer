@@ -19,15 +19,15 @@ JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không 
 - `RUN` in một dòng: `<tool> pass`, `<tool> fail <JSON>` hoặc `<tool> error <log>`. Fail: đọc JSON, không đọc log. Error: đọc log. Log đầy đủ ở `V/work/logs/<tool>.log`.
 - `PY` = `T/.deps/venv/bin/python`, chỉ cho lệnh gen ảnh.
 - `R/views.md`: đọc khi chọn gen lại hay ghi chú một lỗi, khi viết `--hidden` hay `--fix`, và khi viết `VIEWS.md` hoặc `README.md`. Không cần đọc ở các bước khác.
-- `R/fix.md`: đọc khi brief có `TOP_FIX` hoặc xin bằng chứng. Không đọc ở lần dựng đầu.
+- `R/fix.md`: đọc khi brief có dòng `Bản gốc:` (vòng sửa, vòng trả thẳng vì JSON fail, hoặc feedback `H<n>` của người dùng), hoặc khi là brief bằng chứng. Không đọc ở lần dựng đầu.
 - `VIEWS` = các view trong ngoặc ở dòng `VIEWS:` của brief (theo trường `views` của thẻ). Chỉ gen, đo, ghép các view này và front.
 - `F` = `V/final/`: front, các view, guide và báo cáo nằm chung một thư mục. `B` = `final/` của `blockout` trong brief. `C` = thư mục concept trong brief.
 - `CC` = file màu concept: đường dẫn ở dòng `CONCEPT_COLORS:` của brief. Dòng ghi `none`: `CC` = `F/concept_colors.json` (bước 5).
 - Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail.
 - Prompt: `RUN make_prompt.py --view <view> --ref F --concept C --sizes V/work/sizes.json [--hidden "<mô tả mặt khuất>"] [--fix "<một lỗi>"] --out V/work/prompts/<view>-<k>.md`. Không viết prompt bằng tay. `--hidden` bắt buộc cho back, left, right, top và cấm cho front. `--fix` chỉ khi gen lại, lặp được. `k` = 1 cho lần gen đầu, 2 cho lần gen lại.
-- Gen ảnh: `PY "<GEN_IMAGE>" <GEN_ARGS> --image <ảnh chung> --prompt V/work/prompts/<view>-<k>.md --image <ảnh riêng của view> --out V/work/gen/<view>-<k>.png --size <size của view trong V/work/sizes.json>`, với `GEN_IMAGE`, `GEN_ARGS` là hai dòng của brief. Mỗi lần gọi tốn lượt Codex. Ảnh đạt thì chép sang `F/<view>.png`.
+- Gen ảnh: `PY "<GEN_IMAGE>" <GEN_ARGS> --image <ảnh chung> --prompt V/work/prompts/<view>-<k>.md --image <ảnh riêng của view> --out V/work/gen/<view>-<k>.png --size <size của view trong V/work/sizes.json>`, với `GEN_IMAGE`, `GEN_ARGS` là hai dòng của brief. Mỗi lần gọi tốn lượt Codex. Ảnh gen xong: chép `V/work/gen/<view>-<k>.png` sang `F/<view>.png` ngay, rồi mới đo. `measure.py` chỉ đọc ảnh trong `F`.
 - Một lệnh gen cho mọi view còn lại: lặp cụm `--prompt … --image <ảnh riêng> --out … --size …` cho từng view. `--image` và `--size` đứng trước `--prompt` đầu tiên dùng cho mọi view. Đứng sau một `--prompt` thì chỉ dùng cho view đó. Tool chạy các view song song theo số slot `codex_image` còn trống. Gen lại cũng vậy: một lệnh cho mọi view fail.
-- `gen_image_codex.py` thoát 1 khi lỗi kỹ thuật 3 lần, khi lỗi policy 2 lần, hoặc ngay sau lỗi quota hay rate limit: dừng, `STATUS: BLOCKED`, chép dòng lỗi vào `ISSUES`. Không vẽ bằng cách khác. Lỗi quota cũng dừng các view chưa bắt đầu.
+- `gen_image_codex.py` thoát 1 khi lỗi kỹ thuật 3 lần, khi lỗi policy 2 lần, hoặc ngay sau lỗi quota hay rate limit: dừng, `STATUS: BLOCKED`, chép dòng lỗi vào `ISSUES`. Không vẽ bằng cách khác. Lỗi quota cũng dừng các view chưa bắt đầu. Lệnh gen bị dừng bằng SIGTERM hay Ctrl-C thì dừng mọi lần gọi codex và thoát 143 hay 130.
 - Không tự thêm `--approve-for-me` (flag này tự duyệt mọi yêu cầu quyền). Codex bị chặn vì xin quyền: `STATUS: BLOCKED`, chép lỗi vào `ISSUES`. Người dùng quyết định chạy lại với `--approve-for-me "<lý do>"`; ledger ghi lý do.
 
 ## Quy trình
@@ -37,10 +37,10 @@ JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không 
 3. `RUN pick_bg.py --final F --concept C/concept_albedo.png --profile <profile của brief>`. Fail: màu nền của profile quá gần màu concept. `STATUS: BLOCKED`, chép lỗi vào `ISSUES`.
 4. `RUN pick_size.py --guides F/guides --out V/work/sizes.json`.
 5. Dòng `CONCEPT_COLORS:` ghi `none`: mở concept albedo. Mỗi vật liệu có trên `F/guides/front_id.png`: một ô pixel nằm trọn trong vùng vật liệu đó, xa viền và vệt sáng. `RUN concept_colors.py --final F --concept C/concept_albedo.png --box <MÃ>=x0,y0,x1,y1 ...`. Fail: ô có hai vật liệu hoặc thiếu mã. Chọn lại ô. Dòng có đường dẫn: bỏ bước này.
-6. `RUN make_prompt.py --view front …` rồi gen `front-1.png`: ảnh 1 `C/concept_albedo.png`, ảnh 2 `F/guides/front_guide.png`.
+6. `RUN make_prompt.py --view front …`, gen `front-1.png` (ảnh 1 `C/concept_albedo.png`, ảnh 2 `F/guides/front_guide.png`), rồi chép sang `F/front.png`.
 7. Đo front một mình: `RUN measure.py --final F --guides F/guides --views front --concept-colors CC`. Fail: gen lại một lần với đúng lỗi (`make_prompt.py … --fix "<lỗi>" --out V/work/prompts/front-2.md`, gen `front-2.png`, chép sang `F/front.png`), rồi đo lại với `--pick-best V/work/gen`. Lỗi `views.<view>`: đọc `F/report/report.md` mục 4. Lỗi `border.<view>`: `--fix "leave a margin of background on all four sides"`. Lỗi `components.<view>`: `--fix` nêu số khối rời của guide.
 8. Còn fail sau `--pick-best` và `measure.json` có trong `ACCEPTED_FAIL` của brief: dán `data.accepted_fail` vào report và `data.ngoai_le` vào mục `## NGOẠI LỆ` của `F/README.md`, đúng nguyên văn. Chỉ sang bước 9 khi front pass, hoặc sau lần gen lại và `--pick-best` này.
-9. Viết `--hidden` của từng view trong `VIEWS`, chạy `RUN make_prompt.py` cho từng view, rồi gen mọi view trong một lệnh: ảnh chung 1 `C/concept_albedo.png`, ảnh chung 2 `F/front.png`, ảnh riêng `F/guides/<view>_guide.png`. `VIEWS` có left, right và thẻ có `symmetric.left_right: true`: chỉ gen left, rồi `RUN views_sheet.py flip --src F/left.png --out F/right.png`.
+9. Viết `--hidden` của từng view trong `VIEWS`, chạy `RUN make_prompt.py` cho từng view, rồi gen mọi view trong một lệnh: ảnh chung 1 `C/concept_albedo.png`, ảnh chung 2 `F/front.png`, ảnh riêng `F/guides/<view>_guide.png`. `VIEWS` có left, right và thẻ có `symmetric.left_right: true`: chỉ gen left, rồi `RUN views_sheet.py flip --src F/left.png --out F/right.png`. Chép từng `<view>-1.png` sang `F/<view>.png` trước khi lật hay đo.
 10. Đo cả bộ theo front: `RUN measure.py --final F --guides F/guides --views front,<VIEWS> --front --concept-colors CC`. Cùng điều kiện đối xứng như bước 9: thêm `--mirror-right`, để `right` luôn là `left` lật. View fail: gen lại một lần như bước 7, một lệnh gen cho mọi view fail, rồi đo lại với `--pick-best V/work/gen`. Còn fail: làm như bước 8. Front đã khai ở bước 8 và một view khác cùng fail: một mục `ACCEPTED_FAIL` cho `measure.json`, nối hai lý do bằng ` / `. Front không bao giờ nằm trong danh sách gen lại ở bước này.
 11. `RUN views_sheet.py make --final F --concept C/concept_albedo.png --card C/asset-card.yaml [--kept <view,...>]`.
 12. Viết `F/README.md` (`R/views.md` mục 5) và `F/report/VIEWS.md` (mục 4).
@@ -56,8 +56,8 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P` = thư m�
 
 ## Quy tắc
 
-- Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2).
-- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
+- Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings).
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc.
 - Thiếu file brief chỉ định (`check_inputs` fail): `STATUS: NEEDS_CONTEXT`.
 - Front đổi (gen mới, gen lại, không chép từ `P`): gen lại mọi view của `VIEWS`, vì front là chuẩn màu của cả bộ.
 - Nguồn mâu thuẫn (thẻ với `blockout.md`): theo `blockout.md`, ghi cả hai vào `VIEWS.md`.

@@ -53,7 +53,7 @@ Quy tắc dựng: bevel 1–2 segment; tránh hai mặt trùng phẳng khi một
 
 ## `sources.json`
 
-`init_sources.py` điền phần tính được; phần còn lại là `TODO` để bạn điền, và `check_inputs.py` từ chối `TODO`. Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material_sha256}`, `layout.{w, d, h, includes_base, source}`, `door_h`, `door_h_source`, `character_h`, `materials` (danh sách mã), `camera` (`null` hoặc `{azimuth_deg, elevation_deg, fov_v_deg}`).
+`init_sources.py` điền phần tính được; phần còn lại là `TODO` để bạn điền, và `check_inputs.py` từ chối `TODO`. Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material_sha256}`, `layout.{w, d, h, includes_base, source}`, `door_h`, `door_h_source`, `character_h`, `materials` (danh sách mã), `camera` (`null` hoặc `{azimuth_deg, elevation_deg, fov_v_deg}`), và `marks` khi thẻ có `marks`: `{tên mốc: "<part>.top" | "<part>.bottom"}`.
 
 ```json
 {"files": {"layout": "<path>", "layout_sha256": "...", "material": "<path>", "material_sha256": "..."},

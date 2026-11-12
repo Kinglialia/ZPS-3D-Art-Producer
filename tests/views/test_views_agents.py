@@ -25,16 +25,23 @@ def test_agent_is_named_by_step_and_guarded_against_direct_calls(path, name):
 
 
 def test_reviewer_is_read_only_and_carries_the_common_rules():
+    """P29: the brief states the report format, the 8 fields, TOP_FIX, PRIOR words, VERDICT and the reply rule
+    (tests/test_reviewer_rules.py checks the brief); the role file keeps how to judge."""
     meta, body = front(REVIEWER)
     assert meta["tools"] == "Read, Glob, Grep, Write"
     for rule in ("Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí.",
-                 "Không tự đo", "EVIDENCE_OPENED", "`PRIOR`", "**mọi** finding đang mở", "`COMPARE`",
-                 "`regen` liệt kê mọi finding `regen` đang mở (kiểu lô)", "`need_evidence`",
-                 "`superseded`", "`preference`", "giữa dòng `--- report ---` và dòng `--- end ---`", "Chỉ chấm trong phạm vi bước"):
+                 "Không tự đo",
+                 "EVIDENCE_OPENED",
+                 "`PRIOR`",
+                 "vẫn `open`",
+                 "`superseded`",
+                 "`COMPARE`",
+                 "`TOP_FIX: need_evidence`",
+                 "Chỉ chấm trong phạm vi bước",
+                 "`acceptance` là điều thấy được",
+                 "`regen` (lỗi phải gen lại",
+                 "`region` mở đầu bằng tên view"):
         assert rule in body, rule
-    for field in ("region", "viewing_condition", "evidence", "consequence", "confidence", "repair", "preserve",
-                  "acceptance"):
-        assert f"`{field}`" in body, field
 
 
 def test_reviewer_writes_acceptance_a_regen_can_reach_not_a_bbox_normalised_number():
@@ -151,10 +158,10 @@ def test_the_worker_and_the_reference_name_no_building_part_so_their_examples_fi
         assert [w for w in ("roof", "fascia", "plinth", "mái", "tường", "dầm") if w in text] == [], path.name
 
 
-def test_the_worker_and_the_references_carry_no_decision_tag_except_the_two_that_test_watch_pins():
+def test_the_worker_and_the_references_carry_no_decision_tag():
     _, body = front(WORKER)
     tags = lambda t: re.findall(r"\bD\d{2}(?:\.\d+)?\b", t)
-    assert tags(body) == ["D33.2", "D33.8"]
+    assert tags(body) == []
     for ref in ("views.md", "fix.md"):
         assert tags((AGENT / "references" / ref).read_text(encoding="utf-8")) == [], ref
 
@@ -176,6 +183,8 @@ def test_the_worker_measures_the_front_alone_before_it_generates_a_side_and_meas
 def test_the_fix_round_lives_in_a_reference_read_only_in_a_fix_round_and_a_new_front_remakes_every_side():
     _, body = front(WORKER)
     fix = (AGENT / "references/fix.md").read_text(encoding="utf-8")
-    assert "`R/fix.md`: đọc khi brief có `TOP_FIX` hoặc xin bằng chứng. Không đọc ở lần dựng đầu." in body
+    # Every fix-type brief has the "Bản gốc:" line; TOP_FIX is absent in a direct round and a redo with only H findings.
+    assert ("`R/fix.md`: đọc khi brief có dòng `Bản gốc:` (vòng sửa, vòng trả thẳng vì JSON fail, hoặc feedback `H<n>` "
+            "của người dùng), hoặc khi là brief bằng chứng. Không đọc ở lần dựng đầu.") in body
     assert "## Vòng sửa" not in body and "gen lại mọi view của `VIEWS` ở bước 9, kể cả view không có finding" in fix
     assert "Front đổi (gen mới, gen lại, không chép từ `P`): gen lại mọi view của `VIEWS`" in body

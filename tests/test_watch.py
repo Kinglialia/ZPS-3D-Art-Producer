@@ -19,12 +19,14 @@ def test_no_role_file_tool_or_brief_template_ever_asks_for_a_background_command_
 
 
 def test_every_worker_and_reviewer_role_file_forbids_background_commands_and_writes_its_report_last_d33_2_d33_8():
-    """The report file is the done signal (D33.8): written last, so a report on disk means the agent finished."""
+    """The report file is the done signal (D33.8): written last, so a report on disk means the agent finished. The rule
+    says so in its own words: the agent cannot resolve a decision tag."""
     assert len(ROLES) == 9
     for f in ROLES:
         text = f.read_text(encoding="utf-8")
-        assert "Không chạy lệnh nền" in text and "D33.2" in text, f.name
-        assert "Ghi `<report>` là việc cuối cùng trước khi trả kết quả" in text and "(D33.8)" in text, f.name
+        assert "Không chạy lệnh nền" in text and "không chờ thông báo" in text.lower(), f.name
+        assert ("Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc." in text
+                and "D33" not in text), f.name
 
 
 def test_every_agent_file_caps_its_turns_so_a_looping_agent_stops_instead_of_running_on_d33_6():

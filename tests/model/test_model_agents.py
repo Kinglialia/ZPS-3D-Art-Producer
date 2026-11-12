@@ -37,16 +37,25 @@ def test_pipeline_names_the_agents_whose_files_exist():
 
 
 def test_reviewer_is_read_only_and_carries_the_common_rules():
+    """P29: the brief states the report format, the 8 fields, TOP_FIX, PRIOR words, VERDICT and the reply rule
+    (tests/test_reviewer_rules.py checks the brief); the role file keeps how to judge."""
     meta, body = front(REVIEWER)
     assert meta["tools"] == "Read, Glob, Grep, Write"
     for rule in ("Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí.",
-                 "Không tự đo", "EVIDENCE_OPENED", "`PRIOR`", "**mọi** finding đang mở", "kể cả `H<n>`", "`COMPARE`",
-                 "`PICK`", "`structure` đúng một id", "`param` mọi finding `param` đang mở", "`need_evidence`",
-                 "`superseded`", "`preference`", "giữa dòng `--- report ---` và dòng `--- end ---`", "Chỉ chấm trong phạm vi bước"):
+                 "Không tự đo",
+                 "EVIDENCE_OPENED",
+                 "`PRIOR`",
+                 "vẫn `open`",
+                 "`superseded`",
+                 "`COMPARE`",
+                 "`TOP_FIX: need_evidence`",
+                 "Chỉ chấm trong phạm vi bước",
+                 "`acceptance` là điều thấy được",
+                 "`PICK`",
+                 "chấm `H<n>` trước",
+                 "`structure` (thiếu, thừa",
+                 "`param` (đúng part, sai kích thước)"):
         assert rule in body, rule
-    for field in ("region", "viewing_condition", "evidence", "consequence", "confidence", "repair", "preserve",
-                  "acceptance"):
-        assert f"`{field}`" in body, field
 
 
 def test_reviewer_writes_acceptance_a_fix_can_reach_not_a_bbox_normalised_number():
@@ -82,7 +91,6 @@ BLENDER_TOOLS = ("build_model.py", "qa_all.py", "render_all.py")
 QUOTED = re.compile(r'"[^"]*"')
 CHECK_ARGS = re.compile(r'--check-args "(\w+)=([^"]*)"')
 DECISION_TAG = re.compile(r"\bD\d+(?:\.\d+)?\b")
-PINNED_TAGS = {"D33.2", "D33.8"}
 
 
 def calls(body):
@@ -200,7 +208,7 @@ def test_the_hard_gate_list_in_the_agent_file_has_every_name_of_the_code_list_co
 
 def test_no_decision_tag_stays_in_the_agent_text_except_the_two_the_foreground_rule_test_pins():
     _, body = front(WORKER)
-    assert set(DECISION_TAG.findall(body)) == PINNED_TAGS
+    assert DECISION_TAG.findall(body) == []
     for name in ("model.md", "fix.md"):
         assert DECISION_TAG.findall((AGENT / "references" / name).read_text(encoding="utf-8")) == [], name
 

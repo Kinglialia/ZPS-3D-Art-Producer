@@ -24,7 +24,7 @@ Không viết prompt bằng tay. `RUN make_prompt.py` điền mẫu của kit t�
 |---|---|---|
 | Sai hình: silhouette, mốc chiều cao, thiếu hoặc dính props | Gen lại | — |
 | Sai màu cả mặt, có bóng đổ, có ánh sáng một hướng | Gen lại | — |
-| Vật chạm mép ảnh (`border`), số khối rời khác guide (`components`) | Gen lại | — |
+| Vật chạm mép ảnh (`border`, từ 0,5 % chu vi trở lên), số khối rời khác guide (`components`) | Gen lại | — |
 | Sai màu một vùng nhỏ (ví dụ đầu tay nắm thành màu thân) | Không gen lại | TEXTURE NOTE |
 | Vị trí chi tiết lệch nhỏ (ví dụ dải ngang mỏng lệch 3–4%) | Không gen lại | NGOẠI LỆ, kèm con số |
 | Motif hai màu, đèn | Reviewer kiểm bằng mắt | — |

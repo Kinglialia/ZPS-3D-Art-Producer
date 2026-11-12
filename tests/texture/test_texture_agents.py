@@ -37,18 +37,25 @@ def test_pipeline_enables_texture_and_assemble_with_agents_and_a_script_that_exi
 
 
 def test_reviewer_is_read_only_and_carries_the_common_rules():
+    """P29: the brief states the report format, the 8 fields, TOP_FIX, PRIOR words, VERDICT and the reply rule
+    (tests/test_reviewer_rules.py checks the brief); the role file keeps how to judge."""
     meta, body = front(REVIEWER)
     assert meta["tools"] == "Read, Glob, Grep, Write"
     for rule in ("Bạn có xu hướng duyệt dễ. Ảnh sạch với chỉ số cao vẫn có thể sai khối hoặc sai style; kiểm từng tiêu chí.",
-                 "Không tự đo", "EVIDENCE_OPENED", "`PRIOR`", "**mọi** finding đang mở", "kể cả `H<n>`", "`COMPARE`",
-                 "`repaint` mọi finding `repaint` đang mở", "`need_evidence`", "`superseded`", "`preference`",
-                 "giữa dòng `--- report ---` và dòng `--- end ---`", "Chỉ chấm trong phạm vi bước",
-                 "Không dùng % hay IoU chuẩn hóa theo bbox làm ngưỡng",
-                 "Cùng mức: `fix_uv_mesh` trước `meshy_regen` trước `repaint`"):
+                 "Không tự đo",
+                 "EVIDENCE_OPENED",
+                 "`PRIOR`",
+                 "vẫn `open`",
+                 "`superseded`",
+                 "`COMPARE`",
+                 "`TOP_FIX: need_evidence`",
+                 "Chỉ chấm trong phạm vi bước",
+                 "`acceptance` là điều thấy được",
+                 "chấm `H<n>` trước",
+                 "`fix_uv_mesh` khi lỗi do UV, mesh, normal",
+                 "`meshy_regen` khi lớp Meshy hỏng",
+                 "Không dùng % hay IoU chuẩn hóa theo bbox làm ngưỡng"):
         assert rule in body, rule
-    for field in ("region", "viewing_condition", "evidence", "consequence", "confidence", "repair", "preserve",
-                  "acceptance"):
-        assert f"`{field}`" in body, field
 
 
 def test_reviewer_diagnoses_colour_space_and_padding_before_asking_for_a_repaint():
@@ -118,8 +125,8 @@ def test_every_tool_command_is_a_run_line_so_the_exit_code_and_the_log_come_from
 def test_a_fix_round_is_prepared_by_p_brief_so_the_fix_text_has_no_copy_list_and_the_toml_has_it_l14():
     """One wrong copy by hand left a stale measure or render in the new version: the list moved to pipeline.toml."""
     fix = FIX.read_text(encoding="utf-8")
-    assert "Brief có `P` và `TOP_FIX`: làm theo `R/fix.md`" in front(WORKER)[1]
-    assert "`F` đã có bản chép của `P/final/`" in fix and "Không chép tay." in fix
+    assert "Brief có dòng `Bản gốc:`: làm theo `R/fix.md` thay cho bước 1–4." in front(WORKER)[1]
+    assert "`F` đã có bản chép của `<bản gốc>/final/`" in fix and "Không chép tay." in fix
     assert not re.search(r"Chép `P/final/`|review/lit_|review/renders\.json|tex_measure\.json", fix)
     step = {s["id"]: s for s in tomllib.loads((SKILL / "templates/pipeline.toml").read_text(encoding="utf-8"))["steps"]}
     assert step["texture"]["fix_copy_exclude"] == [
@@ -184,9 +191,9 @@ def test_each_reference_says_when_to_read_it_and_the_fix_round_text_lives_only_i
     assert "`repaint`:" not in body and "`meshy_regen`:" not in body
 
 
-def test_the_worker_and_the_references_carry_no_decision_tag_except_the_two_that_test_watch_pins_q11():
+def test_the_worker_and_the_references_carry_no_decision_tag_q11():
     tags = lambda s: re.findall(r"\bD\d{2}(?:\.\d+)?\b", s)
-    assert tags(front(WORKER)[1]) == ["D33.2", "D33.8"]
+    assert tags(front(WORKER)[1]) == []
     assert tags(REF.read_text(encoding="utf-8")) == tags(FIX.read_text(encoding="utf-8")) == []
 
 

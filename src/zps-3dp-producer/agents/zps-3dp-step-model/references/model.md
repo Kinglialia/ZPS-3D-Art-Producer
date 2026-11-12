@@ -12,7 +12,7 @@ Lớp 1, quy tắc chung:
 2. Quy đổi ra pixel bằng `spec.model.px_per_m` (= `target_px_height` / chiều cao bbox trên màn hình ở camera game, cùng tỉ lệ với `thumb.png`). Nhô hoặc lõm ≥ `relief_min_px` px (mặc định 3): dựng hình học. Viền mỏng hoặc chi tiết cần alpha: độ rộng × texel (px/m) < `alpha_min_px` px (mặc định 16): dựng hình học, không dùng alpha.
 3. Mặt phẳng giữ tối thiểu. Chỉ thêm cạnh khi cạnh đó tạo silhouette, tạo bevel, hoặc cần cho UV.
 4. Chi tiết nhận diện nhỏ hơn ngưỡng: phóng to độ sâu, không bỏ chi tiết. Không đổi param trong `fixed_params`.
-5. Vật tròn: đủ segment để viền không gãy ở camera game. `join_mesh.py` đặt smooth shading. Part tròn chỉ tách cạnh > 60°: `cylinder`, `bevel_box`, part `custom` có `"round": true`. Part khác tách cạnh > 20°. Hàm `custom` của asset dựng vật tròn: ghi `"round": true` vào part đó. Mặt phẳng lớn cạnh bevel vẫn phẳng: `join_mesh.py` cho mặt lớn giữ pháp tuyến của nó, chỉ dải bevel chuyển sáng. Không thêm vòng cạnh để chống vệt sáng trên mặt phẳng.
+5. Vật tròn: đủ segment để viền không gãy ở camera game. `join_mesh.py` đặt smooth shading. Part tròn chỉ tách cạnh > 60°: `cylinder`, `bevel_box`, part `custom` có `"round": true`. Part khác tách cạnh > 20°. Hàm `custom` của asset dựng vật tròn: ghi `"round": true` vào part đó. Mặt phẳng lớn cạnh bevel vẫn phẳng: `join_mesh.py` cho mặt lớn giữ pháp tuyến của nó, chỉ dải bevel chuyển sáng. Luật này chỉ áp chỗ một mặt phẳng lớn ít nhất 4 lần các mặt kề; đá, tán cây, khối cầu nhận pháp tuyến smooth thường. Không thêm vòng cạnh để chống vệt sáng trên mặt phẳng.
 6. Vật phát sáng hoặc chuyển động (lửa, khói, nước): card unlit.
 7. Ghi chú real/texture_only của thẻ (`real_texture_only_notes`) thắng các quy tắc trên.
 8. Bevel chỉ khi `spec.model.bevel` khác `false`. Dùng đúng `radius_m` và `segments` của `spec.model.bevel`. Không áp ngưỡng pixel của quy tắc 2 cho bevel: bevel toon là style, bán kính của nó thường dưới 3 px. `make_spec.py` lấy kiểu bevel từ trường `bevel` của thẻ, không có thì `style.bevel` của profile; số lấy từ preset. Ghi chú chữ của thẻ không bật bevel.
@@ -66,8 +66,8 @@ Mọi JSON cùng dạng kit: `overall`, `checks[]` (`check`, `status`, `value`, 
 | `F/spec.json`, `F/concept/` | `make_spec.py`; `sun`, `concept_cam` do worker thêm |
 | `F/assembly.json`, `F/parts/`, `F/assembled.glb`, `F/parts_lib.py` | `gate_all.py` (gọi `build_parts.py` của blockout) |
 | `F/review/gates/<part>.json` | `gate_all.py` (gọi `self_build/gates.py`) |
-| `F/<id>.blend`, `F/review/join.json` | `build_model.py` (`join_mesh.py`) |
-| `F/<id>-untextured.glb`, `F/review/unwrap.json` | `build_model.py` (`unwrap.py`) |
+| `F/<id>.blend`, `F/review/join.json` (ghi `code_hash`) | `build_model.py` (`join_mesh.py`) |
+| `F/<id>-untextured.glb`, `F/review/unwrap.json` (ghi `code_hash`) | `build_model.py` (`unwrap.py`) |
 | `F/review/checks/{detail,mesh,uv_edge}.json` | `gate_all.py` sau khi gộp (`check_*.py`) |
 | `F/review/checks/{detail_build,mesh_build}.json` | `gate_all.py` trước khi gộp (`check_detail.py`, `check_mesh.py` với `--before-join`) |
 | `F/review/checks/inputs.json` | `check_inputs.py` |
