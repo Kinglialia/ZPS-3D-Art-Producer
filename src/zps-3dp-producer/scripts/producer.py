@@ -246,6 +246,7 @@ def main(argv: list[str] | None = None):
     x.add_argument("--every", type=float, default=30, help="giây giữa hai lần đọc đĩa")
     x.add_argument("--max-min", type=float, default=50, help="tối đa bao nhiêu phút rồi thoát")
     sub.add_parser("on-stop", help="hook SubagentStop: JSON trên stdin → ghi trạng thái lần giao xuống đĩa (D33.9)")
+    sub.add_parser("on-main-stop", help="hook Stop của phiên chính: exit 2 + một dòng stderr khi còn report chưa ingest (D39.1)")
     x = sub.add_parser("feedback", help="ghi feedback / quyết định của người dùng")
     x.add_argument("id"); x.add_argument("text"); x.add_argument("--action", default="note", choices=["approve", "redo", "note"])
     x.add_argument("--step", help="bước áp dụng (mặc định: bước hiện tại)")
@@ -307,6 +308,9 @@ def main(argv: list[str] | None = None):
         with contextlib.suppress(Exception), locked():
             cmd_on_stop(a)
         return
+    if a.cmd == "on-main-stop":  # a hook that only reads: no lock, no root check, any failure allows the stop
+        from core.watch import cmd_on_main_stop
+        sys.exit(cmd_on_main_stop(a))
     if a.cmd not in ("init", "preflight", "ab", "compare"):  # preflight may run before init; ab/compare run above both A/B roots
         require_root()
     try:

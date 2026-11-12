@@ -274,3 +274,87 @@ def cmd_on_stop(_a):
         msg = f"on-stop lỗi: {ex}"
     if msg:
         print(msg)
+
+
+SENDERS = ("Agent", "Task", "SendMessage")
+
+
+def sent_to_agent(paths: list[str], rec: dict) -> bool:
+    """D39.1: a main-session transcript holds an Agent, Task or SendMessage call that names the brief of this dispatch,
+    made at or after it. `P brief` records a dispatch when it prints the line, so only the call shows it was sent. A
+    transcript that cannot be read, or none known, counts as sent: an unknown must never refuse a stop."""
+    from . import session
+    if not paths:
+        return True
+    since, brief = at(rec["at"]), rec["brief"]
+    quoted = json.dumps(brief, ensure_ascii=False)[1:-1]
+    for p in paths:
+        try:
+            lines = open(p, encoding="utf-8", errors="replace").read().splitlines()
+        except OSError:
+            return True
+        for line in lines:
+            if brief not in line and quoted not in line:
+                continue
+            try:
+                d = json.loads(line)
+                when = session.local(d["timestamp"])
+                blocks = d["message"]["content"]
+            except (ValueError, KeyError, TypeError, AttributeError):
+                continue
+            if d.get("type") != "assistant" or when < since or not isinstance(blocks, list):
+                continue
+            if any(isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in SENDERS
+                   and brief in json.dumps(b.get("input"), ensure_ascii=False) for b in blocks):
+                return True
+    return False
+
+
+def main_stop_reason(sts: list[dict], exists, sent) -> str | None:
+    """D39.1: why the main session may not stop now, as one line that names the command to run, else None.
+    (a) an open dispatch whose report is on disk and not ingested; (b) an open dispatch with no sign of a subagent, so
+    the line `P brief` printed was never sent. A subagent that runs without a report is waited for (background mode),
+    and an asset that waits for the human has no open dispatch."""
+    open_jobs = [(st, rec) for st in sts if not st.get("broken") and (rec := job(st))]
+    for st, rec in open_jobs:
+        rep = report_of(rec)
+        if rep is not None and exists(rep):
+            return f"Còn report chưa ingest: chạy `P ingest {st['id']} --agent-id {rec.get('agent_id') or '<id subagent>'}`"
+    for st, rec in open_jobs:
+        if not (rec.get("stopped") or rec.get("agent_id") or sent(st, rec)):
+            return (f"Còn dòng giao việc của {st['id']} chưa giao: giao theo dòng JSON của `P brief {st['id']}` "
+                    "(chạy lại lệnh này nếu mất dòng)")
+    return None
+
+
+def on_main_stop(text: str) -> str | None:
+    """D39.1: hook Stop of the main session → `P on-main-stop`. Reads the disk only and prints nothing when the stop is
+    allowed. Allowed too: the turn already goes on because this hook refused (`stop_hook_active`, else a loop), and a
+    project with no production folder."""
+    from . import session
+    try:
+        hook = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(hook, dict) or hook.get("stop_hook_active") or not ROOT.is_dir():
+        return None
+    paths = [p for p in [hook.get("transcript_path"), *((session.load() or {}).get("transcripts") or [])]
+             if isinstance(p, str) and p]
+
+    def sent(st: dict, rec: dict) -> bool:
+        beat = heartbeat.last(vdir(st["id"], rec["step"], rec["v"]))
+        return bool(beat and beat[0] >= at(rec["at"])) or sent_to_agent(paths, rec)
+    return main_stop_reason(all_status(), Path.exists, sent)
+
+
+def cmd_on_main_stop(_a) -> int:
+    """Exit 2 and one line on stderr refuse the stop (Claude Code 2.1.318 feeds stderr to the model and goes on); every
+    other outcome, a failure of this hook too, exits 0 and allows it."""
+    try:
+        why = on_main_stop(sys.stdin.read() if sys.stdin and not sys.stdin.isatty() else "")
+    except Exception:  # noqa: BLE001 — a hook that fails must allow the stop
+        return 0
+    if why:
+        print(why, file=sys.stderr)
+        return 2
+    return 0

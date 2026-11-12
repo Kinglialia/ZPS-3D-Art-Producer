@@ -296,3 +296,132 @@ def test_a_report_that_failed_the_contract_is_not_a_finished_job_for_wait_or_the
     assert "· OK" in f.p("next") and "KẸT" not in f.p("next")
     (tmp_path / out["report"]).write_text("STATUS: DONE\nPROFILE_HASH: x\n", encoding="utf-8")
     assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
+
+
+# ---- D39.1: the Stop hook of the main session (`P on-main-stop`) ----
+
+BRIEF = "production/assets/a1/blockout/v1/brief-worker.md"
+REPORT = "production/assets/a1/blockout/v1/worker-out.md"
+
+
+def asset(state="running", **rec):
+    """A status with one open worker dispatch; `rec` overrides or adds keys of that dispatch."""
+    return {"id": "a1", "stage": "blockout", "state": state, "versions": {"blockout": 1},
+            "dispatches": [{"step": "blockout", "v": 1, "role": "worker", "at": "2026-11-12 09:00:00", "brief": BRIEF} | rec]}
+
+
+def stop_reason(sts, on_disk=(), sent=False):
+    from core import watch
+    return watch.main_stop_reason(sts, lambda p: str(p) in on_disk, lambda st, rec: sent)
+
+
+def test_a_report_on_disk_for_an_open_dispatch_refuses_the_stop_and_names_the_ingest_command_d39_1():
+    """Run 5 lost 4 hours because the Producer ended its turn with a finished report on disk."""
+    assert stop_reason([asset()], {REPORT}) == "Còn report chưa ingest: chạy `P ingest a1 --agent-id <id subagent>`"
+    assert stop_reason([asset(agent_id="ag7")], {REPORT}) == "Còn report chưa ingest: chạy `P ingest a1 --agent-id ag7`"
+    review = asset("reviewing", role="reviewer", brief="production/assets/a1/blockout/v1/brief-review.md")
+    assert stop_reason([review], {"production/assets/a1/blockout/v1/review-out.md"}) == (
+        "Còn report chưa ingest: chạy `P ingest a1 --agent-id <id subagent>`")
+
+
+def test_a_report_that_was_already_ingested_never_refuses_or_the_producer_could_not_stop_after_the_last_step_d39_1():
+    assert stop_reason([asset(ingested="2026-11-12 09:30:00")], {REPORT}) is None
+
+
+def test_the_stop_is_never_refused_while_the_asset_waits_for_the_human_or_the_report_is_not_there_d39_1():
+    assert stop_reason([asset("waiting_human")], {REPORT}) is None
+    assert stop_reason([asset("blocked")], {REPORT}) is None
+    assert stop_reason([asset()], set(), sent=True) is None
+
+
+def test_a_dispatch_line_nobody_sent_refuses_the_stop_but_a_background_subagent_may_run_on_d39_1():
+    """Printed is not sent: `P brief` records the dispatch when it prints the line. Only a dispatch with no sign of a
+    subagent refuses; a subagent that runs (a call in the transcript, a heartbeat, a recorded id or stop) is waited for."""
+    line = "Còn dòng giao việc của a1 chưa giao: giao theo dòng JSON của `P brief a1` (chạy lại lệnh này nếu mất dòng)"
+    assert stop_reason([asset()], set(), sent=False) == line
+    assert stop_reason([asset("reviewing", role="reviewer")], set(), sent=False) == line
+    assert stop_reason([asset(agent_id="ag7")], set()) is None
+    assert stop_reason([asset(stopped="no_report")], set()) is None
+    assert stop_reason([asset()], set(), sent=True) is None
+
+
+def test_a_waiting_asset_does_not_hide_a_report_of_another_asset_and_a_report_wins_over_an_unsent_line_d39_1():
+    other = asset() | {"id": "a2"}
+    other["dispatches"][0]["brief"] = "production/assets/a2/blockout/v1/brief-worker.md"
+    assert stop_reason([asset("waiting_human"), other], {"production/assets/a2/blockout/v1/worker-out.md"}) == (
+        "Còn report chưa ingest: chạy `P ingest a2 --agent-id <id subagent>`")
+    assert stop_reason([asset(), other], {"production/assets/a2/blockout/v1/worker-out.md"}).startswith(
+        "Còn report chưa ingest: chạy `P ingest a2")
+
+
+def call(name, key, text, at="2026-11-12T02:30:00.000Z", **block):
+    import json as _j
+    return _j.dumps({"type": "assistant", "timestamp": at, "message": {"content": [
+        {"type": "tool_use", "name": name, "input": {key: text}} | block]}}) + "\n"
+
+
+def test_a_dispatch_counts_as_sent_only_by_an_agent_or_sendmessage_call_after_it_that_names_the_brief_d39_1(tmp_path):
+    from core import watch
+    import datetime as dt
+    rec = {"at": "2026-11-12 09:00:00", "brief": BRIEF}
+    stamp_utc = dt.datetime.fromisoformat(rec["at"]).astimezone(dt.timezone.utc)
+
+    def at(minutes):
+        return (stamp_utc + dt.timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    def sent(*lines):
+        tr = tmp_path / "main.jsonl"
+        tr.write_text("".join(lines), encoding="utf-8")
+        return watch.sent_to_agent([str(tr)], rec)
+    assert sent(call("Agent", "prompt", f"Đọc `{BRIEF}` trước tiên.", at(1))) is True
+    assert sent(call("SendMessage", "message", f"Vòng sửa mới. Đọc lại `{BRIEF}` rồi làm.", at(1))) is True
+    assert sent(call("Agent", "prompt", f"Đọc `{BRIEF}` trước tiên.", at(-5))) is False, "a call before this dispatch"
+    assert sent(call("Agent", "prompt", "Đọc `production/assets/a2/blockout/v1/brief-worker.md`.", at(1))) is False
+    assert sent(call("Bash", "command", f"cat {BRIEF}", at(1))) is False, "only a subagent call is a dispatch"
+    assert sent("") is False
+    assert watch.sent_to_agent([str(tmp_path / "gone.jsonl")], rec) is True, "an unreadable transcript never refuses"
+    assert watch.sent_to_agent([], rec) is True, "no transcript known: never refuse"
+
+
+def test_the_hook_allows_the_stop_when_it_already_continued_once_or_there_is_no_production_folder_d39_1(tmp_path, monkeypatch):
+    """`stop_hook_active` is true when the turn goes on because a Stop hook refused: a second refusal would loop."""
+    import json as _j
+    from core import watch
+    monkeypatch.chdir(tmp_path)
+    assert watch.on_main_stop(_j.dumps({"hook_event_name": "Stop", "stop_hook_active": False})) is None
+    (tmp_path / "production/assets/a1").mkdir(parents=True)
+    (tmp_path / "production/assets/a1/status.json").write_text(_j.dumps(asset(agent_id="ag7")), encoding="utf-8")
+    rep = tmp_path / REPORT
+    rep.parent.mkdir(parents=True)
+    rep.write_text("done", encoding="utf-8")
+    on = {"hook_event_name": "Stop", "stop_hook_active": False}
+    assert watch.on_main_stop(_j.dumps(on)) == "Còn report chưa ingest: chạy `P ingest a1 --agent-id ag7`"
+    assert watch.on_main_stop(_j.dumps(on | {"stop_hook_active": True})) is None
+    assert watch.on_main_stop("not json") is None
+
+
+def test_the_hook_reads_the_transcript_the_stop_payload_names_and_a_heartbeat_to_tell_sent_from_printed_d39_1(
+        tmp_path, monkeypatch):
+    import datetime as dt
+    import json as _j
+    from core import watch
+    monkeypatch.chdir(tmp_path)
+    a1 = tmp_path / "production/assets/a1"
+    a1.mkdir(parents=True)
+    now = dt.datetime.now().replace(microsecond=0)
+    (a1 / "status.json").write_text(_j.dumps(asset(at=now.strftime("%Y-%m-%d %H:%M:%S"))), encoding="utf-8")
+    sent_at = (now + dt.timedelta(seconds=30)).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    tr = tmp_path / "main.jsonl"
+    tr.write_text(call("Agent", "prompt", f"Đọc `{BRIEF}` trước tiên.", sent_at), encoding="utf-8")
+    on = {"hook_event_name": "Stop", "stop_hook_active": False}
+    never = watch.on_main_stop(_j.dumps(on | {"transcript_path": str(tmp_path / "other.jsonl")}))
+    assert never is None, "an unreadable transcript never refuses"
+    other = tmp_path / "other.jsonl"
+    other.write_text(call("Bash", "command", "ls", sent_at), encoding="utf-8")
+    line = watch.on_main_stop(_j.dumps(on | {"transcript_path": str(other)}))
+    assert line and line.startswith("Còn dòng giao việc của a1 chưa giao")
+    assert watch.on_main_stop(_j.dumps(on | {"transcript_path": str(tr)})) is None
+    vd = a1 / "blockout/v1"
+    vd.mkdir(parents=True)
+    (vd / "heartbeat.log").write_text(f"{(now + dt.timedelta(seconds=40)):%Y-%m-%d %H:%M:%S} · blender · start\n", encoding="utf-8")
+    assert watch.on_main_stop(_j.dumps(on | {"transcript_path": str(other)})) is None

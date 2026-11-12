@@ -100,3 +100,37 @@ def test_a_mutating_command_waits_for_the_lock_so_two_writers_never_interleave(p
     t.join(5)
     assert (ROOT / f"assets/{AID}/feedback.md").read_text(encoding="utf-8").splitlines()[-1].endswith(
         " · blockout · note · ghi chú")
+
+
+def test_the_main_stop_hook_exits_2_with_one_line_on_stderr_to_refuse_and_exits_0_in_silence_to_allow_d39_1(proj):
+    """Claude Code feeds stderr to the model on exit 2 and keeps the turn going; exit 0 with no output lets it end."""
+    import json
+    import subprocess
+    import sys
+    st_path = ROOT / f"assets/{AID}/status.json"
+    st = json.loads(st_path.read_text(encoding="utf-8"))
+    brief = f"production/assets/{AID}/blockout/v1/brief-worker.md"
+    st |= {"stage": "blockout", "state": "running", "versions": {"blockout": 1},
+           "dispatches": [{"step": "blockout", "v": 1, "role": "worker", "at": "2026-11-12 09:00:00", "brief": brief,
+                           "agent_id": "ag7"}]}
+    st_path.write_text(json.dumps(st), encoding="utf-8")
+    report = proj / f"production/assets/{AID}/blockout/v1/worker-out.md"
+    report.parent.mkdir(parents=True)
+
+    def hook(**payload):
+        return subprocess.run([sys.executable, str(producer.__file__), "on-main-stop"], cwd=proj, capture_output=True,
+                              text=True, input=json.dumps({"hook_event_name": "Stop", "stop_hook_active": False} | payload))
+    quiet = hook()
+    assert (quiet.returncode, quiet.stdout, quiet.stderr) == (0, "", ""), "a subagent that still runs may be waited for"
+    report.write_text("done", encoding="utf-8")
+    refused = hook()
+    assert (refused.returncode, refused.stdout) == (2, "")
+    assert refused.stderr == f"Còn report chưa ingest: chạy `P ingest {AID} --agent-id ag7`\n"
+    again = hook(stop_hook_active=True)
+    assert (again.returncode, again.stdout, again.stderr) == (0, "", "")
+    st["dispatches"][0]["ingested"] = "2026-11-12 09:30:00"
+    st_path.write_text(json.dumps(st), encoding="utf-8")
+    done = hook()
+    assert (done.returncode, done.stdout, done.stderr) == (0, "", "")
+    assert subprocess.run([sys.executable, str(producer.__file__), "on-main-stop"], cwd=proj / "production", input="{}",
+                          capture_output=True, text=True).returncode == 0
