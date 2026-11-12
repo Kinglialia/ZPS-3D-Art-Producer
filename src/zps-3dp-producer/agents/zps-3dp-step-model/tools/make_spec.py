@@ -14,6 +14,9 @@ Game camera (sources.json camera): fixed, so screen_tris_check can block with sc
 (docs/agents/3d-artist.md §10). distance_m puts the asset model.target_px_height px tall on a 1080 px screen.
 The asset's height on screen is H cos(el) + (|W sin(az)| + |D cos(az)|) sin(el) metres, the bbox seen from the camera;
 model.px_per_m = target_px_height / that height, the scale of thumb.png. Without a camera: target_px_height / H.
+spec.concept: the concept masks and cameras of the blockout, so render_views.py --spec F/spec.json draws overlay_*.
+The views of B/../work/spec.json (the blockout's own spec) are copied to F/concept/<view>.png; the cameras are its
+concept.cameras, then data.cameras of B/camera_fit.json when that file exists. No blockout masks: no concept key.
 spec["sources"] names the layer of every number ("mặc định" = skill default).
 Keeps `sun` and `concept_cam` of an existing F/spec.json: the worker sets them at A7.
 Prints one line. Exit 0, 2 on error.
@@ -22,6 +25,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
@@ -84,6 +88,25 @@ def screen_height_m(dims, cam):
     return h * math.cos(el) + (abs(w * math.sin(az)) + abs(d * math.cos(az))) * math.sin(el)
 
 
+def concept(blockout, final):
+    """spec.concept for F: the blockout's masks copied into F/concept/ and its fitted cameras; None without masks."""
+    src = os.path.join(blockout, "..", "work", "spec.json")
+    c = (common.read_json(src).get("concept") or {}) if os.path.isfile(src) else {}
+    views = {}
+    for label, rel in (c.get("views") or {}).items():
+        dst = os.path.join("concept", f"{label}.png")
+        os.makedirs(os.path.join(final, "concept"), exist_ok=True)
+        shutil.copyfile(common.spec_rel(src, rel), os.path.join(final, dst))
+        views[label] = dst
+    cams = dict(c.get("cameras") or {})
+    fit = os.path.join(blockout, "camera_fit.json")
+    if os.path.isfile(fit):
+        cams |= common.read_json(fit)["data"].get("cameras") or {}
+    if not views:
+        return None
+    return {"views": views, "cameras": cams} | ({"background": c["background"]} if c.get("background") else {})
+
+
 def build(a):
     s = common.read_json(os.path.join(a.blockout, "sources.json"))
     card, prof, preset = yaml_load(a.card), yaml_load(a.profile), yaml_load(a.preset)
@@ -134,6 +157,10 @@ def build(a):
         spec["camera"] = {"type": "persp", **{k: cam[k] for k in ("azimuth_deg", "elevation_deg", "fov_v_deg") if k in cam},
                           "target_px_height": tpx, "screen": SCREEN,
                           "distance_m": round(seen_h * SCREEN[1] / (2 * math.tan(fov / 2) * tpx), 3)}
+    if cc := concept(a.blockout, a.final):
+        spec["concept"] = cc
+        spec["sources"]["concept"] = "blockout work/spec.json" + (", camera_fit.json" if os.path.isfile(
+            os.path.join(a.blockout, "camera_fit.json")) else "")
     if p.get("screen_tris_max_small_ratio") is not None:
         spec["screen_tris"] = {"max_small_ratio": p["screen_tris_max_small_ratio"]}
     out = os.path.join(a.final, "spec.json")

@@ -100,6 +100,7 @@ def built(tmp_path_factory):
     t = tmp_path_factory.mktemp("model")
     b, f, g, wb, w = t / "blockout", t / "final", t / "inlay", t / "wide_blockout", t / "wide"
     e, under, flip, rnd = t / "eave", t / "bottom_visible", t / "inside_out", t / "round"
+    mask(t / "work")
     build_in_blender(rnd, ROUND)
     model(rnd, rnd)
     build(b)
@@ -131,10 +132,21 @@ def built(tmp_path_factory):
                                             encoding="utf-8")
     blender("asset_checks/screen_tris_check.py", "--input", glb, "--spec", f / "work/spec_limit.json",
             "--out", f / "work/screen_limit.json")
-    blender("self_build/render_views.py", "--work", f, "--mode", "critic", "--outdir", f / "review/renders")
+    blender("self_build/render_views.py", "--work", f, "--spec", f / "spec.json", "--mode", "critic",
+            "--outdir", f / "review/renders")
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
     return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "inside_out": flip, "round": rnd, "rc": rc}
+
+
+def mask(work: Path):
+    """The blockout's own spec with one front mask, the shape concept_mask.py writes (object white on black)."""
+    from PIL import Image
+    (work / "masks").mkdir(parents=True)
+    im = np.zeros((200, 200), np.uint8)
+    im[40:190, 30:170] = 255
+    Image.fromarray(im).save(work / "masks/front.png")
+    (work / "spec.json").write_text(json.dumps({"concept": {"views": {"front": "masks/front.png"}}}), encoding="utf-8")
 
 
 def inside_out(glb: Path):
@@ -241,6 +253,11 @@ def test_kit_qa_passes_the_unwelded_join_and_duplicate_vertices_stay_info_checkl
     overall, c = checks(f / "review/checks/qa_mesh_check.json")
     assert (overall, c["pilot-house.duplicate_verts"]) == ("pass", ("info", 0))
     assert [checks(f / f"review/checks/qa_{q}.json")[0] for q in ("uv_check", "export_check")] == ["pass", "pass"]
+
+
+def test_the_blockout_mask_reaches_the_model_renders_as_an_overlay(built):
+    files = {f["label"] for f in read(built["final"] / "review/renders/renders.json")["data"]["files"]}
+    assert "overlay_front" in files
 
 
 def test_screen_tris_runs_at_the_fixed_game_camera_so_a_limit_blocks(built):

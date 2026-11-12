@@ -190,6 +190,31 @@ def test_bevel_stays_off_for_notes_and_profile_overrides_because_only_the_two_fi
     assert (s["model"]["bevel"], s["sources"]["bevel"]) == (False, "mặc định")
 
 
+def test_the_blockout_concept_masks_and_fitted_cameras_reach_the_model_spec(make_spec, tmp_path):
+    """render_views.py draws overlay_* only from spec.concept; without it the model reviewer had no silhouette check.
+    The masks live in the blockout work folder, which the purge removes, so the model keeps its own copy."""
+    (tmp_path / "work/masks").mkdir(parents=True)
+    for v in ("front", "34"):
+        (tmp_path / f"work/masks/{v}.png").write_bytes(v.encode())
+    (tmp_path / "work/spec.json").write_text(json.dumps({"concept": {
+        "views": {"front": "masks/front.png", "34": "masks/34.png"}, "cameras": {"34": {"azimuth_deg": 45}}},
+        "config": {"paths": {"blender": "/x"}}}), encoding="utf-8")
+    (tmp_path / "blockout").mkdir()
+    (tmp_path / "blockout/camera_fit.json").write_text(json.dumps({"data": {"cameras": {
+        "34": {"azimuth_deg": 38.0, "elevation_deg": 27.0}}}}), encoding="utf-8")
+    _, s = make_spec()
+    assert ({k: s[k] for k in ("concept",) if k in s}, "config" in s, s["sources"]["concept"]) == (
+        {"concept": {"views": {"front": "concept/front.png", "34": "concept/34.png"},
+                     "cameras": {"34": {"azimuth_deg": 38.0, "elevation_deg": 27.0}}}},
+        False, "blockout work/spec.json, camera_fit.json")
+    assert [(tmp_path / f"final/concept/{v}.png").read_bytes() for v in ("front", "34")] == [b"front", b"34"]
+
+
+def test_a_blockout_without_masks_gives_the_model_spec_no_concept(make_spec):
+    _, s = make_spec()
+    assert "concept" not in s
+
+
 def test_a_rerun_keeps_the_sun_and_concept_camera_the_worker_set(make_spec):
     _, s = make_spec(old={"sun": {"azimuth_deg": 300, "elevation_deg": 40}, "budget": {"max_tris_total": 1}})
     assert (s["sun"], s["budget"]["max_tris_total"]) == ({"azimuth_deg": 300, "elevation_deg": 40}, 3000)
