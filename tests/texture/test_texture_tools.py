@@ -188,13 +188,17 @@ def test_base_fill_paints_each_code_its_concept_colour_and_the_top_light_rule_li
     assert round(top - bottom) == 14
 
 
-def measure(m, tmp, img, light="unlit_flat", top=0, cols=None, res=RES):
+def measure(m, tmp, img, light="unlit_flat", top=0, cols=None, res=RES, text_codes=None):
     final = tmp / "F"
     (final / "review").mkdir(parents=True, exist_ok=True)
     tex.save_rgb(img, final / f"albedo_{res}.png")
+    card = []
+    if text_codes is not None:
+        (tmp / "asset-card.yaml").write_text(yaml.safe_dump({"text_codes": text_codes}), encoding="utf-8")
+        card = ["--card", tmp / "asset-card.yaml"]
     rc, out = tool("tex_measure.py", "--final", final, "--glb", m / f"{AID}-untextured.glb", "--model", m, "--albedo",
                    final / f"albedo_{res}.png", "--concept-colors", colors(tmp, cols), "--profile",
-                   profile(tmp, light, top), "--pilot", "none")
+                   profile(tmp, light, top), "--pilot", "none", *card)
     r = json.loads((final / "review/checks/tex_measure.json").read_text())
     return rc, {c["check"]: (c["status"], c["value"]) for c in r["checks"]}, r
 
@@ -640,6 +644,16 @@ def test_faces_with_a_mirrored_uv_island_are_listed_for_every_code(tmp_path):
     assert c["uv.mirrored_faces"] == ("info", 4)
     assert r["data"]["uv_mirrored"] == {"count": 4, "faces": [2, 3, 10, 11], "by_code": {"STONE": 2, "TIMBER": 2}}
 
+
+
+@pytest.mark.parametrize("text_codes, rc, status", [(["TIMBER"], 1, "fail"), (["SIGN"], 0, "info"), ([], 0, "info")])
+def test_a_mirrored_uv_is_a_failure_only_in_a_code_the_card_says_carries_text_g7(tmp_path, text_codes, rc, status):
+    """Mirrored lettering cannot be read, but a mirrored wall of plain wood is invisible: only text_codes decide."""
+    flipped = model_final(tmp_path / "flipped", RES, mirror=("+X", "+Z"))
+    got, c, r = measure(flipped, tmp_path, base_fill(flipped, tmp_path), text_codes=text_codes)
+    assert (got, c["uv.mirrored_faces"]) == (rc, (status, 4))
+    note = next(x["note"] for x in r["checks"] if x["check"] == "uv.mirrored_faces")
+    assert bool(note and "TIMBER 2" in note) == (status == "fail")
 
 
 def test_renders_json_names_the_albedo_it_was_rendered_from_by_sha256_so_a_later_edit_shows_d36_11(tmp_path):

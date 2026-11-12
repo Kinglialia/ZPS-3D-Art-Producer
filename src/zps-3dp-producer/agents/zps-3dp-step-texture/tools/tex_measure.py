@@ -2,7 +2,8 @@
 (id_map.face_codes), never from fixed labels.
 
 Usage: python3 T/tex_measure.py --final F --glb <locked GLB> --model M --albedo F/albedo_<res>.png
-       --concept-colors VF/concept_colors.json --profile <profile> --pilot <PILOT line of the brief, or none>
+       --concept-colors <CONCEPT_COLORS path of the brief> --profile <profile> --pilot <PILOT line of the brief, or none>
+       [--card C/asset-card.yaml]
 Per material code (CIE L*; the colour check is dE2000, the seam check dE76):
   1 light     light.side_spread_L.<c>: max - min of the four side means <= side_spread_L
               light.top_vs_side_L.<c>: |top - side - style.top_vs_side_L| <= top_tol_L
@@ -21,7 +22,9 @@ Per material code (CIE L*; the colour check is dE2000, the seam check dE76):
                 (measure runs before render, D36.11)
               read.sharpness.<c> (info): std of the Laplacian of the atlas inside the code; the note names a code under
                 sharp_ratio of the median of the other codes
-              uv.mirrored_faces (info): faces whose UV triangle runs against the surface (negative determinant)
+              uv.mirrored_faces: faces whose UV triangle runs against the surface (negative determinant). Info for
+                every code; fail when a code of the card's `text_codes` has such a face (--card; mirrored lettering
+                cannot be read). No --card: info only.
   4 seams     seam.p90_dE <= seam_p90 (tex.seam_groups: groups of one material code only, so a border between two
                 codes is no seam); seam.unpainted_share (texels darker than RGB 8, codes whose concept colour is that
                 dark left out) <= unpainted;
@@ -76,6 +79,12 @@ def uv_mirrored(g):
     a, b, c = (uv[g["f"][:, i]] for i in range(3))
     det = (b[:, 0] - a[:, 0]) * (a[:, 1] - c[:, 1]) - (c[:, 0] - a[:, 0]) * (a[:, 1] - b[:, 1])
     return np.flatnonzero(det < 0)
+
+
+def text_codes(card):
+    """`text_codes` of the card, [] without a card."""
+    import yaml
+    return ((yaml.safe_load(open(card, encoding="utf-8")) or {}).get("text_codes") or []) if card else []
 
 
 def laplacian(gray):
@@ -161,7 +170,9 @@ def measure(a, lim, top_l):
     mirrored = uv_mirrored(g)
     data["uv_mirrored"] = {"count": len(mirrored), "faces": mirrored[:200].tolist(),
                            "by_code": {c: int((np.asarray(codes, object)[mirrored] == c).sum()) for c in sorted(set(codes))}}
-    checks.append(tex.check("uv.mirrored_faces", "info", len(mirrored)))
+    text_hit = {c: n for c, n in data["uv_mirrored"]["by_code"].items() if n and c in text_codes(a.card)}
+    checks.append(tex.check("uv.mirrored_faces", "fail" if text_hit else "info", len(mirrored),
+                            note="chữ bị lật UV: " + ", ".join(f"{c} {n}" for c, n in text_hit.items()) if text_hit else None))
     idx, gid = tex.seam_groups(tm, tex.mesh_area(g["v"], g["f"]), codes)
     p90 = tex.seam_spread(img, idx, gid)
     checks.append(tex.check("seam.p90_dE", "pass" if p90 <= lim["seam_p90"] else "fail", round(p90, 2), lim["seam_p90"]))
@@ -183,6 +194,7 @@ def main():
     for k in ("--final", "--glb", "--model", "--albedo", "--concept-colors", "--profile"):
         p.add_argument(k, required=True)
     p.add_argument("--pilot", default="none")
+    p.add_argument("--card")
     a = p.parse_args()
     out = os.path.join(a.final, "review", "checks", "tex_measure.json")
     try:
