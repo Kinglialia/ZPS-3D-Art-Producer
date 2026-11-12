@@ -44,8 +44,8 @@ def patch_st(root, rt, **kw):
 
 
 DONE = {"state": "done", "stage": "assemble", "offer": None, "offer_key": None,
-        "versions": {"blockout": 2, "views_front": 1, "views_rest": 1, "model": 1, "texture": 1, "assemble": 1},
-        "approved": {"blockout": 2, "views_front": 1, "views_rest": 1, "model": 1, "texture": 1, "assemble": 1},
+        "versions": {"blockout": 2, "views": 1, "model": 1, "texture": 1, "assemble": 1},
+        "approved": {"blockout": 2, "views": 1, "model": 1, "texture": 1, "assemble": 1},
         "created": "2026-11-09 08:00", "approved_at": {"blockout": "2026-11-09 09:00", "assemble": "2026-11-09 12:30"}}
 
 
@@ -166,7 +166,7 @@ def test_a_decision_on_one_side_lands_in_that_runtime_folder_only(server, two):
                                                           "regions": None}, applied=True)
     st = json.loads(st_path(two, "claude").read_text(encoding="utf-8"))
     assert (code, msg, applied) == (
-        200, "house-a: đã duyệt blockout v1 → views_front/todo. Tiếp: giao worker → `brief house-a`", True)
+        200, "house-a: đã duyệt blockout v1 → views/todo. Tiếp: giao worker → `brief house-a`", True)
     again = post(server + "/api/feedback", {"id": f"{AID}~B", "action": "approve", "text": "đạt", "step": "blockout",
                                             "offer": "house-a-blockout-v1-1", "regions": None}, applied=True)
     assert again[0::2] == (200, False)

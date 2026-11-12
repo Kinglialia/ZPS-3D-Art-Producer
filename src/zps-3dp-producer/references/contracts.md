@@ -54,7 +54,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận, kèm `offer`; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt khi lệnh không nêu khóa. Quyết định nêu đúng khóa đã có quyết định luôn bị bỏ qua, dù tới từ trang local hay remote. Script xóa khóa này mỗi lần đưa vN cho người dùng duyệt, nên một lần đưa nhận một quyết định.
 - `pending_redo[<bước>]`: danh sách Cần sửa gửi lúc asset `running`, `reviewing` hoặc `evidence_running`: `{text, at, offer, marks[], folder}`. Lần `ingest` kế áp dụng mọi mục thành finding `H<n>` trên version vừa ingest rồi đưa asset vào vòng sửa; reviewer PASS ở lần ingest đó không duyệt bước. Bước sau bước đang chạy bị từ chối như cũ.
 - `worker_agent_id`: subagent worker để resume vòng sửa. Mở lại một bước khác bước đang chạy thì xóa, vì worker cũ có context của bước khác.
-- `reopened[<loại>]`: số lần reviewer mở lại bước trước bằng loại `TOP_FIX` đó (`regen_front`, `fix_uv_mesh`) trong đợt feedback. Cùng loại lần thứ hai → `waiting_human`; loại khác không tính. `redo` của người dùng xóa hết.
+- `reopened[<loại>]`: số lần reviewer mở lại bước trước bằng loại `TOP_FIX` đó (`fix_uv_mesh`) trong đợt feedback. Cùng loại lần thứ hai → `waiting_human`; loại khác không tính. `redo` của người dùng xóa hết.
 - `prior[<bước>]`: bản đã duyệt của bước sau khi một bước trước nó làm lại. Brief lần dựng đầu của bước đó trỏ tới bản này để giữ phần không đổi. Duyệt bước đó thì xóa.
 - `ask`: câu hỏi Meshy đang chờ người dùng (`kind` = `meshy_regen` | `mesh_changed`, `budget` = tên file budget, `next` = `fix` | `todo`, `base`, `new_round`). Duyệt = gọi thêm một lần (`max_credits` + giá); `P meshy <id> paint` = VẼ MỚI. Trả lời xong thì xóa.
 - `paint_for`: 12 ký tự đầu hash mesh mà người dùng chọn VẼ MỚI; brief `texture` của mesh đó ghi `MODE: VẼ MỚI`.
@@ -101,7 +101,7 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | todo | bước chưa bắt đầu | `brief` → running (tạo vN mới) |
 | running | worker đang làm | `ingest` → review / waiting_human / blocked / bước sau · có JSON `fail`/`error` trong `final/review/{gates,checks}/` hoặc `final/review/{join,unwrap}.json` (tool model ghi hai file này ngoài `checks/`) mà không có `ACCEPTED_FAIL` hợp lệ → fix (không giao reviewer, D31.3); hết `max_direct_rounds`, hoặc bộ tên fail y hệt vòng trả thẳng trước → waiting_human |
 | review | worker xong, chờ giao reviewer | `brief` → reviewing; `ingest` của worker tự giao (in dòng JSON của `brief`) |
-| reviewing | reviewer đang chấm | `ingest`: PASS ở `REVIEW_SCOPE: full`, hoặc ở `fix` mà `RUBRIC` không có `not_checked` → bước sau · PASS ở `fix` có `not_checked` → review (reviewer `full` trên cùng version, không gọi worker) · `need_evidence` có ảnh trên đĩa → review (script lấy ảnh) · FIX → fix · `regen_front` → fix của `views_front` · `fix_uv_mesh` → fix của `model` · ESCALATE → waiting_human |
+| reviewing | reviewer đang chấm | `ingest`: PASS ở `REVIEW_SCOPE: full`, hoặc ở `fix` mà `RUBRIC` không có `not_checked` → bước sau · PASS ở `fix` có `not_checked` → review (reviewer `full` trên cùng version, không gọi worker) · `need_evidence` có ảnh trên đĩa → review (script lấy ảnh) · FIX → fix · `fix_uv_mesh` → fix của `model` · ESCALATE → waiting_human |
 | fix | cần vòng sửa | `brief` → running (vN+1, resume hoặc model escalate); `ingest` của reviewer tự giao, trừ khi tài nguyên của bước hết slot |
 | evidence | reviewer cần thêm ảnh (`need_evidence`) | `brief` → evidence_running (không tạo version) |
 | evidence_running | worker đang render bằng chứng | `ingest` → review · `final/` đổi → blocked |
@@ -148,7 +148,7 @@ Reviewer (`review-out.md`). Tin nhắn trả về chỉ dòng `VERDICT`. Script 
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear|not_checked; ...   not_checked chỉ khi brief ghi REVIEW_SCOPE: fix
-TOP_FIX: <loại>[: F<n>[, F<m>]]      chỉ khi FIX; structure, regen_front ghi id, loại lô chỉ ghi loại
+TOP_FIX: <loại>[: F<n>[, F<m>]]      chỉ khi FIX; structure ghi id, loại lô chỉ ghi loại
 EVIDENCE_OPENED: <nhãn ảnh, file đã mở>
 COMPARE: F<n>=better|same|worse; ... vòng sửa: mọi id trong TOP_FIX của bản gốc
 PICK: a|b|c                          chỉ khi TOP_FIX của bản gốc là param
@@ -173,7 +173,7 @@ PRIOR:                               đúng mọi finding đang mở của bản
 - `COUNTS`: script tính từ finding đang mở sau khi áp `PRIOR`. Report còn ghi `COUNTS` mà lệch hoặc thiếu mức thì ledger ghi cảnh báo, không từ chối.
 - Số key `unclear` trong `RUBRIC` ≤ số finding `unclear` đang mở.
 - VERDICT: `PASS` khi không còn `blocker`, `major`, `unclear` đang mở (`preference`, `minor` không chặn). `FIX` khi còn. `PASS` ở vòng `fix` cho bước qua khi `RUBRIC` không có `not_checked`; có thì script giao reviewer `full` trên cùng version.
-- `TOP_FIX`: loại nằm trong `top_fix` của bước (trừ loại `note*`) hoặc `need_evidence`; là loại của finding nặng nhất, cùng mức thì `structure`, `fix_uv_mesh` trước. `structure`: reviewer ghi id; đúng một id, hoặc nhiều id khi không có hai finding chung một part. Part là phần `region` trước `:`, tên part trong `part_graph.json`, nhiều part cách nhau bằng dấu phẩy (`roof: …`, `trunk, branch_2: …`), không phân biệt hoa thường. Chung part, thiếu part, id lặp: `ingest` từ chối và nêu lý do. `regen_front` đúng một id. Loại lô: script lấy đủ mọi finding `blocker|major|minor` đang mở của loại đó; reviewer ghi id lệch thì ledger cảnh báo và script dùng id của mình. `need_evidence`: đủ mọi finding `unclear` đang mở, chỉ khi không còn `blocker`, `major`.
+- `TOP_FIX`: loại nằm trong `top_fix` của bước (trừ loại `note*`) hoặc `need_evidence`; là loại của finding nặng nhất, cùng mức thì `structure`, `fix_uv_mesh` trước. `structure`: reviewer ghi id; đúng một id, hoặc nhiều id khi không có hai finding chung một part. Part là phần `region` trước `:`, tên part trong `part_graph.json`, nhiều part cách nhau bằng dấu phẩy (`roof: …`, `trunk, branch_2: …`), không phân biệt hoa thường. Chung part, thiếu part, id lặp: `ingest` từ chối và nêu lý do. Loại lô: script lấy đủ mọi finding `blocker|major|minor` đang mở của loại đó; reviewer ghi id lệch thì ledger cảnh báo và script dùng id của mình. `need_evidence`: đủ mọi finding `unclear` đang mở, chỉ khi không còn `blocker`, `major`.
 
 Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa ghi). Brief reviewer điền sẵn `PRIOR`, `COMPARE` với `?` để reviewer thay.
 
@@ -185,9 +185,9 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
 ```
 `resolved_notes` (chỉ khi có): ghi chú của bước trước mà reviewer xác nhận (`RESOLVED_CONFIRMED`), cộng các mục của bản gốc. `assemble.py` bỏ các mục này khỏi "Việc còn mở" của README khi version đó được duyệt. Mỗi file giữ mọi finding từ bản gốc (kể cả đã đóng) cộng finding mới. `first_v`, `last_v`: version finding xuất hiện đầu và được chấm gần nhất. Đang mở: `open`, `regressed`. Đã đóng: `resolved`, `superseded`, `waived`. Finding `waived` (D30.1) có thêm `waived: {by: user|producer, why, at}`; không tính vào `COUNTS`, không cần dòng `PRIOR`, brief sau bỏ qua, reviewer không mở lại.
 
-`TOP_FIX: regen_front: F<n>` ở `views_rest` (D22.4): script chép F<n> sang `findings.json` của bản `views_front` đã duyệt với id mới của bản đó, loại `regen`, và đặt `top_fix` của bản đó là id mới. Rồi `views_front` vào vòng sửa từ bản đó, như `redo`. Front duyệt lại thì `views_rest` dựng lại từ đầu. Finding mới ở bước có `regions` (`pipeline.toml`) mở đầu `region` bằng một tên trong đó; loại `regen_front` thì không. Loại `note*` chỉ ở mức `minor`.
+Finding mới ở bước có `regions` (`pipeline.toml`) mở đầu `region` bằng một tên trong đó; loại mở lại bước trước (`fix_uv_mesh`) thì không. Loại `note*` chỉ ở mức `minor`. Ở bước `views`, front sai là finding `regen` có `region` `front: …`, sửa trong cùng bước: worker gen lại front, rồi gen lại mọi view khác, vì front là chuẩn màu.
 
-`TOP_FIX: fix_uv_mesh: F<n>[, F<m>]` ở `texture` (§6.1): như `regen_front`, nhưng chép mọi id sang bản `model` đã duyệt, loại `structure`. Mở lại `model` xóa khóa mesh; duyệt lại thì khóa mesh mới.
+`TOP_FIX: fix_uv_mesh: F<n>[, F<m>]` ở `texture` (§6.1): script chép mọi id sang `findings.json` của bản `model` đã duyệt với id mới của bản đó, loại `structure`, và đặt `top_fix` của bản đó là các id mới. Rồi `model` vào vòng sửa từ bản đó, như `redo`. Mở lại `model` xóa khóa mesh; duyệt lại thì khóa mesh mới.
 
 `redo` ghi lời người dùng thành finding `H<k>` (`major`, loại đầu tiên trong `top_fix` của bước) vào `findings.json` của version bị trả về, tạo file nếu chưa có. Reviewer vòng sau ghi `PRIOR` cho `H<k>` như mọi finding.
 

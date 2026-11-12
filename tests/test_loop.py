@@ -120,10 +120,9 @@ def pick(st):
     (("FIX", "param", False, 2, 3, False, 0), ("ask_human", "không tiến bộ ở vòng 2")),
     (("FIX", "param", False, 2, 3, True, 0), ("fix", None)),
     (("FIX", "structure", False, 3, 3, True, 0), ("ask_human", "hết 3 vòng sửa")),
-    (("FIX", "regen_front", False, 1, 3, False, 0, 0), ("reopen", None)),
-    (("FIX", "regen_front", False, 3, 3, False, 0, 0), ("reopen", None)),
-    (("FIX", "regen_front", False, 0, 3, False, 0, 1), ("ask_human", "regen_front lần 2")),
     (("FIX", "fix_uv_mesh", False, 2, 3, False, 0, 0), ("reopen", None)),
+    (("FIX", "fix_uv_mesh", False, 3, 3, False, 0, 0), ("reopen", None)),
+    (("FIX", "regen", False, 0, 3, False, 0, 1), ("fix", None)),
     (("FIX", "fix_uv_mesh", False, 0, 3, False, 0, 1), ("ask_human", "fix_uv_mesh lần 2")),
 ])
 def test_review_outcome_table_encodes_round_cap_early_stop_escalate_one_evidence_round_and_one_reopen(args, expected):
@@ -339,7 +338,7 @@ def test_human_approve_rejects_the_other_versions_moves_no_folder_and_parks_befo
     st = flow.st
     assert {k: st[k] for k in ("stage", "state", "approved", "rejected", "note")} == {
         "stage": "blockout", "state": "done_enabled", "approved": {"blockout": 2}, "rejected": {"blockout": [1]},
-        "note": "bước views_front chưa bật"}
+        "note": "bước views chưa bật"}
     assert flow.v(1).is_dir() and not (flow.root / "deliver").exists()
     assert "house-a · blockout v2 · duyệt bởi người dùng" in flow.ledger()
     with pytest.raises(ProducerError) as e:
@@ -351,17 +350,17 @@ def test_a_gd1_asset_parked_at_done_enabled_moves_on_with_retry_once_its_next_st
     pass_v2(flow)
     flow.human("approve", "ok")
     assert flow.call(loop.retry, Namespace(id=AID)) == "house-a: → done_enabled. Tiếp: xong các bước đang bật\n"
-    assert flow.st["note"] == "bước views_front chưa bật"
+    assert flow.st["note"] == "bước views chưa bật"
     p = flow.root / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false\n', 'id = "views_front"\n'),
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views"\nenabled = false\n', 'id = "views"\n'),
                  encoding="utf-8")
     from core import limits
-    assert "[house-a] blockout/done_enabled → bước views_front đã bật → `retry house-a`\n" in flow.call(
+    assert "[house-a] blockout/done_enabled → bước views đã bật → `retry house-a`\n" in flow.call(
         limits.show_next, Namespace(session=False))
     head, line = flow.call(loop.retry, Namespace(id=AID)).splitlines()
     assert head == "house-a: → todo. Tiếp: giao worker → `brief house-a`"
-    assert json.loads(line)["brief"] == f"production/assets/{AID}/views_front/v1/brief-worker.md"
-    assert {k: flow.st[k] for k in ("stage", "state", "approved")} == {"stage": "views_front", "state": "running",
+    assert json.loads(line)["brief"] == f"production/assets/{AID}/views/v1/brief-worker.md"
+    assert {k: flow.st[k] for k in ("stage", "state", "approved")} == {"stage": "views", "state": "running",
                                                                      "approved": {"blockout": 2}}
 
 
@@ -373,16 +372,16 @@ def test_approving_the_offered_best_version_rejects_the_newer_versions(flow):
 
 def test_brief_never_dispatches_a_disabled_step(flow):
     st = flow.st
-    st["stage"] = "views_front"
+    st["stage"] = "views"
     save_st(st)
     with pytest.raises(ProducerError) as e:
         briefs.run(Namespace(id=AID))
-    assert str(e.value) == "house-a: bước views_front chưa bật (enabled = false), không giao"
+    assert str(e.value) == "house-a: bước views chưa bật (enabled = false), không giao"
 
 
 def test_approving_the_last_step_ends_at_done_without_the_old_final_human_gate(flow):
     p = flow.root / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").split("[[steps]]\nid = \"views_front\"")[0], encoding="utf-8")
+    p.write_text(p.read_text(encoding="utf-8").split("[[steps]]\nid = \"views\"")[0], encoding="utf-8")
     pass_v2(flow)
     flow.human("approve")
     assert (flow.st["state"], "final_pending" in flow.st) == ("done", False)
@@ -549,8 +548,8 @@ def test_send_back_is_a_major_finding_and_a_reoffer_of_the_same_version_takes_a_
 
 def test_redo_of_a_later_step_is_refused_so_the_asset_never_skips_a_step(flow):
     with pytest.raises(ProducerError) as e:
-        flow.human("redo", "x", "views_rest")
-    assert str(e.value) == "house-a: không làm lại views_rest được: asset đang ở bước blockout"
+        flow.human("redo", "x", "views")
+    assert str(e.value) == "house-a: không làm lại views được: asset đang ở bước blockout"
     assert (flow.st["stage"], flow.st["state"]) == ("blockout", "todo")
     assert "· redo ·" not in (flow.root / f"production/assets/{AID}/feedback.md").read_text(encoding="utf-8")
 
@@ -1160,7 +1159,7 @@ def result_files(sid):
     return step, [o for o in step["outputs"] if o.startswith("final/review/") and o.endswith(".json")]
 
 
-@pytest.mark.parametrize("sid", ["blockout", "views_front", "views_rest", "model", "texture"])
+@pytest.mark.parametrize("sid", ["blockout", "views", "model", "texture"])
 def test_a_worker_that_left_out_one_result_json_of_its_step_is_blocked_with_the_file_named_c5(flow, sid):
     """No output list required the gate and check JSON, so a worker that never ran them went straight to the reviewer."""
     from core.state import outputs_of
@@ -1374,7 +1373,7 @@ CAM_MARK = {"n": 1, "image": "review/game_cam.png", "shape": "rect", "coords": [
 def blockout_waiting_with_a_picture(f):
     from PIL import Image
     p = f.root / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false', 'id = "views_front"'),
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views"\nenabled = false', 'id = "views"'),
                  encoding="utf-8")
     f.work()
     f.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
@@ -1388,7 +1387,7 @@ def test_marks_sent_with_an_approve_become_a_minor_note_the_next_step_brief_list
     so the user's marks were lost."""
     blockout_waiting_with_a_picture(flow)
     ok, msg = loop.act(AID, "approve", "đạt, nhớ cửa", None, [CAM_MARK])
-    assert (ok, msg.splitlines()[0]) == (True, "house-a: đã duyệt blockout v1 → views_front/todo; khoanh 1 vùng → H1. "
+    assert (ok, msg.splitlines()[0]) == (True, "house-a: đã duyệt blockout v1 → views/todo; khoanh 1 vùng → H1. "
                                               "Tiếp: giao worker → `brief house-a`")
     h1 = findings.load(AID, "blockout", 1)["findings"]["H1"]
     assert (h1["kind"], h1["priority"], h1["status"], h1["repair"], h1["mark"]["n"]) == (
@@ -1407,9 +1406,9 @@ def test_marks_sent_with_a_redo_stay_major_findings_of_the_step_kind_c10(flow):
 
 def test_a_step_with_note_kinds_stores_the_marks_of_an_approve_as_its_first_note_kind_c10(flow):
     cfg = load_cfg()
-    views_rest = next(s for s in cfg["steps"] if s["id"] == "views_rest")
+    views = next(s for s in cfg["steps"] if s["id"] == "views")
     texture = next(s for s in cfg["steps"] if s["id"] == "texture")
-    for step, kind in ((views_rest, "note_exception"), (texture, "note")):
+    for step, kind in ((views, "note_exception"), (texture, "note")):
         findings.add_human(AID, step, 1, None, [{"n": 1, "image": "back.png", "png": "p/x.png", "note": "n"}])
         assert loop.marks_as_notes(AID, step, 1, ["H1"]) == ["H1"]
         assert findings.load(AID, step["id"], 1)["findings"]["H1"]["kind"] == kind
@@ -1506,8 +1505,8 @@ def test_a_redo_with_marks_sent_while_the_worker_runs_keeps_the_marks_for_the_fi
 
 def test_a_redo_for_a_later_step_than_the_stage_is_still_refused_and_stores_nothing_c6(flow):
     flow.brief()
-    with pytest.raises(ProducerError, match="không làm lại views_rest được"):
-        flow.human("redo", "x", "views_rest")
+    with pytest.raises(ProducerError, match="không làm lại views được"):
+        flow.human("redo", "x", "views")
     assert flow.st.get("pending_redo", {}) == {}
 
 
@@ -1607,32 +1606,32 @@ def test_the_first_ingest_after_a_retry_drops_the_reason_so_a_later_brief_has_no
     assert flow.st["retry_why"] is None
 
 
-def enable_views_front(f):
+def enable_views(f):
     p = f.root / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false', 'id = "views_front"'),
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views"\nenabled = false', 'id = "views"'),
                  encoding="utf-8")
 
 
 def test_an_ingest_that_approves_by_policy_prints_the_dispatch_of_the_next_step_c16(flow):
-    enable_views_front(flow)
+    enable_views(flow)
     policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
     flow.cap.readouterr()
     flow.work()
     head, line = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass").splitlines()
-    assert head == "house-a: review PASS (0 mở) → views_front/todo. Tiếp: giao worker → `brief house-a`"
+    assert head == "house-a: review PASS (0 mở) → views/todo. Tiếp: giao worker → `brief house-a`"
     sent = json.loads(line)
     assert (sent["role"], sent["agent"]) == ("worker", "zps-3dp-step-views")
 
 
 def test_an_ingest_that_approves_by_policy_prints_no_dispatch_while_the_next_step_has_no_free_slot_c16(flow):
-    enable_views_front(flow)
+    enable_views(flow)
     policy.set_approval(Namespace(step="blockout", who="reviewer", by="để reviewer duyệt", confirm_spend=False))
     flow.cap.readouterr()
     flow.work()
     p = flow.root / "production/pipeline.toml"
     p.write_text(p.read_text(encoding="utf-8").replace("blender = 2", "blender = 0"), encoding="utf-8")
     out = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
-    assert out.count("\n") == 1 and "views_front/todo" in out
+    assert out.count("\n") == 1 and "views/todo" in out
 
 
 def tools_without_venv(tmp_path, venv=False):

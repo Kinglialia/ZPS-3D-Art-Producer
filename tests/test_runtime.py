@@ -150,8 +150,8 @@ def test_redoing_an_approved_step_does_not_answer_the_offer_of_a_later_step(flow
                 rubric="massing=pass")
     flow.human("approve", "đạt")
     st = load_st(AID)
-    st |= {"stage": "views_front", "state": "waiting_human", "offer_key": "house-a-views_front-v1-2"}
-    st["offer_log"].append({"key": "house-a-views_front-v1-2", "step": "views_front", "v": 1, "why": "duyệt",
+    st |= {"stage": "views", "state": "waiting_human", "offer_key": "house-a-views-v1-2"}
+    st["offer_log"].append({"key": "house-a-views-v1-2", "step": "views", "v": 1, "why": "duyệt",
                             "verdict": "PASS", "at": "2026-11-09 10:00"})
     save_st(st)
     flow.human("redo", "mái thấp", "blockout")

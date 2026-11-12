@@ -1,8 +1,8 @@
 """VẼ MỚI step 1 (docs/agents/texture-artist.md §4): fill every UV region with its material colour and the light rule.
 
-Usage: python3 T/base_fill.py --final F --model M --concept-colors VF/concept_colors.json --profile <profile>
+Usage: python3 T/base_fill.py --final F --model M --concept-colors CC --profile <profile>
        --res N --out V/work/paint/base_fill.png [--padding 16]
-Colour per material code from concept_colors.json (the views step's {code: "#hex"}). style.light_convention:
+Colour per material code from concept_colors.json (intake's {code: "#hex"}). style.light_convention:
   unlit_flat         the flat colour
   painted_top_light  faces up get + style.top_vs_side_L in L*, and L* rises GRADIENT_L from the bottom to the top
 A code missing from concept_colors.json is filled mid grey and listed. Gutter: --padding px around each island.

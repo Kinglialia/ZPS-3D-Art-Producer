@@ -11,13 +11,13 @@ OPEN = {"open", "regressed"}
 WAIVED = "waived"
 BM = ("blocker", "major")
 BLOCKING = BM + ("unclear",)
-SINGLE = {"structure", "regen_front"}
+SINGLE = {"structure"}
 PER_PART = "structure"
 NOTE = {"note", "note_exception", "note_texture"}
-TIE_RANK = {"structure": 2, "fix_uv_mesh": 2, "regen_front": 2, "meshy_regen": 1}
+TIE_RANK = {"structure": 2, "fix_uv_mesh": 2, "meshy_regen": 1}
 BATCH_PRIO = ("blocker", "major", "minor")
-REOPEN = {"regen_front": "views_front", "fix_uv_mesh": "model"}
-REOPENED_PART = {"regen_front": "front", "fix_uv_mesh": "mesh và UV"}
+REOPEN = {"fix_uv_mesh": "model"}
+REOPENED_PART = {"fix_uv_mesh": "mesh và UV"}
 
 
 def path(aid: str, step: str, n: int):
@@ -76,7 +76,7 @@ def mark_lines(doc: dict | None) -> list[str]:
 
 
 def carry(aid: str, found: dict, src: str, dst: dict, m: int) -> list[str]:
-    """D22.4, §6.1: findings on an earlier step's output join that step's approved version m, with new ids, as its TOP_FIX."""
+    """§6.1: findings on an earlier step's output join that step's approved version m, with new ids, as its TOP_FIX."""
     doc = load(aid, dst["id"], m) or {"version": m, "base": None, "top_fix": None, "pick": None, "next_id": 1,
                                       "findings": {}}
     kind, new = next(t for t in dst["top_fix"] if t not in NOTE), []

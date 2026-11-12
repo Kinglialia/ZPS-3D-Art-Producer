@@ -22,17 +22,17 @@ def flow(tmp_path, monkeypatch, capsys):
     return Flow(tmp_path, capsys)
 
 
-def enable_views_front(f):
+def enable_views(f):
     p = f.root / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\nenabled = false', 'id = "views_front"'),
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views"\nenabled = false', 'id = "views"'),
                  encoding="utf-8")
 
 
 def approve_blockout(f):
-    enable_views_front(f)
+    enable_views(f)
     pass_v2(f)
     f.human("approve")
-    assert (f.st["stage"], f.st["state"]) == ("views_front", "todo")
+    assert (f.st["stage"], f.st["state"]) == ("views", "todo")
 
 
 def test_profile_hash_ignores_paths_and_underscore_keys_so_editing_notes_or_paths_warns_no_running_asset():
@@ -108,7 +108,7 @@ def test_one_byte_edit_to_an_approved_part_graph_is_caught_at_brief_and_at_inges
     assert (str(e.value), flow.st["state"]) == ("blockout v2: final/ đã duyệt bị sửa sau khi duyệt (hash lệch)", "todo")
     graph.write_text("x", encoding="utf-8")
     out = flow.brief()
-    inp = flow.st["inputs"]["views_front"]["v1"]["blockout"]
+    inp = flow.st["inputs"]["views"]["v1"]["blockout"]
     assert (inp["v"], inp["hash"]) == (2, flow.st["approved_hash"]["blockout"])
     graph.write_text("y", encoding="utf-8")
     with pytest.raises(ProducerError) as e:
@@ -121,12 +121,12 @@ def test_a_version_built_from_an_older_blockout_is_labelled_stale_without_the_pr
     flow.work()
     assert flow.st["stale"] == {}
     flow.human("redo", "mái cao hơn", "blockout")
-    assert flow.st["stale"] == {"views_front v1": "blockout v2"}
+    assert flow.st["stale"] == {"views v1": "blockout v2"}
     flow.work(fixed="H1")
     (flow.v(3) / "final/part_graph.json").write_text("v3", encoding="utf-8")
     flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="H1=better", prior=["- H1: resolved | evidence: clay_front"])
     flow.human("approve")
-    assert (flow.st["approved"], flow.st["stale"]) == ({"blockout": 3}, {"views_front v1": "blockout v2"})
+    assert (flow.st["approved"], flow.st["stale"]) == ({"blockout": 3}, {"views v1": "blockout v2"})
 
 
 def test_reapproving_identical_content_is_not_stale_because_inputs_compare_content(flow):

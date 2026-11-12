@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 SIDE_IMAGE = re.compile(r"^final/(back|left|right|top)\.png$")
+SIDE_TILE = re.compile(r"[/_](back|left|right|top)(?:_guide)?\.png$")
 
 
 def views(st: dict) -> str:
@@ -22,7 +23,7 @@ def card(st: dict) -> dict:
 
 
 def sides(st: dict) -> tuple[str, ...]:
-    """The side views this asset's views_rest makes."""
+    """The side views this asset's views step makes besides front."""
     from check_card import NO_CARD_VIEWS, VIEW_SETS
     return VIEW_SETS.get(views(st), VIEW_SETS[NO_CARD_VIEWS])
 
@@ -36,6 +37,12 @@ def keep_output(step: dict, st: dict, out: str) -> bool:
     """A `views_set` step needs only the side images of the card's views."""
     m = SIDE_IMAGE.match(out) if step.get("views_set") else None
     return not m or m[1] in sides(st)
+
+
+def sheet(step: dict, st: dict) -> list[str]:
+    """A `views_set` step shows on its review sheet only the sides of the card's views: the guides of all five exist."""
+    return [g for g in step.get("sheet") or [] if not step.get("views_set") or not (m := SIDE_TILE.search(g))
+            or m[1] in sides(st)]
 
 
 def regions(step: dict, st: dict) -> list[str]:

@@ -382,44 +382,49 @@ def test_worker_report_missing_profile_hash_keeps_the_asset_running(tmp_path):
     assert json.loads((tmp_path / "production/assets/house-a/status.json").read_text())["state"] == "running"
 
 
-REST = {"id": "views_rest", "top_fix": ["regen", "regen_front", "note_exception", "note_texture"],
-        "regions": ["back", "left", "right", "top"]}
+VIEWS = {"id": "views", "top_fix": ["regen", "note_exception", "note_texture"],
+         "regions": ["front", "back", "left", "right", "top"]}
 
 
-def test_regen_front_takes_one_id_and_wins_a_tie_with_regen_because_a_new_front_voids_every_other_view():
-    fs = [finding("F1", "major", "regen", region="back: bóng đổ dưới mái"),
-          finding("F2", "major", "regen_front", region="front: gỗ đỏ hơn cả bộ")]
-    assert errs_of(None, step=REST, counts=counts(major=2), top_fix="regen: F1", findings=fs) == [
-        "TOP_FIX phải là loại regen_front"]
-    assert errs_of(None, step=REST, counts=counts(major=2), top_fix="regen_front: F2", findings=fs) == []
+def test_a_regen_of_the_front_and_a_regen_of_a_side_go_out_together_as_one_batch_of_the_views_step():
+    """D44.3: a wrong front is a `regen` finding inside the step; the script takes every open regen id."""
+    fs = [finding("F1", "major", "regen", region="back: bóng đổ dưới mép trên"),
+          finding("F2", "major", "regen", region="front: gỗ đỏ hơn cả bộ")]
+    doc, errs = apply(None, rv(counts=counts(major=2), top_fix="regen", findings=fs), VIEWS, 1)
+    assert (errs, doc["top_fix"]) == ([], {"kind": "regen", "ids": ["F1", "F2"]})
+
+
+def test_the_views_step_has_no_kind_that_reopens_another_step():
+    fs = [finding("F1", "major", "regen_front", region="front: gỗ đỏ")]
+    assert errs_of(None, step=VIEWS, counts=counts(major=1), top_fix="regen_front: F1", findings=fs) == [
+        "F1: loại 'regen_front' không có ở bước views (regen|note_exception|note_texture)",
+        "TOP_FIX 'regen_front' không dùng ở bước views (regen|need_evidence)"]
 
 
 def test_a_note_finding_must_be_minor_because_a_note_never_causes_a_fix():
     note = {"region": "back: đầu dầm"}
-    assert errs_of(None, step=REST, verdict="PASS", top_fix=None, counts=counts(minor=1),
+    assert errs_of(None, step=VIEWS, verdict="PASS", top_fix=None, counts=counts(minor=1),
                    findings=[finding("F1", "minor", "note_texture", **note)]) == []
-    assert errs_of(None, step=REST, verdict="PASS", top_fix=None, counts=counts(major=1),
+    assert errs_of(None, step=VIEWS, verdict="PASS", top_fix=None, counts=counts(major=1),
                    findings=[finding("F1", "major", "note_texture", **note)]) == [
         "F1: note_texture chỉ ghi chú, mức phải là minor", "PASS nhưng còn major=1 đang mở"]
 
 
-def test_a_views_rest_finding_opens_with_its_view_so_front_is_judged_only_through_regen_front():
-    fs = [finding("F1", "major", "regen", region="mép mái"), finding("F2", "major", "regen", region="front: màu gỗ"),
-          finding("F3", "major", "regen", region="back, left: bóng đổ"),
-          finding("F4", "major", "regen_front", region="front: gỗ đỏ")]
-    assert errs_of(None, step=REST, counts=counts(major=4), top_fix="regen_front: F4", findings=fs) == [
-        "F1: region phải mở đầu bằng back|left|right|top, vd `back: …`",
-        "F2: region phải mở đầu bằng back|left|right|top, vd `back: …`"]
+def test_a_views_finding_opens_with_its_view_and_front_is_one_of_them():
+    fs = [finding("F1", "major", "regen", region="mép trên"), finding("F2", "major", "regen", region="front: màu gỗ"),
+          finding("F3", "major", "regen", region="back, left: bóng đổ")]
+    assert errs_of(None, step=VIEWS, counts=counts(major=3), top_fix="regen", findings=fs) == [
+        "F1: region phải mở đầu bằng front|back|left|right|top, vd `front: …`"]
 
 
 def test_a_confirmed_note_carries_into_the_next_round_so_the_approved_fix_version_still_drops_it_d27_8():
     base, _ = apply(None, rv(counts=counts(major=1), findings=[finding("F1", "major", "structure")],
-                             extra="RESOLVED_CONFIRMED: views_rest v2 F2\n"), STEP, 1)
+                             extra="RESOLVED_CONFIRMED: views v2 F2\n"), STEP, 1)
     doc, errs = apply(base, rv(verdict="PASS", top_fix=None, counts=counts(), compare="F1=better",
                                prior=["- F1: resolved | evidence: clay_front"],
-                               extra="RESOLVED_CONFIRMED: views_rest v2 F3\n"), STEP, 2)
+                               extra="RESOLVED_CONFIRMED: views v2 F3\n"), STEP, 2)
     assert (base["resolved_notes"], doc["resolved_notes"], errs) == (
-        ["views_rest v2 F2"], ["views_rest v2 F2", "views_rest v2 F3"], [])
+        ["views v2 F2"], ["views v2 F2", "views v2 F3"], [])
 
 
 def test_a_reviewer_cannot_waive_a_finding_in_prior_because_only_the_user_waives_d30_1():

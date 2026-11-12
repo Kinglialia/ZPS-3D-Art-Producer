@@ -1,6 +1,6 @@
-"""End-to-end GĐ 3 on the synthetic pilot: the real CLI from the views_rest approval through model fix rounds (structure,
+"""End-to-end GĐ 3 on the synthetic pilot: the real CLI from the views approval through model fix rounds (structure,
 then param with variants and PICK) to DUYỆT 1 and the mesh lock; then texture enabled for one fake round, where a
-fix_uv_mesh reopens the approved model although a regen_front already ran in the same feedback round. Fake agents."""
+fix_uv_mesh reopens the approved model. Fake agents."""
 import hashlib
 import json
 import re
@@ -17,10 +17,8 @@ A = f"production/assets/{AID}"
 SKILL = P.parents[1]
 OUTPUTS = {
     "blockout": ("part_graph.json", "parts_lib.py", "assembled.glb", "sources.json", "blockout.md"),
-    "views_front": ("front.png", "guides/views.json", "concept_colors.json", "bg_color.json", "report/report.json",
-                    "report/VIEWS.md"),
-    "views_rest": ("back.png", "left.png", "right.png", "top.png", "README.md", "report/report.json", "report/VIEWS.md",
-                   "report/VIEWS_sheet.png"),
+    "views": ("front.png", "back.png", "left.png", "right.png", "top.png", "guides/views.json", "bg_color.json",
+              "README.md", "report/report.json", "report/VIEWS.md", "report/VIEWS_sheet.png"),
     "model": (f"{AID}-untextured.glb", f"{AID}.blend", "part_graph.json", "parts_lib.py", "spec.json", "model.md",
               "review/model_sheet.png", "review/renders/renders.json"),
     "texture": ("albedo_2048.png", "texture_spec.json", "notes.md", "final_lit_vs_concept.png", "review/renders.json",
@@ -117,17 +115,13 @@ def flow(tmp_path_factory):
     f.work("b1")
     f.review("b1", verdict="PASS", counts=counts(), top_fix=None)
     f.human("approve blockout", "đạt", "--action", "approve")
-    f.work("vf1")
-    f.review("vf1", verdict="PASS", counts=counts(), top_fix=None)
-    f.work("vr1")
-    f.review("vr1", counts=counts(1), top_fix="regen_front: F1",
-             findings=[finding("F1", "major", "regen_front", region="front: gỗ đỏ hơn back", evidence="front.png: đỏ")],
+    f.work("v1")
+    f.review("v1", counts=counts(1), top_fix="regen",
+             findings=[finding("F1", "major", "regen", region="front: gỗ đỏ hơn back", evidence="front.png: đỏ")],
              evidence="front.png, back.png")
-    f.work("vf2")
-    f.review("vf2", verdict="PASS", counts=counts(), top_fix=None, compare="F1=better",
+    f.work("v2")
+    f.review("v2", verdict="PASS", counts=counts(), top_fix=None, compare="F1=better",
              prior=["- F1: resolved | evidence: clay_front.png"])
-    f.work("vr2")
-    f.review("vr2", verdict="PASS", counts=counts(), top_fix=None)
     f.human("approve set", "đạt", "--action", "approve")
 
     f.work("m1", issues=ISSUES, failing=True)
@@ -182,7 +176,7 @@ def sha(b: bytes) -> str:
 
 def test_approving_the_view_set_moves_on_to_the_model_step(flow):
     assert moved(flow["approve set"]["out"]) == (
-        "pilot-house: đã duyệt views_rest v2 → model/todo. Tiếp: giao worker → `brief pilot-house`",
+        "pilot-house: đã duyệt views v2 → model/todo. Tiếp: giao worker → `brief pilot-house`",
         f"{A}/model/v1/brief-worker.md")
 
 
@@ -193,8 +187,7 @@ def test_the_model_brief_names_the_three_approved_finals_and_only_the_concept_fi
     assert missing(b["text"], f"TOOLS: {SKILL / 'agents/zps-3dp-step-model/tools'}", "BLENDER: blender",
                    "PILOT: none (pilot_asset: null): so với pilot ghi not_checked",
                    f"7. Đầu ra đã duyệt của bước `blockout`: `{A}/blockout/v1/final/`.",
-                   f"8. Đầu ra đã duyệt của bước `views_front`: `{A}/views_front/v2/final/`.",
-                   f"9. Đầu ra đã duyệt của bước `views_rest`: `{A}/views_rest/v2/final/`.") == []
+                   f"8. Đầu ra đã duyệt của bước `views`: `{A}/views/v2/final/`.") == []
     concept = [l for l in b["text"].splitlines() if "Concept đã duyệt" in l]
     assert len(concept) == 1 and concept[0].endswith(
         ": chỉ đọc `concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`. Bỏ qua file và thư mục khác (bản nháp cũ).")
@@ -232,8 +225,8 @@ def test_a_structure_fix_resumes_the_worker_from_the_best_version_and_reads_the_
     assert json.loads(line) == b["out"]
     assert b["out"]["resume"] == "w-m1"
     assert missing(b["text"],
-                   f"10. Bản gốc: `{A}/model/v1/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
-                   f"11. Đọc trước nguyên văn lỗi script của bản gốc: `{A}/model/v1/final/review/checks/qa_screen_tris_check.json`.") == []
+                   f"9. Bản gốc: `{A}/model/v1/` (bản tốt nhất; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
+                   f"10. Đọc trước nguyên văn lỗi script của bản gốc: `{A}/model/v1/final/review/checks/qa_screen_tris_check.json`.") == []
     assert "`TOP_FIX: structure: F1`" in b["text"]
 
 
@@ -264,8 +257,8 @@ def test_approving_the_model_locks_the_sha256_of_the_picked_untextured_glb(flow)
     s = flow["approve model"]
     assert s["out"] == "pilot-house: đã duyệt model v3 → model/done_enabled. Tiếp: xong các bước đang bật\n"
     assert pick(s["st"], "approved", "rejected", "locked", "note") == {
-        "approved": {"blockout": 1, "views_front": 2, "views_rest": 2, "model": 3},
-        "rejected": {"blockout": [], "views_front": [1], "views_rest": [1], "model": [1, 2]},
+        "approved": {"blockout": 1, "views": 2, "model": 3},
+        "rejected": {"blockout": [], "views": [1], "model": [1, 2]},
         "locked": {"model": sha(glb("m3", "b"))}, "note": "bước texture chưa bật"}
 
 
@@ -278,14 +271,13 @@ def test_once_texture_is_enabled_the_parked_asset_moves_on(flow):
 def test_the_texture_brief_copies_the_approved_model_issues_and_names_every_approved_final_d20_3_d20_10(flow):
     t = flow["t1 brief"]["text"]
     assert missing(t, f"7. Đầu ra đã duyệt của bước `blockout`: `{A}/blockout/v1/final/`.",
-                   f"8. Đầu ra đã duyệt của bước `views_front`: `{A}/views_front/v2/final/`.",
-                   f"9. Đầu ra đã duyệt của bước `views_rest`: `{A}/views_rest/v2/final/`.",
-                   f"10. Đầu ra đã duyệt của bước `model`: `{A}/model/v3/final/`.",
-                   f"11. ISSUES của report worker `model` v3: {ISSUES}") == []
+                   f"8. Đầu ra đã duyệt của bước `views`: `{A}/views/v2/final/`.",
+                   f"9. Đầu ra đã duyệt của bước `model`: `{A}/model/v3/final/`.",
+                   f"10. ISSUES của report worker `model` v3: {ISSUES}") == []
     assert "handoff" not in t.lower()
 
 
-def test_the_first_fix_uv_mesh_reopens_the_approved_model_although_regen_front_ran_in_this_feedback_round(flow):
+def test_the_first_fix_uv_mesh_reopens_the_approved_model_and_counts_one_reopen_of_its_kind(flow):
     s = flow["t1 review"]
     head, line = s["out"].splitlines()
     assert (head, json.loads(line)["brief"]) == (
@@ -294,8 +286,8 @@ def test_the_first_fix_uv_mesh_reopens_the_approved_model_although_regen_front_r
     assert pick(s["st"], "stage", "state", "fix_round", "fix_base", "round_versions", "worker_agent_id", "approved",
                 "locked", "reopened", "note") == {
         "stage": "model", "state": "running", "fix_round": 1, "fix_base": 3, "round_versions": [3], "worker_agent_id": None,
-        "approved": {"blockout": 1, "views_front": 2, "views_rest": 2}, "locked": {},
-        "reopened": {"regen_front": 1, "fix_uv_mesh": 1}, "note": "fix_uv_mesh: sửa model v3 theo F3 (texture v1 F1)"}
+        "approved": {"blockout": 1, "views": 2}, "locked": {},
+        "reopened": {"fix_uv_mesh": 1}, "note": "fix_uv_mesh: sửa model v3 theo F3 (texture v1 F1)"}
     doc = flow["model v3 doc"]
     assert (doc["top_fix"], doc["next_id"], doc["findings"]["F3"]["kind"], doc["findings"]["F3"]["evidence"]) == (
         {"kind": "structure", "ids": ["F3"]}, 4, "structure", "texture v1 F1: clay_lit_34.png: vân mái giãn")
@@ -308,12 +300,12 @@ def test_the_reopened_model_starts_a_fresh_worker_and_a_new_approval_locks_the_n
     assert moved(s["out"]) == ("pilot-house: đã duyệt model v4 → texture/todo. Tiếp: giao worker → `brief pilot-house`",
                                f"{A}/texture/v2/brief-worker.md")
     assert pick(s["st"], "locked", "stale") == {
-        "locked": {"model": sha(glb("m4"))}, "stale": {"views_rest v1": "views_front v1", "texture v1": "model v3"}}
+        "locked": {"model": sha(glb("m4"))}, "stale": {"texture v1": "model v3"}}
 
 
 def test_a_model_report_without_issues_adds_no_handoff_line_to_the_texture_brief(flow):
     t = flow["t2 brief"]["text"]
-    assert f"10. Đầu ra đã duyệt của bước `model`: `{A}/model/v4/final/`." in t.splitlines()
+    assert f"9. Đầu ra đã duyệt của bước `model`: `{A}/model/v4/final/`." in t.splitlines()
     assert "ISSUES của report worker" not in t
 
 
@@ -322,7 +314,7 @@ def test_a_second_fix_uv_mesh_in_the_same_feedback_round_goes_to_the_human(flow)
     assert s["out"] == ("pilot-house: review FIX (major=1) → texture/waiting_human. "
                         "Tiếp: chờ người dùng: fix_uv_mesh lần 2; còn mở: F1 (review page)\n")
     assert pick(s["st"], "stage", "label", "reopened") == {
-        "stage": "texture", "label": "chưa đạt", "reopened": {"regen_front": 1, "fix_uv_mesh": 1}}
+        "stage": "texture", "label": "chưa đạt", "reopened": {"fix_uv_mesh": 1}}
 
 
 def test_a_human_redo_of_a_texture_whose_top_fix_is_fix_uv_mesh_tells_the_worker_the_mesh_is_fixed_elsewhere(flow):

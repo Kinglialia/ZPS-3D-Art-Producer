@@ -155,13 +155,13 @@ def test_a_saved_reviewer_reply_parses_only_its_report_even_with_trailing_spaces
 
 def test_resolved_notes_and_their_confirmation_name_a_note_by_step_version_and_id_d27_8():
     """README "Việc còn mở" matches these ids against `<step> vN F<k>`, so a loose form would keep a done note listed."""
-    c, errs = parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nRESOLVED_NOTES: views_rest v2 F2, views_rest v2 F3\n")
-    assert (c["RESOLVED_NOTES"], errs) == (["views_rest v2 F2", "views_rest v2 F3"], [])
+    c, errs = parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nRESOLVED_NOTES: views v2 F2, views v2 F3\n")
+    assert (c["RESOLVED_NOTES"], errs) == (["views v2 F2", "views v2 F3"], [])
     assert parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nRESOLVED_NOTES: none\n")[0]["RESOLVED_NOTES"] == []
     assert parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nRESOLVED_NOTES: F2 hàng ván\n")[1] == [
         "RESOLVED_NOTES: 'F2 hàng ván' phải là <bước> vN F<k>"]
-    rv, errs = parse_review(report(extra="RESOLVED_CONFIRMED: views_rest v2 F2\n"))
-    assert (rv["confirmed"], errs) == (["views_rest v2 F2"], [])
+    rv, errs = parse_review(report(extra="RESOLVED_CONFIRMED: views v2 F2\n"))
+    assert (rv["confirmed"], errs) == (["views v2 F2"], [])
     assert parse_review(report())[0]["confirmed"] == []
 
 

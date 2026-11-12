@@ -137,7 +137,7 @@ def test_done_enabled_counts_as_finished_in_next(proj, capsys):
 
 
 def views_none_parked_at_blockout(root, model_on):
-    """A `views: none` card skips views_front and views_rest (D35), so the step after blockout is model."""
+    """A `views: none` card skips the views step (D35), so the step after blockout is model."""
     card = root / "concepts/a-hut"
     card.mkdir(parents=True)
     (card / "asset-card.yaml").write_text("views: none\n", encoding="utf-8")
@@ -156,7 +156,7 @@ def test_next_tells_a_views_none_asset_to_retry_once_model_is_enabled(proj, caps
 
 
 def test_next_does_not_offer_a_retry_for_a_skipped_views_step_while_model_is_still_off(proj, capsys):
-    """views_front is enabled, but this asset never runs it: `retry` would only park it again."""
+    """views is enabled, but this asset never runs it: `retry` would only park it again."""
     views_none_parked_at_blockout(proj, model_on=False)
     assert not [l for l in next_lines(capsys) if "đã bật" in l]
 

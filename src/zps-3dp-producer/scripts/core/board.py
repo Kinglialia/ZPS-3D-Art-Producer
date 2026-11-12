@@ -19,9 +19,9 @@ from .state import (DELIVER, FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, d
                     sort_key, step_of, vdir, write_atomic)
 
 BOARD_DIR = SKILL_DIR / "scripts" / "board"
-SUMMARY_FILE = {"blockout": "blockout.md", "views_front": "report/VIEWS.md", "views_rest": "report/VIEWS.md",
-                "model": "model.md", "texture": "notes.md", "assemble": "README.md"}
-HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "VIEWS_sheet.png", "model": "model_sheet.png",
+SUMMARY_FILE = {"blockout": "blockout.md", "views": "report/VIEWS.md", "model": "model.md", "texture": "notes.md",
+                "assemble": "README.md"}
+HERO = {"blockout": "game_cam.png", "views": "VIEWS_sheet.png", "model": "model_sheet.png",
         "texture": "final_lit_vs_concept.png", "assemble": "final_lit_vs_concept.png"}
 SUMMARY_LINES = 3
 CONCEPT_IMAGES = ("concept_albedo.png", "concept_shadow.png")

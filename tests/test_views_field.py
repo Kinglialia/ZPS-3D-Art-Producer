@@ -68,26 +68,38 @@ def cfg():
 
 @pytest.mark.parametrize("value, steps, sides", [
     ("none", ["blockout", "model", "texture", "assemble"], []),
-    ("back", ["blockout", "views_front", "views_rest", "model", "texture", "assemble"], ["final/back.png"]),
-    ("full", ["blockout", "views_front", "views_rest", "model", "texture", "assemble"],
+    ("back", ["blockout", "views", "model", "texture", "assemble"], ["final/back.png"]),
+    ("full", ["blockout", "views", "model", "texture", "assemble"],
      ["final/back.png", "final/left.png", "final/right.png"]),
-    (None, ["blockout", "views_front", "views_rest", "model", "texture", "assemble"],
+    (None, ["blockout", "views", "model", "texture", "assemble"],
      ["final/back.png", "final/left.png", "final/right.png"]),
-    ("full_top", ["blockout", "views_front", "views_rest", "model", "texture", "assemble"],
+    ("full_top", ["blockout", "views", "model", "texture", "assemble"],
      ["final/back.png", "final/left.png", "final/right.png", "final/top.png"]),
 ])
-def test_each_value_gives_its_step_list_and_its_views_rest_images(tmp_path, value, steps, sides):
-    """A full set must not go blocked for a missing top.png, so the outputs follow the card."""
+def test_each_value_gives_its_step_list_and_its_views_images(tmp_path, value, steps, sides):
+    """A full set must not go blocked for a missing top.png, so the outputs follow the card. Front is a region too:
+    a wrong front is a regen of the same step (D44.3)."""
     from core.state import outputs_of
     c = cfg()
     st = asset(tmp_path, value)
     assert [s["id"] for s in asset_card.steps(c, st)] == steps
-    rest = next(s for s in c["steps"] if s["id"] == "views_rest")
-    assert [o for o in outputs_of(rest, st) if o.endswith(("back.png", "left.png", "right.png", "top.png"))] == sides
-    assert asset_card.regions(rest, st) == [s[6:-4] for s in sides]
+    views = next(s for s in c["steps"] if s["id"] == "views")
+    assert [o for o in outputs_of(views, st) if o.endswith(("back.png", "left.png", "right.png", "top.png"))] == sides
+    assert asset_card.regions(views, st) == ["front", *(s[6:-4] for s in sides)]
 
 
-@pytest.mark.parametrize("value, nxt", [("none", "model"), ("back", "views_front"), (None, "views_front")])
+@pytest.mark.parametrize("value, tiles", [
+    ("back", ["front", "back"]), ("full", ["front", "back", "left", "right"]),
+    ("full_top", ["front", "back", "left", "right", "top"])])
+def test_the_views_sheet_shows_each_view_of_the_card_beside_its_guide_and_overlay_and_no_other_side_q6(tmp_path, value,
+                                                                                                       tiles):
+    """The worker renders the guides of all five views, so the globs of the sheet follow the card like the outputs."""
+    views = next(s for s in cfg()["steps"] if s["id"] == "views")
+    assert asset_card.sheet(views, asset(tmp_path, value)) == [
+        g for v in tiles for g in (f"final/{v}.png", f"final/guides/{v}_guide.png", f"final/report/overlay_{v}.png")]
+
+
+@pytest.mark.parametrize("value, nxt", [("none", "model"), ("back", "views"), (None, "views")])
 def test_approving_the_blockout_moves_to_model_when_the_card_has_no_view_set(tmp_path, value, nxt):
     c = cfg()
     st = asset(tmp_path, value)
@@ -120,13 +132,13 @@ def none_flow(tmp_path_factory):
 def test_views_none_goes_from_blockout_straight_to_model_and_then_texture_d35(none_flow):
     assert none_flow.cp["approve b1"]["st"]["stage"] == "model"
     assert none_flow.cp["approve m1"]["st"]["stage"] == "texture"
-    assert not (none_flow.root / A / "views_front").exists()
+    assert not (none_flow.root / A / "views").exists()
 
 
 @pytest.mark.parametrize("name", ["m1 brief", "m1 review brief", "t1"])
 def test_views_none_model_and_texture_briefs_build_and_point_at_no_view_folder_d35(none_flow, name):
     text = none_flow.cp[name]["text"]
-    assert ("views_front" in text, "views_rest" in text) == (False, False)
+    assert "`views`" not in text and "/views/" not in text
     assert "VIEWS: none" in text.splitlines()
 
 
@@ -137,8 +149,8 @@ def test_views_none_texture_brief_names_the_material_file_for_the_texture_notes_
 
 
 def test_views_none_redo_of_a_views_step_is_refused(none_flow):
-    out = none_flow.p("feedback", AID, "x", "--action", "redo", "--step", "views_rest", ok=False)
-    assert out.strip().endswith("pilot-house: bước views_rest không chạy cho asset này (thẻ views: none)")
+    out = none_flow.p("feedback", AID, "x", "--action", "redo", "--step", "views", ok=False)
+    assert out.strip().endswith("pilot-house: bước views không chạy cho asset này (thẻ views: none)")
 
 
 def test_views_none_exceptions_of_the_final_readme_take_the_texture_only_notes_of_the_card_d35(tmp_path):
@@ -252,7 +264,7 @@ def test_camera_fit_of_another_blockout_version_is_not_named_c21(at_root):
     assert briefs.card_lines(st, step_of("model")) == []
 
 
-@pytest.mark.parametrize("sid", ["views_front", "views_rest", "texture"])
+@pytest.mark.parametrize("sid", ["views", "texture"])
 def test_brief_of_a_step_that_reads_concept_colours_points_at_the_intake_file_c22(at_root, sid):
     from core import briefs
     st = card_asset(at_root)
@@ -262,7 +274,7 @@ def test_brief_of_a_step_that_reads_concept_colours_points_at_the_intake_file_c2
     assert briefs.card_lines(st, step_of(sid)) == ["CONCEPT_COLORS: production/assets/05-warehouse/concept_colors.json", ""]
 
 
-@pytest.mark.parametrize("sid", ["views_front", "views_rest", "texture"])
+@pytest.mark.parametrize("sid", ["views", "texture"])
 def test_brief_says_the_worker_picks_the_boxes_when_intake_wrote_no_colour_file_g3(at_root, sid):
     from core import briefs
     lines = briefs.card_lines(card_asset(at_root), step_of(sid))
@@ -307,7 +319,7 @@ def test_texture_brief_of_the_pilot_points_at_the_colour_file_that_intake_wrote_
     assert json.loads(colors.read_text(encoding="utf-8")) == {"STONE": "#808080", "TIMBER": "#A06E3C", "TEAL": "#288C8C"}
 
 
-@pytest.mark.parametrize("sid", ["blockout", "model", "views_front", "texture"])
+@pytest.mark.parametrize("sid", ["blockout", "model", "views", "texture"])
 def test_a_card_written_before_counts_and_views_were_required_still_builds_every_brief_line_g3(at_root, sid):
     """An asset registered earlier keeps running: its card has neither field, and its handoff has no box column."""
     from core import briefs
@@ -315,4 +327,4 @@ def test_a_card_written_before_counts_and_views_were_required_still_builds_every
     d = make_asset(at_root / "_approved", card=card)
     st = {"id": "05-warehouse", "concept_dir": str(d), "approved": {}}
     lines = briefs.card_lines(st, step_of(sid))
-    assert lines == ([briefs.COLORS_NONE, ""] if sid in ("views_front", "texture") else [])
+    assert lines == ([briefs.COLORS_NONE, ""] if sid in ("views", "texture") else [])

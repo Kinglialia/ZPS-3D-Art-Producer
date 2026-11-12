@@ -1,13 +1,14 @@
 """Write the prompt of every VẼ MỚI paint view from one template (row L12), so the model writes only a --fix line.
 
-Usage: python3 T/make_paint_prompts.py --views V/work/paint --concept C --concept-colors VF/concept_colors.json
-           [--views-rest VR] [--batch] [--k <k> ...] [--fix "<line>" ...] --out V/work/prompts
+Usage: python3 T/make_paint_prompts.py --views V/work/paint --concept C --concept-colors CC
+           [--view-set VS] [--batch] [--k <k> ...] [--fix "<line>" ...] --out V/work/prompts
 Fills, per view of <views>/cameras.json (render_paint_views.py):
   camera     azimuth and elevation of the view.
   materials  concept_colors.json {code: hex}: the base fill paints each code in that colour, so the guide shows it.
              The name is the `Tên` cell of the code's row in the table of C/<id>.material.md whose header has `Mã` and
              `Tên`; a code without a row is named by its code only.
-  notes      `real_texture_only_notes` of C/asset-card.yaml and the TEXTURE NOTE section of VR/README.md.
+  notes      `real_texture_only_notes` of C/asset-card.yaml and the TEXTURE NOTE section of VS/README.md (the approved
+             view set; --views is the folder of the paint views).
   background the first of BACKGROUNDS farthest (RGB) from every concept colour, so project_views.py can key it.
   image      the number of the view's guide in the gen call: 2 when each job gets the concept and its own guide;
              with --batch every image goes to one call (the concept, then the guides in the order written), so the
@@ -69,13 +70,13 @@ def background(colours):
     return max(BACKGROUNDS, key=far)
 
 
-def notes(concept, views_rest):
+def notes(concept, view_set):
     import yaml
     card_path = os.path.join(concept, "asset-card.yaml")
     card = (yaml.safe_load(open(card_path, encoding="utf-8")) or {}) if os.path.isfile(card_path) else {}
     lines = [str(x) for x in card.get("real_texture_only_notes") or []]
-    if views_rest:
-        lines += texture_complexity.section(os.path.join(views_rest, "README.md"), "TEXTURE NOTE")
+    if view_set:
+        lines += texture_complexity.section(os.path.join(view_set, "README.md"), "TEXTURE NOTE")
     return [n for n in lines if n.lower().strip(" .") not in ("không có", "none")]
 
 
@@ -88,7 +89,7 @@ def prompts(a):
     colours = json.load(open(a.concept_colors, encoding="utf-8"))
     names = material_names(os.path.join(a.concept, f"{os.path.basename(os.path.normpath(a.concept))}.material.md"))
     materials = "; ".join(f"{h} = {c}, {names[c]}" if c in names else f"{h} = {c}" for c, h in colours.items())
-    note = notes(a.concept, a.views_rest)
+    note = notes(a.concept, a.view_set)
     bg = background(list(colours.values()))
     out = {}
     for i, v in enumerate(pick):
@@ -105,7 +106,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     for k in ("--views", "--concept", "--concept-colors", "--out"):
         p.add_argument(k, required=True)
-    p.add_argument("--views-rest")
+    p.add_argument("--view-set")
     p.add_argument("--batch", action="store_true")
     p.add_argument("--k", type=int, action="append")
     p.add_argument("--fix", action="append", default=[])

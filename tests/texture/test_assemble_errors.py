@@ -103,17 +103,16 @@ def finding_doc(t: Path, step: str, n: int, notes=(), **fs):
 
 def test_the_readme_drops_a_note_only_when_a_later_approved_reviewer_confirmed_the_worker_did_it_d27_8(tmp_path,
                                                                                                       monkeypatch):
-    """Pilot run: "Việc còn mở" listed views_rest F2 (back has 3 board rows), which model built. A texture review with
+    """Pilot run: "Việc còn mở" listed views F2 (back has 3 board rows), which model built. A texture review with
     `texture_note=pass` no longer drops it: only RESOLVED_CONFIRMED of an approved version does."""
     import assemble
     monkeypatch.chdir(tmp_path)
-    st = {"id": AID, "approved": {"views_front": 3, "views_rest": 2, "model": 2, "texture": 4}}
-    finding_doc(tmp_path, "views_front", 3, F4=("regen", "front: đinh"))
-    finding_doc(tmp_path, "views_rest", 2, F2=("note_texture", "back: hàng ván"), F3=("note_texture", "top: rêu"))
+    st = {"id": AID, "approved": {"views": 2, "model": 2, "texture": 4}}
+    finding_doc(tmp_path, "views", 2, F2=("note_texture", "back: hàng ván"), F3=("note_texture", "top: rêu"),
+                F4=("regen", "front: đinh"))
     tex = finding_doc(tmp_path, "texture", 4)
     (tex / "review-out.md").write_text("--- report ---\nVERDICT: PASS\nRUBRIC: light=pass; texture_note=pass\n"
                                           "--- end ---\n", encoding="utf-8")
-    finding_doc(tmp_path, "model", 3, notes=["views_rest v2 F3"])
-    finding_doc(tmp_path, "model", 2, notes=["views_rest v2 F2"])
-    assert assemble.open_work(st) == ["- views_front v3 F4 [minor] front: đinh: sửa",
-                                      "- views_rest v2 F3 [minor] top: rêu: sửa"]
+    finding_doc(tmp_path, "model", 3, notes=["views v2 F3"])
+    finding_doc(tmp_path, "model", 2, notes=["views v2 F2"])
+    assert assemble.open_work(st) == ["- views v2 F3 [minor] top: rêu: sửa", "- views v2 F4 [minor] front: đinh: sửa"]

@@ -1,13 +1,14 @@
 """Review sheet of the view set, crops, and the mirrored side view (concept-views.md §7, §3).
 
-  python3 tools/views_sheet.py make --final <V/final> --concept <concept_albedo.png> --front <front.png>
-          --card <asset-card.yaml> [--kept back,left] [--crop <view>:x0,y0,x1,y1 ...]
-      Row 1: concept, front, then the side views of the card's `views` (D35; full: back, left, right); --kept views (copied from the prior approved set) are labelled
+  python3 tools/views_sheet.py make --final <V/final> --concept <concept_albedo.png> --card <asset-card.yaml>
+          [--kept back,left] [--crop <view>:x0,y0,x1,y1 ...]
+      Row 1: concept, <final>/front.png, then the side views of the card's `views` (D35; full: back, left, right); --kept views (copied from the prior approved set) are labelled
       "(giữ)". Row 2: report/overlay_<view>.png with score, IoU, dE from
       report/report.json. Row 3: the crops, in pixels of the view image. Writes <final>/report/VIEWS_sheet.png and
       VIEWS_sheet.json (sha256 of the view files, which check_package.py compares).
       Labels use the Noto Sans that ships with the skill (fonts/, OFL); without it, the default font and no diacritics.
-  python3 tools/views_sheet.py crop --image <png> --box x0,y0,x1,y1 --out <png> [--scale 2]
+  python3 tools/views_sheet.py crop --image <png> --box x0,y0,x1,y1 --out <png> [--scale 2] [--frac]
+      --frac: the box is in 0–1 of the image, as a reviewer asks for it (`xin ảnh <nhãn> box x0,y0,x1,y1`).
   python3 tools/views_sheet.py flip --src <left.png> --out <right.png>    right = left mirrored (symmetric left_right)
 Prints one line. Exit 0, 2 on error.
 """
@@ -72,7 +73,7 @@ def label(r):
 
 def make(a):
     views = card_set(a.card)
-    paths = {v: a.front if v == "front" else os.path.join(a.final, f"{v}.png") for v in views}
+    paths = {v: os.path.join(a.final, f"{v}.png") for v in views}
     rdir = os.path.join(a.final, "report")
     rep = json.load(open(os.path.join(rdir, "report.json"), encoding="utf-8"))
     kept = set((a.kept or "").split(","))
@@ -100,7 +101,15 @@ def make(a):
 
 
 def crop(a):
-    im = Image.open(a.image).crop(box(a.box))
+    im = Image.open(a.image)
+    if a.frac:
+        f = tuple(float(x) for x in a.box.split(","))
+        if len(f) != 4 or not (0 <= f[0] < f[2] <= 1 and 0 <= f[1] < f[3] <= 1):
+            raise ValueError(f"box {a.box}: --frac cần 0 ≤ x0 < x1 ≤ 1, 0 ≤ y0 < y1 ≤ 1")
+        b = (round(f[0] * im.width), round(f[1] * im.height), round(f[2] * im.width), round(f[3] * im.height))
+    else:
+        b = box(a.box)
+    im = im.crop(b)
     im = im.resize((im.width * a.scale, im.height * a.scale), Image.NEAREST)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     im.save(a.out)
@@ -118,7 +127,6 @@ def main():
     m = sub.add_parser("make")
     m.add_argument("--final", required=True)
     m.add_argument("--concept", required=True)
-    m.add_argument("--front", required=True)
     m.add_argument("--card", required=True)
     m.add_argument("--crop", action="append")
     m.add_argument("--kept")
@@ -127,6 +135,7 @@ def main():
     c.add_argument("--box", required=True)
     c.add_argument("--out", required=True)
     c.add_argument("--scale", type=int, default=2)
+    c.add_argument("--frac", action="store_true")
     f = sub.add_parser("flip")
     f.add_argument("--src", required=True)
     f.add_argument("--out", required=True)

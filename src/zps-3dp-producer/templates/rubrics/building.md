@@ -15,17 +15,11 @@
 - foot: chân nhà, nền và đất ổn trên crop foot_front_*
 - own_decisions: mục "Blockout tự quyết" theo `hidden_side_rules` của profile
 
-## views_front
-- style: style, chất liệu, mức chi tiết của front giống concept albedo
+## views
+- style: style, chất liệu, mức chi tiết của từng view giống concept albedo
 - shape: silhouette đúng guide; mép mái, diềm, nền, bệ trụ đúng độ cao như guide
-- light: ánh sáng đều; không bóng đổ dưới mái hay diềm, không ánh sáng một hướng
+- light: ánh sáng đều ở mọi view; không bóng đổ dưới mái hay diềm, không ánh sáng một hướng
 - inventory: không thêm, không bớt chi tiết so với guide; cửa, cửa sổ, biển đúng số và vị trí
-
-## views_rest
-- style: style, chất liệu, mức chi tiết của từng view mới giống concept albedo
-- shape: silhouette đúng guide; mép mái, diềm, nền, bệ trụ đúng độ cao như guide
-- light: ánh sáng đều ở mọi view mới; không bóng đổ dưới mái hay diềm
-- inventory: không thêm, không bớt chi tiết so với guide
 - sync: cùng vật liệu có cùng màu, texture, độ mòn như front
 - hidden_sides: mặt khuất đúng `blockout.md` (phần khuất, "Blockout tự quyết")
 - props: props đủ số và tách rời

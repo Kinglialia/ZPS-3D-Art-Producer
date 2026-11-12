@@ -72,14 +72,14 @@ def test_show_of_one_step_and_version_names_the_file_after_them_and_refuses_a_mi
 
 def test_show_of_an_asset_lists_every_step_that_has_a_version_newest_step_first(project, capsys):
     st = load_st(AID)
-    png(vdir(AID, "views_front", 1) / "final/front.png", (40, 40))
-    st |= {"stage": "views_front", "state": "running", "versions": {"blockout": 2, "views_front": 1},
+    png(vdir(AID, "views", 1) / "final/front.png", (40, 40))
+    st |= {"stage": "views", "state": "running", "versions": {"blockout": 2, "views": 1},
            "approved": {"blockout": 2}, "offer": None, "offer_key": None}
     save_st(st)
     show(capsys)
     cards = payload(ROOT / "show/house-a.html")["assets"]
     assert [(c["step"], c["version"], c["header"]) for c in cards] == [
-        ("views_front", 1, "House A · views_front v1 · running"), ("blockout", 2, "House A · blockout v2 · đã duyệt")]
+        ("views", 1, "House A · views v1 · running"), ("blockout", 2, "House A · blockout v2 · đã duyệt")]
 
 
 def test_bundle_scales_images_to_1024_px_keeps_crops_and_embeds_everything_in_one_file(project, capsys):

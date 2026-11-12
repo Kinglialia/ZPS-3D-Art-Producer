@@ -16,7 +16,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ): mỗi mục `<khóa> = N` c
 ## Tool
 
 - `T` = dòng `TOOLS:` của brief. `R` = `T/../references` (tài liệu của agent này). `BT` = `../../zps-3dp-step-blockout/tools` (tool của blockout, tính từ `T`).
-- `F` = `V/final/`. `B`, `FF`, `VR` = `final/` đã duyệt của `blockout`, `views_front`, `views_rest` trong brief. `C` = thư mục concept trong brief.
+- `F` = `V/final/`. `B`, `VS` = `final/` đã duyệt của `blockout`, `views` trong brief. `C` = thư mục concept trong brief.
 - `RUN` = dòng `RUN:` của brief. `RUN <tool> <tham số>` chạy tool trong venv. `RUN bl <tool> <tham số>` chạy tool trong Blender. `<tool>` tính từ `T`. `RUN` tự cài deps khi thiếu.
 - Mỗi lệnh in một dòng: tên tool, `pass`, `fail` hoặc `error`, rồi đường dẫn. Thoát 0 khi pass. Thoát 1 khi tool lỗi, hoặc khi JSON kết quả tool vừa ghi là `fail` hay `error`: đọc JSON hoặc log trong dòng đó. Thoát 2: lệnh bị từ chối, sửa lệnh.
 - Mọi bước dựng chạy trong venv, kể cả graph có part `custom`. Chỉ ba lệnh dưới đây mở Blender. Không gọi thẳng `self_build/assembly.py`: nó chạy `parts_lib.py` trong `F`.
@@ -29,7 +29,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ): mỗi mục `<khóa> = N` c
 
 ## Quy trình
 
-1. `RUN check_inputs.py --final F --blockout B --views-front FF --views-rest VR --concept C`. Brief có dòng `VIEWS: none`: không có `FF`, `VR`, bỏ hai cờ đó; mặt khuất theo `hidden_sides` của thẻ và `blockout.md`. Fail: `STATUS: NEEDS_CONTEXT`.
+1. `RUN check_inputs.py --final F --blockout B --views VS --concept C`. Brief có dòng `VIEWS: none`: không có `VS`, bỏ cờ đó; mặt khuất theo `hidden_sides` của thẻ và `blockout.md`. Fail: `STATUS: NEEDS_CONTEXT`.
 2. Chép `B/part_graph.json`, `B/parts_lib.py` vào `F`. `RUN make_spec.py --final F --blockout B --card C/asset-card.yaml --profile <profile> --preset <preset>` (hai file ở mục 4 của brief). Brief có dòng `LIGHT:`: thêm `--light "<giá trị sau LIGHT:>"` (ví dụ `--light "from=left elevation=45"`). `make_spec.py` đọc `bottom_visible` từ thẻ. Số hình học chỉ lấy từ `B/sources.json`, qua `F/spec.json`; không đọc lại `size_m` của thẻ hay profile.
 3. Detail pass (`R/model.md` mục 1). Sửa `F/part_graph.json` cho cả pass. Không viết `parts_lib.py`: lệnh gate chép `BT/custom_lib.py` vào `F`. Graph có part gọi hàm của file `CUSTOM_PARTS:`: sau mỗi lần sửa `part_graph.json` hoặc file đó, chạy `RUN BT/custom_mesh.py --work F` trước lệnh gate (hàm mới: xem Quy tắc). Rồi gate một lần: `RUN gate_all.py --work F --check-flag final --skip check_inputs --skip check_uv_edge --check-args "check_detail=--blockout 'B' --pilot '<PILOT>' --before-join" --check-args "check_mesh=--before-join"`. `<PILOT>` = dòng `PILOT` của brief, `none` khi không có. Lệnh dựng graph một lần, gate mọi part, kiểm bbox trong ±2 % của blockout, `fixed_params` không đổi và part kín không lộn mặt, rồi in chỉ các mục fail. Sửa graph và chạy lại đến khi in `pass`. Không dựng từng part.
 4. `RUN bl build_model.py --final F`: gộp mesh rồi UV trong một phiên Blender. Join fail thì UV không chạy. Fail: sửa ở bước 3, chạy lại từ bước 3.

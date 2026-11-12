@@ -287,14 +287,14 @@ def test_bottom_visible_comes_from_the_card_and_survives_a_rerun_g6(make_spec, c
 
 def inputs_of(tmp_path, card, views=True):
     names = {"blockout": ("part_graph.json", "parts_lib.py", "sources.json", "blockout.md", "assembly.json"),
-             "views_front": ("front.png",), "views_rest": ("back.png", "left.png", "right.png"),
+             "views": ("front.png", "back.png", "left.png", "right.png"),
              "concept": ("concept_albedo.png", "concept_shadow.png")}
     for d, files in names.items():
         for n in files:
             (tmp_path / d).mkdir(exist_ok=True)
             (tmp_path / d / n).write_text("x", encoding="utf-8")
     (tmp_path / "concept/asset-card.yaml").write_text(card, encoding="utf-8")
-    vs = ["--views-front", tmp_path / "views_front", "--views-rest", tmp_path / "views_rest"] if views else []
+    vs = ["--views", tmp_path / "views"] if views else []
     r = tool("check_inputs", "--final", tmp_path / "final", "--blockout", tmp_path / "blockout", *vs,
              "--concept", tmp_path / "concept")
     return r.returncode, result(tmp_path / "final", "inputs")[1]["inputs.views"]
@@ -303,14 +303,14 @@ def inputs_of(tmp_path, card, views=True):
 def test_check_inputs_names_each_missing_file_the_brief_promised(tmp_path):
     (tmp_path / "blockout").mkdir()
     r = tool("check_inputs", "--final", tmp_path / "final", "--blockout", tmp_path / "blockout",
-             "--views-front", tmp_path / "views_front", "--views-rest", tmp_path / "views_rest", "--concept", tmp_path / "concept")
+             "--views", tmp_path / "views", "--concept", tmp_path / "concept")
     assert (r.returncode, len(r.stdout.splitlines())) == (1, 1)
     assert result(tmp_path / "final", "inputs")[1]["inputs.concept"] == (
         "fail", ["concept/concept_albedo.png", "concept/concept_shadow.png", "concept/asset-card.yaml"])
 
 
 @pytest.mark.parametrize("card, views, out", [
-    ("views: full_top\n", True, (1, ("fail", ["views_rest/top.png"]))),
+    ("views: full_top\n", True, (1, ("fail", ["views/top.png"]))),
     ("asset: x\n", True, (0, ("pass", []))),
     ("views: none\n", False, (0, ("pass", []))),
 ])

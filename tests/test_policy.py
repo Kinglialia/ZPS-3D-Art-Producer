@@ -7,7 +7,7 @@ from shared import run
 from core import policy
 from core.state import ProducerError
 
-TEMPLATE = {"approvals": {"blockout": "human", "views_rest": "human", "model": "human"}, "review_board": "local",
+TEMPLATE = {"approvals": {"blockout": "human", "views": "human", "model": "human"}, "review_board": "local",
             "delegations": [], "test_mode": False, "disk_warn_gb": 20, "purge": "on_approve", "purge_zip": None,
             "texture_default": "meshy",
             "dispatch": "foreground", "watch": {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}}
@@ -33,12 +33,12 @@ def test_a_new_project_starts_outside_test_mode_so_the_producer_cannot_waive_fin
     assert policy.load()["test_mode"] is False
 
 
-@pytest.mark.parametrize("key", ["views", "views_front", "assemble", "texture"])
+@pytest.mark.parametrize("key", ["views_front", "assemble", "texture"])
 def test_unknown_approvals_key_in_policy_file_is_refused_because_only_review_human_steps_have_a_choice(prod, key):
     (prod / "policy.yaml").write_text(yaml.safe_dump({"approvals": {key: "reviewer"}}), encoding="utf-8")
     with pytest.raises(ProducerError) as e:
         policy.load()
-    assert str(e.value) == f"production/policy.yaml: approvals.{key}: khóa không hợp lệ (blockout|views_rest|model)"
+    assert str(e.value) == f"production/policy.yaml: approvals.{key}: khóa không hợp lệ (blockout|views|model)"
 
 
 @pytest.mark.parametrize("text, error", [
@@ -52,10 +52,24 @@ def test_a_policy_file_that_is_not_a_yaml_map_is_one_error_line_not_a_traceback(
     assert str(e.value).startswith(error)
 
 
+def test_a_policy_of_v0_7_1_that_names_the_views_gate_views_rest_reads_as_views_and_is_saved_so_d44_3(prod):
+    """The two views steps became one; an old project keeps its choice of approver without a hand edit."""
+    (prod / "policy.yaml").write_text(yaml.safe_dump({
+        "approvals": {"blockout": "human", "views_rest": "reviewer", "model": "human"},
+        "delegations": [{"step": "views_rest", "ids": ["house-a"], "by": "", "at": "-"}]}), encoding="utf-8")
+    pol = policy.load()
+    assert (pol["approvals"], [policy.approver(pol, "views", a) for a in ("house-a", "house-b")]) == (
+        {"blockout": "human", "views": "reviewer", "model": "human"}, ["delegate", "policy"])
+    setp("blockout", "reviewer")
+    saved = yaml.safe_load((prod / "policy.yaml").read_text(encoding="utf-8"))
+    assert (saved["approvals"], saved["delegations"][0]["step"]) == (
+        {"blockout": "reviewer", "views": "reviewer", "model": "human"}, "views")
+
+
 def test_approvals_set_refuses_an_unknown_step_and_an_unknown_value(prod):
     with pytest.raises(ProducerError) as e:
         setp("assemble", "reviewer")
-    assert str(e.value) == "assemble: khóa không hợp lệ (blockout|views_rest|model)"
+    assert str(e.value) == "assemble: khóa không hợp lệ (blockout|views|model)"
     with pytest.raises(ProducerError) as e:
         setp("blockout", "ai")
     assert str(e.value) == "người duyệt phải là human|reviewer"
@@ -75,7 +89,7 @@ def test_approvals_set_writes_the_file_prints_one_line_and_ledgers_the_words_of_
     setp("blockout", "reviewer", by="blockout để reviewer duyệt")
     assert capsys.readouterr().out == "OK: approvals blockout=reviewer\n"
     assert yaml.safe_load((prod / "policy.yaml").read_text(encoding="utf-8")) == TEMPLATE | {
-        "approvals": {"blockout": "reviewer", "views_rest": "human", "model": "human"}}
+        "approvals": {"blockout": "reviewer", "views": "human", "model": "human"}}
     assert "approvals blockout=reviewer · by: blockout để reviewer duyệt" in (prod / "ledger.md").read_text(encoding="utf-8")
 
 
@@ -99,11 +113,11 @@ def test_delegate_beats_approvals_and_approvals_beat_the_human_default(prod, cap
     assert policy.approver(pol, "blockout", "house-a") == "human"
     setp("blockout", "reviewer")
     assert policy.approver(policy.load(), "blockout", "house-a") == "policy"
-    policy.delegate(Namespace(step="views_rest", ids=["house-a", "house-b"], by="lô này để reviewer", confirm_spend=False))
-    assert capsys.readouterr().out.splitlines()[-1] == "OK: delegate views_rest → reviewer: house-a, house-b"
+    policy.delegate(Namespace(step="views", ids=["house-a", "house-b"], by="lô này để reviewer", confirm_spend=False))
+    assert capsys.readouterr().out.splitlines()[-1] == "OK: delegate views → reviewer: house-a, house-b"
     pol = policy.load()
-    assert [policy.approver(pol, "views_rest", a) for a in ("house-a", "house-c")] == ["delegate", "human"]
-    assert pol["delegations"][0] | {"at": "-"} == {"step": "views_rest", "ids": ["house-a", "house-b"],
+    assert [policy.approver(pol, "views", a) for a in ("house-a", "house-c")] == ["delegate", "human"]
+    assert pol["delegations"][0] | {"at": "-"} == {"step": "views", "ids": ["house-a", "house-b"],
                                                    "by": "lô này để reviewer", "at": "-"}
 
 

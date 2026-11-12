@@ -363,7 +363,7 @@ def test_board_links_and_feedback_marks_still_resolve_after_a_purge(proj, monkey
     assert [c["sheet"] for c in after] == [c["sheet"] for c in before]
     assert all(board.safe_file(cfg, i["u"]) for c in after for i in c["images"])
     assert [c["step"] for c in before if c["glb"]] == ["blockout", "model", "assemble"]
-    assert [c["glb"] for c in after] == [None] * 6
+    assert [c["glb"] for c in after] == [None] * 5
     assert (proj / A / MARK).is_file()
 
 
@@ -432,7 +432,7 @@ def test_next_warns_above_disk_warn_gb_and_disk_sums_by_asset_step_and_type(proj
     assert out[2].startswith(f"  {AID}: ")
     steps = out[out.index("Theo bước:") + 1:out.index("Theo loại file:")]
     assert sorted(l.split(":")[0].strip() for l in steps) == ["assemble", "blockout", "feedback", "model", "texture",
-                                                              "views_front", "views_rest"]
+                                                              "views"]
 
 
 def test_an_image_that_cannot_be_shrunk_keeps_its_pixels_and_the_purge_still_records(proj):

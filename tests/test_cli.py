@@ -56,10 +56,10 @@ def test_validate_exits_1_on_problems_so_a_script_can_gate_on_it(proj, capsys):
 def test_validate_names_the_steps_a_gd1_asset_rubric_lacks_so_the_views_brief_never_points_at_nothing(proj, capsys):
     rub = ROOT / f"assets/{AID}/rubric.md"
     text = rub.read_text(encoding="utf-8")
-    rub.write_text(text.split("## views_front")[0] + "## model" + text.split("## model", 1)[1], encoding="utf-8")
+    rub.write_text(text.split("## views\n")[0] + "## model" + text.split("## model", 1)[1], encoding="utf-8")
     assert error_of("validate") == 1
     assert capsys.readouterr().out.splitlines()[0] == (
-        "house-a: rubric.md thiếu mục ## views_front, ## views_rest của bước đang bật (chép từ templates/rubrics/)")
+        "house-a: rubric.md thiếu mục ## views của bước đang bật (chép từ templates/rubrics/)")
 
 
 def test_ledger_tail_0_prints_nothing_instead_of_the_whole_ledger(proj, capsys):
@@ -79,7 +79,7 @@ def test_new_after_a_crash_that_left_a_folder_without_status_creates_the_asset(p
 
 def test_an_issues_handoff_from_a_step_outside_inputs_is_one_error_line_so_no_brief_quotes_an_unapproved_report(proj):
     p = ROOT / "pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('issues = ["model"]', 'issues = ["views_front", "assemble"]'),
+    p.write_text(p.read_text(encoding="utf-8").replace('issues = ["model"]', 'issues = ["views", "assemble"]'),
                  encoding="utf-8")
     assert error_of("next") == "LỖI: step texture: issues assemble không nằm trong inputs của bước"
 

@@ -110,36 +110,35 @@ def test_measure_keys_the_background_over_the_whole_image_so_a_closed_gap_is_not
         assert im.size == (320, 320)
 
 
-def test_measure_reads_front_from_views_front_and_fails_a_missing_view_so_the_fix_brief_lists_it(tmp_path):
+def test_measure_reads_the_front_from_the_same_final_and_fails_a_missing_view_so_the_fix_brief_lists_it(tmp_path):
     g, f = frame_guides(tmp_path / "guides"), tmp_path / "final"
-    front = frame_gen(tmp_path / "views_front/front.png")
-    rc, _, _ = tool("measure", "--final", f, "--guides", g, "--views", "front,back", "--front", front)
+    frame_gen(f / "front.png")
+    rc, _, _ = tool("measure", "--final", f, "--guides", g, "--views", "front,back", "--front")
     assert rc == 1
     assert {k: v[0] for k, v in checks(f / "review/checks/measure.json").items() if k.startswith("views.")} == {
         "views.front": "pass", "views.back": "fail"}
     frame_gen(f / "back.png")
-    assert tool("measure", "--final", f, "--guides", g, "--views", "front,back", "--front", front)[0] == 0
+    assert tool("measure", "--final", f, "--guides", g, "--views", "front,back", "--front")[0] == 0
     assert sorted(read(f / "report/report.json")["views"]) == ["back", "front"]
 
 
 def test_check_inputs_names_every_missing_file_the_brief_points_to(tmp_path):
-    b, c, fr = tmp_path / "blockout", tmp_path / "_approved/hut", tmp_path / "views_front"
+    """One step makes the front and the sides, so the inputs are the blockout and the concept only."""
+    b, c = tmp_path / "blockout", tmp_path / "_approved/hut"
     b.mkdir()
     (b / "part_graph.json").write_text(json.dumps({"parts": [{"name": "base"}, {"name": "roof"}]}), encoding="utf-8")
     for n in ("sources.json", "blockout.md", "parts/base.glb", "../_approved/hut/concept_albedo.png",
-              "../_approved/hut/asset-card.yaml", "../_approved/hut/hut.material.md", "../views_front/front.png"):
+              "../_approved/hut/asset-card.yaml", "../_approved/hut/hut.material.md"):
         (b / n).parent.mkdir(parents=True, exist_ok=True)
         (b / n).write_text("x", encoding="utf-8")
-    rc, _, _ = tool("check_inputs", "--final", tmp_path / "final", "--blockout", b, "--concept", c, "--front", fr)
+    rc, _, _ = tool("check_inputs", "--final", tmp_path / "final", "--blockout", b, "--concept", c)
     got = checks(tmp_path / "final/review/checks/inputs.json")
-    assert rc == 1
-    assert got["inputs.blockout"] == ("fail", ["parts/roof.glb"]) and got["inputs.concept"] == ("pass", [])
-    assert got["inputs.front"][1] == sorted(["bg_color.json", "concept_colors.json", "guides/views.json",
-                                             *[f"guides/{v}_{k}.png" for v in VIEWS for k in ("guide", "id")]])
+    assert (rc, got) == (1, {"inputs.blockout": ("fail", ["parts/roof.glb"]), "inputs.concept": ("pass", [])})
 
 
 def view_set(tmp_path, flip_line="right = left lật ngang"):
-    f, front = tmp_path / "final", png(tmp_path / "views_front/front.png", (300, 200), "#E8E8E8", [((50, 50, 250, 190), "#8B5A2B")])
+    f = tmp_path / "final"
+    front = png(f / "front.png", (300, 200), "#E8E8E8", [((50, 50, 250, 190), "#8B5A2B")])
     for v, colour in (("back", "#556B2F"), ("left", "#8B0000"), ("top", "#2F4F4F")):
         png(f / f"{v}.png", (300, 200), "#E8E8E8", [((40, 30, 200, 190), colour)])
     ImageOps.mirror(Image.open(f / "left.png")).save(f / "right.png")
@@ -158,16 +157,16 @@ def view_set(tmp_path, flip_line="right = left lật ngang"):
 
 
 def package(f, front, card):
-    rc, _, _ = tool("check_package", "--final", f, "--front", front, "--card", card)
+    rc, _, _ = tool("check_package", "--final", f, "--card", card)
     return rc, checks(f / "review/checks/package.json")
 
 
 def test_views_sheet_puts_concept_and_5_views_over_their_overlays_and_records_what_it_was_built_from(tmp_path):
     f, front, card, concept = view_set(tmp_path)
-    rc, out, _ = tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
+    rc, out, _ = tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card)
     assert rc == 0 and out == f"[views/views_sheet] 2 hàng 2004x720 -> {f / 'report/VIEWS_sheet.png'}\n"
     assert sorted(read(f / "report/VIEWS_sheet.json")["inputs"]) == sorted(VIEWS)
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card, "--crop", "back:40,30,140,130")
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card, "--crop", "back:40,30,140,130")
     with Image.open(f / "report/VIEWS_sheet.png") as im:
         assert im.size == (2004, 1074)
     assert package(f, front, card) == (0, {"package.views": ("pass", []), "package.sheet": ("pass", []),
@@ -187,7 +186,7 @@ def test_views_sheet_and_check_package_take_only_the_views_of_the_card_so_full_s
         (f / f"{v}.png").unlink()
     card.write_text(("" if mode is None else f"views: {mode}\n") + "symmetric: {left_right: true, front_back: false}\n",
                     encoding="utf-8")
-    assert tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)[0] == 0
+    assert tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card)[0] == 0
     assert sorted(read(f / "report/VIEWS_sheet.json")["inputs"]) == shipped
     with Image.open(f / "report/VIEWS_sheet.png") as im:
         assert im.width == width
@@ -205,7 +204,7 @@ def test_views_sheet_marks_kept_views_in_the_label_strip_only_so_the_user_sees_w
     f, front, card, concept = view_set(tmp_path)
     shots = []
     for kept in ((), ("--kept", "back,left")):
-        tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card, *kept)
+        tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card, *kept)
         shots.append(Image.open(f / "report/VIEWS_sheet.png").convert("RGB"))
     strip, cells = (0, 0, 2004, 12 + 22), (0, 12 + 22, 2004, 720)
     assert (shots[0].crop(strip).tobytes() != shots[1].crop(strip).tobytes(),
@@ -233,14 +232,14 @@ def test_views_sheet_labels_use_the_bundled_noto_sans_on_every_machine_and_it_dr
 
 def test_check_package_fails_a_view_changed_after_the_sheet_because_the_user_approves_the_sheet(tmp_path):
     f, front, card, concept = view_set(tmp_path)
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card)
     png(f / "back.png", (300, 200), "#000000")
     assert package(f, front, card)[1]["package.sheet"] == ("fail", ["back"])
 
 
 def test_check_package_wants_the_pointer_line_and_all_four_readme_sections(tmp_path):
     f, front, card, concept = view_set(tmp_path)
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card)
     text = (f / "README.md").read_text(encoding="utf-8")
     (f / "README.md").write_text(text.replace(POINTER, "# Bộ view").replace("## 2. TEXTURE NOTE\nkhông có\n", ""),
                                  encoding="utf-8")
@@ -250,12 +249,12 @@ def test_check_package_wants_the_pointer_line_and_all_four_readme_sections(tmp_p
 
 def test_a_symmetric_card_needs_the_flip_line_and_right_must_be_left_mirrored_pixel_for_pixel(tmp_path):
     f, front, card, concept = view_set(tmp_path, flip_line="không có")
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card)
     assert package(f, front, card)[1]["package.flip"] == (
         "fail", ["thẻ có symmetric.left_right: true, mục Lật ảnh cần `right = left lật ngang`"])
     f, front, card, concept = view_set(tmp_path / "b")
     png(f / "right.png", (300, 200), "#E8E8E8", [((40, 30, 200, 190), "#8B0000")])
-    tool("views_sheet", "make", "--final", f, "--concept", concept, "--front", front, "--card", card)
+    tool("views_sheet", "make", "--final", f, "--concept", concept, "--card", card)
     assert package(f, front, card)[1]["package.flip"] == ("fail", ["right.png không phải left.png lật ngang"])
 
 
@@ -265,6 +264,16 @@ def test_views_sheet_flip_and_crop_are_exact_pixel_operations(tmp_path):
     assert Image.open(tmp_path / "right.png").getpixel((289, 10)) == (139, 0, 0)
     tool("views_sheet", "crop", "--image", src, "--box", "0,0,50,40", "--out", tmp_path / "ev/crop.png")
     assert Image.open(tmp_path / "ev/crop.png").size == (100, 80)
+
+
+def test_a_crop_asked_in_0_to_1_of_the_image_is_cut_with_frac_so_the_worker_never_converts_a_reviewer_box(tmp_path):
+    """The reviewer asks `xin ảnh <nhãn> box x0,y0,x1,y1` in 0–1; a box the script could not serve goes to the worker."""
+    src = png(tmp_path / "left.png", (300, 200), "#E8E8E8", [((150, 0, 300, 100), "#8B0000")])
+    assert tool("views_sheet", "crop", "--image", src, "--box", "0.5,0,1,0.5", "--frac", "--scale", "1",
+                "--out", tmp_path / "ev/c.png")[0] == 0
+    with Image.open(tmp_path / "ev/c.png") as im:
+        assert (im.size, im.convert("RGB").getcolors()) == ((150, 100), [(15000, (139, 0, 0))])
+    assert tool("views_sheet", "crop", "--image", src, "--box", "0.5,0,1.2,0.5", "--frac", "--out", tmp_path / "x.png")[0] == 2
 
 
 WALL, WIN = "#E6194B", "#3CB44B"
@@ -459,12 +468,13 @@ def solid_guides(d, views):
     return d
 
 
-def test_with_front_given_the_approved_front_is_never_listed_for_regen_but_its_mirror_partner_is_v4(tmp_path):
-    """views_rest cannot regenerate the front. A failing front/back pair means the back is the view to redo."""
+def test_with_front_the_measured_front_is_never_listed_for_regen_but_its_mirror_partner_is_v4(tmp_path):
+    """The set is made against the front that passed its own measure. A failing front/back pair means the back is the
+    view to redo."""
     g = solid_guides(tmp_path / "guides", ("front", "back"))
-    front = front_mismatch_gen(tmp_path / "views_front/front.png")
+    front_mismatch_gen(tmp_path / "final/front.png")
     png(tmp_path / "final/back.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), BROWN)])
-    rc, _, rep, check = measure(tmp_path, "front,back", ("--front", front), guides=g)
+    rc, _, rep, check = measure(tmp_path, "front,back", ("--front",), guides=g)
     assert rep["views"]["front"]["verdict"] == "fail" and rep["mirrors"][0]["status"] == "fail"
     assert (rep["regen"], rc) == (["back"], 1)
     assert {k: v[0] for k, v in checks(check).items() if k.startswith("views.")} == {"views.front": "info",
@@ -472,7 +482,7 @@ def test_with_front_given_the_approved_front_is_never_listed_for_regen_but_its_m
     assert "Views to generate again: Back\n" in (tmp_path / "final/report/report.md").read_text(encoding="utf-8")
 
 
-def test_without_front_given_a_failing_front_is_still_regenerated_in_views_front_v4(tmp_path):
+def test_a_front_measured_alone_that_fails_is_listed_for_regen_v4(tmp_path):
     g = solid_guides(tmp_path / "guides", ("front",))
     front_mismatch_gen(tmp_path / "final/front.png")
     rc, _, rep, _ = measure(tmp_path, guides=g)
@@ -496,7 +506,7 @@ def test_a_named_view_without_an_image_fails_even_when_a_space_follows_the_comma
     assert (rc, checks(check)["views.back"][0]) == (1, "fail")
 
 
-def test_views_rest_takes_the_colour_reference_from_the_measured_front_and_the_concept_only_where_front_has_none_v6(
+def test_the_set_takes_the_colour_reference_from_the_measured_front_and_the_concept_only_where_front_has_none_v6(
         tmp_path):
     """D36: front is the colour standard of the set. A material the front never shows (the roof) has no front colour, so
     the concept colour is its reference, not the median of the views (which is the view itself, dE 0 always)."""
@@ -505,17 +515,17 @@ def test_views_rest_takes_the_colour_reference_from_the_measured_front_and_the_c
     (g / "views.json").write_text(json.dumps({"materials": {"WALL": ID_STONE, "ROOF": ID_TRIM}}), encoding="utf-8")
     png(g / "front_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 350), ID_STONE)], mode="RGBA")
     png(g / "back_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 200), ID_STONE), ((50, 200, 350, 350), ID_TRIM)], mode="RGBA")
-    front = png(tmp_path / "views_front/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), "#7A4F26")])
+    png(tmp_path / "final/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), "#7A4F26")])
     png(tmp_path / "final/back.png", (600, 600), "#E8E8E8", [((75, 75, 525, 300), "#7A4F26"), ((75, 300, 525, 525), "#556B2F")])
-    cc = tmp_path / "views_front/concept_colors.json"
+    cc = tmp_path / "concept_colors.json"
     cc.write_text(json.dumps({"WALL": BROWN, "ROOF": "#8B0000"}), encoding="utf-8")
-    rc, _, rep, _ = measure(tmp_path, "front,back", ("--front", front, "--concept-colors", cc), guides=g)
+    rc, _, rep, _ = measure(tmp_path, "front,back", ("--front", "--concept-colors", cc), guides=g)
     rows = {m: (r["reference"], r["reference_hex"]) for m, r in rep["colours"].items()}
     assert rows == {"WALL": ("front view", "#7A4F26"), "ROOF": ("concept", "#8B0000")}
     assert (rc, rep["regen"]) == (1, ["back"])
 
 
-def test_views_front_still_compares_the_front_with_the_concept_colours_v6(tmp_path):
+def test_the_front_measured_alone_compares_its_colours_with_the_concept_colours_v6(tmp_path):
     cc = tmp_path / "cc.json"
     cc.write_text(json.dumps({"WALL": "#8B0000", "TRIM": BROWN}), encoding="utf-8")
     wall_trim_gen(tmp_path / "final/front.png", trim="#2F4F4F")
@@ -562,13 +572,30 @@ def test_a_gen_that_touches_the_image_border_fails_because_the_object_is_cropped
     assert (rc, checks(check)["border.front"][0]) == (0, "pass")
 
 
-def test_the_approved_front_that_touches_the_border_is_only_info_in_views_rest_v15(tmp_path):
-    front = wall_trim_gen(tmp_path / "views_front/front.png", margin=0)
+def test_a_front_that_touches_the_border_is_only_info_when_the_set_is_measured_against_it_v15(tmp_path):
+    wall_trim_gen(tmp_path / "final/front.png", margin=0)
     g = wall_trim_guides(tmp_path / "guides", ("front", "back"))
     wall_trim_gen(tmp_path / "final/back.png")
-    rc, _, rep, check = measure(tmp_path, "front,back", ("--front", front), guides=g)
+    rc, _, rep, check = measure(tmp_path, "front,back", ("--front",), guides=g)
     got = {k: v[0] for k, v in checks(check).items()}
     assert (got["border.front"], got["border.back"]) == ("info", "pass")
+
+
+def test_the_set_measure_keeps_the_fail_of_the_front_own_measure_so_the_worker_must_accept_it_d44_3(tmp_path):
+    """One step writes one measure.json: the set measure must not turn a front that failed its own measure into a pass,
+    or an accepted front fail never reaches the reviewer."""
+    wall_trim_gen(tmp_path / "final/front.png", margin=0)
+    g = wall_trim_guides(tmp_path / "guides", ("front", "back"))
+    rc, _, _, check = measure(tmp_path, "front", guides=g)
+    assert (rc, checks(check)["border.front"][0]) == (1, "fail")
+    wall_trim_gen(tmp_path / "final/back.png")
+    rc, _, rep, check = measure(tmp_path, "front,back", ("--front",), guides=g)
+    got = {k: v[0] for k, v in checks(check).items()}
+    assert (rc, got["border.front"], got["border.back"], rep["regen"]) == (1, "fail", "pass", [])
+    wall_trim_gen(tmp_path / "ok/final/front.png")
+    wall_trim_gen(tmp_path / "ok/final/back.png")
+    assert measure(tmp_path / "ok", "front", guides=g)[0] == 0
+    assert measure(tmp_path / "ok", "front,back", ("--front",), guides=g)[0] == 0
 
 
 def test_a_missing_prop_fails_the_component_count_against_the_guide_v15(tmp_path):

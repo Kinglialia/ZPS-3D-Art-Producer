@@ -45,7 +45,7 @@ COMPARE = ("unlit_34_front", "unlit_game")
 COMPARE_MEAN = 6.0
 COMPARE_MASK = 0.02
 OPEN_KINDS = ("minor", "major", "blocker", "unclear")
-STEPS = ("blockout", "views_front", "views_rest", "model", "texture")
+STEPS = ("blockout", "views", "model", "texture")
 
 
 class Fail(Exception):
@@ -172,7 +172,7 @@ def waived(st: dict, by: str, tag: str = "") -> list[str]:
 
 
 def card_notes(st: dict) -> list[str]:
-    """Card `views: none` (D35): no views_rest README, so the texture_only notes of the card stand for its TEXTURE NOTE."""
+    """Card `views: none` (D35): no views README, so the texture_only notes of the card stand for its TEXTURE NOTE."""
     from core import asset_card
     if asset_card.views(st) != "none":
         return []
@@ -182,15 +182,15 @@ def card_notes(st: dict) -> list[str]:
 
 
 def exceptions(st: dict) -> list[str]:
-    """README "Ngoại lệ": views_rest exceptions and texture notes (card notes with `views: none`), blockout decisions,
+    """README "Ngoại lệ": views exceptions and texture notes (card notes with `views: none`), blockout decisions,
     user waives (D30.1), and the NGOẠI LỆ section of every other step's README, where a worker writes its ACCEPTED_FAIL
     (D31.3)."""
-    return [*section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "NGOẠI LỆ"),
-            *section(vdir(st["id"], "views_rest", st["approved"].get("views_rest", 0)) / "final" / "README.md", "TEXTURE NOTE"),
+    return [*section(vdir(st["id"], "views", st["approved"].get("views", 0)) / "final" / "README.md", "NGOẠI LỆ"),
+            *section(vdir(st["id"], "views", st["approved"].get("views", 0)) / "final" / "README.md", "TEXTURE NOTE"),
             *card_notes(st),
             *section(vdir(st["id"], "blockout", st["approved"].get("blockout", 0)) / "final" / "blockout.md", "Blockout tự quyết"),
             *waived(st, "user", "người dùng waive: "),
-            *(f"- {sid}: {x.lstrip('- ')}" for sid in ("blockout", "views_front", "model", "texture")
+            *(f"- {sid}: {x.lstrip('- ')}" for sid in ("blockout", "model", "texture")
               for x in section(vdir(st["id"], sid, st["approved"].get(sid, 0)) / "final" / "README.md", "NGOẠI LỆ"))]
 
 

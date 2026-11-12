@@ -194,11 +194,11 @@ def gen_in_version(tmp_path, model=None, version=None, extra=()):
     """A gen whose --out lies in a version folder of a Producer root, as the views and texture briefs give it."""
     path = fake_codex.install(tmp_path / "bin")
     root = tmp_path / "production"
-    st = {"id": "hut", "inputs": {"views_front": {"v2": {"profile": "786cfc66bdd2"}}}}
+    st = {"id": "hut", "inputs": {"views": {"v2": {"profile": "786cfc66bdd2"}}}}
     (root / "assets/hut").mkdir(parents=True)
     (root / "pipeline.toml").touch()
     (root / "assets/hut/status.json").write_text(json.dumps(st), encoding="utf-8")
-    out = root / "assets/hut/views_front/v2/work/gen/front-1.png"
+    out = root / "assets/hut/views/v2/work/gen/front-1.png"
     out.parent.mkdir(parents=True)
     ref = tmp_path / "ref.png"
     Image.new("RGB", (64, 64)).save(ref)
@@ -212,7 +212,7 @@ def gen_in_version(tmp_path, model=None, version=None, extra=()):
                         f"--image={ref}", "--out", str(out), *extra], capture_output=True, text=True, env=env, cwd=tmp_path)
     assert p.returncode == 0, p.stdout + p.stderr
     rec = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
-    inp = json.loads((root / "assets/hut/status.json").read_text(encoding="utf-8"))["inputs"]["views_front"]["v2"]
+    inp = json.loads((root / "assets/hut/status.json").read_text(encoding="utf-8"))["inputs"]["views"]["v2"]
     return rec, inp, (root / "ledger.md").read_text(encoding="utf-8").splitlines()
 
 
@@ -224,7 +224,7 @@ def test_the_ledger_and_the_version_inputs_keep_the_requested_and_the_actual_ima
     assert inp == {"profile": "786cfc66bdd2", "image_model_requested": "gpt-6-astra",
                    "image_model_actual": "gpt-6-astra-2026-11"}
     assert [l.split(" · ", 2)[2] for l in led] == [
-        "hut · views_front v2 · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế gpt-6-astra-2026-11"
+        "hut · views v2 · gen ảnh front-1.png: model yêu cầu gpt-6-astra · model thực tế gpt-6-astra-2026-11"
         " · codex-cli 0.164.0"]
 
 
@@ -252,7 +252,7 @@ def test_every_flag_of_the_gen_command_is_one_that_preflight_checks_in_codex_exe
 
 def test_a_broken_status_json_only_warns_because_the_image_is_already_paid_for(tmp_path):
     path = fake_codex.install(tmp_path / "bin")
-    out = tmp_path / "production/assets/hut/views_front/v1/work/gen/front-1.png"
+    out = tmp_path / "production/assets/hut/views/v1/work/gen/front-1.png"
     out.parent.mkdir(parents=True)
     (tmp_path / "production/pipeline.toml").touch()
     (tmp_path / "production/assets/hut/status.json").write_text("{broken", encoding="utf-8")

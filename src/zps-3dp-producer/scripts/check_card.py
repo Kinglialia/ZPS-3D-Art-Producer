@@ -26,7 +26,7 @@ VIEWS = ("front", "34", "game_camera")
 VIEW_SIDES = ("left", "right")
 LIGHT_FROM = ("left", "right", "front")
 BEVELS = ("none", "toon")
-# D35: `views` -> the side views views_rest makes; views_front always makes front unless `none`.
+# D35: `views` -> the side views the views step makes; it always makes front unless `none`.
 VIEW_SETS = {"none": (), "back": ("back",), "full": ("back", "left", "right"), "full_top": ("back", "left", "right", "top")}
 NO_CARD_VIEWS = "full"
 IMAGES = ("concept_albedo.png", "concept_shadow.png")

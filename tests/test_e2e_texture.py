@@ -150,7 +150,7 @@ def test_check_texture_gets_only_the_view_set_and_two_concept_images(flow):
     t = flow["t1 review brief"]
     assert t["out"]["agent"] == "zps-3dp-check-texture"
     inputs = [l for l in lines(t["text"]) if l.startswith("- Đầu ra đã duyệt")]
-    assert inputs == [f"- Đầu ra đã duyệt của bước `views_rest` (đầu vào, không chấm lại): `{A}/views_rest/v1/final/`."]
+    assert inputs == [f"- Đầu ra đã duyệt của bước `views` (đầu vào, không chấm lại): `{A}/views/v1/final/`."]
     assert [l for l in lines(t["text"]) if "Concept đã duyệt" in l][0].endswith(
         ": chỉ `concept_albedo.png`, `concept_shadow.png`.")
     assert "TOP_FIX: <repaint|fix_uv_mesh|meshy_regen|need_evidence>[: F<n>[, F<m>]]" in lines(t["text"])
@@ -195,7 +195,7 @@ def test_needs_fix_at_assemble_must_name_texture_or_model(flow):
     assert json.loads(line)["brief"] == f"{A}/texture/v3/brief-worker.md"
     assert pick(s["st"], "stage", "state", "fix_round", "fix_base", "approved") == {
         "stage": "texture", "state": "running", "fix_round": 1, "fix_base": 2,
-        "approved": {"blockout": 1, "views_front": 1, "views_rest": 1, "model": 1}}
+        "approved": {"blockout": 1, "views": 1, "model": 1}}
 
 
 def test_with_the_budget_spent_the_fix_brief_says_no_meshy_call_is_left(flow):
@@ -229,8 +229,7 @@ def test_a_changed_mesh_gets_a_new_budget_of_zero_and_the_meshy_or_paint_questio
         "(review page)\n")
     assert flow["budget h2"] == {"max_credits": 0, "used_credits": 0}
     assert pick(flow["t4 gate"]["st"], "stage", "versions", "ask") == {
-        "stage": "texture", "versions": {"blockout": 1, "views_front": 1, "views_rest": 1, "model": 2, "texture": 3,
-                                         "assemble": 3},
+        "stage": "texture", "versions": {"blockout": 1, "views": 1, "model": 2, "texture": 3, "assemble": 3},
         "ask": {"kind": "mesh_changed", "budget": f"budget-{h2}.json", "next": "todo", "base": None, "new_round": False}}
 
 

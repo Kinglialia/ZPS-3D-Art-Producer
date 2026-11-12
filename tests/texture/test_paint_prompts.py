@@ -52,7 +52,7 @@ def inputs(tmp_path):
 
 def run(t, *extra):
     return tool("make_paint_prompts.py", "--views", t / "paint", "--concept", t / "crate", "--concept-colors",
-                t / "cc.json", "--views-rest", t / "VR", "--out", t / "prompts", *extra)
+                t / "cc.json", "--view-set", t / "VR", "--out", t / "prompts", *extra)
 
 
 def test_each_view_gets_the_template_with_its_camera_materials_notes_and_a_keyable_background(inputs):

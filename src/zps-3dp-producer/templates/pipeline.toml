@@ -1,5 +1,5 @@
 # Pipeline của Producer — nơi DUY NHẤT định nghĩa thứ tự bước, agent, model, gate, output bắt buộc, giới hạn chạy song song.
-# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 4 bật cả 6 bước.
+# Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 4 bật cả 5 bước.
 # gate: review (reviewer PASS → bước sau) | review_human (reviewer PASS → người duyệt) | checks_human (script pass → người duyệt)
 # model: model của worker. escalate_model: model của worker mới khi vòng sửa vượt [review] resume_rounds (không ghi =
 #   model). reviewer_model: model của reviewer bước này (không ghi = [review] reviewer_model). Giá trị: opus | sonnet |
@@ -20,8 +20,8 @@
 #   (`gates/*.json#gate5.health`) khớp file theo đường dẫn từ `final/review/` khi mọi check đang fail của file nằm trong danh
 #   sách: một part có gate khác fail thì không khai được. Gate cứng không bao giờ được: inputs, package, schema,
 #   qa_export_check, meshy, counts.
-# views_set: bước làm bộ view (D35). Thẻ `views: none` bỏ bước này; `final/<mặt>.png` và regions ngoài `views` của thẻ
-#   không bắt buộc (back: back; full: back, left, right; full_top: thêm top; không ghi = full).
+# views_set: bước làm bộ view (D35). Thẻ `views: none` bỏ bước này; `final/<mặt>.png`, regions và ảnh sheet của mặt ngoài
+#   `views` của thẻ không bắt buộc (back: back; full: back, left, right; full_top: thêm top; không ghi = full).
 # counts_gate: `P ingest` so `counts` của thẻ với `final/part_graph.json` (scripts/check_counts.py, D30.6): mỗi khóa cần
 #   một param cùng tên trong `fixed_params`, cùng giá trị, hoặc đúng số đó part có `tag: <khóa>`. Ghi
 #   final/review/checks/counts.json trước khi đọc JSON fail; counts.json là gate cứng.
@@ -63,7 +63,7 @@ timeout_s = 900
 # trung vị các lần trước, tính riêng lần dựng đầu và vòng sửa) × watch.deadline_factor của policy.yaml. Hạn chót chỉ
 # để báo trễ, không phải kẹt. Số đo: texture worker 16 = cả bước texture (nguồn: Run 5, 1 asset, Meshy SỬA, 15m32s cho
 # 2 version, gồm worker và reviewer), nên một lần giao worker không dài hơn; Run 4 VẼ MỚI 38m25s cho 4 version. Tạm, đo
-# lại sau 3–5 asset khác loại. Các số khác chưa đo.
+# lại sau 3–5 asset khác loại. Các số khác chưa đo; views = tổng hai bước view của v0.7.1.
 [[steps]]
 id = "blockout"
 usual_min = { worker = 40, reviewer = 10 }
@@ -84,42 +84,30 @@ outputs = ["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb",
            "final/review/checks/support.json", "final/review/checks/proportion.json"]
 
 [[steps]]
-id = "views_front"
-usual_min = { worker = 30, reviewer = 10 }
-agent = "step-views"
-reviewer = "check-views"
-model = "opus"
-escalate_model = "opus"
-reviewer_model = "opus"
-gate = "review"
-uses = ["blender", "codex_image"]
-top_fix = ["regen"]
-acceptable = ["measure.json"]
-views_set = true
-inputs = ["blockout"]
-concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
-outputs = ["final/front.png", "final/guides/views.json", "final/concept_colors.json", "final/bg_color.json",
-           "final/report/report.json", "final/report/VIEWS.md", "final/review/checks/measure.json"]
-
-[[steps]]
-id = "views_rest"
-usual_min = { worker = 40, reviewer = 10 }
+id = "views"
+usual_min = { worker = 70, reviewer = 20 }
 agent = "step-views"
 reviewer = "check-views"
 model = "opus"
 escalate_model = "opus"
 reviewer_model = "opus"
 gate = "review_human"
-uses = ["codex_image"]
-top_fix = ["regen", "regen_front", "note_exception", "note_texture"]
+uses = ["blender", "codex_image"]
+top_fix = ["regen", "note_exception", "note_texture"]
 acceptable = ["measure.json"]
 views_set = true
-inputs = ["blockout", "views_front"]
+inputs = ["blockout"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
-regions = ["back", "left", "right", "top"]
-outputs = ["final/back.png", "final/left.png", "final/right.png", "final/top.png", "final/README.md",
-           "final/report/report.json", "final/report/VIEWS.md", "final/report/VIEWS_sheet.png",
-           "final/review/checks/measure.json", "final/review/checks/package.json"]
+regions = ["front", "back", "left", "right", "top"]
+sheet = ["final/front.png", "final/guides/front_guide.png", "final/report/overlay_front.png",
+         "final/back.png", "final/guides/back_guide.png", "final/report/overlay_back.png",
+         "final/left.png", "final/guides/left_guide.png", "final/report/overlay_left.png",
+         "final/right.png", "final/guides/right_guide.png", "final/report/overlay_right.png",
+         "final/top.png", "final/guides/top_guide.png", "final/report/overlay_top.png"]
+outputs = ["final/front.png", "final/back.png", "final/left.png", "final/right.png", "final/top.png",
+           "final/guides/views.json", "final/bg_color.json", "final/README.md", "final/report/report.json",
+           "final/report/VIEWS.md", "final/report/VIEWS_sheet.png", "final/review/checks/measure.json",
+           "final/review/checks/package.json"]
 
 [[steps]]
 id = "model"
@@ -131,7 +119,7 @@ reviewer_model = "opus"
 gate = "review_human"
 uses = ["blender"]
 top_fix = ["structure", "param"]
-inputs = ["blockout", "views_front", "views_rest"]
+inputs = ["blockout", "views"]
 review_inputs = ["blockout"]
 concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
 pilot = true
@@ -159,8 +147,8 @@ reviewer_model = "opus"
 gate = "review"
 uses = ["blender", "codex_image", "meshy"]
 top_fix = ["repaint", "fix_uv_mesh", "meshy_regen", "note"]
-inputs = ["blockout", "views_front", "views_rest", "model"]
-review_inputs = ["views_rest"]
+inputs = ["blockout", "views", "model"]
+review_inputs = ["views"]
 concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
 review_concept = ["concept_albedo.png", "concept_shadow.png"]
 no_views_concept = ["{id}.material.md"]

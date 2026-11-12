@@ -16,17 +16,11 @@
 - foot: phần chạm đất ổn trên crop foot_front_*
 - own_decisions: mục "Blockout tự quyết" theo `hidden_side_rules` của profile
 
-## views_front
-- style: style, chất liệu, mức chi tiết của front giống concept albedo
-- shape: silhouette và mốc chiều cao của front đúng guide
-- light: ánh sáng đều; không bóng đổ, không ánh sáng một hướng
+## views
+- style: style, chất liệu, mức chi tiết của từng view giống concept albedo
+- shape: silhouette và mốc chiều cao của từng view đúng guide
+- light: ánh sáng đều ở mọi view; không bóng đổ, không ánh sáng một hướng
 - inventory: không thêm, không bớt chi tiết so với guide; mọi phần tử truy được về concept, guide hoặc thẻ
-
-## views_rest
-- style: style, chất liệu, mức chi tiết của từng view mới giống concept albedo
-- shape: silhouette và mốc chiều cao của từng view mới đúng guide
-- light: ánh sáng đều ở mọi view mới
-- inventory: không thêm, không bớt chi tiết so với guide
 - sync: cùng vật liệu có cùng màu, texture, độ mòn như front
 - hidden_sides: phần khuất đúng `blockout.md`
 - props: props đủ số và tách rời

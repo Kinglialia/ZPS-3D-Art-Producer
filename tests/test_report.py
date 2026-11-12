@@ -273,9 +273,9 @@ def test_duyet_2_writes_the_report_to_deliver_and_prints_the_table_after_the_app
     lines = out.splitlines()
     assert lines[0] == "pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong"
     table = lines[lines.index(HEAD):]
-    assert [l.split(" | ")[0] for l in table[2:9]] == [
-        "| blockout", "| views_front", "| views_rest", "| model", "| texture", "| assemble", "| Tổng"]
-    assert table[7].split(" | ")[2:5] == ["—", "—", "—"]
+    assert [l.split(" | ")[0] for l in table[2:8]] == [
+        "| blockout", "| views", "| model", "| texture", "| assemble", "| Tổng"]
+    assert table[6].split(" | ")[2:5] == ["—", "—", "—"]
     text = (root / "deliver" / AID / "RUN-REPORT.md").read_text(encoding="utf-8")
     assert "\n".join(table) in text
 

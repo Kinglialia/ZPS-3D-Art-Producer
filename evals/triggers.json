@@ -35,9 +35,9 @@
       ]
     },
     "zps-3dp-step-views": {
-      "rule": "Run only on a Producer brief for views_front or views_rest.",
+      "rule": "Run only on a Producer brief for the views step.",
       "cases": [
-        {"query": "Đọc `production/assets/kho-lua/views_front/v1/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/views_front/v1/worker-out.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "Đọc `production/assets/kho-lua/views/v1/brief-worker.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/views/v1/worker-out.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
         {"query": "ZPS - Concept Views vẽ 5 view cho cái đèn", "should_trigger": false, "kind": "negative", "why": "Kit zps-concept-views named"},
         {"query": "gen 5 mặt cho concept cái đèn", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-concept-views"}
       ]
@@ -67,9 +67,9 @@
       ]
     },
     "zps-3dp-check-views": {
-      "rule": "Run only on a Producer review brief for views_front or views_rest.",
+      "rule": "Run only on a Producer review brief for the views step.",
       "cases": [
-        {"query": "Đọc `production/assets/kho-lua/views_rest/v1/brief-review.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/views_rest/v1/review-out.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
+        {"query": "Đọc `production/assets/kho-lua/views/v1/brief-review.md` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `production/assets/kho-lua/views/v1/review-out.md`. Chỉ trả về các dòng brief yêu cầu.", "should_trigger": true, "kind": "positive", "why": "Producer dispatch"},
         {"query": "5 view concept này có khớp nhau không", "should_trigger": false, "kind": "negative", "why": "No brief: kit zps-concept-views"}
       ]
     },

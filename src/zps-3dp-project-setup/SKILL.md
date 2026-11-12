@@ -26,7 +26,7 @@ Bạn làm cùng người dùng trong phiên chính. Bạn hỏi và đề xuấ
 
 ## Tạo chính sách
 
-6. Hỏi ai duyệt từng điểm duyệt `blockout`, `views_rest`, `model`: `human` hoặc `reviewer`. Gợi ý cho pilot: `human` hết. Mỗi điểm khác `human`: `P approvals set <bước> reviewer --by "<nguyên văn>"`. `model reviewer` tốn credit Meshy: hỏi lại người dùng, rồi thêm `--confirm-spend`.
+6. Hỏi ai duyệt từng điểm duyệt `blockout`, `views`, `model`: `human` hoặc `reviewer`. Gợi ý cho pilot: `human` hết. Mỗi điểm khác `human`: `P approvals set <bước> reviewer --by "<nguyên văn>"`. `model reviewer` tốn credit Meshy: hỏi lại người dùng, rồi thêm `--confirm-spend`.
 7. Hỏi trang duyệt: `local` hoặc `local+remote`. `local+remote` chỉ dùng được khi runtime có tool Artifact (`S/references/runtime.md`, mục Review Board). Khác `local`: `P approvals set review_board local+remote --by "<nguyên văn>"`.
 
 ## Kiểm và kết thúc

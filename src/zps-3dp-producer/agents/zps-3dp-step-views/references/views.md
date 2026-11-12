@@ -33,9 +33,9 @@ Tự gen lại chỉ cho view mà `measure.json` ghi `fail`, một lần mỗi v
 
 ## 4. `report/VIEWS.md`
 
-Review board hiện 3 dòng đầu (bỏ dòng trống). Dòng 1: `# Views <id> v<N> · <bước>`. Dòng 2: điểm `overall_score` của `report.json` và view fail nếu có. Dòng 3: số lần gen mỗi view. Sau đó: bảng điểm từng view (IoU, tỉ lệ, vị trí chi tiết, dE), view gen lại và vì sao, NGOẠI LỆ, TEXTURE NOTE, giả định về phần khuất.
+Review board hiện 3 dòng đầu (bỏ dòng trống). Dòng 1: `# Views <id> v<N>`. Dòng 2: điểm `overall_score` của `report.json` và view fail nếu có. Dòng 3: số lần gen mỗi view. Sau đó: bảng điểm từng view (IoU, tỉ lệ, vị trí chi tiết, dE), view gen lại và vì sao, NGOẠI LỆ, TEXTURE NOTE, giả định về phần khuất.
 
-## 5. `README.md` (chỉ `views_rest`)
+## 5. `README.md`
 
 Dòng đầu cố định, đúng từng chữ:
 

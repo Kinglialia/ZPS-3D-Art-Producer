@@ -1,18 +1,19 @@
 """Measure generated views against the guides: the kit's measure_views.py, unchanged, with G1 and D36 fixed here.
 
-Usage: python3 tools/measure.py --final <V/final> --guides <views_front final>/guides --views front[,back,left,right,top]
-           [--front <views_front final>/front.png] [--concept-colors <views_front final>/concept_colors.json] [--mirror-right]
-           [--pick-best <V/work/gen>]
+Usage: python3 tools/measure.py --final <V/final> --guides <V/final>/guides --views front[,back,left,right,top]
+           [--front] [--concept-colors <concept_colors.json>] [--mirror-right] [--pick-best <V/work/gen>]
 G1 (docs/review-kit-v0.10.4-vs-process.md): the kit keeps only background that touches the image border, so a
 closed gap between columns counts as object. Here every pixel near the background colour is background.
-Images: <final>/<view>.png; --front when front.png lives in views_front (views_rest).
+Images: <final>/<view>.png, the front and the side views in one folder.
 Without --concept-colors, the kit compares each material with the front view (the colour standard).
 --views: names are stripped; an unknown name stops the run with exit 2 and measures nothing (V5).
 V2: a boundary between two materials whose colours in the image are under dE 10 apart is not checked for `detail`:
 no edge can be seen there. It is listed in the check `detail.<view>` (not_checked).
---front given (views_rest, V4): the approved front is never in `regen` and its check is at most `info`; if the front/back
-mirror pair fails, back is queued instead. V6: with --concept-colors too, the reference colour of a material is the measured
-front, and the concept colour only for a material the front does not show.
+--front (V4): front.png already has its own measure (a run with --views front), so the set is measured against it: the
+front is never in `regen` and its new checks are at most `info`; if the front/back mirror pair fails, back is queued
+instead. The front's own checks are kept: the front checks of the measure.json already in <final>/review/checks/ replace
+the new ones, so a front that failed its own measure still fails here. V6: with --concept-colors too, the reference colour
+of a material is the measured front, and the concept colour only for a material the front does not show.
 --mirror-right (V10, symmetric left_right): before measuring, right.png is made again as left.png mirrored, so a left made
 again never leaves a stale right that the colour match then fails.
 V15: per view, the checks border (the object touches the image border: fail), components (the count of separate shapes
@@ -25,8 +26,8 @@ or the same number and a higher IoU (`views.<view>` value `iou`; no IoU counts a
 first image wins it is copied to <final>/<view>.png and the whole set is measured again, so report/ and measure.json
 describe the kept images. `data.picked` is {view: first|regen}. A compared view that still fails also gets
 `data.accepted_fail` (`ACCEPTED_FAIL: measure.json — <view> (ảnh lần 1|2): <numbers>`) and `data.ngoai_le` (the same
-text without the prefix, for the NGOẠI LỆ section of README.md); both are printed as the last two lines. The front of
-views_rest (--front) and the right view with --mirror-right are never compared.
+text without the prefix, for the NGOẠI LỆ section of README.md); both are printed as the last two lines. The front with
+--front and the right view with --mirror-right are never compared.
 Writes <final>/report/{report.json, report.md, overlay_sheet.png, overlay_<view>.png} and
 <final>/review/checks/measure.json (fail: a view in `regen`, or a missing image). Exit 0 pass, 1 fail, 2 error.
 """
@@ -117,9 +118,9 @@ def measure_view(view, blk, gen, mat_names):
 mv.measure_view = measure_view
 
 
-def gen_dir(d, final, views, front):
+def gen_dir(d, final, views):
     for v in views:
-        src = front if v == "front" and front else os.path.join(final, f"{v}.png")
+        src = os.path.join(final, f"{v}.png")
         if os.path.isfile(src):
             os.symlink(os.path.abspath(src), os.path.join(d, f"{v}.png"))
 
@@ -210,7 +211,8 @@ def rest_concept(guides, front, concept_colors, threshold, tmp):
 
 
 def drop_front(report_dir):
-    """V4: views_rest cannot make the front again. A failing front/back pair means back is the view to make."""
+    """V4: the set is measured against a front that passed its own measure. A failing front/back pair means back is the
+    view to make."""
     path = os.path.join(report_dir, "report.json")
     rep = common.read_json(path)
     regen = [v for v in rep["regen"] if v != "front"]
@@ -260,10 +262,10 @@ def measure_final(a, final, views):
     if a.mirror_right and {"left", "right"} <= set(views):
         ImageOps.mirror(Image.open(os.path.join(final, "left.png"))).save(os.path.join(final, "right.png"))
     with tempfile.TemporaryDirectory() as d:
-        gen_dir(d, final, views, a.front)
+        gen_dir(d, final, views)
         concept = a.concept_colors
         if a.front and concept and "front" in views:
-            concept = rest_concept(a.guides, a.front, concept, a.bg_threshold, d)
+            concept = rest_concept(a.guides, os.path.join(final, "front.png"), concept, a.bg_threshold, d)
         elif concept:
             REFERENCE.update(common.read_json(concept))
         sys.argv = ["measure_views.py", "--blockout", a.guides, "--gen", d, "--out", report_dir,
@@ -352,12 +354,21 @@ def pick_best(a, rep, extra, views):
     return rep, extra, {v: "first" if v in swap else "regen" for v in firsts}
 
 
+def own_front(out, checks):
+    """--front: the front checks of the measure.json already written (the front's own measure) replace the new ones."""
+    try:
+        old = [c for c in common.read_json(out).get("checks", []) if view_of(c) == "front"]
+    except (OSError, ValueError, AttributeError):
+        old = []
+    return old + [c for c in checks if view_of(c) != "front"] if old else checks
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--final", required=True)
     p.add_argument("--guides", required=True)
     p.add_argument("--views", required=True)
-    p.add_argument("--front")
+    p.add_argument("--front", action="store_true")
     p.add_argument("--concept-colors")
     p.add_argument("--bg-threshold", type=float, default=40)
     p.add_argument("--mirror-right", action="store_true")
@@ -378,6 +389,8 @@ def main():
         common.write_error(out, TOOL, e)
         sys.exit(2)
     checks = checks_of(rep, views, bool(a.front), extra)
+    if a.front and "front" in views:
+        checks = own_front(out, checks)
     lines = accepted_lines(checks, picked) if picked else None
     data = {"regen": rep["regen"], "overall_score": rep["overall_score"], "report": os.path.join(a.final, "report", "report.json")}
     if picked:

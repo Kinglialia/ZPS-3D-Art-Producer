@@ -77,8 +77,7 @@ def move(st: dict, event: str, cfg: dict | None = None):
 def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int, max_rounds: int, progressed: bool,
                  evidence_used: int, reopened: int = 0) -> tuple[str, str | None]:
     """§7: what a valid review leads to. fix_round is the fix round that built the reviewed version (0 = first build).
-    reopened: times this TOP_FIX kind reopened an earlier step in this feedback round (regen_front costs a new front and
-    a new set; fix_uv_mesh a new DUYỆT 1)."""
+    reopened: times this TOP_FIX kind reopened an earlier step in this feedback round (fix_uv_mesh costs a new DUYỆT 1)."""
     if verdict == "ESCALATE":
         return "ask_human", "reviewer ESCALATE"
     if verdict == "PASS":
@@ -97,9 +96,10 @@ def review_event(verdict: str, top_kind: str | None, auto: bool, fix_round: int,
 
 
 def reopened_of(st: dict) -> dict:
-    """Reopens per TOP_FIX kind in this feedback round. GĐ 2 kept one int, which only regen_front raised."""
+    """Reopens per TOP_FIX kind in this feedback round. GĐ 2 kept one int, for a kind that no step has now: it counts
+    for nothing."""
     r = st.get("reopened") or {}
-    return r if isinstance(r, dict) else {"regen_front": r}
+    return r if isinstance(r, dict) else {}
 
 
 def review_base(st: dict, n: int) -> int | None:

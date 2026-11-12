@@ -82,7 +82,7 @@ def complexity(tmp, mats, cols=None, card=None, note=None, concept_img=None, mod
     else:
         concept(c / "concept_albedo.png", cols)
     (vr / "README.md").write_text("# README\n## TEXTURE NOTE\n" + (note or "- không có\n"), encoding="utf-8")
-    rc, out = tool("texture_complexity.py", "--final", f, "--blockout", b, "--concept", c, "--views-rest", vr,
+    rc, out = tool("texture_complexity.py", "--final", f, "--blockout", b, "--concept", c, "--views", vr,
                    "--profile", profile(tmp), "--mode", mode)
     assert rc == 0, out
     return json.loads((f / "texture_spec.json").read_text())
@@ -675,7 +675,7 @@ def test_renders_json_names_the_albedo_it_was_rendered_from_by_sha256_so_a_later
 
 def complexity_in(tmp, version, glb, mode="meshy"):
     f = tmp / "texture" / version / "final"
-    rc, out = tool("texture_complexity.py", "--final", f, "--blockout", tmp / "B", "--concept", tmp / "C", "--views-rest",
+    rc, out = tool("texture_complexity.py", "--final", f, "--blockout", tmp / "B", "--concept", tmp / "C", "--views",
                    tmp / "VR", "--profile", profile(tmp), "--mode", mode, "--glb", glb)
     assert rc == 0, out
     return out, json.loads((f / "texture_spec.json").read_text())

@@ -1,10 +1,10 @@
 """The files the model brief names exist (docs/agents/3d-artist.md §2, A1). Plain Python.
 
-Usage: python3 tools/check_inputs.py --final F --blockout B [--views-front FF --views-rest VR] --concept C
+Usage: python3 tools/check_inputs.py --final F --blockout B [--views VS] --concept C
 Existence only: the Producer script checks input hashes (D22.12).
   inputs.blockout     B/part_graph.json, parts_lib.py, sources.json, blockout.md, assembly.json
-  inputs.views        FF/front.png and the side views of the card's `views` in VR (D35: full = back, left, right).
-                      `views: none`: no view set; FF and VR are not read
+  inputs.views        VS/front.png and the side views of the card's `views` (D35: full = back, left, right).
+                      `views: none`: no view set; VS is not read
   inputs.concept      C/concept_albedo.png, concept_shadow.png, asset-card.yaml
 Writes F/review/checks/inputs.json. Exit 0 pass, 1 fail, 2 error.
 """
@@ -26,14 +26,13 @@ CONCEPT = ("concept_albedo.png", "concept_shadow.png", "asset-card.yaml")
 def args(p):
     for k in ("blockout", "concept"):
         p.add_argument(f"--{k}", required=True)
-    for k in ("views-front", "views-rest"):
-        p.add_argument(f"--{k}")
+    p.add_argument("--views")
 
 
 def need(a):
     from check_card import VIEW_SETS, card_views
     sides = VIEW_SETS[card_views(a.concept)] if os.path.isfile(os.path.join(a.concept, "asset-card.yaml")) else None
-    views = [] if sides == () else [("views_front", ("front.png",)), ("views_rest", tuple(f"{v}.png" for v in sides or ()))]
+    views = [] if sides == () else [("views", ("front.png", *(f"{v}.png" for v in sides or ())))]
     return {"inputs.blockout": [("blockout", BLOCKOUT)], "inputs.views": views, "inputs.concept": [("concept", CONCEPT)]}
 
 

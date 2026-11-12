@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from .state import ROOT, TEMPLATES, die, ledger, now, rel, write_atomic
 
-KEYS = ("blockout", "views_rest", "model")
+KEYS = ("blockout", "views", "model")
+RENAMED = {"views_rest": "views"}
 WHO = ("human", "reviewer")
 BOARDS = ("local", "local+remote")
 BY = {"human": "người dùng", "producer": "Producer (test_mode)", "policy": "reviewer theo chính sách dự án", "delegate": "reviewer theo ủy quyền"}
@@ -53,6 +54,16 @@ def check(pol: dict) -> list[str]:
     return errs
 
 
+def rename(pol: dict):
+    """A policy.yaml of v0.7.1 names the views gate `views_rest`: it reads as `views`, and the next write saves it so."""
+    ap = pol.get("approvals")
+    if isinstance(ap, dict):
+        pol["approvals"] = {RENAMED.get(k, k): v for k, v in ap.items()}
+    for d in pol.get("delegations") or []:
+        if isinstance(d, dict) and d.get("step") in RENAMED:
+            d["step"] = RENAMED[d["step"]]
+
+
 def load() -> dict:
     import yaml
     p = path() if path().exists() else TEMPLATES / "policy.yaml"
@@ -62,6 +73,7 @@ def load() -> dict:
         die(f"{rel(p)} sai cú pháp YAML: {' '.join(str(ex).split())}")
     if not isinstance(pol, dict):
         die(f"{rel(p)}: phải là bảng `khóa: giá trị`, không phải {type(pol).__name__}")
+    rename(pol)
     if errs := check(pol):
         die(f"{rel(p)}: " + "; ".join(errs))
     return pol

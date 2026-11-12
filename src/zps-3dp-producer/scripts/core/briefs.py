@@ -578,7 +578,7 @@ def review_scope(st, sid: str, n: int) -> str:
 
 def review_brief(cfg, st, step, n) -> str:
     aid, sid = st["id"], step["id"]
-    step = step | {"regions": asset_card.regions(step, st)}
+    step = step | {"regions": asset_card.regions(step, st), "sheet": asset_card.sheet(step, st)}
     d = vdir(aid, sid, n)
     a = ASSETS / aid
     m = review_base(st, n)
@@ -669,9 +669,9 @@ def review_brief(cfg, st, step, n) -> str:
         f"`{next(k for k in step['top_fix'] if k not in findings.NOTE)}`"
         + (f", không phải {', '.join(f'`{k}`' for k in notes)}." if notes else "."),
         "- `preserve`: tên chi tiết cạnh vùng sửa (vd \"nét mực mép mái\"), không ghi \"giữ phần còn lại\".",
-        *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`; "
-           + "; ".join(f"`{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
-                       if k in findings.REOPEN) + "."] if step["regions"] else []),
+        *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`"
+           + "".join(f"; `{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
+                     if k in findings.REOPEN) + "."] if step["regions"] else []),
         *(["- PRIOR: thay `?` bằng open|resolved|regressed|superseded. resolved chỉ khi thấy bằng chứng cho "
            "acceptance, ghi nhãn ảnh đó vào evidence."] if op else []),
         *([f"- COMPARE: so ảnh cùng góc với v{m}: better|same|worse. resolved cần better; worse thì regressed."]

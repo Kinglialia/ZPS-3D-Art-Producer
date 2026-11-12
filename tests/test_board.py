@@ -132,11 +132,11 @@ def test_a_decided_version_reports_the_time_so_the_page_shows_the_dedupe_state(p
 
 def test_a_version_built_from_old_input_gets_the_stale_label(project):
     st = load_st(AID)
-    st |= {"stage": "views_rest", "versions": {"views_rest": 1}, "offer": 1, "label": "",
-           "stale": {"views_rest v1": "blockout v1"}}
+    st |= {"stage": "views", "versions": {"views": 1}, "offer": 1, "label": "",
+           "stale": {"views v1": "blockout v1"}}
     save_st(st)
     v = view()
-    assert (v["step"], v["version"], v["stale"], v["label"]) == ("views_rest", 1, "dựng từ blockout v1 — cũ", "")
+    assert (v["step"], v["version"], v["stale"], v["label"]) == ("views", 1, "dựng từ blockout v1 — cũ", "")
 
 
 def views_version(step, files, note, label=""):
@@ -152,19 +152,14 @@ def views_version(step, files, note, label=""):
     return view()
 
 
-def test_views_front_sent_to_the_user_shows_front_first_the_views_md_summary_and_why_d20_16(project):
-    v = views_version("views_front", ("report/overlay_front.png", "front.png", "guides/front_guide.png"),
+def test_the_views_card_puts_the_set_sheet_first_the_views_md_summary_and_why_because_the_user_approves_the_set(
+        project):
+    v = views_version("views", ("back.png", "front.png", "report/VIEWS_sheet.png", "report/overlay_back.png"),
                       "hết 3 vòng sửa; còn mở: F1", loop.NOT_PASSED)
-    assert (v["sheet"], [i["n"] for i in v["images"]][:2], v["summary"], v["reason"], v["label"]) == (
-        "/p/assets/house-a/views_front/v1/final/front.png", ["front.png", "concept/concept_albedo.png"],
+    assert (v["sheet"], [i["n"] for i in v["images"]][:3], v["summary"], v["reason"], v["label"]) == (
+        "/p/assets/house-a/views/v1/final/report/VIEWS_sheet.png",
+        ["report/VIEWS_sheet.png", "concept/concept_albedo.png", "back.png"],
         ["Views house-a v1", "front: bóng đổ còn dưới mái", "đã gen 3 lần"], "hết 3 vòng sửa; còn mở: F1", "chưa đạt")
-
-
-def test_views_rest_puts_the_five_view_sheet_first_because_the_user_approves_the_set(project):
-    v = views_version("views_rest", ("back.png", "report/VIEWS_sheet.png", "report/overlay_back.png"),
-                      "duyệt views_rest v1")
-    assert (v["sheet"], v["images"][0]["n"]) == ("/p/assets/house-a/views_rest/v1/final/report/VIEWS_sheet.png",
-                                                 "report/VIEWS_sheet.png")
 
 
 def test_duyet_1_shows_the_model_sheet_first_and_the_untextured_glb_not_the_blockout_union(project):

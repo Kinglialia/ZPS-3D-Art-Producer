@@ -1,4 +1,4 @@
-"""Drive the real CLI with fake agents through all six steps. The model step writes a real GLB (the box of glbkit), so
+"""Drive the real CLI with fake agents through all five steps. The model step writes a real GLB (the box of glbkit), so
 the Meshy wrapper and its fake HTTP layer see a valid mesh; the texture worker calls meshy_call.py for real."""
 import hashlib
 import json
@@ -18,10 +18,8 @@ FAKE_MESHY = Path(__file__).parent / "texture" / "fake_meshy"
 PROJECT_KEY, SHELL_KEY = "msy-project-0123456789", "msy-shell-9876543210"
 OUTPUTS = {
     "blockout": ("part_graph.json", "parts_lib.py", "assembled.glb", "sources.json", "blockout.md"),
-    "views_front": ("front.png", "guides/views.json", "concept_colors.json", "bg_color.json", "report/report.json",
-                    "report/VIEWS.md"),
-    "views_rest": ("back.png", "left.png", "right.png", "top.png", "README.md", "report/report.json", "report/VIEWS.md",
-                   "report/VIEWS_sheet.png"),
+    "views": ("front.png", "back.png", "left.png", "right.png", "top.png", "guides/views.json", "bg_color.json",
+              "README.md", "report/report.json", "report/VIEWS.md", "report/VIEWS_sheet.png"),
     "model": (f"{AID}.blend", "part_graph.json", "parts_lib.py", "spec.json", "model.md", "review/model_sheet.png",
               "review/renders/renders.json"),
     "texture": ("albedo_2048.png", "notes.md", "final_lit_vs_concept.png", "review/renders.json",
@@ -34,8 +32,7 @@ OUTPUTS = {
 RESULTS = {
     "blockout": tuple(f"review/checks/{k}.json" for k in ("inputs", "schema", "materials", "layout", "base", "markers",
                                                           "support", "proportion")),
-    "views_front": ("review/checks/measure.json",),
-    "views_rest": ("review/checks/measure.json", "review/checks/package.json"),
+    "views": ("review/checks/measure.json", "review/checks/package.json"),
     "model": ("review/join.json", "review/unwrap.json", *(f"review/checks/{k}.json" for k in (
         "detail", "mesh", "uv_edge", "qa_mesh_check", "qa_uv_check", "qa_export_check", "qa_screen_tris_check"))),
     "texture": ("review/checks/inputs.json",),
@@ -196,7 +193,7 @@ def to_texture(root: Path, env_line=f"MESHY_API_KEY={PROJECT_KEY}\n", prepare=No
         (root / ".env").write_text(env_line, encoding="utf-8")
     f.p("intake", AID)
     f.p("ready", AID)
-    for name, human in (("b1", True), ("vf1", False), ("vr1", True), ("m1", True)):
+    for name, human in (("b1", True), ("v1", True), ("m1", True)):
         f.work(name)
         f.review(name, verdict="PASS", counts=counts(), top_fix=None)
         if name == "m1" and prepare:

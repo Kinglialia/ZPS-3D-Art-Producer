@@ -12,7 +12,7 @@ from core import session, stats
 from flowkit import AID
 from test_resolved_notes import to_model
 
-CFG = {"steps": [{"id": "blockout"}, {"id": "views_front"}, {"id": "model"}]}
+CFG = {"steps": [{"id": "blockout"}, {"id": "views"}, {"id": "model"}]}
 HEAD = ("| Bước | Thời gian bước | Worker | Reviewer đầu | Reviewer sửa | Reviewer cuối | Chờ Producer | Chờ anh "
         "| Token worker | Token reviewer đầu | Token reviewer sửa | Token reviewer cuối | Token Producer | report_fallback |")
 
@@ -43,7 +43,7 @@ ST = {
         d("model", "reviewer", "2026-11-10 12:10:00", "2026-11-10 12:12:00", "fix", tokens=100),
         d("model", "worker", "2026-11-10 12:13:00", "2026-11-10 12:20:00", "review", tokens=2000),
         d("model", "reviewer", "2026-11-10 12:20:00", "2026-11-10 12:21:00", "waiting_human", tokens=200),
-        d("views_front", "worker", "2026-11-10 13:00:00"),
+        d("views", "worker", "2026-11-10 13:00:00"),
     ]}
 USAGE = [(t("2026-11-10 09:05:00"), 1000), (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:50:00"), 7),
          (t("2026-11-10 12:05:00"), 300), (t("2026-11-10 13:30:00"), 40)]
@@ -57,7 +57,7 @@ def test_stats_splits_reviewer_rounds_by_scope_and_times_each_step_from_first_wo
         HEAD, "|" + "---|" * 14,
         "| blockout | 45m00s | 19m20s | 4m00s | 3m00s | 3m00s | 2m00s | 14m00s | 80000 | không có số | 20000 | 15000 "
         "| 1500 | 1 |",
-        "| views_front | chưa duyệt | không có số | — | — | — | — | — | không có số | — | — | — | 40 | 0 |",
+        "| views | chưa duyệt | không có số | — | — | — | — | — | không có số | — | — | — | 40 | 0 |",
         "| model | chưa duyệt | 17m00s | 2m00s | 1m00s | — | 1m00s | — | 3000 | 100 | 200 | — | 340 | 0 |"]
 
 
@@ -150,10 +150,10 @@ def test_p_stats_reads_the_dispatches_of_a_real_run_one_row_per_step_d27_3(tmp_p
     f = to_model(tmp_path)
     rows = f.p("stats", AID).splitlines()
     assert rows[0] == HEAD
-    # D30.5: approving views_rest dispatched the model worker, so the model row is open with no reviewer yet.
-    assert [r.split(" | ")[0] for r in rows[2:]] == ["| blockout", "| views_front", "| views_rest", "| model"]
-    assert [r.split(" | ")[-2] for r in rows[2:]] == ["không có số"] * 4
-    assert rows[5] == ("| model | chưa duyệt | không có số | — | — | — | — | — | không có số | — | — | — | không có số "
+    # D30.5: approving views dispatched the model worker, so the model row is open with no reviewer yet.
+    assert [r.split(" | ")[0] for r in rows[2:]] == ["| blockout", "| views", "| model"]
+    assert [r.split(" | ")[-2] for r in rows[2:]] == ["không có số"] * 3
+    assert rows[4] == ("| model | chưa duyệt | không có số | — | — | — | — | — | không có số | — | — | — | không có số "
                        "| 0 |")
 
 

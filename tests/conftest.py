@@ -41,14 +41,14 @@ def pilot_project(root: Path):
 
 
 def blockout_only(root):
-    """GĐ 1 tests drive one step; turning views_front off keeps `done_enabled` right after blockout."""
+    """GĐ 1 tests drive one step; turning views off keeps `done_enabled` right after blockout."""
     p = Path(root) / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('id = "views_front"\n', 'id = "views_front"\nenabled = false\n', 1),
+    p.write_text(p.read_text(encoding="utf-8").replace('id = "views"\n', 'id = "views"\nenabled = false\n', 1),
                  encoding="utf-8")
 
 
 def views_only(root):
-    """GĐ 2 tests end at the view set; turning model off keeps `done_enabled` right after views_rest."""
+    """GĐ 2 tests end at the view set; turning model off keeps `done_enabled` right after views."""
     p = Path(root) / "production/pipeline.toml"
     p.write_text(p.read_text(encoding="utf-8").replace('id = "model"\n', 'id = "model"\nenabled = false\n', 1),
                  encoding="utf-8")

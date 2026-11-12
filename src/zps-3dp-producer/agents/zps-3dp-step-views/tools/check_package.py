@@ -1,7 +1,7 @@
-"""The view set of views_rest is complete (concept-views.md §6). Pure Python + Pillow + PyYAML.
+"""The view set is complete (concept-views.md §6). Pure Python + Pillow + PyYAML.
 
-Usage: python3 tools/check_package.py --final <V/final> --front <views_front final>/front.png --card <asset-card.yaml>
-  package.views   front (--front) and the side views of the card's `views` exist (D35: back; full: back, left, right;
+Usage: python3 tools/check_package.py --final <V/final> --card <asset-card.yaml>
+  package.views   <final>/front.png and the side views of the card's `views` exist (D35: back; full: back, left, right;
                   full_top: and top; no field = full)
   package.sheet   report/VIEWS_sheet.json holds the sha256 of exactly these files (the sheet shows what ships)
   package.readme  README.md line 1 is the fixed pointer line; the 4 sections exist in order, none empty
@@ -57,7 +57,7 @@ def readme(path):
 
 def run(a):
     views = card_set(a.card)
-    paths = {v: a.front if v == "front" else os.path.join(a.final, f"{v}.png") for v in views}
+    paths = {v: os.path.join(a.final, f"{v}.png") for v in views}
     miss = [v for v, p in paths.items() if not os.path.isfile(p)]
     out = [common.check("package.views", "fail" if miss else "pass", value=miss)]
     side = os.path.join(a.final, "report", "VIEWS_sheet.json")
@@ -85,7 +85,6 @@ def run(a):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--final", required=True)
-    p.add_argument("--front", required=True)
     p.add_argument("--card", required=True)
     a = p.parse_args()
     out = os.path.join(a.final, "review", "checks", "package.json")

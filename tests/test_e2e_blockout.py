@@ -316,12 +316,12 @@ def test_pass_on_a_review_human_step_waits_for_the_human_without_a_not_passed_la
                                                   label="", evidence_used=0, rejected={}, note="duyệt blockout v4")
 
 
-def test_approve_rejects_the_other_versions_and_stops_at_done_enabled_since_views_front_is_off(flow):
+def test_approve_rejects_the_other_versions_and_stops_at_done_enabled_since_views_is_off(flow):
     assert flow["approve"]["out"] == "pilot-house: đã duyệt blockout v4 → blockout/done_enabled. Tiếp: xong các bước đang bật\n"
     st = flow["approve"]["st"]
     assert pick(st) == state(state="done_enabled", fix_round=0, fix_base=None, round_versions=[], label="",
                              evidence_used=0, worker_agent_id=None, approved={"blockout": 4},
-                             rejected={"blockout": [1, 2, 3]}, note="bước views_front chưa bật")
+                             rejected={"blockout": [1, 2, 3]}, note="bước views chưa bật")
     assert re.fullmatch(r"[0-9a-f]{64}", st["approved_hash"]["blockout"])
 
 
