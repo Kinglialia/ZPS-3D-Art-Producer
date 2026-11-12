@@ -511,6 +511,26 @@ def test_a_profile_background_too_close_to_a_concept_colour_fails_like_a_picked_
     assert out.startswith("[views/pick_bg] fail: nền của profile #4B3121 cách #4A3020 chỉ ")
 
 
+def test_pick_size_orients_each_view_by_the_box_it_shows_v9(tmp_path):
+    g = tmp_path / "guides"
+    g.mkdir()
+    box = {"width_x": 2.0, "depth_y": 1.0, "height_z": 3.0}
+    (g / "views.json").write_text(json.dumps({"bbox_size_m": box}), encoding="utf-8")
+    rc, out, _ = tool("pick_size", "--guides", g, "--out", tmp_path / "work/sizes.json")
+    assert rc == 0 and out == f"[views/pick_size] front=1024x1536 back=1024x1536 left=1024x1536 right=1024x1536 top=1536x1024 bottom=1536x1024 -> {tmp_path / 'work/sizes.json'}\n"
+    assert read(tmp_path / "work/sizes.json")["top"] == "1536x1024"
+
+
+def test_pick_size_gives_a_wide_view_and_a_square_view_the_landscape_size_v9(tmp_path):
+    g = tmp_path / "guides"
+    g.mkdir()
+    (g / "views.json").write_text(json.dumps({"bbox_size_m": {"width_x": 4.0, "depth_y": 2.0, "height_z": 2.0}}), encoding="utf-8")
+    tool("pick_size", "--guides", g, "--out", tmp_path / "sizes.json")
+    assert read(tmp_path / "sizes.json") == {"front": "1536x1024", "back": "1536x1024", "left": "1536x1024",
+                                             "right": "1536x1024", "top": "1536x1024",
+                                             "bottom": "1536x1024"}
+
+
 def test_a_gen_that_touches_the_image_border_fails_because_the_object_is_cropped_v15(tmp_path):
     wall_trim_gen(tmp_path / "final/front.png", margin=0)
     rc, _, rep, check = measure(tmp_path)
