@@ -8,9 +8,15 @@ The brief gives --model, --reasoning (preset `image_gen`) and --pid-file. --prom
 the script adds the fixed frame (save the image to --out, write <name>.result.json, do nothing else).
 Runs `codex exec -C <dir of --out> -s workspace-write`, prompt on stdin, in an env without any *_API_KEY other than
 OPENAI_API_KEY and CODEX_API_KEY (a Meshy key never reaches Codex). If --out is missing, Codex reported no error and
-exactly one image appeared under $CODEX_HOME/generated_images during the call, it takes that image, saved as PNG (D18.4);
-this also holds after a timeout. A valid --out image is accepted even if result.json carries an error.
+exactly one image appeared during the call in $CODEX_HOME/generated_images/<session id>/, it takes that image, saved as
+PNG (D18.4, D36.9); this also holds after a timeout. The session id is the `session id:` line of the header that
+`codex exec` prints on stderr. Without that line the fallback looks in all of generated_images/, and only while no other
+live pid file of the codex_image folder exists, because it cannot tell whose image is new. A valid --out image is accepted
+even if result.json carries an error.
 A try fails when there is no image, Codex reports an error, the image is broken, or the long side is 1040 px or less.
+An image that Pillow reads but is not PNG (a JPEG saved under a .png name) is converted to PNG and accepted (D36.12).
+D36.12: a quota, rate-limit or billing error stops the whole run after that one call. A policy or safety error is tried
+once more. Any other error is tried up to 3 times.
 The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset each hold a slot.
 Several --prompt/--out pairs (same order) share the --image list. D30.20: after each call every expected file is
 checked on its own (exists, PNG header, Pillow reads it, long side); only the files that failed are made again.
@@ -47,6 +53,10 @@ from root_guard import require_root
 
 TRIES = 3
 MIN_LONG = 1041
+QUOTA = re.compile(r"quota|rate[ _-]?limit|usage[ _-]?limit|too many requests|\b429\b|billing", re.I)
+POLICY = re.compile(r"polic|safety|moderation", re.I)
+POLICY_TRIES = 2
+SESSION_LINE = re.compile(r"^session id: *([\w-]+)\s*$", re.M | re.I)
 IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 CODEX_KEYS = {"OPENAI_API_KEY", "CODEX_API_KEY"}
@@ -80,8 +90,8 @@ SIZE: {size}
 JOB = "JOB {k}\nOUTPUT_PATH: {out}\nRESULT_PATH: {result}\nREQUEST:\n{request}\nEND JOB {k}\n"
 
 
-def new_images(since: float) -> list[Path]:
-    d = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "generated_images"
+def new_images(since: float, session: str | None = None) -> list[Path]:
+    d = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "generated_images" / (session or "")
     return [p for p in d.rglob("*") if p.suffix.lower() in IMAGES and p.stat().st_mtime >= since] if d.is_dir() else []
 
 
@@ -108,6 +118,46 @@ def missing_flags(help_text: str) -> list[str]:
 def actual_model(stderr: str | None) -> str | None:
     m = re.search(r"^model: *(\S+)\s*$", stderr or "", re.M)
     return m[1] if m else None
+
+
+def session_id(stderr: str | None) -> str | None:
+    m = SESSION_LINE.search(stderr or "")
+    return m[1] if m else None
+
+
+def error_kind(err: str) -> str | None:
+    return "quota" if QUOTA.search(err) else "policy" if POLICY.search(err) else None
+
+
+def runs_alive(pid_file: Path, own: Path) -> bool:
+    """True when another process holds a live pid file in the folder of --pid-file."""
+    for f in pid_file.parent.glob(f"*{pid_file.suffix}"):
+        if f == own:
+            continue
+        try:
+            pid = int(f.read_text(encoding="utf-8").strip())
+            if pid > 0:
+                os.kill(pid, 0)
+                return True
+        except PermissionError:
+            return True
+        except (OSError, ValueError):
+            pass
+    return False
+
+
+def convert_to_png(path: Path) -> bool:
+    from PIL import Image
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with Image.open(path) as im:
+            im.load()
+            (im if im.mode in ("RGB", "RGBA", "L", "LA", "P") else im.convert("RGB")).save(tmp, "PNG")
+    except (OSError, SyntaxError, ValueError):
+        tmp.unlink(missing_ok=True)
+        return False
+    tmp.replace(path)
+    return True
 
 
 def version_of(out: Path) -> tuple[Path, str, str, int] | None:
@@ -141,15 +191,6 @@ def record_models(out: Path, requested: str, actual: str, cli: str, approve: str
         print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
 
 
-def to_png(src: Path, out: Path):
-    from PIL import Image
-    try:
-        with Image.open(src) as im:
-            im.save(out, "PNG")
-    except (OSError, SyntaxError, ValueError):
-        shutil.copyfile(src, out)
-
-
 def call(a, jobs: list[dict]):
     for j in jobs:
         for p in (j["out"], j["result"]):
@@ -160,23 +201,34 @@ def call(a, jobs: list[dict]):
     cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(jobs[0]["out"].parent),
            "-s", "workspace-write", "--skip-git-repo-check", *(["--approve-for-me"] if a.approve_for_me else []),
            *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
-    start = time.time() - 1
+    start, busy = time.time() - 1, runs_alive(a.pid_file, a.own_pid_file)
     try:
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY") or k in CODEX_KEYS}
         p = heartbeat.run(cmd, tool="codex exec", vd=heartbeat.vdir_of(*(j["out"] for j in jobs)), input=prompt,
                           timeout=a.timeout, env=env)
-    except subprocess.TimeoutExpired:
-        p = None
-    if p is not None and (m := actual_model(p.stderr)):
+        stderr = p.stderr
+    except subprocess.TimeoutExpired as ex:
+        p, stderr = None, ex.stderr if isinstance(ex.stderr, str) else ""
+    if m := actual_model(stderr):
         a.actual = m
-    return p, start
+    return p, start, {"stderr": stderr, "busy": busy}
 
 
-def check(a, j: dict, p, start: float, alone: bool) -> tuple[str | None, bool, list[int] | None]:
+def fallback_image(a, ctx: dict, start: float) -> Path | None:
+    """D36.9: the one new image of this call's session folder. With no session id, any folder, but only while no other
+    codex_image run is alive (before the call or now), because the image could be that run's."""
+    sid = session_id(ctx["stderr"])
+    if sid is None and (ctx["busy"] or runs_alive(a.pid_file, a.own_pid_file)):
+        return None
+    return found[0] if len(found := new_images(start, sid)) == 1 else None
+
+
+def check(a, j: dict, p, start: float, ctx: dict, alone: bool) -> tuple[str | None, bool, list[int] | None]:
     """D30.20: the file of one job after a call. The CODEX_HOME fallback (D18.4) holds only for a call with one job."""
-    out, err, fallback = j["out"], codex_error(j["result"]), False
-    if alone and not out.is_file() and not err and len(found := new_images(start)) == 1:
-        to_png(found[0], out)
+    out, err, fallback, rec = j["out"], codex_error(j["result"]), False, j["rec"]
+    rec["session"], rec["converted"] = session_id(ctx["stderr"]), False
+    if alone and not out.is_file() and not err and (found := fallback_image(a, ctx, start)):
+        shutil.copyfile(found, out)
         fallback = True
     if not out.is_file():
         if err:
@@ -186,8 +238,11 @@ def check(a, j: dict, p, start: float, alone: bool) -> tuple[str | None, bool, l
         tail = (p.stderr.strip().splitlines() or [""])[-1][:200]
         return "không có file ảnh" + (f" (codex exit {p.returncode}: {tail})" if p.returncode else ""), False, None
     with out.open("rb") as f:
-        if f.read(8) != PNG_SIGNATURE:
-            return "file không có header PNG", fallback, None
+        is_png = f.read(8) == PNG_SIGNATURE
+    if not is_png:
+        if not convert_to_png(out):
+            return "file ảnh hỏng", fallback, None
+        rec["converted"] = True
     from PIL import Image
     try:
         with Image.open(out) as im:
@@ -201,26 +256,35 @@ def check(a, j: dict, p, start: float, alone: bool) -> tuple[str | None, bool, l
 
 
 def run_jobs(a, jobs: list[dict]):
-    """Each round calls Codex once per pending job, or once for all of them with --batch. After a call every job file is checked on its own, and only the
-    jobs that failed go to the next round, at most TRIES tries each."""
-    pending, t0 = list(jobs), time.monotonic()
-    while pending:
+    """Each round calls Codex once per pending job, or once for all of them with --batch. After a call every job file is
+    checked on its own, and only the jobs that failed go to the next round, up to the `limit` of each: TRIES, or fewer
+    after a quota or policy error (D36.12). A quota error ends the run: the quota is shared by every file."""
+    pending, t0, quota = list(jobs), time.monotonic(), False
+    while pending and not quota:
         for group in [pending] if a.batch else [[j] for j in pending]:
+            if quota:
+                for j in group:
+                    j["rec"]["errors"].append("không gọi: codex hết quota ở file khác")
+                continue
             if time.monotonic() - t0 + a.timeout > a.wall_s:
                 for j in group:
                     j["rec"]["errors"].append(f"hết thời gian tổng {a.wall_s} s (D33.3): không gọi thêm")
                     j["rec"]["attempts"] = TRIES
                 continue
-            p, start = call(a, group)
+            p, start, ctx = call(a, group)
             for j in group:
                 rec = j["rec"]
                 rec["attempts"] += 1
-                err, rec["fallback"], rec["size"] = check(a, j, p, start, len(group) == 1)
+                err, rec["fallback"], rec["size"] = check(a, j, p, start, ctx, len(group) == 1)
                 if err is None:
                     rec["status"] = "ok"
-                else:
-                    rec["errors"].append(err)
-        pending = [j for j in pending if j["rec"]["status"] != "ok" and j["rec"]["attempts"] < TRIES]
+                    continue
+                rec["errors"].append(err)
+                kind = error_kind(err)
+                rec["limit"] = min(rec["limit"], {"quota": 1, "policy": POLICY_TRIES}.get(kind, TRIES))
+                quota = quota or kind == "quota"
+        pending = [j for j in pending if j["rec"]["status"] != "ok" and j["rec"]["attempts"] < j["rec"]["limit"]
+                   and not quota]
 
 
 def main():
@@ -244,6 +308,7 @@ def main():
     if a.batch and len({o.resolve().parent for o in a.out}) > 1:
         ap.error("--batch cần mọi --out trong cùng một thư mục: codex exec -C chỉ mở một thư mục")
     a.actual, jobs = None, []
+    a.own_pid_file = a.pid_file.with_name(f"{a.pid_file.stem}-{os.getpid()}{a.pid_file.suffix}")
     for prompt, out in zip(a.prompt, a.out):
         out = out.resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -252,13 +317,14 @@ def main():
                      "rec": {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model,
                              "model_actual": NO_NUMBER, "codex_cli": NO_NUMBER, "reasoning": a.reasoning,
                              "prompt": str(prompt), "images": a.image, "approve_for_me": a.approve_for_me, "batch": a.batch,
-                             "size": None, "fallback": False, "errors": []}})
+                             "size": None, "fallback": False, "converted": False, "session": None, "limit": TRIES,
+                             "errors": []}})
     if shutil.which("codex") is None:
         for j in jobs:
             j["rec"]["errors"].append("không thấy codex trên PATH")
     else:
         cli = cli_version()
-        pid_file = a.pid_file.with_name(f"{a.pid_file.stem}-{os.getpid()}{a.pid_file.suffix}")
+        pid_file = a.own_pid_file
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(os.getpid()), encoding="utf-8")
         try:
@@ -279,7 +345,8 @@ def main():
             print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
             continue
         failed = True
-        print(f"[gen_image_codex] fail{f' {TRIES}/{TRIES}' if rec['attempts'] else ''}: {rec['errors'][-1]} -> {rec_path}")
+        tries = f" {rec['attempts']}/{rec['limit']}" if rec["attempts"] else ""
+        print(f"[gen_image_codex] fail{tries}: {rec['errors'][-1]} -> {rec_path}")
     if failed:
         sys.exit(1)
 

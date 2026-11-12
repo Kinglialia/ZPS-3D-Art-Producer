@@ -2,8 +2,13 @@
 ok | small | home | home_two | none | fail:<n> (first n calls report an error, then ok) | slow:<s> (sleep, then ok) |
 hang_after_image (saves under CODEX_HOME, never returns) | error_with_bystander (reports an error; another asset's image
 sits under CODEX_HOME) | ok_but_error (valid image, result.json also carries an error) | truncated (cut-off PNG) |
-jpeg (JPEG bytes at the .png path) | home_jpeg (a JPEG under CODEX_HOME) | break_once:<name> | miss_once:<name> |
-fail_for:<name> (that file always reports an error).
+jpeg (JPEG bytes at the .png path) | not_an_image (text bytes at the .png path) | home_jpeg (a JPEG under CODEX_HOME) | break_once:<name> | miss_once:<name> |
+fail_for:<name> (that file always reports an error) | other_session (another session saved an image under CODEX_HOME,
+none of ours) | own_and_other_session (ours and another session's image under CODEX_HOME).
+FAKE_CODEX_STDERR set: the call prints that text on stderr and exits 1 before it makes any file.
+FAKE_CODEX_ERROR: the error text of fail:<n> and fail_for (default "internal error", a technical failure).
+FAKE_CODEX_SESSION set: the `codex exec` header has a `session id:` line, and CODEX_HOME images of this call go under
+generated_images/<that id>/ (default folder: sess, and no session line).
 Each mode applies to every OUTPUT_PATH of the prompt. An --image file that does not exist exits 1, as codex does.
 Logs each call to FAKE_CODEX_LOG with the parsed image list and the output names.
 FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr.
@@ -71,9 +76,13 @@ def main():
         f.write(json.dumps(entry) + "\n")
     if missing := [i for i in images if not Path(i).is_file()]:
         sys.exit(f"Error: failed to read image {missing[0]}")
-    if os.environ.get("FAKE_CODEX_MODEL"):
-        print(f"OpenAI Codex v0.0.0\n--------\nworkdir: {os.getcwd()}\nmodel: {os.environ['FAKE_CODEX_MODEL']}\n"
-              "provider: openai\n--------", file=sys.stderr)
+    header = [f"{key}: {os.environ[var]}" for key, var in (("model", "FAKE_CODEX_MODEL"), ("session id", "FAKE_CODEX_SESSION"))
+              if os.environ.get(var)]
+    if header:
+        print("\n".join(["OpenAI Codex v0.0.0", "--------", f"workdir: {os.getcwd()}", *header, "provider: openai", "--------"]),
+              file=sys.stderr)
+    if os.environ.get("FAKE_CODEX_STDERR"):
+        sys.exit(os.environ["FAKE_CODEX_STDERR"])
     w, h = map(int, re.search(r"^SIZE: (\d+)x(\d+)$", prompt, re.M).groups())
     mode = os.environ.get("FAKE_CODEX_MODE", "ok")
     for out, result in jobs:
@@ -101,13 +110,15 @@ def make(out: Path, result: Path, w: int, h: int, mode: str, n_calls: int, befor
     miss_once:<name> cut off or skip that file on its first call only."""
     from PIL import Image
     if (mode.startswith("fail:") and n_calls < int(mode[5:])) or mode == f"fail_for:{out.name}":
-        result.write_text(json.dumps({"path": None, "width": 0, "height": 0, "error": "quota exceeded"}))
+        result.write_text(json.dumps({"path": None, "width": 0, "height": 0,
+                                      "error": os.environ.get("FAKE_CODEX_ERROR", "internal error")}))
         return
     if mode == "none" or (mode == f"miss_once:{out.name}" and before == 0):
         return
     if mode == f"break_once:{out.name}" and before == 0:
         mode = "truncated"
-    home = Path(os.environ.get("CODEX_HOME", "")) / "generated_images" / "sess"
+    home = Path(os.environ.get("CODEX_HOME", "")) / "generated_images" / os.environ.get("FAKE_CODEX_SESSION", "sess")
+    theirs = Path(os.environ.get("CODEX_HOME", "")) / "generated_images" / "theirs"
     if mode.startswith("slow:"):
         time.sleep(float(mode[5:]))
     if mode == "hang_after_image":
@@ -125,8 +136,19 @@ def make(out: Path, result: Path, w: int, h: int, mode: str, n_calls: int, befor
         out.write_bytes(buf.getvalue()[:300])
         result.write_text(json.dumps({"path": str(out), "width": w, "height": h, "error": None}))
         return
+    if mode == "not_an_image":
+        out.write_bytes(b"this is not an image, " * 20)
+        result.write_text(json.dumps({"path": str(out), "width": w, "height": h, "error": None}))
+        return
     if mode == "jpeg":
         Image.new("RGB", (w, h), (200, 120, 10)).save(out, "JPEG")
+        return
+    if mode in ("other_session", "own_and_other_session"):
+        theirs.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (w, h), (1, 1, 1)).save(theirs / "other-asset.png")
+        if mode == "own_and_other_session":
+            home.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (w, h), (10, 120, 200)).save(home / "img.png")
         return
     if mode == "home_two":
         home.mkdir(parents=True, exist_ok=True)

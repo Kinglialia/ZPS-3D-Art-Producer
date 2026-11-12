@@ -70,8 +70,8 @@ def test_codex_gets_no_api_key_of_another_service_so_a_meshy_key_never_reaches_t
 def test_three_technical_failures_in_a_row_stop_with_exit_1_and_no_fourth_paid_call(gen):
     r = gen("fail:5")
     assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 3, False)
-    assert r["out"] == f"[gen_image_codex] fail 3/3: codex: quota exceeded -> {gen.out.with_suffix('.json')}\n"
-    assert (r["record"]["status"], r["record"]["errors"]) == ("fail", ["codex: quota exceeded"] * 3)
+    assert r["out"] == f"[gen_image_codex] fail 3/3: codex: internal error -> {gen.out.with_suffix('.json')}\n"
+    assert (r["record"]["status"], r["record"]["errors"]) == ("fail", ["codex: internal error"] * 3)
 
 
 def test_two_failures_then_an_image_passes_on_the_third_try(gen):
@@ -155,8 +155,8 @@ def test_two_gens_of_one_asset_hold_two_pid_files_so_the_first_to_finish_does_no
 
 def test_a_codex_reported_error_is_never_overridden_by_another_assets_newer_image_under_codex_home(gen):
     r = gen("error_with_bystander")
-    assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 3, False)
-    assert r["record"]["errors"] == ["codex: content policy"] * 3 and r["record"]["fallback"] is False
+    assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 2, False)
+    assert r["record"]["errors"] == ["codex: content policy"] * 2 and r["record"]["fallback"] is False
 
 
 def test_two_new_images_under_codex_home_are_ambiguous_so_the_fallback_takes_neither(gen):
@@ -287,11 +287,11 @@ def test_no_shipped_file_names_the_removed_full_auto_flag(tmp_path):
     assert hits == []
 
 
-def gen_many(gen, names, mode="ok", extra=()):
+def gen_many(gen, names, mode="ok", extra=(), env=None):
     """One run of the script with a --prompt/--out pair per name; the prompts sit beside the fixture's front.md."""
     log = gen.tmp / "many.jsonl"
     env = {**os.environ, "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(gen.pid),
-           "CODEX_HOME": str(gen.tmp / "codex-home"), "PATH": fake_codex.install(gen.tmp / "bin")}
+           "CODEX_HOME": str(gen.tmp / "codex-home"), "PATH": fake_codex.install(gen.tmp / "bin"), **(env or {})}
     pairs = []
     for n in names:
         (gen.tmp / f"{n}.md").write_text(f"Paint the {n} view.\n", encoding="utf-8")
@@ -327,15 +327,59 @@ def test_a_file_that_keeps_failing_fails_alone_and_the_good_files_stay_but_the_r
     assert [c["outs"] for c in calls] == [["front.png"], ["left.png"], ["front.png"], ["front.png"]]
     assert {n: (r["status"], r["attempts"]) for n, r in recs.items()} == {"front": ("fail", 3), "left": ("ok", 1)}
     assert (p.returncode, p.stdout.splitlines()[0]) == (
-        1, f"[gen_image_codex] fail 3/3: codex: quota exceeded -> {gen.out.with_name('front.json')}")
+        1, f"[gen_image_codex] fail 3/3: codex: internal error -> {gen.out.with_name('front.json')}")
     assert (gen.out.with_name("front.png").exists(), gen.out.with_name("left.png").exists()) == (False, True)
 
 
-def test_a_file_without_a_png_header_is_a_failed_try_even_when_pillow_can_read_it(gen):
-    """The frame asks for PNG and the next tools read <name>.png as PNG; JPEG bytes under that name are not the image
-    the step expects."""
+def test_a_jpeg_saved_under_a_png_name_is_converted_to_png_and_accepted_since_the_image_is_paid_for_v11(gen):
+    """The next tools read <name>.png as PNG, so the bytes must be PNG. A JPEG that Pillow reads is a good image with
+    the wrong container: converting costs nothing, a second Codex call costs usage. This replaces the D18 rule that
+    counted it as a failed try."""
     r = gen("jpeg")
-    assert (r["rc"], len(r["calls"]), r["record"]["errors"]) == (1, 3, ["file không có header PNG"] * 3)
+    assert (r["rc"], len(r["calls"]), r["record"]["errors"], r["record"]["converted"]) == (0, 1, [], True)
+    assert gen.out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    with Image.open(gen.out) as im:
+        assert (im.format, im.size) == ("PNG", (1536, 1024))
+        assert all(abs(got - want) <= 3 for got, want in zip(im.getpixel((5, 5)), (200, 120, 10)))
+
+
+def test_a_file_without_a_png_header_that_pillow_cannot_read_is_still_a_broken_image_v11(gen):
+    r = gen("not_an_image")
+    assert (r["rc"], len(r["calls"]), r["record"]["errors"], r["record"]["converted"]) == (1, 3, ["file ảnh hỏng"] * 3, False)
+
+
+@pytest.mark.parametrize("error", ["quota exceeded", "Rate limit reached for gpt-image", "429 Too Many Requests",
+                                   "You have hit your usage limit"])
+def test_a_quota_or_rate_limit_error_stops_after_one_paid_call_because_a_retry_cannot_pass_v12(gen, error):
+    """kit gen-craft: stop at once on a quota error. D8.3 retried 3 times, paying the same refusal 3 times."""
+    r = gen("fail:5", extra=(), keys={"FAKE_CODEX_ERROR": error})
+    assert (r["rc"], len(r["calls"]), gen.out.exists()) == (1, 1, False)
+    assert r["record"]["errors"] == [f"codex: {error}"] and r["record"]["attempts"] == 1
+    assert r["out"] == f"[gen_image_codex] fail 1/1: codex: {error} -> {gen.out.with_suffix('.json')}\n"
+
+
+def test_a_quota_error_on_one_file_stops_the_files_still_waiting_because_the_quota_is_shared_v12(gen):
+    p, calls, recs = gen_many(gen, ["front", "left", "back"], "fail_for:front.png", env={"FAKE_CODEX_ERROR": "quota exceeded"})
+    assert (p.returncode, [c["outs"] for c in calls]) == (1, [["front.png"]])
+    assert {n: (r["status"], r["attempts"]) for n, r in recs.items()} == {
+        "front": ("fail", 1), "left": ("fail", 0), "back": ("fail", 0)}
+    assert recs["left"]["errors"] == ["không gọi: codex hết quota ở file khác"]
+
+
+def test_a_policy_error_is_tried_at_most_one_more_time_v12(gen):
+    r = gen("fail:5", keys={"FAKE_CODEX_ERROR": "Content policy violation"})
+    assert (r["rc"], len(r["calls"]), r["record"]["errors"]) == (1, 2, ["codex: Content policy violation"] * 2)
+    assert r["out"] == f"[gen_image_codex] fail 2/2: codex: Content policy violation -> {gen.out.with_suffix('.json')}\n"
+
+
+def test_a_policy_error_that_passes_on_the_retry_is_accepted_v12(gen):
+    r = gen("fail:1", keys={"FAKE_CODEX_ERROR": "request blocked by safety system"})
+    assert (r["rc"], len(r["calls"]), r["record"]["attempts"]) == (0, 2, 2)
+
+
+def test_a_quota_text_in_the_stderr_tail_of_a_codex_that_wrote_no_file_also_stops_v12(gen):
+    r = gen("ok", keys={"FAKE_CODEX_STDERR": "ERROR: Quota exceeded. Check your plan"})
+    assert (r["rc"], len(r["calls"])) == (1, 1)
 
 
 def test_the_codex_home_fallback_saves_a_jpeg_as_png_so_the_header_check_passes(gen):
@@ -432,3 +476,48 @@ def test_no_new_codex_call_starts_when_it_could_end_after_the_total_cap_so_the_r
     r = gen("slow:60", timeout=1, extra=("--wall-s", "2"))
     assert (r["rc"], len(r["calls"])) == (1, 1)
     assert r["record"]["errors"] == ["hết thời gian chờ 1 s", "hết thời gian tổng 2 s (D33.3): không gọi thêm"]
+
+
+def test_the_fallback_takes_only_an_image_of_this_calls_own_session_folder_v1(gen):
+    """Another asset's Codex run saves under its own session folder in the same CODEX_HOME. Taking the one new image
+    there puts the wrong asset's art into this view."""
+    r = gen("other_session", keys={"FAKE_CODEX_SESSION": "mine"})
+    assert (r["rc"], gen.out.exists(), r["record"]["errors"][0], r["record"]["fallback"]) == (
+        1, False, "không có file ảnh", False)
+
+
+def test_with_the_session_id_known_the_fallback_ignores_other_sessions_even_when_both_images_are_new_v1(gen):
+    r = gen("own_and_other_session", keys={"FAKE_CODEX_SESSION": "mine"})
+    assert (r["rc"], r["record"]["fallback"], r["record"]["session"]) == (0, True, "mine")
+    with Image.open(gen.out) as im:
+        assert im.getpixel((0, 0)) == (10, 120, 200)
+
+
+def test_the_session_id_is_read_from_the_codex_exec_header_on_stderr_v1():
+    import gen_image_codex
+    header = "OpenAI Codex v0.164.0\n--------\nworkdir: /x\nmodel: gpt-6\nsession id: 0199-abc\n--------\n"
+    assert (gen_image_codex.session_id(header), gen_image_codex.session_id("model: gpt-6\n"),
+            gen_image_codex.session_id(None)) == ("0199-abc", None, None)
+
+
+def test_without_a_session_id_the_fallback_waits_while_another_codex_image_run_is_alive_v1(gen):
+    """No id to tell the runs apart: an image that appears while a second run is alive may be the second run's."""
+    other = subprocess.Popen(["sleep", "60"])
+    try:
+        gen.pid.parent.mkdir(parents=True, exist_ok=True)
+        (gen.pid.parent / f"other-{other.pid}.pid").write_text(str(other.pid), encoding="utf-8")
+        r = gen("home")
+    finally:
+        other.kill()
+        other.wait()
+    assert (r["rc"], gen.out.exists(), r["record"]["fallback"], r["record"]["errors"][0]) == (
+        1, False, False, "không có file ảnh")
+
+
+def test_without_a_session_id_a_pid_file_of_a_dead_run_does_not_block_the_fallback_v1(gen):
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    gen.pid.parent.mkdir(parents=True, exist_ok=True)
+    (gen.pid.parent / f"old-{dead.pid}.pid").write_text(str(dead.pid), encoding="utf-8")
+    r = gen("home")
+    assert (r["rc"], r["record"]["fallback"]) == (0, True)
