@@ -18,6 +18,8 @@ Reads F/spec.json (asset id), F/assembly.json (part order) and F/parts/<part>.gl
   split the vertices of every edge sharper than 20 deg, or 60 deg in a round part: a cylinder, a bevel_box, or a
   custom part with "round": true in F/part_graph.json (a mirror_of part follows its source). 60 deg keeps an
   8-segment side (45 deg) and the steps of a 1-2 segment bevel (30-45 deg) smooth and splits caps and corners (90).
+- Custom normals, weighted_normals(): a large flat face keeps its own normal beside a bevel and only the bevel strip
+  blends. Plain averaged normals tilted the faces of a bevel_box 11.25 deg towards its bevel, a light gradient.
 - Origin at the bottom centre of the whole asset.
 Saves F/<id>.blend (object, mesh and material named <id>, no UV yet: unwrap.py next).
 Writes F/review/join.json. Exit 0, 1 on error.
@@ -46,6 +48,7 @@ GRID_M = 0.05
 SEEN_RES = 200
 GROUND_MARGIN = 0.05
 GROUND_DROP = 1e-4
+FLAT_DEG = 1.0
 
 
 def part_arrays(final):
@@ -137,6 +140,35 @@ def seen(v, f, gone, tree, bottom):
     return sorted(out)
 
 
+def weighted_normals(v, f):
+    """Unit normal per vertex: the normals of its triangles weighted by corner angle times the squared area of the flat
+    face each triangle belongs to (edge-connected triangles within FLAT_DEG of one plane). A flat face many times the
+    size of the bevel faces beside it outweighs them, however it is cut into triangles; faces of one size average."""
+    t = v[f]
+    cr = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    area = np.linalg.norm(cr, axis=1) / 2
+    fn = cr / np.maximum(2 * area, 1e-30)[:, None]
+    parent = list(range(len(f)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    first, cos = {}, np.cos(np.radians(FLAT_DEG))
+    for k, edge in enumerate(map(tuple, np.sort(f[:, [0, 1, 1, 2, 2, 0]].reshape(-1, 2), axis=1).tolist())):
+        j = first.setdefault(edge, k // 3)
+        if fn[j] @ fn[k // 3] > cos:
+            parent[root(j)] = root(k // 3)
+    face = np.array([root(i) for i in range(len(f))])
+    flat = np.bincount(face, area)[face]
+    a, b = t[:, [1, 2, 0]] - t, t[:, [2, 0, 1]] - t
+    corner = np.arctan2(np.linalg.norm(np.cross(a, b), axis=2), np.einsum("mkj,mkj->mk", a, b))
+    n = np.zeros_like(v, dtype=float)
+    np.add.at(n, f.ravel(), ((corner * (flat ** 2)[:, None])[:, :, None] * fn[:, None]).reshape(-1, 3))
+    return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-30)
+
+
 def run(final):
     import bmesh
     import bpy
@@ -176,6 +208,7 @@ def run(final):
     me.materials.append(bpy.data.materials.new(aid))
     ob = bpy.data.objects.new(aid, me)
     bpy.context.scene.collection.objects.link(ob)
+    me.normals_split_custom_set_from_vertices(weighted_normals(*optbpy.mesh_arrays(ob)).tolist())
     blend = os.path.join(os.path.abspath(final), f"{aid}.blend")
     fp = bpy.context.preferences.filepaths
     keep, fp.save_version = fp.save_version, 0
