@@ -264,6 +264,7 @@ def done(tmp_path_factory):
     f.work("t1", meshy="")
     f.review("t1", verdict="PASS", counts=counts(), top_fix=None)
     f.assemble("a1")
+    f.p("approvals", "set", "purge", "off", "--by", "giữ file để in lại report")
     return root, f, f.p("feedback", AID, "đạt", "--action", "approve")
 
 

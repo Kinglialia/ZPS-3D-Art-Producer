@@ -448,6 +448,7 @@ def test_assemble_approval_copies_final_to_deliver_and_a_later_redo_marks_the_de
     save_st(st)
     (flow.v(1, "assemble") / "final").mkdir(parents=True)
     (flow.v(1, "assemble") / "final/README.md").write_text("Trạng thái: chờ DUYỆT 2\n# House A\n", encoding="utf-8")
+    (flow.root / "production/policy.yaml").write_text("purge: off\n", encoding="utf-8")
     flow.human("approve")
     readme = flow.root / "deliver/house-a/README.md"
     head, body = readme.read_text(encoding="utf-8").split("\n", 1)

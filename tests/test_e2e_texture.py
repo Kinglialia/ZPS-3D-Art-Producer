@@ -57,6 +57,7 @@ def flow(tmp_path_factory):
              prior=["- H1: resolved | evidence: lit_34_front.png"])
     f.assemble("a2")
     cp["deliver before"] = (root / "deliver").exists()
+    f.p("approvals", "set", "purge", "off", "--by", "giữ file để làm lại")
     f.human("approve a2", "đạt", "--action", "approve")
     cp["deliver"] = sorted(p.relative_to(root / "deliver" / AID).as_posix()
                            for p in (root / "deliver" / AID).rglob("*") if p.is_file())
@@ -204,7 +205,7 @@ def test_with_the_budget_spent_the_fix_brief_says_no_meshy_call_is_left(flow):
 def test_duyet_2_copies_the_package_to_deliver_and_logs_the_estimate_record(flow):
     out = flow["approve a2"]["out"].splitlines()
     assert out[0] == "pilot-house: đã duyệt assemble v3 → assemble/done. Tiếp: xong"
-    assert out[1].startswith("Lệnh xóa D29: ")  # D29.3: the user's DUYỆT 2 arms the deletion; tests/test_purge.py
+    assert out[1].startswith("Giữ file, không xóa: policy.yaml có purge: off")
     assert pick(flow["approve a2"]["st"], "approved", "rejected")["rejected"]["assemble"] == [1, 2]
     assert flow["deliver before"] is False
     assert flow["deliver"] == ["README.md", "RUN-REPORT.md", "model/pilot-house.blend", "model/pilot-house.glb", "review/compare.json",
@@ -270,6 +271,7 @@ def test_every_texture_brief_stays_under_the_token_budget_without_the_install_an
 
 def test_a_second_duyet_2_of_one_asset_replaces_its_estimate_record_so_the_project_median_counts_it_once(tmp_path):
     f = to_texture(tmp_path)
+    f.p("approvals", "set", "purge", "off", "--by", "giữ file để làm lại")
     for k in (1, 2):
         f.work(f"t{k}")
         f.review(f"t{k}", verdict="PASS", counts=counts(), top_fix=None, compare="H1=better" if k == 2 else None,
