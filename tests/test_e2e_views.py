@@ -174,10 +174,12 @@ def test_the_views_reviewer_reads_a_sheet_where_each_view_sits_beside_its_guide_
     """Q6: no top tile for a `full` card, although the worker's guides hold all five views."""
     t = flow["v1 review brief"]["text"]
     sheet = f"{A}/views/v1/review/sheet.png"
-    assert f"- Sheet: `{sheet}` (nhãn ô = tên ảnh; ảnh lẻ qua need_evidence). Số liệu: JSON trong `final/`, `work/` của v1." in t
+    assert (f"- Sheet: `{sheet}`, `sheet-2.png` (nhãn ô = tên ảnh; ảnh lẻ qua need_evidence). Số liệu: JSON trong "
+            "`final/`, `work/` của v1.") in t
     tiles = json.loads((flow["root"] / A / "views/v1/review/sheet.json").read_text(encoding="utf-8"))
-    assert list(tiles) == [f"{x}{v}{y}" for v in ("front", "back", "left", "right")
-                           for x, y in (("", ""), ("", "_guide"), ("overlay_", ""))]
+    assert [(label, t["page"]) for label, t in tiles.items()] == [
+        (f"{x}{v}{y}", f"review/sheet{'' if k < 6 else '-2'}.png") for k, (v, (x, y)) in enumerate(
+            (v, xy) for v in ("front", "back", "left", "right") for xy in (("", ""), ("", "_guide"), ("overlay_", "")))]
 
 
 def test_a_measure_fail_the_worker_accepts_reaches_the_reviewer_with_its_reason(flow):
