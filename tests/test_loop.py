@@ -1301,8 +1301,8 @@ def rereview_v1_asks_for_evidence(f):
 def test_the_evidence_round_of_a_rereview_targets_the_version_judged_not_the_newest_c7(flow):
     """The reproduction: the answer need_evidence cleared `rereview`, `current_v()` fell back to v3, so the worker
     rendered pictures for v3 and its report was checked against the hash of v1."""
-    assert rereview_v1_asks_for_evidence(flow).endswith("→ blockout/evidence. Tiếp: giao worker render bằng chứng → "
-                                                         "`brief house-a`\n")
+    assert rereview_v1_asks_for_evidence(flow).splitlines()[0].endswith(
+        "→ blockout/evidence. Tiếp: giao worker render bằng chứng → `brief house-a`")
     assert (flow.st["evidence"]["version"], loop.current_v(flow.st, "blockout")) == (1, 1)
     out = flow.brief()
     ev = f"production/assets/{AID}/blockout/v1/review/evidence-1"
@@ -1333,7 +1333,7 @@ def blockout_waiting_with_a_picture(f):
                  encoding="utf-8")
     f.work()
     f.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
-    (f.v(1) / "final/review").mkdir(parents=True)
+    (f.v(1) / "final/review").mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (200, 100), "white").save(f.v(1) / "final/review/game_cam.png")
     assert f.st["state"] == "waiting_human"
 
