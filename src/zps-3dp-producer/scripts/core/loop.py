@@ -160,10 +160,24 @@ def offer(st: dict, sid: str, n: int, verdict: str | None = None, **kw):
     log_wait(st, sid, n, kw.get("note", ""), st["offer_key"], verdict)
 
 
+def set_rejected(rep):
+    """A report the contract refuses becomes `<name>.rejected-<k>.md`: its path is free for the rewrite, and `P wait`
+    and the stall check no longer read it as a finished report."""
+    k = 1
+    while (to := rep.with_name(f"{rep.stem}.rejected-{k}.md")).exists():
+        k += 1
+    rep.rename(to)
+
+
+def reject(rep, why: str):
+    set_rejected(rep)
+    die(f"{rel(rep)} sai contract: {why}")
+
+
 def valid(rep, parsed: tuple):
     out, errs = parsed
     if errs:
-        die(f"{rel(rep)} sai contract: {'; '.join(errs)}")
+        reject(rep, "; ".join(errs))
     return out
 
 
@@ -171,6 +185,7 @@ def worker_report(st: dict, rep, agent_id, sid: str, n: int) -> dict:
     c = valid(rep, parse_worker(read_report(rep)))
     inp = (st.get("inputs") or {}).get(sid, {}).get(f"v{n}") or {}
     if c["PROFILE_HASH"] != inp.get("profile"):
+        set_rejected(rep)
         die(f"{rel(rep)}: PROFILE_HASH {c['PROFILE_HASH']} khác brief ({inp.get('profile')})")
     hashes.check_inputs(st, inp)
     if agent_id:
@@ -184,12 +199,12 @@ def stuck(c: dict) -> str | None:
 
 def script_findings(st, sid: str, n: int, rep):
     """§6.4: the fail points a script step writes as findings in its report go to findings.json, for the board."""
-    c = parse_contract(read_report(rep), {"FINDINGS", "EVIDENCE_OPENED"})
     errs = []
+    c = parse_contract(read_report(rep), {"FINDINGS", "EVIDENCE_OPENED"}, errs)
     fs = parse_findings(c.get("FINDINGS", []), [x.strip() for x in c.get("EVIDENCE_OPENED", "").split(",") if x.strip()],
                         errs)
     if errs:
-        die(f"{rel(rep)} sai contract: {'; '.join(errs)}")
+        reject(rep, "; ".join(errs))
     doc = {"version": n, "base": None, "top_fix": None, "pick": None, "next_id": len(fs) + 1,
            "findings": {i: {"priority": f["priority"], "kind": f["kind"], "status": "open", "first_v": n, "last_v": n,
                             **{k: v for k, v in f.items() if k not in ("priority", "kind")}} for i, f in fs.items()}}
@@ -326,11 +341,11 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     rv = valid(rep, parse_review(read_report(rep)))
     scope = st.get("review_scope") or "full"
     if scope == "full" and (nc := [k for k, x in rv["rubric"].items() if x == "not_checked"]):
-        die(f"{rel(rep)} sai contract: RUBRIC {', '.join(nc)}=not_checked chỉ dùng khi REVIEW_SCOPE: fix")
+        reject(rep, f"RUBRIC {', '.join(nc)}=not_checked chỉ dùng khi REVIEW_SCOPE: fix")
     wr = d / "worker-out.md"
     claimed = parse_worker(read_report(wr))[0]["RESOLVED_NOTES"] if wr.exists() else []
     if extra := [x for x in rv["confirmed"] if x not in claimed]:
-        die(f"{rel(rep)} sai contract: RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
+        reject(rep, f"RESOLVED_CONFIRMED {', '.join(extra)} không có trong RESOLVED_NOTES của worker")
     warns = []
     doc = valid(rep, findings.apply(findings.load(aid, sid, review_base(st, n)), rv,
                                     step | {"regions": asset_card.regions(step, st)}, n, warns))

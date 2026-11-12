@@ -607,6 +607,44 @@ def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_
     assert "mức `minor`" not in text
 
 
+def test_a_reviewer_report_that_fails_the_contract_is_set_aside_so_the_rewrite_has_a_free_path(flow):
+    """Run 4: the rejected report stayed at the report path, so `P wait` and `next` read it as a finished report."""
+    flow.work()
+    out = flow.brief()
+    rep = flow.root / out["report"]
+    for k in (1, 2):
+        with pytest.raises(ProducerError) as e:
+            flow.review(out=out, evidence="", rubric=f"massing=fail; try{k}=fail")
+        assert str(e.value) == f"production/assets/{AID}/blockout/v1/review-out.md sai contract: thiếu EVIDENCE_OPENED"
+        assert not rep.exists()
+        assert f"try{k}=fail" in rep.with_name(f"review-out.rejected-{k}.md").read_text(encoding="utf-8")
+    assert flow.st["state"] == "reviewing"
+    assert loop.next_action(flow.st).startswith("đang chờ subagent")
+    flow.review(out=out, top_fix="structure: F1", findings=[finding("F1", "major", "structure")])
+    assert sorted(p.name for p in rep.parent.glob("review-out*")) == [
+        "review-out.md", "review-out.rejected-1.md", "review-out.rejected-2.md"]
+
+
+def test_a_worker_report_without_the_profile_hash_is_set_aside_the_same_way(flow):
+    out = flow.brief()
+    rep = flow.root / out["report"]
+    rep.write_text("STATUS: DONE\nOUTPUT: final/\n", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        flow.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
+    assert str(e.value) == f"production/assets/{AID}/blockout/v1/worker-out.md sai contract: thiếu PROFILE_HASH"
+    assert not rep.exists() and rep.with_name("worker-out.rejected-1.md").read_text(encoding="utf-8").startswith("STATUS: DONE")
+    assert flow.st["state"] == "running"
+
+
+def test_the_checks_that_run_after_parsing_also_set_the_report_aside(flow):
+    flow.work()
+    out = flow.brief()
+    rep = flow.root / out["report"]
+    with pytest.raises(ProducerError):
+        flow.review(out=out, verdict="PASS", top_fix=None, rubric="massing=pass; props=not_checked")
+    assert not rep.exists() and rep.with_name("review-out.rejected-1.md").exists()
+
+
 def test_a_reviewer_that_omits_counts_and_the_batch_ids_is_ingested_and_the_script_fills_both(flow):
     """The script counts and lists the batch ids, so a reviewer is never sent back for what it cannot get wrong."""
     flow.work()

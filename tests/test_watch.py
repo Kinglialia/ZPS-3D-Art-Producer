@@ -281,3 +281,18 @@ def test_stall_takes_the_agent_id_from_the_producer_and_dispatch_mode_has_one_wr
     f.p("approvals", "set", "dispatch", "background", "--by", "chạy lô")
     assert "dispatch: background" in (tmp_path / "production/policy.yaml").read_text(encoding="utf-8")
     assert "dispatch phải là foreground|background" in f.p("approvals", "set", "dispatch", "fast", "--by", "x", ok=False)
+
+
+def test_a_report_that_failed_the_contract_is_not_a_finished_job_for_wait_or_the_stall_check_d36_3(tmp_path):
+    """Run 4: ingest refused the report, but it stayed at the report path, so `P wait` woke at once for the same
+    report, again and again. The rejected report is set aside; the job is back to running."""
+    f, out, _ = project(tmp_path)
+    (tmp_path / out["report"]).write_text("STATUS: DONE\nOUTPUT: final/\n", encoding="utf-8")
+    assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
+    assert "thiếu PROFILE_HASH" in f.p("ingest", "pilot-house", ok=False)
+    edit_job(f, stopped="report", deadline=ago(-60))
+    woke = f.p("wait", "--every", "0.05", "--max-min", "0.01")
+    assert woke.startswith("chưa có gì sau") and "có báo cáo" not in woke
+    assert "· OK" in f.p("next") and "KẸT" not in f.p("next")
+    (tmp_path / out["report"]).write_text("STATUS: DONE\nPROFILE_HASH: x\n", encoding="utf-8")
+    assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
