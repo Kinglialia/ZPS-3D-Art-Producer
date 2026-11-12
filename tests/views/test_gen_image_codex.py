@@ -594,7 +594,7 @@ def test_a_stopped_gen_kills_its_codex_calls_so_none_keeps_spending_or_writes_an
     while len(log.read_text().splitlines() if log.exists() else []) < 2:
         assert time.monotonic() < end and p.poll() is None, "codex never started twice"
         time.sleep(0.05)
-    calls = subprocess.run(["pgrep", "-P", str(p.pid)], capture_output=True, text=True).stdout.split()
+    calls = subprocess.run(["pgrep", "-P", str(p.pid), "-f", "fake_codex.py"], capture_output=True, text=True).stdout.split()
     assert len(calls) == 2
     p.send_signal(getattr(signal, sig))
     assert p.wait(timeout=10) == code
