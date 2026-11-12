@@ -177,48 +177,140 @@ def test_subagent_stop_records_the_stop_on_disk_when_the_producer_never_hears_of
     assert hook(tmp_path, "not json").returncode == 0
 
 
+def age(vd, minutes):
+    """Every file under vN last changed `minutes` ago: the job has been quiet that long."""
+    import os
+    import time
+    t = time.time() - minutes * 60
+    for p in [vd, *vd.rglob("*")]:
+        os.utime(p, (t, t))
+
+
+def utc_ago(minutes):
+    import datetime as dt
+    return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
+
+
+def test_a_late_stop_of_the_old_agent_never_marks_the_new_agent_that_shares_its_brief_c12(tmp_path):
+    """After a new agent got the same brief, the old one stopped late. Its transcript names the same brief, so the hook
+    took the new dispatch for it: `no_report` and the old agent id on the new record, the new agent shown KẸT at once
+    and a third agent unlocked on the same vN. A prompt older than the dispatch belongs to an earlier dispatch."""
+    f, out, j = project(tmp_path)
+    tr = tmp_path / "agent-old.jsonl"
+    tr.write_text(j.dumps({"type": "user", "timestamp": utc_ago(29),
+                           "message": {"content": f"Đọc `{out['brief']}` trước tiên."}}) + "\n", encoding="utf-8")
+    edit_job(f, at=ago(30), stopped="no_report")
+    f.p("stall", "pilot-house")
+    new = f.st()["dispatches"][-1]
+    r = hook(tmp_path, {"agent_type": "zps-3dp-step-blockout", "agent_id": "old", "agent_transcript_path": str(tr)})
+    assert (r.returncode, r.stdout) == (0, "")
+    assert f.st()["dispatches"][-1] == new and "KẸT" not in f.p("next")
+    tr.write_text(j.dumps({"type": "user", "timestamp": utc_ago(0),
+                           "message": {"content": f"Đọc `{out['brief']}` trước tiên."}}) + "\n", encoding="utf-8")
+    hook(tmp_path, {"agent_type": "zps-3dp-step-blockout", "agent_id": "b2", "agent_transcript_path": str(tr)})
+    assert (f.st()["dispatches"][-1]["stopped"], f.st()["dispatches"][-1]["agent_id"]) == ("no_report", "b2")
+
+
 def test_a_stalled_job_climbs_nudge_then_one_new_agent_then_the_user_and_the_ledger_logs_each_rung_d33_11(tmp_path):
     """One rule for every stall, decided by the script: max_nudges nudges (1), then the same brief to a new agent
-    (never a resume of the stuck one), then waiting_human. Each rung waits stall_min before the next."""
+    (never a resume of the stuck one), then waiting_human. Each rung waits stall_min before the next. A new agent goes
+    out only after SubagentStop recorded that the old one stopped (D39.4): two agents never write one vN."""
     f, out, j = project(tmp_path)
-    edit_job(f, deadline=ago(5), agent_id="a1")
+    vd = (tmp_path / out["report"]).parent
+    edit_job(f, stopped="no_report", agent_id="a1")
     assert "OK" not in f.p("next").split("↳")[1]
     r = f.p("stall", "pilot-house")
     assert "nudge 1/1: gửi tới agent a1 đúng câu \"Tiếp tục, báo trạng thái\"" in r
     assert "không kẹt" in f.p("stall", "pilot-house", ok=False)
-    edit_job(f, nudged_at=ago(11))
+    edit_job(f, at=ago(30), nudged_at=ago(11))
+    age(vd, 20)
+    led = f.p("ledger", "--tail", "1")
+    assert f.p("stall", "pilot-house").splitlines() == [
+        f"pilot-house: kẹt (không có nhịp tim, không có file đổi từ {ago(11)[11:16]}) → chưa giao lại: agent a1 chưa "
+        "dừng. Dừng agent a1 trước, rồi `stall pilot-house` lại"]
+    assert (len(f.st()["dispatches"]), [x["rung"] for x in f.st()["stalls"]], f.p("ledger", "--tail", "1")) == (
+        1, ["nudge"], led)
+    edit_job(f, stopped="no_report")
     r = f.p("stall", "pilot-house")
     new = j.loads(r.strip().splitlines()[-1])
     assert (new["role"], new["resume"], new["brief"]) == ("worker", None, out["brief"])
     d = f.st()["dispatches"]
     assert len(d) == 2 and "ended" in d[0] and d[1]["redispatch_of"] == d[0]["at"] and "ended" not in d[1]
-    edit_job(f, deadline=ago(1))
+    edit_job(f, stopped="no_report")
     r = f.p("stall", "pilot-house")
     assert "waiting_human" in r and f.st()["state"] == "waiting_human"
     assert [x["rung"] for x in f.st()["stalls"]] == ["nudge", "redispatch", "human"]
     led = f.p("ledger", "--tail", "6")
-    assert "kẹt · worker · quá hạn chót" in led and "nudge 1/1" in led and "giao lại cho agent mới" in led
+    assert "kẹt · worker · subagent dừng, không có report" in led and "nudge 1/1" in led and "giao lại cho agent mới" in led
     stats = f.p("stats", "pilot-house")
     assert "| Bước | Kẹt | Nudge | Giao lại | Hỏi anh |" in stats and "| blockout | 3 | 1 | 1 | 1 |" in stats
     r = f.p("retry", "pilot-house")
     assert f.st()["state"] == "running" and j.loads(r.strip().splitlines()[-1])["resume"] is None
 
 
-def test_silence_counts_only_while_a_tool_runs_so_a_thinking_worker_is_not_stuck_but_a_hung_tool_is_d33_11(tmp_path):
+def test_the_user_rung_names_the_agent_that_may_still_run_so_retry_never_adds_a_second_writer_d39_4(tmp_path):
+    f, out, _ = project(tmp_path)
+    vd = (tmp_path / out["report"]).parent
+    edit_job(f, stopped="no_report")
+    f.p("stall", "pilot-house")
+    edit_job(f, at=ago(30), agent_id="b2")
+    age(vd, 20)
+    assert "nudge 1/1: gửi tới agent b2" in f.p("stall", "pilot-house")
+    edit_job(f, nudged_at=ago(11))
+    assert "waiting_human" in f.p("stall", "pilot-house")
+    assert f.st()["note"].endswith("; agent b2 chưa dừng: dừng nó trước khi `retry`")
+
+
+def test_a_job_is_stalled_only_when_vn_has_no_heartbeat_and_no_file_change_for_stall_min_d39_3(tmp_path):
+    """The Run 5 rule (D33.11) is gone: a deadline alone flagged a slow job with a beat one minute old, and the ladder
+    then sent a second agent on the same vN. Now: a worker that hangs, while a tool runs or while it thinks, writes no
+    beat and no file, so it is stalled after stall_min (10). A file the worker writes, or a live beat past the
+    deadline, is a slow job: `P next` says it is late, not KẸT."""
     f, out, _ = project(tmp_path)
     edit_job(f, at=ago(20))
     vd = (tmp_path / out["report"]).parent
     (vd / "heartbeat.log").write_text(f"{ago(15)} · blender render · done · exit 0\n", encoding="utf-8")
-    assert "· OK" in f.p("next")
-    (vd / "heartbeat.log").write_text(f"{ago(15)} · blender render · running · cpu +3.0 s\n", encoding="utf-8")
+    age(vd, 15)
+    assert "KẸT 15m · nudge 0/1" in f.p("next")
+    assert "không có nhịp tim, không có file đổi từ" in f.p("stall", "pilot-house")
+    edit_job(f, deadline=ago(5))
+    age(vd, 15)
+    (vd / "work").mkdir(exist_ok=True)
+    (vd / "work/part_graph.json").write_text("{}", encoding="utf-8")
     nxt = f.p("next")
-    assert "KẸT 15m · nudge 0/1" in nxt and "không có nhịp tim mới" in f.p("stall", "pilot-house")
+    assert "KẸT" not in nxt and "· trễ: quá hạn chót, còn file đổi" in nxt
+    age(vd, 15)
+    (vd / "heartbeat.log").write_text(f"{ago(1)} · blender render · running · cpu +3.0 s\n", encoding="utf-8")
+    age(vd, 15)
+    nxt = f.p("next")
+    assert "KẸT" not in nxt and "· trễ: quá hạn chót, còn nhịp tim" in nxt
+    assert "không kẹt" in f.p("stall", "pilot-house", ok=False)
+
+
+def test_a_reviewer_writes_nothing_until_its_report_so_its_silence_counts_only_past_its_deadline_d39_3(tmp_path):
+    """A reviewer reads and thinks; its only file is the report. Silence alone would flag every healthy review longer
+    than stall_min, so a quiet reviewer is stalled only once its deadline has passed too."""
+    import os
+    from core import watch
+    f, out, _ = project(tmp_path)
+    vd = (tmp_path / out["report"]).parent
+    st = f.st()
+    rec = st["dispatches"][-1] | {"role": "reviewer", "at": ago(15), "deadline": ago(-5)}
+    w = {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}
+    age(vd, 15)
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        assert watch.check(st, rec, w)["stalled"] is False
+        assert watch.check(st, rec | {"deadline": ago(1)}, w)["why"].startswith("không có nhịp tim, không có file đổi từ")
+    finally:
+        os.chdir(cwd)
 
 
 def test_the_board_labels_a_stalled_asset_kẹt_d33_17(tmp_path):
     from core import board, state
     f, out, _ = project(tmp_path)
-    edit_job(f, deadline=ago(1))
+    edit_job(f, stopped="no_report")
     import os
     cwd = os.getcwd()
     os.chdir(tmp_path)
@@ -276,7 +368,7 @@ def test_a_subagent_cut_by_max_turns_is_nudged_with_the_id_its_stop_hook_gave_wi
 
 def test_stall_takes_the_agent_id_from_the_producer_and_dispatch_mode_has_one_writer_d33_11_d33_14(tmp_path):
     f, out, _ = project(tmp_path)
-    edit_job(f, deadline=ago(1))
+    edit_job(f, stopped="no_report")
     assert "nudge 1/1: gửi tới agent z9" in f.p("stall", "pilot-house", "--agent-id", "z9")
     f.p("approvals", "set", "dispatch", "background", "--by", "chạy lô")
     assert "dispatch: background" in (tmp_path / "production/policy.yaml").read_text(encoding="utf-8")

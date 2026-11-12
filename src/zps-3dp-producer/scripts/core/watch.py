@@ -19,8 +19,8 @@ from .state import ROOT, all_status, die, ledger, load_cfg, load_st, rel, save_s
 ROLE_OF = {"running": "worker", "evidence_running": "worker", "reviewing": "reviewer"}
 REPORT = {"brief-worker.md": "worker-out.md", "brief-review.md": "review-out.md"}
 NUDGE = "Tiếp tục, báo trạng thái"
-LIVE = ("start", "running")
 LOCK = "wait.lock"
+WALK_MAX = 20000
 
 
 def at(s: str) -> dt.datetime:
@@ -66,15 +66,43 @@ def report_of(rec: dict):
     return b.with_name(REPORT[b.name]) if b and b.name in REPORT else None
 
 
+def touched(vd: Path) -> dt.datetime | None:
+    """The newest mtime under the version folder, symlinks left out. The walk stops after WALK_MAX entries."""
+    best, todo, seen = None, [vd], 0
+    while todo and seen < WALK_MAX:
+        try:
+            entries = list(os.scandir(todo.pop()))
+        except OSError:
+            continue
+        for e in entries:
+            seen += 1
+            try:
+                if e.is_symlink():
+                    continue
+                m = e.stat(follow_symlinks=False).st_mtime
+                if e.is_dir(follow_symlinks=False):
+                    todo.append(e.path)
+            except OSError:
+                continue
+            best = m if best is None else max(best, m)
+    return dt.datetime.fromtimestamp(best) if best is not None else None
+
+
 def check(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> dict:
-    """D33.11: stalled = no new heartbeat for stall_min while a tool still runs, or past the deadline, or the subagent
-    stopped without its report (SubagentStop). Silence counts only while the last heartbeat says a tool runs: a worker
-    that thinks between tools writes none. After a nudge or a new dispatch the next rung waits stall_min again."""
+    """D39.3: stalled = vN has had no heartbeat and no file change for stall_min, or the subagent stopped without its
+    report (SubagentStop). A reviewer writes no file before its report, so its silence counts only past its deadline. A
+    deadline alone is not a stall: `late`. After a nudge or a new dispatch the next rung waits stall_min again."""
     now = now or dt.datetime.now()
     start = at(rec["at"])
-    hb = heartbeat.last(vdir(st["id"], rec["step"], rec["v"]))
+    vd = vdir(st["id"], rec["step"], rec["v"])
+    hb = heartbeat.last(vd)
     beat = hb if hb and hb[0] >= start else None
-    since = max([start, *([beat[0]] if beat else []), *([at(rec["nudged_at"])] if rec.get("nudged_at") else [])])
+    signs = [(start, "mới giao"), *([(beat[0], "còn nhịp tim")] if beat else []),
+             *([(t, "còn file đổi")] if (t := touched(vd)) else []),
+             *([(at(rec["nudged_at"]), "vừa nudge")] if rec.get("nudged_at") else [])]
+    since, sign = max(signs, key=lambda x: x[0])
+    quiet = (now - since).total_seconds() > w["stall_min"] * 60
+    late = bool(rec.get("deadline")) and now > at(rec["deadline"])
     grace = rec.get("nudged_at") and (now - at(rec["nudged_at"])).total_seconds() < w["stall_min"] * 60
     rep = report_of(rec)
     why = None
@@ -84,12 +112,10 @@ def check(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> dict:
         why = None
     elif rec.get("stopped") == "no_report":
         why = "subagent dừng, không có report"
-    elif beat and beat[2] in LIVE and (now - beat[0]).total_seconds() > w["stall_min"] * 60:
-        why = f"không có nhịp tim mới từ {beat[0]:%H:%M} ({beat[1]})"
-    elif rec.get("deadline") and now > at(rec["deadline"]):
-        why = f"quá hạn chót {at(rec['deadline']):%H:%M}"
+    elif quiet and (rec["role"] != "reviewer" or late or not rec.get("deadline")):
+        why = f"không có nhịp tim, không có file đổi từ {since:%H:%M}"
     return {"stalled": why is not None, "why": why, "beat": beat, "ran_s": (now - start).total_seconds(),
-            "quiet_s": (now - since).total_seconds()}
+            "quiet_s": (now - since).total_seconds(), "late": f"quá hạn chót, {sign}" if late and why is None else None}
 
 
 def line(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> str:
@@ -98,7 +124,7 @@ def line(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> str:
     beat = f"{c['beat'][0]:%H:%M} {c['beat'][1]} {c['beat'][2]}" if c["beat"] else "chưa có"
     due = f"{at(rec['deadline']):%H:%M}" if rec.get("deadline") else "không có"
     state = (f"KẸT {minutes(c['quiet_s'])} · nudge {rec.get('nudges', 0)}/{w['max_nudges']} → `stall {st['id']}`"
-             if c["stalled"] else "OK")
+             if c["stalled"] else f"trễ: {c['late']}" if c["late"] else "OK")
     return (f"  ↳ {st['id']} · {rec['step']} v{rec['v']} · {rec['role']} · chạy {minutes(c['ran_s'])} · nhịp tim {beat}"
             f" · hạn chót {due} · {state}")
 
@@ -110,7 +136,9 @@ def stalled(st: dict) -> bool:
 
 def stall(a):
     """D33.11 `P stall <id>`: the next rung of the one stall rule. Nudge (max_nudges times, needs the agent id), then one
-    new agent with the same brief, then waiting_human. The script picks the rung and logs it; the Producer only sends.
+    new agent with the same brief, then waiting_human with an offer labelled "chưa chấm". The new agent goes out only
+    once SubagentStop recorded that the old one stopped (D39.4); until then the rung changes nothing and says so. The
+    script picks the rung and logs it; the Producer only sends.
     --agent-id: the id of the stuck subagent, from its launch; on-stop also records it."""
     from .briefs import run
     from .loop import UNREVIEWED, move, offer
@@ -135,6 +163,11 @@ def stall(a):
         print(f"{a.id}: kẹt ({c['why']}) → nudge {rec['nudges']}/{w['max_nudges']}: gửi tới agent "
               f"{rec['agent_id']} đúng câu \"{NUDGE}\"")
         return
+    who = rec.get("agent_id") or "chưa rõ id"
+    if not rec.get("redispatch_of") and not rec.get("stopped"):
+        print(f"{a.id}: kẹt ({c['why']}) → chưa giao lại: agent {who} chưa dừng. Dừng agent {who} trước, rồi "
+              f"`stall {a.id}` lại")
+        return
     rec["ended"] = {"at": stamp(), "why": c["why"]}
     if not rec.get("redispatch_of"):
         st.setdefault("stalls", []).append(entry | {"rung": "redispatch"})
@@ -152,7 +185,8 @@ def stall(a):
     st["stalled_from"] = st["state"]
     move(st, "ask_human")
     offer(st, sid, n, label=UNREVIEWED,
-          note=f"kẹt: {c['why']}; đã nudge và giao lại → hỏi người dùng; giao lại: `retry {a.id}`")
+          note=f"kẹt: {c['why']}; đã nudge và giao lại → hỏi người dùng; giao lại: `retry {a.id}`"
+               + ("" if rec.get("stopped") else f"; agent {who} chưa dừng: dừng nó trước khi `retry`"))
     save_st(st)
     ledger(f"{head} · waiting_human")
     build_outputs(cfg)
@@ -164,7 +198,8 @@ def running() -> list[tuple[dict, dict]]:
 
 
 def wake(w: dict) -> list[str]:
-    """What ends a `P wait`: a report on disk, a stall (silence, deadline, stop without report), or nothing running."""
+    """What ends a `P wait`: a report on disk, a stall (no beat and no file change, stop without report), or nothing
+    running."""
     jobs = running()
     if not jobs:
         return ["không có việc nào đang chạy → `next`"]
@@ -225,7 +260,8 @@ def wait(a):
 
 def match(hook: dict) -> tuple[dict, dict] | None:
     """The open dispatch a SubagentStop belongs to: the agent id recorded at ingest, else the brief the subagent's
-    prompt names (two assets on the same step share an agent type, never a brief)."""
+    prompt names (two assets on the same step share an agent type, never a brief). A new agent on the same vN gets the
+    same brief, so a prompt sent before the dispatch belongs to an earlier agent."""
     from . import session
     aid, path = hook.get("agent_id"), hook.get("agent_transcript_path")
     jobs = running()
@@ -233,8 +269,14 @@ def match(hook: dict) -> tuple[dict, dict] | None:
         if aid and rec.get("agent_id") == aid:
             return st, rec
     lines = session.lines_of(__import__("pathlib").Path(path)) if isinstance(path, str) and path else []
+
+    def before(x: dict, rec: dict) -> bool:
+        try:
+            return session.local(x["timestamp"]) < at(rec["at"])
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return False
     for st, rec in jobs:
-        if rec.get("brief") and any(session.asks_for(x, rec["brief"]) for x in lines):
+        if rec.get("brief") and any(session.asks_for(x, rec["brief"]) and not before(x, rec) for x in lines):
             return st, rec
     return None
 
