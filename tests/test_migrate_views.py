@@ -152,7 +152,8 @@ def test_an_old_asset_never_stops_next_or_the_board_for_another_asset(case_b, mo
 
 def test_b_the_approved_pair_becomes_one_approved_views_v1_and_the_asset_continues_at_model(case_b):
     out = case_b.p("migrate", AID)
-    assert out == (f"{AID}: views_front v2 + views_rest v2 → views v1 (đã duyệt), thư mục cũ giữ nguyên; rubric.md có "
+    assert out == (f"production/assets/pilot-house/rubric.md: ## views nhận key chỉ có ở ## views_front: shape\n"
+                   f"{AID}: views_front v2 + views_rest v2 → views v1 (đã duyệt), thư mục cũ giữ nguyên; rubric.md có "
                    f"mục ## views. Tiếp: giao worker → `brief {AID}`\n")
     st = st_of(case_b.root)
     assert {k: st[k] for k in ("stage", "state", "versions", "approved", "rejected", "prior", "stale", "reopened")} == {
@@ -228,7 +229,17 @@ def test_the_old_rubric_gets_one_views_section_with_the_keys_of_the_old_set_sect
     text = (case_b.root / A / "rubric.md").read_text(encoding="utf-8")
     assert "## views_front" not in text and "## views_rest" not in text
     assert text.split("## views\n", 1)[1].split("\n## ", 1)[0].strip().splitlines() == [
-        "- style: view mới giống concept", "- sync: cùng màu như front", "- props: đủ số"]
+        "- style: view mới giống concept", "- sync: cùng màu như front", "- props: đủ số", "- shape: front đúng guide"]
+
+
+def test_a_key_only_the_old_front_section_has_joins_the_views_section_and_migrate_names_it():
+    """The front section went whole: a custom key that only the front had was lost without a word."""
+    from core.state import views_rubric
+    old = ("# R\n## views_front\n- Style: front giống concept\n- door_glow: đèn cửa sáng\n  ghi chú dòng 2\n\n"
+           "## views_rest\n- style: view mới giống concept\n\n## model\n- density: x\n")
+    assert views_rubric(old) == ("# R\n## views\n- style: view mới giống concept\n- door_glow: đèn cửa sáng\n"
+                                 "  ghi chú dòng 2\n\n## model\n- density: x\n", ["door_glow"])
+    assert views_rubric("## views_front\n- shape: x\n") == ("## views\n- shape: x\n", [])
 
 
 MID = {
@@ -373,7 +384,7 @@ def test_a_an_asset_before_the_views_step_with_the_old_rubric_is_named_by_valida
     before = st_of(tmp_path)
     line = f"{AID}: rubric.md của v0.7.1 còn mục views_front, views_rest → chạy `migrate {AID}`"
     assert line in validate(tmp_path)
-    assert f.p("migrate", AID) == f"{AID}: không có bước view cũ, không đổi gì; rubric.md có mục ## views\n"
+    assert f.p("migrate", AID) == f"production/assets/pilot-house/rubric.md: ## views nhận key chỉ có ở ## views_front: shape\n{AID}: không có bước view cũ, không đổi gì; rubric.md có mục ## views\n"
     assert (st_of(tmp_path), [l for l in validate(tmp_path) if l.startswith(AID)]) == (before, [])
 
 

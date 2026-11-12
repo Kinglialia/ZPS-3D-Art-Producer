@@ -357,7 +357,7 @@ def validate(_a):
             if cnt > FEEDBACK_LOG_WARN:
                 problems.append(f"{aid}: feedback.md có {cnt} dòng log → gộp vào mục Hiện hành, giữ 2 vòng gần nhất")
         rub = ASSETS / aid / "rubric.md"
-        if rub.exists() and (t := rub.read_text(encoding="utf-8")) != views_rubric(t):
+        if rub.exists() and (t := rub.read_text(encoding="utf-8")) != views_rubric(t)[0]:
             problems.append(f"{aid}: rubric.md của v0.7.1 còn mục {', '.join(OLD_VIEWS)} → chạy `migrate {aid}`")
             continue
         if rub.exists() and not re.search(r"^- [A-Za-z0-9_]+:", rub.read_text(encoding="utf-8"), re.M):
@@ -388,16 +388,43 @@ def validate(_a):
         sys.exit(1)
 
 
-def views_rubric(text: str) -> str:
-    """D44.3: `## views_front` goes (its keys are in the set section); `## views_rest` becomes `## views`."""
-    out, skip = [], False
+RUBRIC_KEY = re.compile(r"^- ([A-Za-z0-9_]+):")
+
+
+def views_rubric(text: str) -> tuple[str, list[str]]:
+    """D44.3: `## views_rest` becomes `## views` and `## views_front` goes. A key of the front section that the set
+    section lacks moves to the end of `## views`, with its indented lines. Without a set section the front section
+    becomes `## views`. Returns the text and the moved keys."""
+    parts = [["", []]]
     for line in text.splitlines(keepends=True):
         if line.startswith("## "):
-            skip = line.strip() == f"## {OLD_VIEWS[0]}"
-            line = f"## {VIEWS}\n" if line.strip() == f"## {OLD_VIEWS[1]}" else line
-        if not skip:
-            out.append(line)
-    return "".join(out)
+            parts.append([line.strip()[3:], []])
+        parts[-1][1].append(line)
+    sec = dict(parts)
+    front, rest = sec.get(OLD_VIEWS[0]), sec.get(OLD_VIEWS[1])
+    have = {m[1].lower() for line in rest or [] if (m := RUBRIC_KEY.match(line))}
+    add, moved, on = [], [], False
+    for line in (front or [])[1:] if rest is not None else []:
+        if m := RUBRIC_KEY.match(line):
+            on = m[1].lower() not in have
+            moved += [m[1]] if on else []
+        elif not (line[:1].isspace() and line.strip()):
+            on = False
+        if on:
+            add.append(line if line.endswith("\n") else line + "\n")
+    out = []
+    for name, lines in parts:
+        if name == OLD_VIEWS[0] and rest is not None:
+            continue
+        if name in OLD_VIEWS:
+            lines = [f"## {VIEWS}\n", *lines[1:]]
+            if name == OLD_VIEWS[1] and add:
+                k = len(lines)
+                while k > 1 and not lines[k - 1].strip():
+                    k -= 1
+                lines = [*lines[:k - 1], lines[k - 1].rstrip("\n") + "\n", *add, *lines[k:]]
+        out += lines
+    return "".join(out), moved
 
 
 def merge_readme(front: Path, merged: Path):
@@ -455,9 +482,12 @@ def migrate(a):
     aid, cfg = a.id, load_cfg()
     st = read_st(aid)
     rubrics = [ASSETS / aid / "rubric.md", *sorted((ROOT / "rubrics").glob("*.md"))]
-    changed = [r for r in rubrics if r.is_file() and (t := r.read_text(encoding="utf-8")) != views_rubric(t)]
+    changed = [r for r in rubrics if r.is_file() and (t := r.read_text(encoding="utf-8")) != views_rubric(t)[0]]
     for r in changed:
-        r.write_text(views_rubric(r.read_text(encoding="utf-8")), encoding="utf-8")
+        text, moved = views_rubric(r.read_text(encoding="utf-8"))
+        r.write_text(text, encoding="utf-8")
+        if moved:
+            print(f"{rel(r)}: ## {VIEWS} nhận key chỉ có ở ## {OLD_VIEWS[0]}: {', '.join(moved)}")
     tail = f"; rubric.md có mục ## {VIEWS}" if rubrics[0] in changed else ""
     if not legacy(st):
         if changed:
