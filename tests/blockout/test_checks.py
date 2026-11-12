@@ -491,7 +491,8 @@ def test_inputs_tell_the_worker_when_sources_can_be_reused(tmp_path, run_check):
 
 
 def test_every_check_prints_one_line_and_errors_exit_2(tmp_path, run_check):
-    for name in ("check_schema", "check_materials", "check_layout", "check_base", "check_support", "check_markers"):
+    for name in ("check_schema", "check_materials", "check_layout", "check_base", "check_support", "check_markers",
+                 "check_proportion"):
         r = run_check(name, "--work", tmp_path / "missing")
         assert (r.rc, r.overall, len(r.lines)) == (2, "error", 1), name
         assert "No such file" in r.json["data"]["error"], name

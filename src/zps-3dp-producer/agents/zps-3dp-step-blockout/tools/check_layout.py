@@ -36,13 +36,15 @@ def tags(graph, key="tag"):
     return {p["name"]: p.get(key) for p in graph.get("parts", [])}
 
 
-def cli(tool, name, fn, extra=()):
+def cli(tool, name, fn, extra=(), optional=()):
     """Shared CLI: fn(args, graph, rows, sources) -> (checks, data, overall or None)."""
     p = argparse.ArgumentParser(description=sys.modules["__main__"].__doc__)
     p.add_argument("--work", required=True)
     p.add_argument("--out")
     for flag in extra:
         p.add_argument(flag, required=True)
+    for flag in optional:
+        p.add_argument(flag)
     a = p.parse_args()
     out = a.out or os.path.join(a.work, "review", "checks", name(a) if callable(name) else f"{name}.json")
     src = os.path.join(a.work, "assembly.json")

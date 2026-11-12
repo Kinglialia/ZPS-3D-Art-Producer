@@ -72,7 +72,7 @@ def read_yaml(path):
 
 
 def test_pure_checks_pass_on_the_real_build(built):
-    for name in ("schema", "materials", "layout", "base", "support", "markers"):
+    for name in ("schema", "materials", "layout", "base", "support", "markers", "proportion"):
         r = py(TOOLS / f"check_{name}.py", "--work", built)
         assert (r.returncode, len(r.stdout.strip().splitlines())) == (0, 1), r.stdout + r.stderr
     assert read(built / "review/checks/base.json")["data"]["margin"] == {"walls": 0.5, "crate": 0.185, "crate_l": 0.185}
