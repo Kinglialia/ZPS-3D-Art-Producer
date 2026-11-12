@@ -585,6 +585,8 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     sid = step["id"]
     st["approved"][sid] = n
     st.setdefault("approved_at", {})[sid] = now()
+    from .report import record_producer
+    record_producer(st, sid)
     st.setdefault("approved_hash", {})[sid] = hashes.tree_hash(vdir(st["id"], sid, n) / "final")
     if step["lock"]:
         p = vdir(st["id"], sid, n) / step["lock"].format(id=st["id"])
@@ -768,7 +770,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
         keep()
         return findings.add_human(aid, step, n, None, marks) if marks and waiting else []
 
-    ids, msg, armed = [], "đã ghi feedback", False
+    ids, msg, armed, finished = [], "đã ghi feedback", False, False
     if answer:
         decide()
         msg = texture.resolve(st, "call" if action == "approve" else "paint", policy.BY["human"])
@@ -781,6 +783,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
             findings.close_human(aid, target, n)
         msg = f"đã duyệt {key} → {st['stage']}/{st['state']}"
         armed = target == "assemble" and by == "user"
+        finished = st["state"] == "done"
     elif action == "redo" and st["state"] in REDO_FROM:
         decide()
         st.pop("ask", None)
@@ -801,9 +804,11 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
     save_st(st)
     ledger(f"{aid} · {'người dùng' if by == 'user' else 'Producer'} {action} {target} · {text[:80]}")
     build_outputs(cfg)
+    from .report import finish
+    _, table = finish(st) if finished else (True, "")
     if armed:
         try:
             armed = "\n" + purge.arm(cfg, st, zip_path)
         except (ProducerError, OSError) as ex:
             armed = f"\nchưa lập được lệnh xóa D29: {ex}; DUYỆT 2 vẫn ghi. Xóa sau bằng `purge {aid} --by \"<nguyên văn>\"`"
-    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}{armed or ''}"
+    return True, f"{aid}: {msg}. Tiếp: {next_action(st)}{armed or ''}" + (f"\n{table}" if table else "")

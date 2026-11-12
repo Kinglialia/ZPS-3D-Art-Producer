@@ -61,6 +61,17 @@ def test_stats_splits_reviewer_rounds_by_scope_and_times_each_step_from_first_wo
         "| model | chưa duyệt | 17m00s | 2m00s | 1m00s | — | 1m00s | — | 3000 | 100 | 200 | — | 340 | 0 |"]
 
 
+def test_the_producer_tokens_stored_at_approval_come_before_the_transcript_d41():
+    """The transcript is gone (or never found) when `P stats` runs after the approval: the stored number answers. A
+    step that was reopened has no approval, so the stored number of its old window must not show."""
+    stored = ST | {"producer_usage": {"blockout": {"tokens": 1234, "from": "2026-11-10 09:00:00",
+                                                    "to": "2026-11-10 09:45:00", "dup": 0},
+                                      "model": {"tokens": 777, "from": "2026-11-10 12:00:00", "to": "2026-11-10 12:30:00",
+                                                "dup": 0}}}
+    rows = stats.table(CFG, stored, "không có số")
+    assert [r.split(" | ")[-2] for r in rows[2:]] == ["1234", "không có số", "không có số"]
+
+
 def test_producer_tokens_count_each_main_session_message_once_and_skip_subagent_and_broken_lines_d30_10(tmp_path):
     """Claude Code repeats one message's usage on every content-block line; counting each line would triple the
     Producer's share. Subagent lines are already in the worker and reviewer columns."""

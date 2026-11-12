@@ -1,0 +1,360 @@
+"""`P report [id]` and `deliver/<id>/RUN-REPORT.md` (D41): real time and tokens per step. Every number comes from a
+transcript, stored in status.json at ingest and at approval; a missing number says "không có số" and a reason below the
+table, never an estimate and never an even split."""
+from __future__ import annotations
+
+import datetime as dt
+import json
+from dataclasses import dataclass, field
+
+from . import stats
+from .loop import NO_NUMBER
+from .state import ASSETS, DELIVER, RUNTIME, all_status, load_cfg, load_st, now, rel, write_atomic
+
+NAME = "RUN-REPORT.md"
+DASH = "—"
+SHARED = "*"
+SESSION = "model của phiên"
+HEAD = ("Bước", "Thời gian bước", "Worker", "Reviewer", "Chờ Producer", "Chờ anh", "Token worker", "Token reviewer",
+        "Token Producer", "Version", "Vòng sửa", "Lần giao", "Gọi Codex", "Credit Meshy", "Kẹt", "Model")
+PRODUCER_WHY = {stats.NOT_SUPPORTED: "bản Codex chưa đọc được transcript của Producer",
+                NO_NUMBER: "không thấy transcript của phiên Producer"}
+NO_MESSAGE = "transcript của Producer không có message trong khoảng của bước"
+NO_CODEX_COUNT = "chưa có bản ghi số lần gọi Codex (gen_image_codex.py chỉ ghi model)"
+NOT_INGESTED = "lần giao chưa ingest"
+
+
+@dataclass
+class Metric:
+    total: float = 0
+    got: int = 0
+    miss: int = 0
+
+    def __add__(self, o: "Metric") -> "Metric":
+        return Metric(self.total + o.total, self.got + o.got, self.miss + o.miss)
+
+    def cell(self, fmt=lambda n: str(int(n))) -> str:
+        if not self.got and not self.miss:
+            return DASH
+        if not self.got:
+            return NO_NUMBER
+        return fmt(self.total) + (f" (+{self.miss} {NO_NUMBER})" if self.miss else "")
+
+
+def metric(values: list) -> Metric:
+    return Metric(sum(v for v in values if v is not None), sum(v is not None for v in values),
+                  sum(v is None for v in values))
+
+
+def credits(n: float) -> str:
+    return f"{n:g}"
+
+
+@dataclass
+class Row:
+    label: str
+    span: Metric = field(default_factory=Metric)
+    opened: int = 0
+    worker: Metric = field(default_factory=Metric)
+    reviewer: Metric = field(default_factory=Metric)
+    wait_p: Metric = field(default_factory=Metric)
+    wait_u: Metric = field(default_factory=Metric)
+    tw: Metric = field(default_factory=Metric)
+    tr: Metric = field(default_factory=Metric)
+    tp: Metric = field(default_factory=Metric)
+    codex: Metric = field(default_factory=Metric)
+    credit: Metric = field(default_factory=Metric)
+    versions: int = 0
+    rounds: int = 0
+    calls: int = 0
+    stalls: int = 0
+    models: tuple = ((), ())
+    shared: tuple = ()
+    why: dict = field(default_factory=dict)
+
+    def __add__(self, o: "Row") -> "Row":
+        why = {k: list(v) for k, v in self.why.items()}
+        for k, cols in o.why.items():
+            why[k] = list(dict.fromkeys([*why.get(k, []), *cols]))
+        return Row(
+            self.label, self.span + o.span, self.opened + o.opened, self.worker + o.worker, self.reviewer + o.reviewer,
+            self.wait_p + o.wait_p, self.wait_u + o.wait_u, self.tw + o.tw, self.tr + o.tr, self.tp + o.tp,
+            self.codex + o.codex, self.credit + o.credit, self.versions + o.versions, self.rounds + o.rounds,
+            self.calls + o.calls, self.stalls + o.stalls,
+            tuple(tuple(dict.fromkeys([*a, *b])) for a, b in zip(self.models, o.models)),
+            tuple(dict.fromkeys([*self.shared, *o.shared])), why)
+
+
+def note(row: Row, reason: str, col: str):
+    cols = row.why.setdefault(reason, [])
+    col in cols or cols.append(col)
+
+
+def span_cell(r: Row) -> str:
+    if not r.span.got:
+        return "chưa duyệt" if r.opened else DASH
+    return stats.clock(r.span.total) + (f" (+{r.opened} chưa duyệt)" if r.opened else "")
+
+
+def model_cell(r: Row) -> str:
+    return " / ".join(", ".join(m) for m in r.models if m) or DASH
+
+
+def cells(r: Row) -> list[str]:
+    return [r.label, span_cell(r), r.worker.cell(stats.clock), r.reviewer.cell(stats.clock), r.wait_p.cell(stats.clock),
+            r.wait_u.cell(stats.clock), r.tw.cell(), r.tr.cell(), r.tp.cell() + (SHARED if r.shared else ""),
+            str(r.versions), str(r.rounds), str(r.calls), r.codex.cell(), r.credit.cell(credits), str(r.stalls),
+            model_cell(r)]
+
+
+def render(head: str, rows: list[Row], total: Row, extra: list[str]) -> list[str]:
+    cols = (head, *HEAD[1:])
+    body = [cells(r) for r in (*rows, total)]
+    notes = [f"{NO_NUMBER} ({', '.join(cols)}): {reason}." for reason, cols in total.why.items()] + extra
+    return ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols), *("| " + " | ".join(c) + " |" for c in body),
+            *([""] + notes if notes else [])]
+
+
+def worker_reason(x: dict) -> str:
+    if RUNTIME == "codex":
+        return "bản Codex không có transcript"
+    if not x.get("ingested"):
+        return NOT_INGESTED
+    if "usage" not in x:
+        return "lần giao từ bản cũ không lưu số lúc ingest, và transcript không còn"
+    return "không thấy transcript của subagent"
+
+
+def seconds_of(xs: list[dict], row: Row, col: str) -> Metric:
+    vals = []
+    for x in xs:
+        t = stats.took(x)
+        if t is None:
+            note(row, NOT_INGESTED, col)
+        vals.append(t)
+    return metric(vals)
+
+
+def tokens_of(xs: list[dict], row: Row, col: str) -> Metric:
+    for x in xs:
+        if x.get("tokens") is None:
+            note(row, worker_reason(x), col)
+    return metric([x.get("tokens") for x in xs])
+
+
+def window_tokens(usage, start: dt.datetime, end: dt.datetime | None) -> int | str:
+    """Producer tokens in a step window, or the reason there is no number."""
+    if isinstance(usage, str):
+        return PRODUCER_WHY[usage]
+    ns = [n for t, n in usage if t >= start and (end is None or t <= end)]
+    return sum(ns) if ns else NO_MESSAGE
+
+
+def at(s: str) -> dt.datetime:
+    return dt.datetime.fromisoformat(s)
+
+
+def stamp_of(t: dt.datetime) -> str:
+    return t.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def stored_windows(sts: list[dict]) -> list[tuple[dt.datetime, dt.datetime]]:
+    return [(at(w["from"]), at(w["to"])) for s in sts for w in (s.get("producer_usage") or {}).values()
+            if isinstance(w, dict) and isinstance(w.get("tokens"), int)]
+
+
+def record_producer(st: dict, sid: str):
+    """X2: when a step is approved, the Producer's own tokens in its window go into status.json, so they outlive the
+    transcript. `dup` is the share already inside the stored window of another asset, so a batch counts it once."""
+    mine = [x for x in st.get("dispatches") or [] if x["step"] == sid]
+    if not mine:
+        return
+    start, end = stats.window(st, sid, mine)
+    if end is None:
+        return
+    usage = stats.producer_usage()
+    got = window_tokens(usage, start, end)
+    if isinstance(got, str):
+        st.setdefault("producer_usage", {})[sid] = got
+        return
+    other = stored_windows(others_of(st))
+    dup = sum(n for t, n in usage if start <= t <= end and any(a <= t <= b for a, b in other))
+    st.setdefault("producer_usage", {})[sid] = {"tokens": got, "from": stamp_of(start), "to": stamp_of(end), "dup": dup}
+
+
+def windows(st: dict) -> list[tuple[dt.datetime, dt.datetime]]:
+    out = []
+    for sid in dict.fromkeys(x["step"] for x in st.get("dispatches") or []):
+        start, end = stats.window(st, sid, [x for x in st["dispatches"] if x["step"] == sid])
+        out.append((start, end or dt.datetime.now()))
+    return out
+
+
+def overlapping(start: dt.datetime, end: dt.datetime, others: list[dict]) -> tuple:
+    return tuple(o["id"] for o in others if any(a < end and start < b for a, b in windows(o)))
+
+
+class Lazy:
+    def __init__(self, fn):
+        self.fn, self.done, self.value = fn, False, None
+
+    def __call__(self):
+        if not self.done:
+            self.value, self.done = self.fn(), True
+        return self.value
+
+
+def budget_credits(aid: str, sid: str) -> list[float | None]:
+    out = []
+    for p in sorted((ASSETS / aid / sid).glob("budget-*.json")):
+        try:
+            out.append(float(json.loads(p.read_text(encoding="utf-8"))["used_credits"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            out.append(None)
+    return out or [0.0]
+
+
+def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others: list[dict]) -> Row | None:
+    sid = step["id"]
+    mine = [x for x in disp if x["step"] == sid]
+    if not mine:
+        return None
+    worker, rev = [x for x in mine if x["role"] == "worker"], [x for x in mine if x["role"] == "reviewer"]
+    start, end = stats.window(st, sid, mine)
+    r = Row(sid, models=(tuple(dict.fromkeys(x.get("model") or SESSION for x in worker)),
+                         tuple(dict.fromkeys(x.get("model") or SESSION for x in rev))))
+    r.span, r.opened = (Metric((end - start).total_seconds(), 1), 0) if end else (Metric(), 1)
+    r.worker, r.reviewer = seconds_of(worker, r, "Worker"), seconds_of(rev, r, "Reviewer")
+    r.wait_p = Metric(waits[sid], 1) if sid in waits else Metric()
+    wu = stats.user_wait(st, sid)
+    r.wait_u = Metric(wu, 1) if wu is not None else Metric()
+    r.tw, r.tr = tokens_of(worker, r, "Token worker"), tokens_of(rev, r, "Token reviewer")
+    stored = (st.get("producer_usage") or {}).get(sid) if end else None
+    if isinstance(stored, dict):
+        r.tp = Metric(stored["tokens"], 1)
+    else:
+        got = stored if isinstance(stored, str) else window_tokens(usage(), start, end)
+        r.tp = Metric(got, 1) if isinstance(got, int) else Metric(miss=1)
+        if isinstance(got, str):
+            note(r, got, "Token Producer")
+    r.shared = overlapping(start, end or dt.datetime.now(), others)
+    r.versions = (st.get("versions") or {}).get(sid, 0)
+    r.rounds = max(sum(1 for x in worker if not x.get("redispatch_of")) - 1, 0)
+    r.calls = len(mine)
+    r.stalls = sum(1 for x in st.get("stalls") or [] if x["step"] == sid)
+    if "codex_image" in step["uses"]:
+        r.codex = Metric(miss=1)
+        note(r, NO_CODEX_COUNT, "Gọi Codex")
+    if "meshy" in step["uses"]:
+        r.credit = metric(budget_credits(st["id"], sid))
+        if r.credit.miss:
+            note(r, "file budget Meshy không đọc được", "Credit Meshy")
+    return r
+
+
+def asset_rows(st: dict, cfg: dict, others: list[dict], usage) -> list[Row]:
+    disp = st.get("dispatches") or []
+    if RUNTIME != "codex":
+        disp = stats.reread(disp)
+    waits = stats.waits(disp)
+    return [r for s in cfg["steps"] if (r := step_row(s, st, disp, waits, usage, others))]
+
+
+def total_of(label: str, rows: list[Row]) -> Row:
+    return sum(rows, Row(label))
+
+
+def usage_getter(usage) -> Lazy:
+    return Lazy(stats.producer_usage) if usage is None else Lazy(lambda: usage)
+
+
+def others_of(st: dict) -> list[dict]:
+    return [s for s in all_status() if s.get("id") != st["id"] and not s.get("broken")]
+
+
+def table(st: dict, cfg: dict | None = None, others: list[dict] | None = None, usage=None) -> list[str]:
+    cfg = cfg or load_cfg()
+    others = others_of(st) if others is None else others
+    rows = asset_rows(st, cfg, others, usage_getter(usage))
+    if not rows:
+        return [f"{st['id']}: chưa giao lần nào"]
+    total = total_of("Tổng", rows)
+    who = ", ".join(dict.fromkeys(i for r in rows for i in r.shared))
+    return render(HEAD[0], rows, total, [f"{SHARED} Token Producer tính chung với {who}."] if who else [])
+
+
+def batch(sts: list[dict], cfg: dict | None = None, usage=None) -> list[str]:
+    cfg = cfg or load_cfg()
+    get = usage_getter(usage)
+    sts = [s for s in sts if s.get("dispatches")]
+    per = []
+    for s in sts:
+        rows = asset_rows(s, cfg, [o for o in sts if o is not s], get)
+        per.append(total_of(s["id"], rows))
+    if not per:
+        return ["chưa asset nào được giao việc"]
+    total = total_of("Tổng lô", per)
+    total.shared = ()
+    total.tp, why = batch_producer(sts, get)
+    if why:
+        note(total, why, "Token Producer")
+    shared = [f"{r.label}: {', '.join(r.shared)}" for r in per if r.shared]
+    return render("Asset", per, total, [f"{SHARED} Token Producer tính chung: " + "; ".join(shared)
+                                        + ". Tổng lô tính mỗi message một lần."] if shared else [])
+
+
+def batch_producer(sts: list[dict], usage) -> tuple[Metric, str | None]:
+    """Each Producer message once. Stored numbers when every step has them, else the transcript."""
+    steps = [(s, sid) for s in sts for sid in dict.fromkeys(x["step"] for x in s["dispatches"])]
+    puts = [(s.get("producer_usage") or {}).get(sid) if sid in (s.get("approved") or {}) else None for s, sid in steps]
+    if puts and all(isinstance(p, dict) for p in puts):
+        return Metric(sum(p["tokens"] - p.get("dup", 0) for p in puts), 1), None
+    u = usage()
+    if isinstance(u, str):
+        return Metric(miss=1), PRODUCER_WHY[u]
+    ws = [w for s in sts for w in windows(s)]
+    ns = [n for t, n in u if any(a <= t <= b for a, b in ws)]
+    return (Metric(sum(ns), 1), None) if ns else (Metric(miss=1), NO_MESSAGE)
+
+
+def write(st: dict, lines: list[str] | None = None):
+    lines = table(st) if lines is None else lines
+    p = DELIVER / st["id"] / NAME
+    write_atomic(p, "\n".join([f"# RUN-REPORT {st['id']}", "",
+                               f"Ghi lúc {now()}. Số lấy từ transcript của runtime, không ước lượng.", "", *lines]) + "\n")
+    return p
+
+
+def finish(st: dict) -> tuple[bool, str]:
+    """DUYỆT 2: write the report and give back the table to print. A failure is printed and never undoes the approval."""
+    try:
+        lines = table(st)
+        write(st, lines)
+    except Exception as ex:  # noqa: BLE001 — the approval is saved; the report must say what went wrong, not crash
+        return False, f"KHÔNG ghi được {NAME}: {type(ex).__name__}: {ex}"
+    return True, "\n".join(lines)
+
+
+def used(st: dict) -> tuple[str, str]:
+    """Time and tokens spent so far, from stored numbers only; the dashboard reads no transcript."""
+    xs = [x for x in st.get("dispatches") or [] if x.get("role") != "script"]
+    secs = metric([stats.took(x) for x in xs])
+    toks = metric([x.get("tokens") for x in xs])
+    for v in (st.get("producer_usage") or {}).values():
+        if isinstance(v, dict):
+            toks = toks + Metric(v["tokens"], 1)
+    return secs.cell(stats.clock), toks.cell()
+
+
+def run(a):
+    if not a.id:
+        print("\n".join(batch(all_status())))
+        return
+    st = load_st(a.id)
+    kept = DELIVER / a.id / NAME
+    if st.get("purged") and kept.is_file():
+        print(kept.read_text(encoding="utf-8").rstrip())
+        return
+    lines = table(st)
+    print("\n".join(lines))
+    print(f"OK: {rel(write(st, lines))}")

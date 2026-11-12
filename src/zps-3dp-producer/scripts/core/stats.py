@@ -109,12 +109,24 @@ def producer_usage() -> list[tuple[dt.datetime, int]] | str:
     return usage or NO_NUMBER
 
 
-def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:
-    disp = st.get("dispatches") or []
-    wait = {}
+def waits(disp: list[dict]) -> dict[str, float]:
+    """Seconds the Producer took between a dispatch's ingest and the next dispatch, per step of the next one."""
+    out = {}
     for prev, x in zip(disp, disp[1:]):
         if prev.get("ingested") and prev.get("after") in WAITS_ON_PRODUCER:
-            wait[x["step"]] = wait.get(x["step"], 0) + seconds(prev["ingested"], x["at"])
+            out[x["step"]] = out.get(x["step"], 0) + seconds(prev["ingested"], x["at"])
+    return out
+
+
+def stored_producer(st: dict, sid: str) -> int | None:
+    """D41: the Producer tokens saved when the step was approved; a reopened step has no approval, so no stored number."""
+    v = (st.get("producer_usage") or {}).get(sid) if sid in (st.get("approved") or {}) else None
+    return v["tokens"] if isinstance(v, dict) else None
+
+
+def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:
+    disp = st.get("dispatches") or []
+    wait = waits(disp)
     rows = ["| " + " | ".join(HEAD) + " |", "|" + "---|" * len(HEAD)]
     for step in cfg["steps"]:
         sid = step["id"]
@@ -128,7 +140,8 @@ def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:
         start, end = window(st, sid, mine)
         cells = [sid, clock((end - start).total_seconds()) if end else NOT_APPROVED, spent(worker),
                  *(spent(rv[k]) for k in ROUNDS), clock(wait.get(sid)), clock(user_wait(st, sid)), tokens(worker),
-                 *(tokens(rv[k]) for k in ROUNDS), producer_tokens(usage, start, end),
+                 *(tokens(rv[k]) for k in ROUNDS),
+                 str(n) if (n := stored_producer(st, sid)) is not None else producer_tokens(usage, start, end),
                  str(sum(bool(x.get("fallback")) for x in mine))]
         rows.append("| " + " | ".join(cells) + " |")
     return rows

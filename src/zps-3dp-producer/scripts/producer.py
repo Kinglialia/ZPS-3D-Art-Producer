@@ -6,7 +6,7 @@ Cần Python 3.11+ (dùng tomllib).
 
 Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · stall · wait · on-stop · ack
              feedback · waive · meshy
-             texture-mode · approvals · delegate · rule · ledger · stats · dashboard · serve · show · board · validate
+             texture-mode · approvals · delegate · rule · ledger · stats · report · dashboard · serve · show · board · validate
              keep · purge · disk · archive · texture-stats · ab · compare
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
@@ -151,6 +151,11 @@ def cmd_stats(a):
     run(a)
 
 
+def cmd_report(a):
+    from core.report import run
+    run(a)
+
+
 def cmd_dashboard(_a):
     from core.board import dashboard
     dashboard()
@@ -277,6 +282,8 @@ def main(argv: list[str] | None = None):
     x.add_argument("--tail", type=int, default=20); x.add_argument("--rulings", action="store_true")
     sub.add_parser("stats", help="bảng theo bước: thời gian bước, worker, reviewer theo vòng, chờ Producer, chờ anh; "
                                  "token theo vai trò và Producer").add_argument("id")
+    sub.add_parser("report", help="thời gian và token thật của từng bước → deliver/<id>/RUN-REPORT.md; không có id: bảng cả lô"
+                   ).add_argument("id", nargs="?")
     sub.add_parser("dashboard", help="sinh lại dashboard.md")
     sub.add_parser("serve", help="mở review page có nút feedback").add_argument("--port", type=int, default=PORT)
     x = sub.add_parser("show", help="xuất trang board của một asset thành file HTML tĩnh")
