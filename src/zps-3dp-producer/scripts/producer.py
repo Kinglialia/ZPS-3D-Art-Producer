@@ -4,7 +4,7 @@
 Chạy từ thư mục gốc project. Dữ liệu nằm ở ./production (đổi bằng biến môi trường PRODUCER_ROOT).
 Cần Python 3.11+ (dùng tomllib).
 
-Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · stall · wait · on-stop · ack
+Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · stall · wait · on-stop · on-main-stop · ack
              feedback · waive · meshy
              texture-mode · approvals · delegate · rule · ledger · stats · report · dashboard · serve · show · board · validate
              keep · purge · disk · archive · texture-stats · ab · compare · migrate
@@ -244,7 +244,7 @@ def main(argv: list[str] | None = None):
                    help="dùng cho hook SessionStart: JSON của hook trên stdin → production/session.json")
     sub.add_parser("brief", help="sinh brief cho worker/reviewer, in JSON để giao việc").add_argument("id")
     x = sub.add_parser("ingest", help="đọc báo cáo, chuyển state")
-    x.add_argument("id"); x.add_argument("--agent-id", help="id subagent worker, để resume vòng sửa")
+    x.add_argument("id"); x.add_argument("--agent-id", help="id subagent (worker hoặc reviewer), để resume được")
     x.add_argument("--tokens", type=int, help="token runtime báo cho lần giao này; không có thì script đọc transcript subagent (D33.22)")
     x.add_argument("--duration-ms", type=int, help="thời lượng lần giao, mili giây; không có thì script đọc transcript subagent (D33.22)")
     x.add_argument("--fallback", action="store_true",
@@ -307,9 +307,9 @@ def main(argv: list[str] | None = None):
     sub.add_parser("compare", help="tổng hợp A/B theo asset; --reveal mở nhãn khi lô đã duyệt hết").add_argument(
         "--reveal", action="store_true")
     sub.add_parser("validate", help="kiểm tra cấu hình và status")
-    x = sub.add_parser("keep", help="hủy lệnh xóa đang chờ sau DUYỆT 2 (D29.5)")
+    x = sub.add_parser("keep", help="trước DUYỆT 2: lần duyệt đó không xóa file; cũng hủy lệnh xóa cũ của v0.7 và lời nhắc A/B")
     x.add_argument("id"); x.add_argument("--by", default="", help="nguyên văn lời người dùng")
-    x = sub.add_parser("purge", help="xóa ngay file trung gian của asset đã DUYỆT 2 (D29.5), chỉ khi người dùng muốn")
+    x = sub.add_parser("purge", help="xóa file trung gian của asset đã DUYỆT 2 mà lần duyệt chưa xóa, chỉ khi người dùng muốn")
     x.add_argument("id"); x.add_argument("--by", required=True, help="nguyên văn lời người dùng")
     x.add_argument("--zip", help="nén phần sẽ xóa vào file zip này trước")
     sub.add_parser("disk", help="dung lượng production/ theo asset, bước, loại file (D29.10)")

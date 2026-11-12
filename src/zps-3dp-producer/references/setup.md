@@ -54,7 +54,7 @@ Muốn đổi guideline cho mọi project sau này: sửa `templates/GUIDELINE.m
 
 Mọi thay đổi workflow nằm ở `production/pipeline.toml`:
 - **Thêm bước:** thêm khối `[[steps]]` đúng vị trí. Agent mới: thêm file agent vào `src/zps-3dp-producer/agents/` của repo bộ skill, thêm câu mẫu vào `evals/triggers.json`, build và cài lại, mở phiên mới. Id của bước cũng là tag `steps:` mà AD dùng trong README art direction.
-- **Đổi model:** sửa `model`; `escalate_model` dùng khi vòng sửa vượt `resume_rounds`. Tên chung `opus`, `sonnet`, `haiku`; runtime đổi sang model thật (`references/runtime.md`, mục Model).
+- **Đổi model:** sửa `model` (worker) và `reviewer_model` (reviewer) của bước. Bước không ghi `reviewer_model` thì dùng `[review] reviewer_model`. `escalate_model` dùng khi vòng sửa vượt `resume_rounds`. Tên chung `opus`, `sonnet`, `haiku`; runtime đổi sang model thật (`references/runtime.md`, mục Model).
 - **Đổi output bắt buộc:** sửa `outputs`. Thiếu file thì asset bị blocked.
 - **Đổi chuẩn preview:** sửa `[preview].spec`. Brief đưa nguyên văn cho worker.
 - **Lệnh ngoài:** `external_command` của bước (biến `{request}`, `{vdir}`, `{log}`); brief ghi lệnh cho worker chạy và chờ lệnh xong.
@@ -87,10 +87,12 @@ v0.8.0 gộp hai bước `views_front`, `views_rest` thành một bước `views
 
 ## Dọn file
 
-- Người dùng DUYỆT 2 (`assemble`) thì script lập lệnh xóa: in danh sách, tổng dung lượng, ghi `production/assets/<id>/purge-pending.json`. Không xóa trong phiên đó.
-- Phiên sau mở bằng hook SessionStart (`startup` hoặc `clear`): `P next --session` xóa. `resume`, `compact` và `P next` gõ tay không xóa. Bản Codex không có hook: không tự xóa, `P next` nhắc.
-- `P keep <id>`: hủy lệnh xóa. `P purge <id> --by "<nguyên văn>" [--zip <file>]`: xóa ngay. `--zip` cũng dùng được ở `P feedback <id> "<nguyên văn>" --action approve` của DUYỆT 2.
-- Còn lại: `deliver/<id>/`; mọi file text ngoài `work/` (status, findings, report, brief, `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); `feedback/`; ảnh trang duyệt trỏ tới, thu về cạnh dài 1024 px. Mọi thứ khác xóa thật. Manifest: `production/assets/<id>/purge-manifest.json`. Sau đó `redo` bị từ chối.
+- Người dùng DUYỆT 2 (`assemble`) thì script xóa ngay trong lệnh duyệt, sau khi chép `deliver/<id>/` và ghi `RUN-REPORT.md`. Bản Codex cũng vậy.
+- Trước khi xóa, `P next` và nút DUYỆT 2 hiện một dòng: số file, dung lượng, "sau lệnh này không `redo` được". Nút cần bấm hai lần.
+- Không xóa khi: `P keep <id>` chạy trước lần duyệt; `policy.yaml` có `purge: off`; Producer tự duyệt (`test_mode`). Khi đó xóa sau bằng `P purge <id> --by "<nguyên văn>" [--zip <file>]`.
+- `purge_zip: <thư mục>` trong `policy.yaml` nén phần sắp xóa vào `<thư mục>/<id>.zip` trước khi xóa. `--zip <file>` ở `P purge` và ở `P feedback <id> "<nguyên văn>" --action approve` của DUYỆT 2 ghi đè thư mục đó.
+- File `purge-pending.json` của v0.7: script không tự chạy. `P next` nhắc chạy `purge` hoặc `keep`.
+- Còn lại: `deliver/<id>/`; mọi file text ngoài `work/` (status, findings, report, brief, `heartbeat.log`, `part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); `feedback/`; ảnh trang duyệt trỏ tới, thu về cạnh dài 1024 px. Mọi thứ khác xóa thật, cả `production/show/<id>*`, file đẩy lên trang của asset, file PID của asset và mọi `*.rejected-*.md`. Manifest: `production/assets/<id>/purge-manifest.json`. Sau đó `redo` bị từ chối.
 - A/B: `production-<runtime>/` không xóa trước khi cặp có `ab prefer` hoặc đủ hai lần `ab judge`; `P purge` từ chối và nêu kết quả còn thiếu.
 - `P disk`: dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb` của `policy.yaml`.
 - Xong hẳn: `P archive <id>`.

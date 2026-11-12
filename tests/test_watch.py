@@ -667,7 +667,7 @@ def test_every_rule_of_the_old_receiving_paragraph_is_still_in_the_skill_d39_2()
     section = receive_section()
     for kept in ("Không giao thêm", "Bạn không bao giờ sửa report của worker hay reviewer.", "Đừng tự diễn giải report",
                  "Report sai contract: <dòng lỗi của script>. Sửa `<report>` rồi trả lại các dòng brief yêu cầu.",
-                 "`references/runtime.md` mục Resume", "không giao lại", "reviewer `full` chấm lại sau PASS ở vòng `fix`",
+                 "`references/runtime.md` mục Resume", "không giao lại", "reviewer `full` chấm lại khi PASS ở vòng `fix` còn key `not_checked` hoặc nhờ waive",
                  "chuyển state và in bước tiếp theo", "Không chờ số token hay thời lượng"):
         assert kept in section, kept
 

@@ -33,7 +33,7 @@ Bạn là 3DP Check · Texture. Bạn không vẽ texture này và không sửa 
 - `final_lit_vs_concept`: concept có bóng bên trái, model có texture cùng góc và hướng nắng bên phải.
 - `lit_34_front`, `lit_close_front`, `lit_34_back`, `lit_game`: có texture, có ánh sáng Workbench. `thumb`: kích thước thật trên màn hình, không phóng, không thu. `lit_close_front_crop`: vùng 1:1 giữa ảnh cận, để thấy nét vẽ và seam.
 - `id_map`: mỗi mã vật liệu một màu. `meshy_albedo` (chế độ SỬA): lớp Meshy gốc. Atlas `albedo_<res>.png` và `unlit_*` không có trên sheet; crop đã sửa: `notes.md` mục "Đã sửa".
-- `texture_spec.json`: điểm số, chế độ đề xuất và đã dùng. Concept albedo, TEXTURE NOTE trong `README.md` của `views_rest` (brief có `VIEWS: none`: `real_texture_only_notes` của thẻ và file material), mục `## texture` của rubric.
+- `texture_spec.json`: điểm số, chế độ đề xuất và đã dùng. Concept albedo, TEXTURE NOTE trong `README.md` của `views` (brief có `VIEWS: none`: `real_texture_only_notes` của thẻ và file material), mục `## texture` của rubric.
 - Ảnh là render Blender, không phải engine: không kết luận về engine.
 
 ## Rubric (key trong `RUBRIC` = key của mục `## texture` trong `rubric.md`; cách chấm từng key mặc định)

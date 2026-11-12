@@ -38,7 +38,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **Giao việc** (khi `P next` báo `brief <id>`):
 1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
-2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (`references/runtime.md`, mục Resume), nội dung "Vòng sửa mới. Đọc lại `<brief>` rồi làm.". Nếu không: tạo subagent `agent` (`references/runtime.md`, mục Gọi agent), truyền `model` tường minh khi khác null, prompt đúng như sau:
+2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (`references/runtime.md`, mục Resume), nội dung "Đọc `<brief>` rồi làm.". Brief nói việc của lần này: vòng sửa của worker, hoặc ảnh reviewer đã xin. Nếu không: tạo subagent `agent` (`references/runtime.md`, mục Gọi agent), truyền `model` tường minh khi khác null, prompt đúng như sau:
    > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 
    Lời giao việc chỉ gồm file role và brief: file role là agent `agent` (Codex: `agent_file`), brief là prompt trên. Không thêm gì vào prompt. Không hướng dẫn cách ghi file: không heredoc, không `cat >`, không `tee`, không python. Agent ghi report bằng tool ghi file, theo brief.
@@ -54,7 +54,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **Nhận kết quả** (khi subagent trả về hoặc `P next` báo `ingest <id>`). Ba luật đầu không có ngoại lệ. Lý do: thông báo của subagent có thể không đến, nên một lượt kết thúc sớm làm pipeline đứng im cho tới khi người dùng nhắn.
 1. Chạy `P ingest <id> --agent-id <id subagent>` ngay, cho mọi vai trò. Worker cũng cần id, để vòng sửa sau resume được.
-2. Nếu `ingest` in một dòng JSON giao việc, giao đúng dòng đó trong cùng lượt (bước 2 của "Giao việc"). Dòng này có khi kết quả dẫn tới lần giao tiếp: reviewer sau worker, worker vòng sửa sau FIX hoặc sau check fail, reviewer `full` chấm lại sau PASS ở vòng `fix`.
+2. Nếu `ingest` in một dòng JSON giao việc, giao đúng dòng đó trong cùng lượt (bước 2 của "Giao việc"). Dòng này có khi kết quả dẫn tới lần giao tiếp: reviewer sau worker, worker vòng sửa sau FIX hoặc sau check fail, reviewer `full` chấm lại khi PASS ở vòng `fix` còn key `not_checked` hoặc nhờ waive.
 3. Không kết thúc lượt khi còn report chưa ingest hoặc còn dòng giao việc chưa giao.
 4. Không chờ số token hay thời lượng. Script tự đọc chúng từ transcript của subagent.
 5. `P brief` gọi lại khi subagent chưa trả về chỉ in lại dòng giao việc. Không giao thêm.

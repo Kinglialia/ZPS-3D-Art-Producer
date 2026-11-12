@@ -153,7 +153,7 @@ PRIOR:
 **Script tính, reviewer không ghi; contract đọc dung thứ** (D38.1, D38.2, D38.6, D38.8):
 - Script tính `COUNTS` (số finding mỗi mức) và bộ id `TOP_FIX` của loại lô. Reviewer không ghi hai trường này. Reviewer còn ghi mà lệch số của script thì `ingest` chỉ ghi cảnh báo vào ledger, không từ chối.
 - Script điền các key `RUBRIC` mà một file JSON gate đã quyết, và chỉ khi file đó có. Thiếu file thì key để reviewer chấm. Brief reviewer chỉ liệt kê key cần nhìn.
-- Reviewer nhận `vN/review/summary.json` nhỏ (khoảng 100 B mỗi part) thay cho `assembly.json` và mọi JSON gate.
+- Reviewer nhận `vN/review/summary.json` nhỏ thay cho `assembly.json` và mọi JSON gate: mỗi part một dòng (số, tên, primitive, vật liệu, tag, cỡ, kết quả gate; khoảng 100 B), rồi các số mỗi key rubric cần (`numbers`). Bước không có part và không có số thì không có file.
 - `ingest` đọc contract dung thứ hình thức: lấy giá trị từ phần đầu (ghi chú trong ngoặc phía sau không tính), không phân biệt hoa thường, bỏ `**` và dấu backtick quanh khóa, nối dòng thụt lề, nhận `-` và `–` trong `ACCEPTED_FAIL`. Mọi kiểm về nội dung giữ nguyên.
 - Dòng không thụt lề trong `FINDINGS` hoặc `PRIOR` là lỗi contract. `ingest` nêu đúng dòng đó.
 
@@ -162,7 +162,7 @@ PRIOR:
 - Vòng `fix`: reviewer chỉ chấm id trong `TOP_FIX` (kèm `COMPARE`), các vùng `preserve`, và nhìn nhanh toàn sheet để bắt lỗi mới. Mục rubric không chấm ghi `not_checked`. `ingest` từ chối `not_checked` ở vòng `full`.
 - **PASS ở vòng `fix` là cuối cùng khi `RUBRIC` không có `not_checked`.** Lý do: worker chỉ được sửa `TOP_FIX`, nên điều kiện `full` cũ gần như không đạt, và mỗi vòng sửa tốn ba reviewer. Vòng `fix` còn `not_checked`, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
 - **Sheet review** (D31.1, D38.5): brief reviewer của `blockout`, `views`, `model`, `texture` chỉ đưa sheet của `review_sheet.py` (cạnh dài khoảng 2048 px, có nhãn) và concept. Ảnh lẻ xin qua `need_evidence`. Bước `views` cũng có glob `sheet`, cạnh `views_sheet.py` đã có.
-  - `P brief` dựng sheet vào `vN/review/sheet-<n>.png` (ngoài `final/`, nên hash duyệt không đổi), từ glob `sheet` của bước trong `pipeline.toml`. Mỗi trang tối đa 8 ô; nhiều hơn thì tách `sheet-1.png`, `sheet-2.png`. Glob bỏ `normal_*`, `unlit_*`, `lineup` và atlas. Script thêm các crop 1:1 do nó chọn: wire, thumbnail, nhóm seam xấu nhất, ranh vật liệu. Vòng sửa có thêm sheet bản gốc; phương án param có `sheet-<b|c>.png`.
+  - `P brief` dựng sheet vào `vN/review/sheet.png` (ngoài `final/`, nên hash duyệt không đổi), từ glob `sheet` của bước trong `pipeline.toml`. Mỗi trang tối đa 8 ô; nhiều hơn thì thêm `sheet-2.png`, `sheet-3.png`, và `sheet.json` ghi trang và hộp của từng nhãn. Glob bỏ `normal_*`, `unlit_*`, `lineup` và atlas. Glob mở đầu bằng `native:` đặt ảnh đúng cỡ thật; `crop:` thêm một ô 1:1 quanh giữa phần có vẽ của ảnh. Vòng sửa có thêm sheet bản gốc; phương án param có `sheet-<b|c>.png`.
   - Reviewer xin ảnh có trên đĩa (`viewing_condition: xin ảnh <nhãn ô>[ box x0,y0,x1,y1]`): script chép ảnh gốc hoặc crop vào `review/evidence-<k>/` và resume đúng reviewer đang chấm (D38.4), không giao worker, không tính vào vòng bằng chứng của §7.6. Bước `views` nhận `box` theo tỉ lệ 0–1 của ảnh và script tự cắt. Tối đa `[review] served_evidence` lần mỗi đợt feedback, quá thì sang vòng worker.
 - **Resume reviewer chỉ trong một lượt chấm** (D38.4, sửa D31.7): bằng chứng có sẵn trên đĩa thì script resume đúng reviewer đang chấm, cùng version, và chỉ giao thêm đúng crop nó xin. Sang vòng worker khác thì reviewer là agent mới. Tính độc lập giữ nguyên.
 
@@ -355,7 +355,7 @@ Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên
    - Không tính vào 3 vòng. Cùng bước xin lần thứ hai trong một đợt feedback → `waiting_human` (D20.15).
 7. **Chuyển lên anh** (`waiting_human`): hết vòng 3 vẫn FIX (gửi bản tốt nhất kèm finding còn mở); dừng sớm; `ESCALATE`; `need_evidence` lần hai; check fail y hệt vòng trả thẳng trước (2d); kẹt lần 3 (mục 6.6); Meshy (mục 6.3 điểm 5 và 6); `assemble.py` pass (DUYỆT 2). `assemble.py` fail → `blocked`.
 8. **Cần sửa ở bước `assemble`** (D21.6, thay D20.4): không có agent và reviewer, nên khi anh bấm Cần sửa, trang duyệt hỏi sửa ở bước nào: `texture` (vẽ lại) hoặc `model` (mesh, UV). Script chạy `redo --step <bước>`; các bước sau tự chạy lại.
-9. **"Cần sửa" gửi lúc asset đang chạy** (D36.10): khi asset ở `running`, `reviewing` hoặc `evidence_running`, script lưu feedback vào `status.json` → `pending_redo[<bước>]`. Lần `ingest` kế áp dụng nó thành finding `H<n>`, trước mọi lần duyệt. Duyệt kèm vùng khoanh được ghi thành finding loại `note` và chuyển cho bước sau.
+9. **"Cần sửa" gửi lúc asset đang chạy** (D36.10): khi asset ở `running`, `reviewing` hoặc `evidence_running`, script lưu feedback vào `status.json` → `pending_redo[<bước>]`. Lần `ingest` kế áp dụng nó thành finding `H<n>`, trước mọi lần duyệt. Duyệt kèm vùng khoanh được ghi thành finding `minor` và chuyển cho bước sau. Loại của nó là loại `note*` đầu tiên trong `top_fix` của bước; bước không có loại đó thì dùng `note`.
 10. **Nghi reviewer chấm sai** (D39.7): Producer không tự quyết, vì Producer không mở output. Producer chạy `P feedback … --action note` rồi hỏi anh.
 
 ## 8. Thư mục
@@ -370,7 +370,7 @@ production/                            KHU 2 — LÀM VIỆC. Chỉ script và a
   rubrics/<loại>.md
   assets/<id>/
     status.json, brief.md, rubric.md, feedback.md, feedback/
-    <bước>/vN/{final, work (kèm logs/<tool>.log), review (kèm sheet-<n>.png, summary.json), findings.json, brief-*.md, worker-out.md, review-out.md}
+    <bước>/vN/{final, work (kèm logs/<tool>.log), review (kèm sheet.png, sheet-<n>.png, sheet.json, summary.json), findings.json, brief-*.md, worker-out.md, review-out.md}
     texture/budget-<mesh_hash>.json
 
 deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
@@ -453,6 +453,7 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 ```
 
 - Mỗi bước khai báo tài nguyên dùng (`uses = ["blender", "codex_image"]`). `P next` chỉ đề xuất giao việc khi còn chỗ; asset chờ hiện "chờ slot <tài nguyên>".
+- Một slot là một lần giao worker còn mở của bước dùng tài nguyên đó, hoặc một file PID còn sống trong `production/pids/<tài nguyên>/`. Một asset chỉ tính một lần.
 - Mỗi runtime có `[limits]` riêng (mục 16). Hai runtime không chạy cùng lúc trên một máy.
 - `[codex] timeout_s = 900`: giây chờ mỗi lần gọi `codex exec`, tối thiểu 300 (D30.20). Khóa `codex_batch = true` của `[[steps]]` (chỉ texture, mặc định `false`) gộp các paint view vào một lần gọi (D30.22).
 
