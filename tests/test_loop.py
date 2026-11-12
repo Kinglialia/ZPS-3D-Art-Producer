@@ -1144,6 +1144,21 @@ def test_a_gate_json_whose_only_failing_check_is_gate5_health_can_be_accepted_c1
     assert (st["state"], st["accepted_fail"]) == ("reviewing", {"blockout": {"roof.json": 1}})
 
 
+def test_a_model_worker_can_accept_the_gate5_health_fail_the_approved_blockout_accepted(tmp_path):
+    """The model rebuilds the parts of the blockout and gates them again: a part the blockout accepted with gate5.health
+    fails the same gate there, and the model step accepted only qa_screen_tris_check.json."""
+    import tomllib
+    steps = tomllib.loads((SCRIPTS.parent / "templates/pipeline.toml").read_text(encoding="utf-8"))["steps"]
+    model = next(s for s in steps if s["id"] == "model")
+    d = tmp_path / "model/v1"
+    gate = d / "final/review/gates/roof.json"
+    write_json(gate, {"overall": "fail", "checks": [{"check": "gate2.contact", "status": "pass"},
+                                                    {"check": "gate5.health", "status": "fail"}]})
+    why = "hai part chạm nhau dọc một cạnh, 1 cạnh mở"
+    (d / "final/README.md").write_text(f"## NGOẠI LỆ\n- roof.json — {why}\n", encoding="utf-8")
+    assert loop.accept_fails(model, d, [str(gate)], [("roof.json", why)]) == ({str(gate): ("roof.json", why)}, [])
+
+
 def test_a_gate_json_with_another_failing_gate_beside_gate5_health_is_still_refused_c19(flow):
     """gate2.contact says a part floats: accepting it hides a real structure fault behind the edge-contact exception."""
     gate_json(flow, "roof", failing=["gate5.health", "gate2.contact"])

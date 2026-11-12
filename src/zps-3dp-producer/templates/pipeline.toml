@@ -126,7 +126,7 @@ inputs = ["blockout", "views"]
 review_inputs = ["blockout"]
 concept = ["concept_albedo.png", "concept_shadow.png", "asset-card.yaml"]
 pilot = true
-acceptable = ["qa_screen_tris_check.json"]
+acceptable = ["qa_screen_tris_check.json", "gates/*.json#gate5.health"]
 counts_gate = true
 sheet = ["final/review/lit_*.png", "final/review/clay_lit_concept.png", "final/review/renders/clay_34.png",
          "final/review/renders/clay_front.png", "final/review/renders/parts_34.png", "final/review/wire_34.png",
