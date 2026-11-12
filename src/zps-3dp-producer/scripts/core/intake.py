@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import sys
 import unicodedata
@@ -45,8 +46,8 @@ def init(a):
         d.mkdir(parents=True, exist_ok=True)
     concepts = Path(os.path.expanduser(a.concepts)).resolve()
     fill = {"{{PROJECT}}": a.project, "{{CONCEPTS}}": str(concepts), "{{DATE}}": dt.date.today().isoformat(),
-            "{{CHECK_CARD}}": f"{SCRIPTS / '.deps/venv/bin/python'} {SCRIPTS / 'check_card.py'}",
-            "{{PROFILE}}": str(PROFILE.resolve())}
+            "{{CHECK_CARD}}": shlex.join([str(SCRIPTS / ".deps/venv/bin/python"), str(SCRIPTS / "check_card.py")]),
+            "{{PROFILE}}": shlex.quote(str(PROFILE.resolve()))}
 
     def put(src: Path, dst: Path):
         if dst.exists():

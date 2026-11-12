@@ -1,6 +1,8 @@
 import copy
 import json
 import os
+import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -810,9 +812,21 @@ def test_guideline_lists_required_files_and_the_check_command_with_no_placeholde
     assert "{{" not in g
     for name in ("concept_albedo.png", "concept_shadow.png", "asset-card.yaml", "<id>.material.md", "<id>.layout.md"):
         assert name in g
-    venv_py = SCRIPTS / ".deps/venv/bin/python"
-    assert f"{venv_py} {SCRIPTS / 'check_card.py'} " in g
-    assert f"--profile {tmp_path.resolve() / 'production/PROJECT-PROFILE.yaml'}" in g
+    venv_py, card = str(SCRIPTS / ".deps/venv/bin/python"), str(SCRIPTS / "check_card.py")
+    profile = str(tmp_path.resolve() / "production/PROJECT-PROFILE.yaml")
+    assert f"{shlex.quote(venv_py)} {shlex.quote(card)} " in g
+    assert f"--profile {shlex.quote(profile)}" in g
+
+
+def test_the_check_command_of_the_guideline_still_runs_from_a_project_path_with_a_space(tmp_path, presets):
+    """An unquoted path with a space split the mandatory check_card command at the space."""
+    root = tmp_path / "my project"
+    root.mkdir()
+    Proj(root, presets)
+    g = (root / "concepts/GUIDELINE.md").read_text(encoding="utf-8")
+    cmd = re.search(r"^\d+\. Chạy `(.+) <thư mục asset> --profile (.+?)`", g, re.M)
+    assert shlex.split(cmd[2]) == [str(root.resolve() / "production/PROJECT-PROFILE.yaml")]
+    assert shlex.split(cmd[1])[1] == str(SCRIPTS / "check_card.py")
 
 
 def test_guideline_tells_agents_to_name_the_env_path_and_never_attach_the_file_d30_13(tmp_path, presets):
