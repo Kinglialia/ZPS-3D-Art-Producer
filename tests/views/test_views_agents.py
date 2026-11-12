@@ -95,7 +95,7 @@ def test_every_tool_command_of_the_worker_goes_through_run_and_none_through_a_ba
 def test_every_flag_the_worker_passes_is_one_its_tool_parses():
     _, body = front(WORKER)
     calls = re.findall(r"`(?:RUN (?:bl )?([\w.]+\.py)|PY (\"<GEN_IMAGE>\" <GEN_ARGS>))([^`]*)`", body)
-    assert len(calls) == 15
+    assert len(calls) == 18
     for script, gen, args in calls:
         src = SKILL / "scripts/gen_image_codex.py" if gen else AGENT / "tools" / script
         text = src.read_text(encoding="utf-8")
@@ -115,7 +115,35 @@ def test_the_readme_template_of_the_reference_passes_check_package_sections():
     spec = importlib.util.spec_from_file_location("check_package", AGENT / "tools/check_package.py")
     cp = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cp)
-    ref = (AGENT / "references/views.md").read_text(encoding="utf-8").split("## 6. `README.md`", 1)[1]
+    ref = (AGENT / "references/views.md").read_text(encoding="utf-8").split("## 5. `README.md`", 1)[1]
     blocks = re.findall(r"```text\n(.*?)```", ref, re.S)
     assert blocks[0].strip() == cp.POINTER
     assert re.findall(r"^## \d\. (.+)$", blocks[1], re.M) == list(cp.SECTIONS)
+
+
+def test_the_worker_writes_no_prompt_by_hand_and_passes_every_view_of_a_step_in_one_gen_call():
+    _, body = front(WORKER)
+    assert "Không viết prompt bằng tay" in body and "`RUN make_prompt.py --view <view>" in body
+    assert "Một lệnh gen cho mọi view của bước" in body and "một lệnh cho mọi view fail" in body
+    assert body.count("--pick-best V/work/gen") == 2 and "data.accepted_fail" in body and "data.ngoai_le" in body
+
+
+def test_the_reference_has_a_read_when_trigger_in_the_worker_and_holds_no_prompt_template_after_the_move_to_the_tool():
+    _, body = front(WORKER)
+    ref = (AGENT / "references/views.md").read_text(encoding="utf-8")
+    assert "`R/views.md`: đọc khi" in body
+    assert "STRICT RULES" not in ref and "STRICT RULES" in (AGENT / "tools/make_prompt.py").read_text(encoding="utf-8")
+
+
+def test_the_worker_and_the_reference_name_no_building_part_so_their_examples_fit_any_object():
+    """A barrel, a tree and a hut get the same text. The fixed words of the prompt are pinned in test_make_prompt."""
+    for path in (WORKER, AGENT / "references/views.md"):
+        text = path.read_text(encoding="utf-8").lower()
+        assert [w for w in ("roof", "fascia", "plinth", "mái", "tường", "dầm") if w in text] == [], path.name
+
+
+def test_the_worker_and_the_reference_carry_no_decision_tag_except_the_two_that_test_watch_pins():
+    _, body = front(WORKER)
+    tags = lambda t: re.findall(r"\bD\d{2}(?:\.\d+)?\b", t)
+    assert tags(body) == ["D33.2", "D33.8"]
+    assert tags((AGENT / "references/views.md").read_text(encoding="utf-8")) == []

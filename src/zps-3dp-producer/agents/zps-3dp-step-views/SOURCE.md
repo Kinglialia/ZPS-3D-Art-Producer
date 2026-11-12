@@ -16,6 +16,7 @@ Không sửa file chép nguyên. `tests/views/test_views_source.py` so sha256 v�
 
 - G1 (`docs/review-kit-v0.10.4-vs-process.md`): `concept-views.md` §10 ghi `measure_views.py` "có sửa". File kit giữ nguyên. `tools/measure.py` nạp nó như module và thay `flood_background` bằng hàm giữ mọi pixel gần màu nền trên toàn ảnh.
 - D36 (V2, V4, V5, V6, V15): `tools/measure.py` bọc `measure_view` và `internal_boundaries` của `measure_views.py` (ranh hai màu dưới dE 10 không đo `detail`), sửa `regen` và danh sách view sau khi kit chạy, và thêm phép đo border, components, ring, light. File kit giữ nguyên.
+- D37 (L7, L9): `tools/make_prompt.py` holds the prompt templates, cut from `references/views.md`. `tools/measure.py` has the `--pick-best` mode. Both sit beside the kit files.
 - D36 (V3): `tools/concept_colors.py` lấy trung vị của ô bằng `hexc` của `measure_views.py`. Nó không dùng `vivid` của `palette_report.py` nữa.
 - Không chép `sheet.py`: chỉ Way B (một ảnh nhiều view) dùng nó, và Producer chỉ chạy Way A.
 
@@ -23,6 +24,7 @@ Không sửa file chép nguyên. `tests/views/test_views_source.py` so sha256 v�
 
 | File | Nguồn kit | sha256 nguồn | Cách rút |
 |---|---|---|---|
-| `references/views.md` | `zps-concept-views/references/process.md` | `2c8e1d4946dca8779ac185f061ea98602f569420837d674861bc66c2957e9798` | Step 3 rules and prompts (Way A), verbatim; step 4 concept colours |
-| `references/views.md` | `.art-production-support/shared/gen-craft.md` | `07f6bfc95b72a63f0aced1b5596d2c6dc2efa3b95d1441258904e3c809202864` | Lighting and shadows; Typical faults table, verbatim |
+| `references/views.md` | `zps-concept-views/references/process.md` | `2c8e1d4946dca8779ac185f061ea98602f569420837d674861bc66c2957e9798` | Step 3 rules (Way A), verbatim; step 4 concept colours |
+| `references/views.md` | `.art-production-support/shared/gen-craft.md` | `07f6bfc95b72a63f0aced1b5596d2c6dc2efa3b95d1441258904e3c809202864` | Typical faults table, verbatim |
+| `tools/make_prompt.py` | `zps-concept-views/references/process.md` | `2c8e1d4946dca8779ac185f061ea98602f569420837d674861bc66c2957e9798` | Step 3 prompts (Way A), verbatim, with `roof edge, fascia, base and plinth` written as `top edge, base and ground contact`; lighting and shadow lines from gen-craft.md |
 | `zps-3dp-check-views.md` | `.art-production-support/rules/art-quality.md` | `855d0c3de045222c4f320ebbf257a9af43290c3a3546c673a64584dd2e691039` | §1 element inventory, restated |
