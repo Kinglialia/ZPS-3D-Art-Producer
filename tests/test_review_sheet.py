@@ -275,7 +275,7 @@ def test_the_blockout_review_brief_names_the_summary_the_pages_and_the_part_lege
         png(flow.v(1) / "final" / r, (400, 300))
     text = flow.text(flow.brief())
     sheet = f"production/assets/{AID}/blockout/v1/review/sheet.png"
-    assert (f"- Sheet: `{sheet}`, `sheet-2.png`, `sheet-3.png`. Số liệu: `summary.json` cùng thư mục. "
+    assert (f"- Sheet: `{sheet}` và `sheet-2.png`, `sheet-3.png`, cùng thư mục. Số liệu: `summary.json` cùng thư mục. "
             "Số = tên part: 1 base, 2 walls, 3 roof_f, 4 roof_b, 5 door.") in text.splitlines()
     assert "Số liệu: JSON trong" not in text and "final/review/gates" not in text
     assert (flow.v(1) / "review/sheet-3.png").is_file()
@@ -296,7 +296,8 @@ def test_a_part_legend_that_would_take_the_brief_over_its_budget_stays_in_the_su
     short = briefs.review_brief(load_cfg(), flow.st, blockout_step(), 1)
     assert "Số = tên part: 1 base" in inline and "roof_f" not in short
     sheet = f"production/assets/{AID}/blockout/v1/review/sheet.png"
-    assert (f"- Sheet: `{sheet}`, `sheet-2.png`, `sheet-3.png`. Số liệu và số = tên part (`n`): `summary.json` cùng thư mục."
+    assert (f"- Sheet: `{sheet}` và `sheet-2.png`, `sheet-3.png`, cùng thư mục. Số liệu và số = tên part (`n`): "
+            "`summary.json` cùng thư mục."
             in short.splitlines())
     assert "roof_f" in (flow.v(1) / "review/summary.json").read_text(encoding="utf-8")
 

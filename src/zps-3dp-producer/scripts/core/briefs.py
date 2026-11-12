@@ -525,10 +525,10 @@ def write_summary(st, step, n: int) -> Path | None:
 
 
 def sheet_files(sheet: Path) -> str:
-    """The first page of a sheet by path, the further pages by name: they sit in the same folder."""
+    """The first page of a sheet by path, the further pages by name with "cùng thư mục": they sit in the same folder."""
     from review_sheet import pages
     first, *more = pages(sheet)
-    return ", ".join([f"`{rel(first)}`", *(f"`{p.name}`" for p in more)])
+    return f"`{rel(first)}`" + (f" và {', '.join(f'`{p.name}`' for p in more)}, cùng thư mục" if more else "")
 
 
 def sheet_line(sheet: Path, summary: Path | None, n: int) -> tuple[str, str | None]:
