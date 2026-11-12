@@ -16,9 +16,9 @@ GUARDED = [
     "scripts/assemble.py", "scripts/assemble_glb.py", "scripts/assemble_qa.py", "scripts/check_counts.py", "scripts/gen_image_codex.py",
     "scripts/meshy_call.py", "scripts/producer.py", "scripts/review_sheet.py", "scripts/run_tool.py",
     *(f"agents/zps-3dp-step-blockout/tools/{n}.py" for n in (
-        "build_parts", "check_base", "check_fix", "check_inputs", "check_layout", "check_markers", "check_materials",
-        "check_proportion", "check_schema", "check_support", "clear_gates", "concept_mask", "custom_mesh", "fit_view",
-        "render_critic", "render_review")),
+        "blockout_md", "build_parts", "check_base", "check_fix", "check_inputs", "check_layout", "check_markers",
+        "check_materials", "check_proportion", "check_schema", "check_support", "concept_mask", "custom_mesh", "fit_view",
+        "gate_all", "init_sources", "make_variant", "prep_overlay", "render_critic", "render_review", "render_sides")),
     *(f"agents/zps-3dp-step-model/tools/{n}.py" for n in (
         "check_detail", "check_inputs", "check_mesh", "check_uv_edge", "join_mesh", "make_spec", "render_review",
         "unwrap")),
