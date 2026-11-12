@@ -4,7 +4,8 @@ of that kind fail): post_fail (connection refused: the POST never left), post_lo
 response is lost as a connection reset), poll_fail (HTTP 503 on the task GET), task_failed (the
 task ends FAILED), download_fail
 (network error on the GLB URL), truncated (GLB cut off), base_fail (network error on the base_color URL), echo_key
-(HTTP 401 whose body repeats the Authorization header), running (the task GET says IN_PROGRESS: a slow task). The returned GLB is the uploaded model, as Meshy returns the mesh
+(HTTP 401 whose body repeats the Authorization header), running (the task GET says IN_PROGRESS: a slow task),
+failed_after_running (the first n task GETs say IN_PROGRESS, every later one says FAILED). The returned GLB is the uploaded model, as Meshy returns the mesh
 with original UVs, or the file FAKE_MESHY_GLB (a real Meshy GLB, normalized). A succeeded task also has
 texture_urls[0].base_color: a PNG of FAKE_MESHY_BASE_PX (default 2048) square, one colour, or
 one-pixel black and white columns when FAKE_MESHY_BASE_STRIPES is set.
@@ -78,8 +79,11 @@ def urlopen(req, timeout=None):
             raise urllib.error.URLError(ConnectionResetError(54, "Connection reset by peer"))
         return Resp(json.dumps({"result": f"task-{n}"}).encode())
     if method == "GET" and (m := re.search(r"/retexture/(task-\d+)$", url)):
+        late_fail = faults().get("failed_after_running")
         kind = ("poll_fail" if fail_now("poll_fail", past) else "task_failed" if fail_now("task_failed", past)
                 else "running" if fail_now("running", past) else "poll")
+        if late_fail and kind == "poll":
+            kind = "running" if sum(c.get("kind") == "running" for c in past) < late_fail else "task_failed"
         log({"method": method, "url": url, "auth": auth, "kind": kind})
         if kind == "poll_fail":
             raise urllib.error.HTTPError(url, 503, "Service Unavailable", {}, io.BytesIO(b"busy"))

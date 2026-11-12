@@ -322,11 +322,36 @@ def test_a_profile_without_env_file_means_paint_only_and_no_call(meshy):
 
 def test_a_second_call_on_the_same_mesh_while_one_runs_is_refused_so_the_budget_is_not_spent_twice(meshy):
     lock = meshy.budget.with_suffix(".lock")
-    lock.write_text("4242", encoding="utf-8")
+    lock.write_text(str(os.getpid()), encoding="utf-8")
     r = meshy()
     assert (r["rc"], r["calls"], r["budget"]["used_credits"]) == (3, [], 0)
     assert r["out"] == (f"[meshy_call] từ chối: {lock.name} có: một lần gọi Meshy khác đang chạy trên mesh này (pid "
-                        "4242); chờ nó xong, hoặc xóa file đó khi không còn process này\n")
+                        f"{os.getpid()}); chờ nó xong, hoặc xóa file đó khi không còn process này\n")
+    assert lock.read_text(encoding="utf-8") == str(os.getpid())
+
+
+def dead_pid() -> int:
+    p = subprocess.Popen([sys.executable, "-c", "pass"])
+    p.wait()
+    return p.pid
+
+
+def test_a_lock_whose_process_died_does_not_block_the_asset_so_the_paid_call_runs_and_frees_it(meshy):
+    """A killed call left budget-<sha>.lock behind; before, the asset was stuck until a human deleted the file."""
+    lock = meshy.budget.with_suffix(".lock")
+    lock.write_text(str(dead_pid()), encoding="utf-8")
+    r = meshy()
+    assert (r["rc"], kinds(r), r["budget"]["used_credits"]) == (0, ["post", "poll", "download", "poll", "base_color"], 10)
+    assert not lock.exists()
+
+
+@pytest.mark.parametrize("content", ["", "not a pid"])
+def test_a_lock_without_a_readable_pid_still_refuses_because_it_may_be_a_call_that_is_starting(meshy, content):
+    lock = meshy.budget.with_suffix(".lock")
+    lock.write_text(content, encoding="utf-8")
+    r = meshy()
+    assert (r["rc"], r["calls"], r["budget"]["used_credits"]) == (3, [], 0)
+    assert lock.exists()
 
 
 def test_the_lock_is_freed_after_a_call_so_the_next_approved_call_can_run(meshy):
@@ -509,11 +534,98 @@ def test_a_slow_task_exits_pending_and_resume_waits_on_that_task_without_a_secon
     assert (r["budget"]["used_credits"], r["record"]["credits_charged"]) == (10, 0)
 
 
-def test_resume_without_a_task_is_refused_and_past_the_total_wait_it_blocks_without_a_request_d33_5(meshy):
+def test_resume_without_a_task_is_refused_d33_5(meshy):
     r = meshy("--resume")
     assert (r["rc"], kinds(r)) == (3, [])
     assert "không tạo task mới khi resume" in r["out"]
+
+
+def test_past_the_total_wait_one_status_request_is_made_and_a_running_task_stays_blocked_without_a_new_task_or_charge(meshy):
     meshy("--timeout", "2", mode="running:100")
-    r = meshy("--resume", "--total-s", "0")
-    assert (r["rc"], r["record"]["status"], kinds(r).count("post")) == (1, "blocked_total", 1)
-    assert len(r["calls"]) == 2
+    r = meshy("--resume", "--total-s", "0", mode="running:100")
+    assert (r["rc"], r["record"]["status"], kinds(r)) == (1, "blocked_total", ["post", "running", "running"])
+    assert (r["budget"]["used_credits"], r["record"]["credits_charged"]) == (10, 0)
+    assert r["record"]["task_id"] == "task-1"
+    assert no_key_anywhere(r, meshy.tmp)
+
+
+def test_past_the_total_wait_a_task_that_succeeded_meanwhile_is_downloaded_so_the_paid_result_is_not_lost(meshy):
+    """The task finished on Meshy after the last wait ended. Blocking here would throw away the credit it cost."""
+    meshy("--timeout", "2", mode="running:100")
+    r = meshy("--resume", "--total-s", "0", mode="running:1")
+    assert (r["rc"], r["record"]["status"], r["topology"]["overall"]) == (0, "ok", "pass")
+    assert kinds(r) == ["post", "running", "poll", "poll", "download", "poll", "base_color"]
+    assert (r["budget"]["used_credits"], r["record"]["credits_charged"]) == (10, 0)
+    assert (meshy.tmp / "work/meshy/call-1/glb.glb").read_bytes() == meshy.model.read_bytes()
+    assert no_key_anywhere(r, meshy.tmp)
+
+
+def test_past_the_total_wait_a_task_meshy_ended_as_failed_gives_the_credit_back_instead_of_blocking_for_good(meshy):
+    meshy("--timeout", "2", mode="failed_after_running:1")
+    r = meshy("--resume", "--total-s", "0", mode="failed_after_running:1")
+    assert (r["rc"], kinds(r).count("post"), r["budget"]["used_credits"]) == (1, 1, 0)
+    assert "task-ended.json" in r["files"]
+
+
+def test_a_task_that_fails_on_the_resume_run_gives_back_the_credit_the_first_run_charged(meshy):
+    """On a resume run the budget already holds the first run's charge. Refunding to that level gave nothing back."""
+    r = meshy("--timeout", "2", mode="failed_after_running:1")
+    assert (r["rc"], r["budget"]["used_credits"]) == (5, 10)
+    r = meshy("--resume", mode="failed_after_running:1")
+    assert (r["rc"], kinds(r).count("post")) == (1, 1)
+    assert r["budget"] == {"max_credits": 10, "used_credits": 0}
+    assert (r["record"]["credits_charged"], r["files"]) == (0, ["meshy_call.json", "task-ended.json"])
+
+
+def test_the_refund_does_not_depend_on_the_record_of_the_first_run_because_that_run_may_have_been_killed(meshy):
+    meshy("--timeout", "2", mode="failed_after_running:1")
+    (meshy.tmp / "work/meshy/call-1/meshy_call.json").unlink()
+    r = meshy("--resume", mode="failed_after_running:1")
+    assert (r["rc"], r["budget"]["used_credits"]) == (1, 0)
+
+
+def test_the_refund_is_the_charge_of_the_task_so_credits_of_other_calls_on_the_budget_stay(meshy):
+    meshy.budget.write_text(json.dumps({"max_credits": 30, "used_credits": 10}), encoding="utf-8")
+    meshy("--timeout", "2", mode="failed_after_running:1")
+    assert json.loads(meshy.budget.read_text())["used_credits"] == 20
+    r = meshy("--resume", mode="failed_after_running:1")
+    assert r["budget"] == {"max_credits": 30, "used_credits": 10}
+
+
+def test_both_files_downloaded_but_no_topology_json_runs_only_the_gate_without_a_request_or_a_charge(meshy):
+    """A run was killed between the last download and the gate. The folder is paid and complete; it is not 'used'."""
+    assert meshy()["rc"] == 0
+    topo = meshy.tmp / "work/meshy/call-1/topology.json"
+    topo.unlink()
+    r = meshy()
+    assert (r["rc"], r["topology"]["overall"], r["record"]["status"]) == (0, "pass", "ok")
+    assert (len(r["calls"]), r["budget"]["used_credits"], r["record"]["credits_charged"]) == (5, 10, 0)
+    assert r["record"]["albedo"] == f"{meshy.tmp}/work/meshy/call-1/base_color.png"
+
+
+def test_the_gate_only_rerun_also_works_when_the_killed_run_left_no_meshy_call_json(meshy):
+    assert meshy()["rc"] == 0
+    for name in ("topology.json", "meshy_call.json"):
+        (meshy.tmp / "work/meshy/call-1" / name).unlink()
+    r = meshy()
+    assert (r["rc"], r["topology"]["overall"], len(r["calls"])) == (0, "pass", 5)
+
+
+def test_a_gate_only_rerun_that_fails_the_gate_is_a_topology_fail_and_charges_nothing(meshy):
+    assert meshy()["rc"] == 0
+    (meshy.tmp / "work/meshy/call-1/topology.json").unlink()
+    card_res(meshy, 128)
+    r = meshy()
+    assert (r["rc"], failed(r), r["record"]["albedo"], len(r["calls"])) == (4, ["meshy.base_color_px"], None, 5)
+    assert r["budget"]["used_credits"] == 10
+
+
+def test_a_folder_with_its_gate_result_is_still_refused_because_the_gate_only_rerun_is_for_a_missing_topology_json(meshy):
+    assert meshy()["rc"] == 0
+    r = meshy()
+    assert (r["rc"], len(r["calls"])) == (3, 5)
+
+
+def test_one_run_waits_up_to_1700_seconds_by_default_so_a_slow_task_is_not_cut_at_8_minutes(meshy):
+    p = subprocess.run([sys.executable, str(CALL), "texture", "--help"], cwd=meshy.tmp, capture_output=True, text=True)
+    assert "default: 1700" in " ".join(p.stdout.split())
