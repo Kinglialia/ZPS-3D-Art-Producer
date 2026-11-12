@@ -1,7 +1,7 @@
 """Measure generated views against the guides: the kit's measure_views.py, unchanged, with G1 and D36 fixed here.
 
 Usage: python3 tools/measure.py --final <V/final> --guides <views_front final>/guides --views front[,back,left,right,top]
-           [--front <views_front final>/front.png] [--concept-colors <views_front final>/concept_colors.json]
+           [--front <views_front final>/front.png] [--concept-colors <views_front final>/concept_colors.json] [--mirror-right]
 G1 (docs/review-kit-v0.10.4-vs-process.md): the kit keeps only background that touches the image border, so a
 closed gap between columns counts as object. Here every pixel near the background colour is background.
 Images: <final>/<view>.png; --front when front.png lives in views_front (views_rest).
@@ -12,6 +12,8 @@ no edge can be seen there. It is listed in the check `detail.<view>` (not_checke
 --front given (views_rest, V4): the approved front is never in `regen` and its check is at most `info`; if the front/back
 mirror pair fails, back is queued instead. V6: with --concept-colors too, the reference colour of a material is the measured
 front, and the concept colour only for a material the front does not show.
+--mirror-right (V10, symmetric left_right): before measuring, right.png is made again as left.png mirrored, so a left made
+again never leaves a stale right that the colour match then fails.
 V15: per view, the checks border (the object touches the image border: fail), components (the count of separate shapes
 differs from the guide: fail), ring (share of the object rim near the background colour: info), light (luminance change
 across each material region, a share of its mean: info).
@@ -28,7 +30,7 @@ import sys
 import tempfile
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.join(HERE, "lib")]
@@ -56,10 +58,19 @@ def pair_edges(label, pairs):
     return out
 
 
+REFERENCE = {}
+
+
+def apart_in_reference(a, b):
+    """The colours meant for two materials (concept, or the approved front) differ: their border must be visible."""
+    return a in REFERENCE and b in REFERENCE and mv.delta_e(mv.hex_rgb(REFERENCE[a]), mv.hex_rgb(REFERENCE[b])) >= BLIND_DE
+
+
 def blind_pairs(blk, gen, mat_names):
     """V2: material pairs that touch in the guide and cannot be told apart in the image: 9 pixels in 10 of their two
-    regions together are under dE 10 from the median of both. Judging by the colour of each region alone would call
-    a misplaced border 'blind', because a shifted region holds both colours."""
+    regions together are under dE 10 from the median of both, and the colours meant for them (REFERENCE) are not apart.
+    Judging by the colour of each region alone would call a misplaced border 'blind', because a shifted region holds
+    both colours."""
     if gen["bb"] is None:
         return []
     bl = mv._label_frame(blk["label"], blk["bb"])
@@ -72,7 +83,8 @@ def blind_pairs(blk, gen, mat_names):
             px = gr[core[i] | core[j]]
             if core[i].sum() >= 40 and core[j].sum() >= 40 and pair_edges(bl, [(i, j)]).any():
                 px, med = px[::max(1, len(px) // 1500)], np.median(px, 0)
-                if np.percentile([mv.delta_e(p, med) for p in px], 90) < BLIND_DE:
+                if np.percentile([mv.delta_e(p, med) for p in px], 90) < BLIND_DE and not apart_in_reference(
+                        mat_names[i], mat_names[j]):
                     pairs.append((i, j))
     return pairs
 
@@ -84,8 +96,10 @@ def measure_view(view, blk, gen, mat_names):
         r, fr = _measure_view(view, blk, gen, mat_names)
     finally:
         mv.internal_boundaries = _internal_boundaries
-    r["detail_not_checked"] = {mat_names[a]: [mat_names[b] for x, b in ((i, j), (j, i)) if x == a]
-                               for a in sorted({k for p in pairs for k in p}) for i, j in pairs if a in (i, j)}
+    r["detail_not_checked"] = {}
+    for i, j in pairs:
+        r["detail_not_checked"].setdefault(mat_names[i], []).append(mat_names[j])
+        r["detail_not_checked"].setdefault(mat_names[j], []).append(mat_names[i])
     return r, fr
 
 
@@ -176,7 +190,9 @@ def rest_concept(guides, front, concept_colors, threshold, tmp):
     names = list(meta["materials"])
     palette = np.array([mv.hex_rgb(meta["materials"][m]) for m in names])
     r, _ = mv.measure_view("front", mv.load_blockout(guides, "front", palette), mv.load_gen(front, threshold), names)
-    kept = {m: c for m, c in common.read_json(concept_colors).items() if m not in r.get("colours", {})}
+    concept = common.read_json(concept_colors)
+    kept = {m: c for m, c in concept.items() if m not in r.get("colours", {})}
+    REFERENCE.update(concept | r.get("colours", {}))
     path = os.path.join(tmp, "concept_colors.json")
     common.write_json(path, kept)
     return path
@@ -234,6 +250,7 @@ def main():
     p.add_argument("--front")
     p.add_argument("--concept-colors")
     p.add_argument("--bg-threshold", type=float, default=40)
+    p.add_argument("--mirror-right", action="store_true")
     a = p.parse_args()
     try:
         views = view_list(a.views)
@@ -244,11 +261,15 @@ def main():
     out = os.path.join(a.final, "review", "checks", "measure.json")
     try:
         os.makedirs(report_dir, exist_ok=True)
+        if a.mirror_right and {"left", "right"} <= set(views):
+            ImageOps.mirror(Image.open(os.path.join(a.final, "left.png"))).save(os.path.join(a.final, "right.png"))
         with tempfile.TemporaryDirectory() as d:
             gen_dir(d, a.final, views, a.front)
             concept = a.concept_colors
             if a.front and concept and "front" in views:
                 concept = rest_concept(a.guides, a.front, concept, a.bg_threshold, d)
+            elif concept:
+                REFERENCE.update(common.read_json(concept))
             sys.argv = ["measure_views.py", "--blockout", a.guides, "--gen", d, "--out", report_dir,
                         "--views", ",".join(views), "--bg-threshold", str(a.bg_threshold),
                         *(["--concept-colors", concept] if concept else [])]

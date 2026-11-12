@@ -89,7 +89,7 @@ def test_every_tool_command_of_the_worker_goes_through_run_and_none_through_a_ba
     _, body = front(WORKER)
     assert re.findall(r"PY T/|\bBLENDER\b|PID|\bnohup\b|`PY (?!\"<GEN_IMAGE>\")", body) == []
     assert re.findall(r"`PY ([^ ]+)", body) == ['"<GEN_IMAGE>"']
-    assert "Chạy mọi lệnh Bash ở foreground và chờ xong trong lượt." in body
+    assert "Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt" in body and "`&`" not in body
 
 
 def test_every_flag_the_worker_passes_is_one_its_tool_parses():

@@ -350,6 +350,28 @@ def test_a_boundary_between_two_clearly_different_materials_in_the_wrong_place_s
     assert "detail.front" not in checks(check)
 
 
+def test_two_materials_the_concept_paints_apart_must_show_a_border_even_when_the_image_paints_them_alike_v2(tmp_path):
+    """The V2 exception is for colours that are alike in the concept too. Here the concept says the trim is dE 13 from
+    the wall: an image with one colour for both has lost the border, and detail must say so."""
+    cc = tmp_path / "cc.json"
+    cc.write_text(json.dumps({"WALL": BROWN, "TRIM": "#8B7A4B"}), encoding="utf-8")
+    wall_trim_gen(tmp_path / "final/front.png", trim=BROWN)
+    rc, _, rep, check = measure(tmp_path, extra=("--concept-colors", cc))
+    assert (rc, rep["views"]["front"]["status"]["detail"], "detail.front" in checks(check)) == (1, "fail", False)
+
+
+def test_a_material_beside_two_blind_neighbours_lists_both_of_them_v2(tmp_path):
+    g = tmp_path / "guides"
+    g.mkdir()
+    (g / "views.json").write_text(json.dumps({"materials": {"A": ID_STONE, "B": ID_TRIM, "C": "#4363D8"}}), encoding="utf-8")
+    png(g / "front_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 150), ID_STONE), ((50, 150, 350, 250), ID_TRIM),
+                                                       ((50, 250, 350, 350), "#4363D8")], mode="RGBA")
+    png(tmp_path / "final/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 225), BROWN), ((75, 225, 525, 375), BROWN_15),
+                                                           ((75, 375, 525, 525), "#9A5A3B")])
+    rc, _, _, check = measure(tmp_path, guides=g)
+    assert checks(check)["detail.front"][1] == {"A": ["B"], "B": ["A", "C"], "C": ["B"]}
+
+
 def test_a_boundary_in_the_right_place_between_different_materials_passes_detail_v2(tmp_path):
     wall_trim_gen(tmp_path / "final/front.png", trim="#2F4F4F")
     rc, _, rep, _ = measure(tmp_path)
@@ -581,3 +603,23 @@ def test_a_strong_light_gradient_across_a_material_is_reported_as_info_v15(tmp_p
     status, shaded_v = checks(measure(tmp_path, guides=g)[3])["light.front"]
     flat_v = checks(measure(tmp_path / "flat", guides=g)[3])["light.front"][1]
     assert (status, shaded_v["WALL"] > 0.5, flat_v["WALL"] < 0.02) == ("info", True, True)
+
+
+def test_a_left_made_again_leaves_a_stale_right_that_the_colour_match_fails_unless_measure_mirrors_right_v10(tmp_path):
+    """Symmetric asset: right is left mirrored. The worker makes left again after a fail; if right is not mirrored again,
+    the old right is measured and fails the colour match with the new left, and `regen` asks for a paid gen of a view
+    that should be a flip."""
+    g = tmp_path / "guides"
+    g.mkdir()
+    (g / "views.json").write_text(json.dumps({"materials": {"WALL": ID_STONE}}), encoding="utf-8")
+    for v in ("left", "right"):
+        png(g / f"{v}_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 350), ID_STONE)], mode="RGBA")
+    f = tmp_path / "final"
+    png(f / "left.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), BROWN)])
+    tool("views_sheet", "flip", "--src", f / "left.png", "--out", f / "right.png")
+    png(f / "left.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), "#556B2F")])
+    rc, _, rep, _ = measure(tmp_path, "left,right", guides=g)
+    assert (rc, sorted(rep["regen"])) == (1, ["left", "right"])
+    rc, _, rep, _ = measure(tmp_path, "left,right", ("--mirror-right",), guides=g)
+    assert (rc, rep["regen"]) == (0, [])
+    assert ImageOps.mirror(Image.open(f / "left.png")).tobytes() == Image.open(f / "right.png").tobytes()

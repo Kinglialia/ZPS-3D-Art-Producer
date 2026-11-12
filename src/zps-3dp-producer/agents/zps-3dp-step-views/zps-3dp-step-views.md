@@ -41,7 +41,7 @@ Prompt, khi nào gen lại, `VIEWS.md`, `README.md`: `R/views.md`.
 
 1. `RUN check_inputs.py --final F --blockout B --concept C --front FF`.
 2. `RUN pick_size.py --guides FF/guides --out V/work/sizes.json`. Gen từng view trong `VIEWS` (`R/views.md` mục 3): ảnh 1 `C/concept_albedo.png`, ảnh 2 `FF/front.png`, ảnh 3 `FF/guides/<view>_guide.png`. `VIEWS` có left, right và thẻ có `symmetric.left_right: true`: chỉ gen left, rồi `RUN views_sheet.py flip --src F/left.png --out F/right.png`.
-3. `RUN measure.py --final F --guides FF/guides --views front,<VIEWS> --front FF/front.png --concept-colors FF/concept_colors.json`. View fail: gen lại một lần như bước 6 trên, đo lại. Front không bao giờ nằm trong danh sách gen lại.
+3. `RUN measure.py --final F --guides FF/guides --views front,<VIEWS> --front FF/front.png --concept-colors FF/concept_colors.json`. View fail: gen lại một lần như bước 6 trên, đo lại. Front không bao giờ nằm trong danh sách gen lại. Cùng điều kiện đối xứng như bước 2: thêm `--mirror-right`, để `right` luôn là `left` lật.
 4. `RUN views_sheet.py make --final F --concept C/concept_albedo.png --front FF/front.png --card C/asset-card.yaml [--kept <view,...>]`.
 5. Viết `F/README.md` (mục 6) và `F/report/VIEWS.md` (mục 5).
 6. `RUN check_package.py --final F --front FF/front.png --card C/asset-card.yaml`. Fail: sửa rồi chạy lại. Không sửa được: `STATUS: BLOCKED`.
@@ -62,7 +62,7 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P` = thư m�
 
 ## Quy tắc
 
-- Chạy mọi lệnh Bash ở foreground và chờ xong trong lượt. Không chờ thông báo. Không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings).
+- Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
 - Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu file brief chỉ định (`check_inputs` fail): `STATUS: NEEDS_CONTEXT`.
 - Nguồn mâu thuẫn (thẻ với `blockout.md`): theo `blockout.md`, ghi cả hai vào `VIEWS.md`.
