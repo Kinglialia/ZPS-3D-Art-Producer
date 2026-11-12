@@ -345,6 +345,15 @@ def test_the_run_report_is_still_printed_after_the_purge_d41(proj):
     assert out.startswith(f"# RUN-REPORT {AID}")
 
 
+def test_the_heartbeat_log_stays_so_a_report_after_the_purge_still_counts_the_codex_calls_x4(proj):
+    """The report counts the codex exec calls from vN/heartbeat.log; the purge keeps that log, so a later report agrees."""
+    log = proj / A / "texture/v1/heartbeat.log"
+    log.write_text("2026-11-10 10:00:00 · codex exec · start\n2026-11-10 10:05:00 · codex exec · start\n", encoding="utf-8")
+    approve(proj)
+    row = next(l for l in p(proj, "report", AID).splitlines() if l.startswith("| texture |"))
+    assert (log.is_file(), row.split(" | ")[12]) == (True, "2")
+
+
 def test_board_links_and_feedback_marks_still_resolve_after_a_purge(proj, monkeypatch):
     """Every image a card listed before the purge is listed and served after it; GLBs leave the intermediate cards
     (deliver/ keeps the delivered one)."""
