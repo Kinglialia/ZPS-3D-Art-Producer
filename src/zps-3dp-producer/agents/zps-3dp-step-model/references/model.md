@@ -9,13 +9,15 @@ Blockout chỉ để đo. Detail pass là bắt buộc: `check_detail.py` fail k
 Lớp 1, quy tắc chung:
 
 1. Silhouette trước. Chi tiết đổi đường viền ở camera game hoặc góc 3/4: dựng hình học. Chi tiết chỉ đổi màu hay hoa văn trên mặt phẳng: để texture.
-2. Quy đổi ra pixel bằng `spec.model.px_per_m` (= `target_px_height` / chiều cao thật). Nhô hoặc lõm ≥ `relief_min_px` px (mặc định 3): dựng hình học. Viền mỏng hoặc chi tiết cần alpha: độ rộng × texel (px/m) < `alpha_min_px` px (mặc định 16): dựng hình học, không dùng alpha.
+2. Quy đổi ra pixel bằng `spec.model.px_per_m` (= `target_px_height` / chiều cao bbox trên màn hình ở camera game, cùng tỉ lệ với `thumb.png`). Nhô hoặc lõm ≥ `relief_min_px` px (mặc định 3): dựng hình học. Viền mỏng hoặc chi tiết cần alpha: độ rộng × texel (px/m) < `alpha_min_px` px (mặc định 16): dựng hình học, không dùng alpha.
 3. Mặt phẳng giữ tối thiểu. Chỉ thêm cạnh khi cạnh đó tạo silhouette, tạo bevel, hoặc cần cho UV.
 4. Chi tiết nhận diện nhỏ hơn ngưỡng: phóng to độ sâu, không bỏ chi tiết. Không đổi param trong `fixed_params`.
-5. Vật tròn: đủ segment để viền không gãy ở camera game. `join_mesh.py` đặt smooth shading và tách cạnh > 20°.
+5. Vật tròn: đủ segment để viền không gãy ở camera game. `join_mesh.py` đặt smooth shading. Part tròn chỉ tách cạnh > 60°: `cylinder`, `bevel_box`, part `custom` có `"round": true`. Part khác tách cạnh > 20°. Hàm `custom` của asset dựng vật tròn: ghi `"round": true` vào part đó.
 6. Vật phát sáng hoặc chuyển động (lửa, khói, nước): card unlit.
 7. Ghi chú real/texture_only của thẻ (`real_texture_only_notes`) thắng các quy tắc trên.
-8. Bevel chỉ khi `spec.model.bevel` khác `false`, cùng ngưỡng pixel. Dùng đúng `radius_m` và `segments` của `spec.model.bevel`. `make_spec.py` lấy kiểu bevel từ trường `bevel` của thẻ, không có thì `style.bevel` của profile; số lấy từ preset (D27.10). Ghi chú chữ của thẻ không bật bevel.
+8. Bevel chỉ khi `spec.model.bevel` khác `false`. Dùng đúng `radius_m` và `segments` của `spec.model.bevel`. Không áp ngưỡng pixel của quy tắc 2 cho bevel: bevel toon là style, bán kính của nó thường dưới 3 px. `make_spec.py` lấy kiểu bevel từ trường `bevel` của thẻ, không có thì `style.bevel` của profile; số lấy từ preset (D27.10). Ghi chú chữ của thẻ không bật bevel.
+
+9. Model nằm trong bbox của blockout ±2 % trên mỗi trục. `check_detail.py --before-join` so ngay sau mỗi lần dựng (`detail.bbox`). Chi tiết làm bbox vượt: thu vào trong.
 
 Lớp 2: `detail_examples` của profile (`geometry`, `texture_only`), có sau pilot. Không có thì chỉ dùng lớp 1.
 
@@ -23,8 +25,13 @@ Part mới theo hợp đồng part graph của blockout. Hai mặt trùng khít 
 
 ## 2. Gộp mesh và UV
 
-- `join_mesh.py`: một object, một mesh, một material, tên là mã asset. Không weld, không boolean. Xóa mặt không tia nào từ ngoài chạm tới (mặt một part giấu trong hoặc sát part khác); `join.removed_faces_seen` fail khi một mặt đã xóa vẫn thấy được từ 6 trục hoặc từ trên. Tách cạnh gắt > 20°. Origin tâm đáy.
+- `join_mesh.py`: một object, một mesh, một material, tên là mã asset. Không weld, không boolean. Xóa mặt không tia nào từ ngoài chạm tới (mặt một part giấu trong hoặc sát part khác). Mặt đất dưới chân asset cũng chặn tia, nên mặt đáy nằm trên đất bị xóa. `spec.json` có `bottom_visible: true` thì giữ đáy. `join.removed_faces_seen` fail khi một mặt đã xóa vẫn thấy được từ 5 trục (cả từ dưới khi `bottom_visible`) hoặc từ trên. Tách cạnh theo quy tắc 5 của mục 1. Origin tâm đáy.
 - `unwrap.py`: `xatlas_unwrap()` của kit ở `uv.resolution`, padding `uv.min_padding_px` giữa các đảo, rồi thu UV vào trong để mép atlas cũng cách đúng padding. Không có xatlas: lỗi, không có đường dự phòng.
+- Padding của preset tính ở 2048. `make_spec.py` nhân với `texture_res` / 2048 (8 px ở 1024).
+- `check_uv_edge.py` `uv.stretch`: phần diện tích có tỉ lệ hai giá trị kỳ dị của Jacobian UV lớn hơn `spec.model.uv_stretch.max_ratio`. Ngưỡng là số tạm, chưa đo trên asset thật. `review/uv_checker.png` cho thấy chỗ kéo giãn.
+- Quy ước góc cho `sun`, `concept_cam`, `camera` và `concept.cameras` của `spec.json`: `azimuth_deg` 0 = camera (hoặc nắng) ở phía trước (−Y), nhìn về +Y; số dương đưa camera sang +X, bên phải người nhìn mặt trước; `elevation_deg` = số độ trên mặt đất. `camera_fit.json` của blockout dùng cùng quy ước.
+- `make_spec.py` chép mask concept của blockout (`work/spec.json` của blockout) vào `F/concept/`, và camera đã khớp (`camera_fit.json`) vào `spec.concept`. `render_views.py --spec F/spec.json` vẽ `overlay_*` từ đó.
+- Camera game của `spec.json` cố định (`distance_m`): asset cao `target_px_height` px trên màn 1080 px. `screen_tris_check` đo ở đúng cỡ đó.
 - Làm và giao ở `texture_res` của spec. Không đổi độ phân giải.
 
 ## 3. `model.md`
@@ -54,12 +61,14 @@ Mọi JSON cùng dạng kit: `overall`, `checks[]` (`check`, `status`, `value`, 
 
 | File | Ghi bởi |
 |---|---|
-| `F/spec.json` | `make_spec.py`; `sun`, `concept_cam` do worker thêm |
+| `F/spec.json`, `F/concept/` | `make_spec.py`; `sun`, `concept_cam` do worker thêm |
 | `F/assembly.json`, `F/parts/`, `F/assembled.glb` | `self_build/assembly.py` |
 | `F/review/gates/<part>.json` | `self_build/gates.py --out` |
 | `F/<id>.blend`, `F/review/join.json` | `join_mesh.py` |
 | `F/<id>-untextured.glb`, `F/review/unwrap.json` | `unwrap.py` |
 | `F/review/checks/{inputs,detail,mesh,uv_edge}.json` | `check_*.py` |
+| `F/review/checks/{detail_build,mesh_build}.json` | `check_detail.py`, `check_mesh.py` với `--before-join` |
 | `F/review/checks/qa_<q>.json` | QA kit `asset_checks/<q>.py` |
-| `F/review/renders/` (`clay_*`, `normal_*`, `parts_*`) | `self_build/render_views.py` |
-| `F/review/{lit_*,clay_lit_concept,wire_34,thumb,lineup,model_sheet}.png`, `review.json` | `render_review.py` |
+| `F/review/renders/` (`clay_*`, `parts_*`, `overlay_*`, `renders.json`) | `self_build/render_views.py --work` |
+| `F/review/renders/normal_*`, `normal.json` | `self_build/render_views.py --input` (GLB đã join) |
+| `F/review/{lit_*,clay_lit_concept,wire_34,thumb,lineup,uv_checker,model_sheet}.png`, `review.json` | `render_review.py` |

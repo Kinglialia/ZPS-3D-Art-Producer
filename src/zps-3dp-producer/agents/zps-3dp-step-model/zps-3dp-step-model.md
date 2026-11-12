@@ -16,22 +16,25 @@ Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa>
 
 ## Tool
 
-- `T` = dòng `TOOLS:` của brief. `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.
-- `R` = `T/../references` (tài liệu của agent này).
+- `T` = dòng `TOOLS:` của brief. `R` = `T/../references` (tài liệu của agent này). `BT` = `../../zps-3dp-step-blockout/tools` (tool của blockout, tính từ `T`).
 - `F` = `V/final/`. `B`, `FF`, `VR` = `final/` đã duyệt của `blockout`, `views_front`, `views_rest` trong brief. `C` = thư mục concept trong brief.
-- `BL` = `BLENDER -b --python-exit-code 1 --python`, với `BLENDER` là dòng `BLENDER:` của brief. Mọi lệnh `BL` chạy qua dòng PID của brief.
-- Mỗi tool in một dòng. Tool kiểm ghi JSON vào `F/review/checks/` và thoát 1 khi fail; khi đó đọc JSON, không đọc log.
+- `RUN` = dòng `RUN:` của brief. Lệnh tool: `RUN <tool> <tham số>`; tool chạy trong Blender: `RUN bl <tool> <tham số>`. `<tool>` tính từ `T`. `RUN` tự cài deps khi thiếu.
+- Mỗi lệnh in một dòng: tên tool, `pass`, `fail` hoặc `error`, rồi đường dẫn. Thoát 0 khi pass. Thoát 1 khi tool lỗi, hoặc khi JSON kết quả tool vừa ghi là `fail` hay `error`: đọc JSON hoặc log trong dòng đó.
+- Thư mục `V/variants/<b|c>/`: `RUN` không thấy JSON fail ở đó. Đọc `overall` của từng JSON.
 
-Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/../../zps-3dp-step-blockout/tools/custom_lib.py`, hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief (D32). Không viết `parts_lib.py`: tool dựng chép `custom_lib.py` vào `F`. Part gọi hàm của file `CUSTOM_PARTS:`: trước mỗi lần dựng sau khi sửa `part_graph.json` hoặc file đó, chạy `PY T/../../zps-3dp-step-blockout/tools/custom_mesh.py --work F` (cùng `--work` với lệnh dựng; lưới JSON vào `V/work/custom_mesh/`; Blender chỉ dựng từ JSON).
+Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/BT/custom_lib.py`, hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief. Không viết `parts_lib.py`: tool dựng chép `custom_lib.py` vào `F`. Part gọi hàm của file `CUSTOM_PARTS:`: trước mỗi lần dựng sau khi sửa `part_graph.json` hoặc file đó, chạy `RUN BT/custom_mesh.py --work F` (cùng `--work` với lệnh dựng; lưới JSON vào `V/work/custom_mesh/`; Blender chỉ dựng từ JSON).
 
 ## Quy trình
 
-1. `PY T/check_inputs.py --final F --blockout B --views-front FF --views-rest VR --concept C`. Brief có dòng `VIEWS: none`: không có `FF`, `VR`, bỏ hai cờ đó; mặt khuất theo `hidden_sides` của thẻ và `blockout.md`. Fail: `STATUS: NEEDS_CONTEXT`.
-2. Chép `B/part_graph.json`, `B/parts_lib.py` vào `F`. `PY T/make_spec.py --final F --blockout B --card C/asset-card.yaml --profile <profile> --preset <preset>` (hai file ở mục 4 của brief). Số hình học chỉ lấy từ `B/sources.json`, qua `F/spec.json`; không đọc lại `size_m` của thẻ hay profile.
-3. Detail pass (`R/model.md` mục 1): thêm hoặc sửa part trong `F/part_graph.json`, mỗi lần một part. `PY T/../../zps-3dp-step-blockout/tools/build_parts.py assembly --work F`, rồi gate của part đó: `PY T/self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`. Graph có part `custom`: `BLENDER -b --python T/../../zps-3dp-step-blockout/tools/build_parts.py -- assembly --work F`. Không gọi thẳng `T/self_build/assembly.py`: nó chạy `parts_lib.py` trong `F`. Không đổi param trong `fixed_params`.
-4. `BL T/join_mesh.py -- --final F`, rồi `BL T/unwrap.py -- --final F`.
-5. `PY T/check_detail.py --final F --blockout B --pilot <dòng PILOT của brief, none khi không có>`, `PY T/check_mesh.py --final F`, `PY T/check_uv_edge.py --final F`. QA kit, `q` là `mesh_check`, `uv_check`, `export_check`, `screen_tris_check`: `BL T/asset_checks/<q>.py -- --input F/<id>-untextured.glb --spec F/spec.json --out F/review/checks/qa_<q>.json`. Fail: sửa ở bước 3, chạy lại từ bước 4. `screen_tris_check` chỉ cảnh báo.
-6. Mở `C/concept_shadow.png`. Ghi vào `F/spec.json` hướng nắng `sun: {azimuth_deg, elevation_deg}` và góc nhìn `concept_cam: {azimuth_deg, elevation_deg}` của ảnh đó. `BL T/self_build/render_views.py -- --work F --mode critic --outdir F/review/renders`, rồi `BL T/render_review.py -- --final F --concept C/concept_shadow.png`.
+1. `RUN check_inputs.py --final F --blockout B --views-front FF --views-rest VR --concept C`. Brief có dòng `VIEWS: none`: không có `FF`, `VR`, bỏ hai cờ đó; mặt khuất theo `hidden_sides` của thẻ và `blockout.md`. Fail: `STATUS: NEEDS_CONTEXT`.
+2. Chép `B/part_graph.json`, `B/parts_lib.py` vào `F`. `RUN make_spec.py --final F --blockout B --card C/asset-card.yaml --profile <profile> --preset <preset>` (hai file ở mục 4 của brief). Số hình học chỉ lấy từ `B/sources.json`, qua `F/spec.json`; không đọc lại `size_m` của thẻ hay profile.
+3. Detail pass (`R/model.md` mục 1): thêm hoặc sửa part trong `F/part_graph.json`, mỗi lần một part. Dựng: `RUN BT/build_parts.py assembly --work F`; graph có part `custom`: `RUN bl BT/build_parts.py assembly --work F`. Không gọi thẳng `self_build/assembly.py`: nó chạy `parts_lib.py` trong `F`. Sau mỗi lần dựng: gate của part đó `RUN self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`, rồi `RUN check_detail.py --final F --blockout B --pilot <PILOT> --before-join` (bbox trong ±2 % của blockout, `fixed_params` không đổi) và `RUN check_mesh.py --final F --before-join` (part kín không lộn mặt). `<PILOT>` = dòng `PILOT` của brief, `none` khi không có.
+4. `RUN bl join_mesh.py --final F`, rồi `RUN bl unwrap.py --final F`.
+5. `RUN check_detail.py --final F --blockout B --pilot <PILOT>`, `RUN check_mesh.py --final F`, `RUN check_uv_edge.py --final F`. QA kit, `q` là `mesh_check`, `uv_check`, `export_check`, `screen_tris_check`: `RUN bl asset_checks/<q>.py --input F/<id>-untextured.glb --spec F/spec.json --out F/review/checks/qa_<q>.json`. Fail: sửa ở bước 3, chạy lại từ bước 4. `screen_tris_check` chỉ chặn khi `spec.json` có `screen_tris.max_small_ratio`.
+6. Mở `C/concept_shadow.png`. Ghi vào `F/spec.json` hướng nắng `sun: {azimuth_deg, elevation_deg}` và góc nhìn `concept_cam: {azimuth_deg, elevation_deg}` của ảnh đó, theo quy ước góc ở `R/model.md` mục 2. Render:
+   - `RUN bl self_build/render_views.py --work F --spec F/spec.json --mode critic --outdir F/review/renders`.
+   - `RUN bl self_build/render_views.py --input F/<id>-untextured.glb --mode normal --outdir F/review/renders --out F/review/renders/normal.json`: `normal_*` vẽ lại từ GLB đã join.
+   - `RUN bl render_review.py --final F --concept C/concept_shadow.png`.
 7. Viết `F/model.md` (`R/model.md` mục 3). Ghi báo cáo theo brief: `ISSUES` là điều bước texture cần biết, vì Producer chép dòng này sang brief texture. Rồi dừng.
 
 ## Vòng sửa
@@ -50,10 +53,10 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P`) khi block
 
 ## Quy tắc
 
-- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`), với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
+- Mọi lệnh Bash chạy ở tiền cảnh và chờ xong trong lượt. Không chạy nền, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh tool đi qua `RUN`, với `timeout: 3600000` cho Bash.
 - Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
-- Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief, theo quy tắc của file agent blockout (D32: Python thuần, chỉ `import math`, mỗi hàm trả `(verts, faces)`, không trùng tên hàm chung; chạy `custom_mesh.py` trước khi dựng). Chỉ thêm hàm: không sửa, không xóa hàm mà một version đã dùng (bản cũ dựng lại từ graph của nó). Ghi tên hàm mới và lý do vào `model.md`.
+- Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief: Python thuần, chỉ `import math`, mỗi hàm trả `(verts, faces)`, không trùng tên hàm chung; chạy `custom_mesh.py` trước khi dựng. Chỉ thêm hàm: không sửa, không xóa hàm mà một version đã dùng (bản cũ dựng lại từ graph của nó). Ghi tên hàm mới và lý do vào `model.md`.
 - Không weld, không boolean. Không thêm `max_duplicate_verts` vào `spec.json` (D24.6).
 - Không sửa trần tris, `texture_res`, `uv` trong `spec.json`. Cần đổi: ghi vào `ISSUES`.
 - Nguồn mâu thuẫn: ghi cả hai nguồn và lựa chọn vào `model.md`.

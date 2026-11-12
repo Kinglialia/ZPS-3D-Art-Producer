@@ -134,6 +134,8 @@ def built(tmp_path_factory):
             "--out", f / "work/screen_limit.json")
     blender("self_build/render_views.py", "--work", f, "--spec", f / "spec.json", "--mode", "critic",
             "--outdir", f / "review/renders")
+    rc["normal"] = blender("self_build/render_views.py", "--input", glb, "--mode", "normal", "--outdir", f / "review/renders",
+                           "--out", f / "review/renders/normal.json")[0]
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
     return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "inside_out": flip, "round": rnd, "rc": rc}
@@ -258,6 +260,15 @@ def test_kit_qa_passes_the_unwelded_join_and_duplicate_vertices_stay_info_checkl
 def test_the_blockout_mask_reaches_the_model_renders_as_an_overlay(built):
     files = {f["label"] for f in read(built["final"] / "review/renders/renders.json")["data"]["files"]}
     assert "overlay_front" in files
+
+
+def test_normal_renders_come_from_the_joined_glb_and_keep_the_critic_render_list(built):
+    """The critic renders draw the part build; a face the join flipped or deleted shows only on the joined GLB."""
+    f = built["final"]
+    data = read(f / "review/renders/normal.json")["data"]
+    assert (built["rc"]["normal"], data["input"], sorted(x["label"] for x in data["files"])) == (
+        0, str(f / "pilot-house-untextured.glb"), ["normal_34", "normal_back", "normal_front", "normal_left", "normal_right"])
+    assert "clay_front" in {x["label"] for x in read(f / "review/renders/renders.json")["data"]["files"]}
 
 
 def test_screen_tris_runs_at_the_fixed_game_camera_so_a_limit_blocks(built):

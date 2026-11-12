@@ -77,22 +77,31 @@ def test_rubric_template_model_keys_are_the_check_clay_keys(rubric):
     assert re.findall(r"^- ([a-z0-9_]+):", part, re.M) == reviewer_keys() == CHECK_CLAY_KEYS
 
 
+TOOL = r"`RUN (bl )?((?:BT/)?[\w/<>.-]+\.py)([^`]*)`"
+BLENDER_TOOLS = ("join_mesh.py", "unwrap.py", "render_review.py", "self_build/render_views.py", "asset_checks/<q>.py")
+
+
+def calls(body):
+    """(in Blender, tool path relative to T, arguments) of every RUN command of the worker file."""
+    return [(bool(bl), t.replace("BT/", "../../zps-3dp-step-blockout/tools/"), a) for bl, t, a in re.findall(TOOL, body)]
+
+
 def test_worker_points_only_at_references_and_tools_that_exist():
     _, body = front(WORKER)
     refs = re.findall(r"`R/([\w.-]+)`", body)
     assert refs and all((AGENT / "references" / r).is_file() for r in refs), refs
     assert (AGENT / "tools" / "../../zps-3dp-step-blockout/references/part-graph.md").resolve().is_file()
-    tools = set(re.findall(r"T/([\w/]+\.(?:py|sh))", body))
+    tools = {t for _, t, _ in calls(body) if "<q>" not in t}
     assert len(tools) == 12 and all((AGENT / "tools" / t).is_file() for t in tools), tools
     assert all((AGENT / f"tools/asset_checks/{q}.py").is_file() for q in re.findall(r"`(\w+_check)`", body)), body
 
 
 def test_every_flag_the_worker_passes_is_one_its_tool_accepts():
     _, body = front(WORKER)
-    calls = re.findall(r"`(?:PY|BL) T/([\w/<>.-]+\.py)([^`]*)`", body)
-    assert len(calls) == 13  # 12 model tools + the blockout custom_mesh.py (D32.2)
+    found = calls(body)
+    assert len(found) == 17  # 12 tools and the kit QA; build_parts, check_detail, check_mesh, render_views twice
     vpy = AGENT / "tools/.deps/venv/bin/python"
-    for script, args in calls:
+    for _, script, args in found:
         flags = set(re.findall(r"(--[a-z][a-z-]*)", args))
         if script.startswith("asset_checks/"):
             text = (AGENT / "tools/asset_checks/ac_common.py").read_text(encoding="utf-8")
@@ -106,7 +115,30 @@ def test_every_flag_the_worker_passes_is_one_its_tool_accepts():
         assert all(f in out for f in flags), (script, flags, out[-300:])
 
 
-def test_every_blender_command_goes_through_the_brief_blender_path():
+def test_every_tool_command_goes_through_run_and_every_blender_tool_through_run_bl():
+    """run_tool.py holds the Blender slot, returns 1 on a failed result JSON and needs no PID wrapper; a bare python
+    or blender command bypasses all three and asks for permission."""
     _, body = front(WORKER)
-    assert re.findall(r"(?<![A-Z_])blender -b", body) == []
-    assert "`BL` = `BLENDER -b --python-exit-code 1 --python`" in body
+    assert re.findall(r"`(?:PY|BL|BLENDER|bash) ", body) == [] and "PID" not in body and "&" not in body
+    assert {t for bl, t, _ in calls(body) if bl} == {*BLENDER_TOOLS, "../../zps-3dp-step-blockout/tools/build_parts.py"}
+    assert all(bl for bl, t, _ in calls(body) if t in BLENDER_TOOLS)
+
+
+def test_the_worker_hears_the_part_checks_right_after_each_build_and_renders_normals_from_the_joined_glb():
+    _, body = front(WORKER)
+    assert "`RUN check_detail.py --final F --blockout B --pilot <PILOT> --before-join`" in body
+    assert "`RUN check_mesh.py --final F --before-join`" in body
+    assert ("`RUN bl self_build/render_views.py --input F/<id>-untextured.glb --mode normal --outdir F/review/renders "
+            "--out F/review/renders/normal.json`") in body
+    assert "`RUN bl self_build/render_views.py --work F --spec F/spec.json --mode critic" in body
+
+
+def test_model_reference_states_the_bbox_rule_the_bevel_exception_and_the_angle_convention():
+    """The worker reads these before the checks fail: a bevel judged by the 3 px rule never gets built (9 mm is under
+    1 px), and a sun or camera azimuth with the wrong sign lights the clay from the other side."""
+    text = (AGENT / "references/model.md").read_text(encoding="utf-8")
+    for rule in ("Model nằm trong bbox của blockout ±2 % trên mỗi trục.",
+                 "Không áp ngưỡng pixel của quy tắc 2 cho bevel",
+                 "`azimuth_deg` 0 = camera (hoặc nắng) ở phía trước (−Y), nhìn về +Y; số dương đưa camera sang +X",
+                 '`"round": true`'):
+        assert rule in text, rule
