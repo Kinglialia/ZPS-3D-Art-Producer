@@ -1,20 +1,22 @@
-"""D29: free disk after DUYỆT 2. The user's approval arms a deletion; the next session's start deletes it; `P keep`,
-`P purge`, `P disk`, and the disk lines of `P next`."""
+"""D29, D40: free disk at DUYỆT 2. The user's approval deletes in the same command; `P keep`, `P purge`, `P disk`, and the
+disk lines of `P next`."""
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
 import zipfile
 from pathlib import Path
 
-from . import policy, session
-from .state import (ASSETS, DELIVER, FINISHED, ROOT, RUNTIME, ProducerError, die, ledger, load_cfg, load_st, locked, now,
-                    rel, save_st, write_atomic)
+from . import policy
+from .state import (ASSETS, DELIVER, FINISHED, ROOT, ProducerError, all_status, die, ledger, load_cfg, load_st, now, rel,
+                    save_st, write_atomic)
 
 TEXT = {".md", ".json", ".jsonl", ".txt", ".log", ".yaml", ".yml", ".toml", ".py", ".csv"}
 PENDING, MANIFEST = "purge-pending.json", "purge-manifest.json"
-NEW_SESSION = ("startup", "clear")
+REJECTED = "*.rejected-*.md"
+NO_REDO = "sau lệnh này không `redo` được"
 THUMB_PX = 1024
 GB = 1 << 30
 
@@ -54,17 +56,48 @@ def big(p: Path) -> bool:
         return False
 
 
+def outside(cfg: dict, aid: str) -> list[tuple[str, int]]:
+    """D40.3: what the asset left under production/ outside assets/<id>/, as (path under production/, bytes). Exact
+    names only, so `a-2` never costs `a` its files: `show/` pages by step id, the board files this asset pushed, and
+    pid files of a process that is gone (`<id>-<pid>.pid` is not the `<id>-2.pid` of another asset). `pushes/*.json`
+    of a push names every open asset and stays."""
+    steps = "|".join(re.escape(s["id"]) for s in cfg["steps"])
+    page = re.compile(rf"{re.escape(aid)}(-({steps})-v\d+)?(-bundle)?\.html")
+    pid = re.compile(rf"{re.escape(aid)}(-\d+)?\.pid")
+    found = [f for f in sorted((ROOT / "show").glob("*.html")) if page.fullmatch(f.name)]
+    for d in sorted((ROOT / "board" / "push").glob("*")):
+        found += [d / f"{aid}_glb.json", d / "offers" / f"{d.name}~{aid}.json"]
+    from .limits import alive
+    siblings = {d.name for d in ASSETS.iterdir() if d.is_dir()} - {aid}
+    for d in sorted((ROOT / "pids").glob("*")):
+        for f in sorted(d.glob("*.pid")):
+            if pid.fullmatch(f.name) and f.stem not in siblings and not _live(f, alive):
+                found.append(f)
+    return [(f.relative_to(ROOT).as_posix(), f.lstat().st_size) for f in found if f.is_file() and not f.is_symlink()]
+
+
+def _live(f: Path, alive) -> bool:
+    try:
+        return alive(int(f.read_text(encoding="utf-8").strip()))
+    except (OSError, ValueError):
+        return False
+
+
 def plan(cfg: dict, st: dict) -> dict:
-    """D29.6: keep text records and step text sources outside `work/`, and the images the board links (shrunk when
-    larger than THUMB_PX). Everything else under assets/<id>/ is deleted. `feedback/` keeps its marked images:
-    feedback.md links them. D32.3: the asset's custom_parts.py and each parts_lib.py stay as text sources; the JSON
-    meshes custom_mesh.py made sit in work/ and go with it."""
+    """D29.6, D40.2: keep text records and step text sources outside `work/`, and the images the board links (shrunk
+    when larger than THUMB_PX). Everything else under assets/<id>/ is deleted, and so is every `*.rejected-*.md`.
+    `feedback/` keeps its marked images: feedback.md links them. D32.3: the asset's custom_parts.py and each
+    parts_lib.py stay as text sources; the JSON meshes custom_mesh.py made sit in work/ and go with it. `other` holds
+    the files outside assets/<id>/ (see `outside`); `bytes` counts both."""
     a = ASSETS / st["id"]
     shown = linked(cfg, st)
     out, thumbs = [], []
     for f in sorted(files(a)):
         r = f.relative_to(a).parts
         work = len(r) > 3 and re.fullmatch(r"v\d+", r[1]) and r[2] == "work"
+        if fnmatch.fnmatchcase(f.name, REJECTED):
+            out.append(("/".join(r), f.lstat().st_size))
+            continue
         if r[0] == "feedback" or not work and f.suffix.lower() in TEXT:
             continue
         if not work and f.resolve() in shown:
@@ -72,48 +105,47 @@ def plan(cfg: dict, st: dict) -> dict:
                 thumbs.append("/".join(r))
             continue
         out.append(("/".join(r), f.lstat().st_size))
-    return {"delete": out, "thumbs": thumbs, "bytes": sum(b for _, b in out)}
+    other = outside(cfg, st["id"])
+    return {"delete": out, "other": other, "thumbs": thumbs, "bytes": sum(b for _, b in out + other)}
 
 
-def groups(p: dict) -> list[str]:
-    by: dict[str, list[int]] = {}
-    for r, b in p["delete"]:
-        parts = r.split("/")
-        g = by.setdefault("/".join(parts[:2]) if len(parts) > 2 else parts[0], [0, 0])
-        g[0], g[1] = g[0] + 1, g[1] + b
-    return [f"  {k}: {n} file, {size(b)}" for k, (n, b) in by.items()]
+def count(p: dict) -> int:
+    return len(p["delete"]) + len(p["other"])
+
+
+def notice(p: dict | None) -> str:
+    """D40.4: the one line the command prints and the DUYỆT 2 button shows. No plan, no size."""
+    return f"Sẽ xóa {count(p)} file, {size(p['bytes'])}; {NO_REDO}." if p else f"Sẽ xóa file trung gian; {NO_REDO}."
+
+
+def zip_target(aid: str, explicit: str | None) -> str | None:
+    """`--zip <file>` wins over `purge_zip: <folder>` of policy.yaml."""
+    if explicit:
+        return explicit
+    folder = policy.purge_zip(policy.load())
+    return str(Path(folder).expanduser() / f"{aid}.zip") if folder else None
 
 
 def pack(aid: str, p: dict, path: str) -> str:
     """D29.9: the files to delete, and the originals of the shrunk images, before anything is deleted."""
     a, out = ASSETS / aid, Path(path).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
-    names = [r for r, _ in p["delete"]] + p["thumbs"]
+    names = [(a / r, f"{aid}/{r}") for r, _ in p["delete"]] + [(ROOT / r, f"{ROOT.name}/{r}") for r, _ in p["other"]]
+    names += [(a / r, f"{aid}/{r}") for r in p["thumbs"]]
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for r in names:
-            z.write(a / r, f"{aid}/{r}")
+        for f, name in names:
+            z.write(f, name)
     with zipfile.ZipFile(out) as z:
         if z.testzip() is not None or len(z.namelist()) != len(names):
             die(f"{out}: file nén hỏng, chưa xóa gì")
     return str(out)
 
 
-def arm(cfg: dict, st: dict, zip_path: str | None) -> str:
-    """D29.2, D29.3: only a DUYỆT 2 by the user calls this. Nothing is deleted in this session."""
-    aid = st["id"]
+def prepare(cfg: dict, st: dict, zip_path: str | None) -> tuple[dict, str | None]:
+    """The plan and, when asked, its zip. Nothing is deleted here, so a failure leaves every file."""
     p = plan(cfg, st)
-    zp = pack(aid, p, zip_path) if zip_path else None
-    doc = {"asset": aid, "armed": now(), "assemble": st["approved"]["assemble"],
-           "session": (session.load() or {}).get("session_id"), "bytes": p["bytes"], "zip": zp,
-           "delete": [{"path": r, "bytes": b} for r, b in p["delete"]], "thumbs": p["thumbs"]}
-    write_atomic(ASSETS / aid / PENDING, json.dumps(doc, ensure_ascii=False, indent=2))
-    ledger(f"{aid} · lệnh xóa D29: {len(p['delete'])} file, {size(p['bytes'])}, thu nhỏ {len(p['thumbs'])} ảnh"
-           + (f" · nén {zp}" if zp else ""))
-    when = ("bản Codex không tự xóa: `purge` khi người dùng muốn" if RUNTIME == "codex"
-            else "xóa ở đầu phiên sau (hook SessionStart: startup hoặc clear)")
-    return "\n".join([f"Lệnh xóa D29: {len(p['delete'])} file, {size(p['bytes'])}; thu nhỏ {len(p['thumbs'])} ảnh "
-                      f"trang duyệt trỏ tới; {when}. Giữ: `keep {aid}`. Xóa ngay: `purge {aid} --by \"<nguyên văn>\"`. "
-                      f"Danh sách: {rel(ASSETS / aid / PENDING)}", *groups(p)])
+    target = zip_target(st["id"], zip_path)
+    return p, pack(st["id"], p, target) if target else None
 
 
 def ab_wait(aid: str) -> str | None:
@@ -128,14 +160,36 @@ def ab_wait(aid: str) -> str | None:
             "giữ mọi file tới khi có")
 
 
-def blocked(st: dict, doc: dict | None) -> str | None:
-    """Checked again at delete time: a redo since the arm, a new DUYỆT 2, or no delivered package keeps every file."""
+def hold(st: dict, report_ok: bool = True) -> tuple[str, str] | None:
+    """Why a DUYỆT 2 by the user deletes nothing: (code, reason), or None when it deletes. The command, the button and
+    `P next` all ask this one function, so the page never shows a deletion that will not happen."""
+    if policy.purge_mode(policy.load()) == "off":
+        return "off", "policy.yaml có purge: off"
+    if st.get("keep_files"):
+        return "keep", f"đã `keep {st['id']}` trước khi duyệt"
+    if wait := ab_wait(st["id"]):
+        return "ab", wait
+    if not report_ok:
+        return "report", "chưa có RUN-REPORT.md"
+    return None
+
+
+def offer_notice(cfg: dict, st: dict) -> str | None:
+    """The line for the DUYỆT 2 button of an assemble offer; None when this approval deletes nothing."""
+    try:
+        if hold(st):
+            return None
+        return notice(plan(cfg, st))
+    except (ProducerError, OSError):
+        return notice(None)
+
+
+def blocked(st: dict) -> str | None:
+    """Checked again at delete time: a redo since the offer, no DUYỆT 2, or no delivered package keeps every file."""
     if st.get("purged"):
         return f"đã xóa lúc {st['purged']['at']}"
     if st["state"] not in FINISHED or not st["approved"].get("assemble"):
         return f"chưa DUYỆT 2 hoặc đang làm lại (state={st['state']})"
-    if doc and doc.get("assemble") != st["approved"]["assemble"]:
-        return f"DUYỆT 2 đổi từ assemble v{doc.get('assemble')} sang v{st['approved']['assemble']}"
     if not (DELIVER / st["id"]).is_dir():
         return f"không có {rel(DELIVER / st['id'])}/"
     return None
@@ -159,21 +213,27 @@ def shrink(a: Path, r: str) -> dict:
     return {"path": r, "before": before, "after": f.stat().st_size}
 
 
-def execute(cfg: dict, st: dict, source: str, by: str | None, zip_path: str | None = None) -> str:
+def execute(cfg: dict, st: dict, source: str, by: str | None, zp: str | None, p: dict) -> str:
     aid, a = st["id"], ASSETS / st["id"]
-    pend = a / PENDING
-    p = plan(cfg, st)
-    zp = pack(aid, p, zip_path) if zip_path else (json.loads(pend.read_text(encoding="utf-8")).get("zip")
-                                                   if pend.is_file() else None)
     doc = {"asset": aid, "at": now(), "source": source, "by": by, "assemble": st["approved"]["assemble"],
            "freed_bytes": p["bytes"], "zip": zp, "deleted": [{"path": r, "bytes": b} for r, b in p["delete"]],
-           "thumbnails": []}
+           "deleted_other": [{"path": r, "bytes": b} for r, b in p["other"]], "thumbnails": []}
     write_atomic(a / MANIFEST, json.dumps(doc, ensure_ascii=False, indent=2))
     st["purged"] = {"at": doc["at"], "manifest": rel(a / MANIFEST), "freed_bytes": p["bytes"], "zip": zp}
+    st.pop("keep_files", None)
+    st.pop("purge_hold", None)
     save_st(st)
-    pend.unlink(missing_ok=True)
+    (a / PENDING).unlink(missing_ok=True)
     for r, _ in p["delete"]:
         (a / r).unlink(missing_ok=True)
+    push = ROOT / "board" / "push"
+    for r, _ in p["other"]:
+        f = ROOT / r
+        f.unlink(missing_ok=True)
+        for d in f.parents:
+            if d == push or not d.is_relative_to(push) or any(d.iterdir()):
+                break
+            d.rmdir()
     for top, dirs, names in os.walk(a, topdown=False):
         if Path(top) != a and not os.listdir(top):
             os.rmdir(top)
@@ -181,41 +241,56 @@ def execute(cfg: dict, st: dict, source: str, by: str | None, zip_path: str | No
     freed = doc["freed_bytes"] = st["purged"]["freed_bytes"] = p["bytes"] + sum(t["before"] - t["after"] for t in th)
     write_atomic(a / MANIFEST, json.dumps(doc, ensure_ascii=False, indent=2))
     save_st(st)
-    ledger(f"{aid} · đã xóa D29 ({source}): {len(p['delete'])} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}"
+    ledger(f"{aid} · đã xóa D40 ({source}): {count(p)} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}"
            + (f" · by: {by}" if by else "") + (f" · nén {zp}" if zp else ""))
-    return (f"[{aid}] đã xóa {len(p['delete'])} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}. "
+    return (f"[{aid}] đã xóa {count(p)} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}. "
             f"Manifest: {rel(a / MANIFEST)}")
 
 
+def on_approve(cfg: dict, st: dict, zip_path: str | None, report_ok: bool) -> str:
+    """D40.1: the user's DUYỆT 2 deletes here, after deliver/<id>/ and the run report exist. Whatever keeps the files
+    comes back as one line that names the way to delete later. The approval is already saved and stays."""
+    aid = st["id"]
+    later = f"Xóa sau: `purge {aid} --by \"<nguyên văn>\"`."
+    why = hold(st, report_ok)
+    st.pop("keep_files", None)
+    st.pop("purge_hold", None)
+    if why:
+        if why[0] == "ab":
+            st["purge_hold"] = "ab"
+        save_st(st)
+        ledger(f"{aid} · giữ file sau DUYỆT 2: {why[1]}")
+        return f"Giữ file, không xóa: {why[1]}. {later}"
+    try:
+        p, zp = prepare(cfg, st, zip_path)
+    except (ProducerError, OSError) as ex:
+        save_st(st)
+        return f"Chưa xóa, file giữ nguyên: {ex}. {later}"
+    try:
+        return f"{notice(p)}\n{execute(cfg, st, 'approve', None, zp, p)}"
+    except (ProducerError, OSError) as ex:
+        return f"Xóa dở dang: {ex}. Xem {rel(ASSETS / aid / MANIFEST)}"
+
+
 def on_next(a) -> list[str]:
-    """D29.4: delete only when the SessionStart hook says a new session started (`startup`, `clear`), in another
-    session than the one that armed it. Codex has no hook: it only reminds. A failure never stops `P next`."""
-    pend = sorted(ASSETS.glob(f"*/{PENDING}")) if ASSETS.is_dir() else []
-    src = getattr(a, "source", None) if a.session else None
-    auto = src in NEW_SESSION and RUNTIME != "codex"
+    """Lines for `P next`: a v0.7 `purge-pending.json` is never run; an A/B asset still waits for its pair result; an
+    asset at DUYỆT 2 shows what the approval would delete, for the Producer to tell the user. A failure never stops
+    `P next`."""
     out = []
-    for p in pend:
+    for p in sorted(ASSETS.glob(f"*/{PENDING}")) if ASSETS.is_dir() else []:
         aid = p.parent.name
+        out.append(f"[{aid}] còn lệnh xóa cũ (v0.7), script không tự chạy: `purge {aid} --by \"<nguyên văn>\"` để xóa, "
+                   f"`keep {aid}` để giữ")
+    for st in all_status():
+        aid = st["id"]
         try:
-            doc = json.loads(p.read_text(encoding="utf-8"))
-            if wait := ab_wait(aid):
-                out.append(f"[{aid}] chờ xóa {size(doc.get('bytes') or 0)} sau DUYỆT 2: {wait}")
-                continue
-            if not auto or (doc.get("session") and doc["session"] == getattr(a, "session_id", None)):
-                how = ("bản Codex không tự xóa: `purge " + aid + " --by \"<nguyên văn>\"` khi người dùng muốn"
-                       if RUNTIME == "codex" else "xóa ở đầu phiên sau")
-                out.append(f"[{aid}] chờ xóa {size(doc.get('bytes') or 0)} sau DUYỆT 2: {how}; giữ: `keep {aid}`")
-                continue
-            with locked():
-                st = load_st(aid)
-                if why := blocked(st, doc):
-                    p.unlink()
-                    ledger(f"{aid} · hủy lệnh xóa D29: {why}")
-                    out.append(f"[{aid}] hủy lệnh xóa: {why}")
-                else:
-                    out.append(execute(load_cfg(), st, src, None))
+            if st.get("purge_hold") == "ab" and not st.get("purged"):
+                out.append(f"[{aid}] chờ xóa sau DUYỆT 2: {wait}" if (wait := ab_wait(aid)) else
+                           f"[{aid}] đã có kết quả so A/B: `purge {aid} --by \"<nguyên văn>\"` để xóa, `keep {aid}` để giữ")
+            elif st.get("state") == "waiting_human" and st.get("stage") == "assemble" and not hold(st):
+                out.append(f"[{aid}] DUYỆT 2: {notice(plan(load_cfg(), st))}")
         except Exception as ex:  # noqa: BLE001 — the hook must still print the asset list
-            out.append(f"[{aid}] chưa xóa được: {ex}")
+            out.append(f"[{aid}] chưa tính được việc xóa: {ex}")
     return out
 
 
@@ -235,19 +310,36 @@ def disk_warning() -> str | None:
 
 
 def keep(a):
-    p = ASSETS / a.id / PENDING
-    load_st(a.id)
-    p.is_file() or die(f"{a.id}: không có lệnh xóa nào đang chờ")
-    p.unlink()
-    ledger(f"{a.id} · giữ file, hủy lệnh xóa D29" + (f" · by: {a.by}" if a.by else ""))
-    print(f"{a.id}: đã hủy lệnh xóa; mọi file giữ nguyên")
+    """Before DUYỆT 2: this approval deletes nothing. Also cancels a v0.7 pending deletion, and the A/B reminder."""
+    st = load_st(a.id)
+    pend, by = ASSETS / a.id / PENDING, (f" · by: {a.by}" if a.by else "")
+    if pend.is_file():
+        pend.unlink()
+        ledger(f"{a.id} · giữ file, hủy lệnh xóa cũ{by}")
+        print(f"{a.id}: đã hủy lệnh xóa cũ; mọi file giữ nguyên")
+    elif st.get("purge_hold"):
+        st.pop("purge_hold")
+        save_st(st)
+        ledger(f"{a.id} · giữ file, bỏ nhắc xóa sau khi so A/B{by}")
+        print(f"{a.id}: không nhắc xóa nữa; mọi file giữ nguyên")
+    elif st.get("purged"):
+        die(f"{a.id}: đã xóa lúc {st['purged']['at']}")
+    elif st["state"] in FINISHED:
+        die(f"{a.id}: đã DUYỆT 2, không có lệnh xóa nào đang chờ; mọi file còn nguyên")
+    else:
+        st["keep_files"] = now()
+        save_st(st)
+        ledger(f"{a.id} · giữ file: lần DUYỆT 2 tới không xóa{by}")
+        print(f"{a.id}: lần DUYỆT 2 tới sẽ không xóa file")
 
 
 def purge(a):
     st = load_st(a.id)
-    if why := ab_wait(a.id) or blocked(st, None):
+    if why := ab_wait(a.id) or blocked(st):
         die(f"{a.id}: không xóa: {why}")
-    print(execute(load_cfg(), st, "purge", a.by, a.zip))
+    cfg = load_cfg()
+    p, zp = prepare(cfg, st, a.zip)
+    print(f"{notice(p)}\n{execute(cfg, st, 'purge', a.by, zp, p)}")
 
 
 def refused(st: dict) -> str:

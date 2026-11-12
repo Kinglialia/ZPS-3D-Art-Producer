@@ -1,4 +1,4 @@
-"""production/session.json (D29.4, D30.10): what the SessionStart hook received on stdin. `source` of the last start, and
+"""production/session.json (D30.10): what the SessionStart hook received on stdin. `source` of the last start, and
 the transcript of every main session, so `P stats` can count Producer tokens across `/clear`."""
 from __future__ import annotations
 

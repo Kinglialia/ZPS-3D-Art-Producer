@@ -716,8 +716,8 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
     """One decision per offer (D22.8), from the CLI, the local board or a remote row. `offer` is the offer the page
     showed; `regions` are marks on images of the current card (review-board.md §4). Returns (applied, message):
     applied is False for a skipped call, so a page keeps the user's marks. Nothing reaches the disk before the
-    decision can no longer die. by: `producer` is the Producer's own approval (test_mode only); only `user` arms the
-    D29 deletion at DUYỆT 2."""
+    decision can no longer die. by: `producer` is the Producer's own approval (test_mode only); only `user` deletes at
+    DUYỆT 2 (D40)."""
     from .board import build_outputs, view_images
     cfg = load_cfg()
     st = load_st(aid)
@@ -817,10 +817,7 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
     ledger(f"{aid} · {'người dùng' if by == 'user' else 'Producer'} {action} {target} · {text[:80]}")
     build_outputs(cfg)
     from .report import finish
-    _, table = finish(st) if finished else (True, "")
+    report_ok, table = finish(st) if finished else (False, "")
     if armed:
-        try:
-            armed = "\n" + purge.arm(cfg, st, zip_path)
-        except (ProducerError, OSError) as ex:
-            armed = f"\nchưa lập được lệnh xóa D29: {ex}; DUYỆT 2 vẫn ghi. Xóa sau bằng `purge {aid} --by \"<nguyên văn>\"`"
+        armed = "\n" + purge.on_approve(cfg, st, zip_path, report_ok)
     return True, f"{aid}: {msg}. Tiếp: {next_action(st)}{armed or ''}" + (f"\n{table}" if table else "")
