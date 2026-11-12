@@ -594,6 +594,14 @@ def test_a_dispatch_line_nobody_sent_refuses_the_stop_but_a_background_subagent_
     assert stop_reason([asset()], set(), sent=True) is None
 
 
+def test_a_script_step_report_on_disk_refuses_the_stop_although_a_script_step_records_no_dispatch():
+    script = {"id": "a1", "stage": "assemble", "state": "running", "versions": {"assemble": 1}, "dispatches": []}
+    assert stop_reason([script], {"production/assets/a1/assemble/v1/report-script.md"}) == (
+        "Còn report chưa ingest: chạy `P ingest a1`")
+    assert stop_reason([script], set()) is None
+    assert stop_reason([script | {"state": "review"}], {"production/assets/a1/assemble/v1/report-script.md"}) is None
+
+
 def test_a_waiting_asset_does_not_hide_a_report_of_another_asset_and_a_report_wins_over_an_unsent_line_d39_1():
     other = asset() | {"id": "a2"}
     other["dispatches"][0]["brief"] = "production/assets/a2/blockout/v1/brief-worker.md"

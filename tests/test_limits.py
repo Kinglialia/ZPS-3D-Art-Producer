@@ -88,7 +88,7 @@ def test_an_ingest_holds_back_the_next_worker_while_another_asset_holds_the_slot
     st["state"] = "fix"
     capsys.readouterr()
     loop.dispatch_next(load_cfg(), st)
-    assert capsys.readouterr().out == ""
+    assert capsys.readouterr().out == "b-barn: chờ slot blender, chưa giao\n"
     st = load_st("a-hut")
     st["dispatches"][-1]["ingested"] = st["dispatches"][-1]["at"]
     st["state"] = "review"

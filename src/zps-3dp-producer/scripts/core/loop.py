@@ -667,7 +667,8 @@ def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
     from .limits import DISPATCH, full, slots
     from .state import all_status
     _, step = step_of(cfg, st["stage"])
-    if st["state"] in DISPATCH and full(step, slots(cfg, all_status())):
+    if st["state"] in DISPATCH and (busy := full(step, slots(cfg, all_status()))):
+        print(f"{st['id']}: chờ slot {', '.join(busy)}, chưa giao")
         return
     try:
         run(Namespace(id=st["id"]))

@@ -217,13 +217,14 @@ def test_the_agent_file_sends_the_worker_to_the_run_line_of_the_brief_and_the_br
 
 
 def test_two_live_blender_pids_hold_the_fix_dispatch_because_slots_count_processes_not_states(flow):
-    """D27.2: the ingest that ends in FIX does not dispatch either while the slot is full."""
-    assert flow["v1 review"]["out"].count("\n") == 1
+    """D27.2: the ingest that ends in FIX does not dispatch either while the slot is full, and says so as `P brief` does."""
+    assert flow["v1 review"]["out"].splitlines()[1:] == ["pilot-house: chờ slot blender, chưa giao"]
     assert flow["next, two live blender pids"]["out"] == NEXT_HEAD + "[pilot-house] blockout/fix → chờ slot blender\n"
 
 
 def test_four_major_param_findings_open_fix_round_1_from_v1_as_one_batch(flow):
-    assert flow["v1 review"]["out"] == "pilot-house: review FIX (major=4) → blockout/fix. Tiếp: giao worker → `brief pilot-house`\n"
+    assert flow["v1 review"]["out"].splitlines()[0] == (
+        "pilot-house: review FIX (major=4) → blockout/fix. Tiếp: giao worker → `brief pilot-house`")
     assert pick(flow["v1 review"]["st"]) == state(note="vòng sửa 1/3")
     v1 = flow["findings"][1]
     assert head(v1) == {"version": 1, "base": None, "top_fix": {"kind": "param", "ids": ["F1", "F2", "F3", "F4"]},

@@ -1720,6 +1720,16 @@ def test_the_brief_of_a_new_dispatch_waits_for_a_free_slot_but_the_stored_one_do
     assert json.loads(flow.call(briefs.run, Namespace(id=AID))) == out
 
 
+def test_an_ingest_whose_next_worker_waits_for_a_slot_says_so_in_the_words_of_p_brief(flow):
+    """The ingest printed "Tiếp: giao worker" and nothing else, so the Producer ran `brief` to dispatch a held worker."""
+    flow.work()
+    p = flow.root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace("blender = 2", "blender = 0"), encoding="utf-8")
+    out = flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")])
+    assert out.splitlines()[1:] == [f"{AID}: chờ slot blender, chưa giao"]
+    assert flow.st["state"] == "fix"
+
+
 def test_a_fix_dispatch_takes_its_deadline_from_the_median_of_fix_rounds_not_of_every_round_k04(flow, held):
     """The first build took 10 minutes. No fix round has run, so a fix round gets the step's usual 40 minutes, twice for
     the factor. The pooled median would give it 20."""
@@ -1800,7 +1810,7 @@ def test_an_ingest_that_approves_by_policy_prints_no_dispatch_while_the_next_ste
     p = flow.root / "production/pipeline.toml"
     p.write_text(p.read_text(encoding="utf-8").replace("blender = 2", "blender = 0"), encoding="utf-8")
     out = flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass")
-    assert out.count("\n") == 1 and "views/todo" in out
+    assert "views/todo" in out.splitlines()[0] and out.splitlines()[1:] == [f"{AID}: chờ slot blender, chưa giao"]
 
 
 def tools_without_venv(tmp_path, venv=False):

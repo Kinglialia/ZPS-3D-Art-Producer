@@ -392,14 +392,20 @@ def sent_to_agent(paths: list[str], rec: dict) -> bool:
 
 def main_stop_reason(sts: list[dict], exists, sent) -> str | None:
     """D39.1: why the main session may not stop now, as one line that names the command to run, else None.
-    (a) an open dispatch whose report is on disk and not ingested; (b) an open dispatch with no sign of a subagent, so
-    the line `P brief` printed was never sent. A subagent that runs without a report is waited for (background mode),
+    (a) an open dispatch whose report is on disk and not ingested, or the report of a script step that runs (a script
+    step records no dispatch); (b) an open dispatch with no sign of a subagent, so the line `P brief` printed was never
+    sent. A subagent that runs without a report is waited for (background mode),
     and an asset that waits for the human has no open dispatch."""
     open_jobs = [(st, rec) for st in sts if not st.get("broken") and (rec := job(st))]
     for st, rec in open_jobs:
         rep = report_of(rec)
         if rep is not None and exists(rep):
             return f"Còn report chưa ingest: chạy `P ingest {st['id']} --agent-id {rec.get('agent_id') or '<id subagent>'}`"
+    for st in sts:
+        n = (st.get("versions") or {}).get(st.get("stage"))
+        if not st.get("broken") and st.get("state") == "running" and n and exists(
+                vdir(st["id"], st["stage"], n) / "report-script.md"):
+            return f"Còn report chưa ingest: chạy `P ingest {st['id']}`"
     for st, rec in open_jobs:
         if not (rec.get("stopped") or rec.get("agent_id") or sent(st, rec)):
             return (f"Còn dòng giao việc của {st['id']} chưa giao: giao theo dòng JSON của `P brief {st['id']}` "
