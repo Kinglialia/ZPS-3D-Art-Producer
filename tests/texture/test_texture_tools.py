@@ -546,6 +546,38 @@ def test_tone_fix_leaves_the_hue_alone_without_concept_colours(m, tmp_path):
     assert "ab_shift" not in rec["codes"]["TIMBER"]
 
 
+def lightness_drift(m, tmp, dl):
+    """Walls with grain whose colour is the concept colour lit `dl` L* brighter; caps untouched."""
+    tm = texels(m)
+    lab = tex.lab(base_fill(m, tmp))
+    walls = tm.inside & np.isin(np.vectorize(face_name)(np.where(tm.inside, tm.face, 0)), WALLS)
+    lab[..., 0] += np.where(walls, dl + np.random.default_rng(4).normal(0, 2.5, tm.face.shape), 0)
+    tex.save_rgb(np.where(tm.inside[..., None], tex.lab_to_rgb(lab), 0), tmp / "light.png")
+    return tmp / "light.png", walls
+
+
+@pytest.mark.parametrize("dl, de_before", [(4.0, 3.8), (8.0, 7.8)])
+def test_tone_fix_brings_a_lightness_offset_back_inside_the_concept_limit_and_keeps_the_grain(m, tmp_path, dl, de_before):
+    """The right hue painted a few L* too light fails dE_concept. The script fix runs before any paid repaint, so it
+    must be able to fix lightness, not only a*b*."""
+    src, walls = lightness_drift(m, tmp_path, dl)
+    before = tex.load_rgb(src)
+    assert measure(m, tmp_path, before)[1]["material.dE_concept.TIMBER"] == ("fail", pytest.approx(de_before, abs=0.15))
+    fixed, rec = tone_fix_run(m, tmp_path, src, RES, "--no-seams", "--concept-colors", colors(tmp_path))
+    c = measure(m, tmp_path, fixed)[1]
+    assert c["material.dE_concept.TIMBER"][0] == "pass" and c["material.dE_concept.TIMBER"][1] < 1.0, c
+    assert rec["codes"]["TIMBER"]["L_shift"] == pytest.approx(-dl, abs=0.6)
+    dev = [tex.lab(x[walls])[:, 0] - np.median(tex.lab(x[walls])[:, 0]) for x in (before, fixed)]
+    assert np.abs(dev[1] - dev[0]).mean() < 0.4
+
+
+def test_tone_fix_leaves_an_albedo_of_the_concept_colours_unchanged(m, tmp_path):
+    tex.save_rgb(base_fill(m, tmp_path), tmp_path / "flat.png")
+    fixed, rec = tone_fix_run(m, tmp_path, tmp_path / "flat.png", RES, "--no-seams", "--concept-colors", colors(tmp_path))
+    assert np.abs(fixed - tex.load_rgb(tmp_path / "flat.png")).max() <= 1
+    assert [k for v in rec["codes"].values() for k in v if k in ("L_shift", "ab_shift")] == []
+
+
 def ink_of(gm):
     """The inked groove faces that look sideways; the ones facing up or down belong to the top group."""
     tm = texels_at(gm, GROOVE_RES)

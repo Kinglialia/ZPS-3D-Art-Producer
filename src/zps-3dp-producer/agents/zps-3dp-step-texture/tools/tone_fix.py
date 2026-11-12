@@ -10,7 +10,9 @@ Per material code:
           low-pass (grain, wear) is kept. Groove faces (tex.groove_texels, the same mask as tex_measure) are not
           lifted and do not count in the target of the lift: the concept draws line art there.
   hue     with --concept-colors: all texels of the code but the groove ones move by one a*b* offset, from the median
-          colour of the code to the concept colour, at most AB_MAX long and only above AB_TOL. The grain stays.
+          colour of the code to the concept colour, at most AB_MAX long and only above AB_TOL, and by one L* offset
+          the same way, at most L_MAX. This runs after the side and shade steps, so the sides keep their flattening.
+          The grain stays.
 Then seam_fix.fix (unless --no-seams). Writes <out> and <out>.json. Prints one line. Exit 0, 2 on error.
 """
 import argparse
@@ -33,6 +35,7 @@ from root_guard import require_root  # noqa: E402
 SIDE_TOL = 1.0
 SHADE_TOL = 4.0
 AB_MAX = 12.0  # a wrong concept box must not repaint a whole material
+L_MAX = 12.0
 AB_TOL = 1.0
 LOWPASS_FRAC = 1 / 64
 SIDES = ("+X", "-X", "+Y", "-Y")
@@ -85,12 +88,16 @@ def fix(img, tm, codes, top_l, r, groove, concept=None):
         m = tm.inside & (code == c) & ~groove
         if not m.any():
             continue
-        d = tex.lab(tex.hex_rgb(hexa))[1:] - tex.lab(np.round(np.median(cur[m], 0)))[1:]
-        n = float(np.linalg.norm(d))
+        d = tex.lab(tex.hex_rgb(hexa)) - tex.lab(np.round(np.median(cur[m], 0)))
+        if abs(d[0]) > AB_TOL:
+            dl = float(np.clip(d[0], -L_MAX, L_MAX))
+            lab[m, 0] += dl
+            log.setdefault(c, {"moved": {}})["L_shift"] = round(dl, 2)
+        n = float(np.linalg.norm(d[1:]))
         if n > AB_TOL:
-            d *= min(1.0, AB_MAX / n)
-            lab[m, 1:] += d
-            log.setdefault(c, {"moved": {}})["ab_shift"] = [round(float(x), 2) for x in d]
+            ab = d[1:] * min(1.0, AB_MAX / n)
+            lab[m, 1:] += ab
+            log.setdefault(c, {"moved": {}})["ab_shift"] = [round(float(x), 2) for x in ab]
     out = np.where(tm.inside[..., None], tex.lab_to_rgb(lab), img)
     return out, log
 
