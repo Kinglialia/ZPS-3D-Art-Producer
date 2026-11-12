@@ -158,10 +158,9 @@ def test_remote_regions_are_drawn_from_the_local_original_and_become_h_findings(
     (row(aid="../x"), "e: LỖI: dòng sai dạng: aid"),
     (row(text=5), "e: LỖI: dòng sai dạng: text"),
     (row(key=["x"]), "e: LỖI: dòng sai dạng: key"),
-    (row(aid="ghost"), "e: LỖI: không có asset 'ghost'"),
     ([1, 2], "e: LỖI: dòng sai dạng: không phải object"),
 ])
-def test_a_bad_row_is_reported_in_one_line_and_never_retried(remote_on, capsys, body, err):
+def test_a_malformed_row_is_reported_in_one_line_and_never_retried(remote_on, capsys, body, err):
     inbox(remote_on, "e", body)
     assert pull(capsys) == [err, "board pull: 1 dòng mới"]
     assert pull(capsys) == ["board pull: 0 dòng mới"]
@@ -178,5 +177,41 @@ def test_an_unreadable_original_ends_its_pull_row_in_one_line_and_never_blocks_t
     lines = pull(capsys)
     assert lines[0] == f"r1: LỖI: {FINAL}/review/lineup.png: không vẽ được vùng khoanh (OSError)"
     assert lines[1].startswith("r2: house-a: đã ghi feedback.") and lines[2] == "board pull: 2 dòng mới"
-    assert (remote.load_state()["pulled"], (ROOT / "assets/house-a/feedback").exists()) == (["r1", "r2"], False)
-    assert pull(capsys) == ["board pull: 0 dòng mới"]
+    assert (remote.load_state()["pulled"], (ROOT / "assets/house-a/feedback").exists()) == (["r2"], False)
+    assert pull(capsys)[0] == lines[0]
+
+
+def meshy_question_open():
+    st = load_st(AID)
+    save_st(st | {"stage": "texture", "state": "waiting_human", "versions": {"blockout": 2, "texture": 1}, "offer": 1,
+                  "offer_key": "texture-v1-1", "ask": {"kind": "mesh_changed", "budget": "budget-x.json", "next": "todo",
+                                                       "base": None, "new_round": False}})
+
+
+def test_a_redo_refused_while_the_meshy_question_is_open_stays_in_the_inbox_until_the_question_is_answered_c9(remote_on, capsys):
+    """The reproduction: the refused redo was marked pulled, so the owner's Cần sửa was lost for good."""
+    meshy_question_open()
+    inbox(remote_on, "m1", row(action="redo", text="albedo quá tối", step="texture", key=None))
+    refusal = ("m1: LỖI: house-a: đang chờ chọn Meshy hay VẼ MỚI cho mesh mới: duyệt = gọi Meshy, "
+               "`meshy house-a paint` = VẼ MỚI")
+    assert pull(capsys) == [refusal, "board pull: 1 dòng mới"]
+    assert remote.load_state()["pulled"] == []
+    assert pull(capsys) == [refusal, "board pull: 1 dòng mới"]
+    st = load_st(AID)
+    st.pop("ask")
+    save_st(st)
+    assert pull(capsys) == ["m1: house-a: làm lại texture từ v1. Tiếp: giao worker → `brief house-a`",
+                            "board pull: 1 dòng mới"]
+    assert (remote.load_state()["pulled"], pull(capsys)) == (["m1"], ["board pull: 0 dòng mới"])
+
+
+def test_a_row_skipped_as_stale_is_marked_pulled_and_a_failed_row_does_not_stop_the_rows_after_it_c9(remote_on, capsys):
+    meshy_question_open()
+    inbox(remote_on, "s1", row(action="approve", text="cũ", key="blockout-v1-1", at="2026-11-09T10:00:00Z"))
+    inbox(remote_on, "s2", row(action="redo", text="x", step="texture", key=None, at="2026-11-09T10:05:00Z"))
+    inbox(remote_on, "s3", row(action="note", text="xem lại", step="texture", key="texture-v1-1", at="2026-11-09T10:10:00Z"))
+    lines = pull(capsys)
+    assert [x.split(":")[0] for x in lines[:-1]] == ["s1", "s2", "s3"]
+    assert lines[0] == "s1: house-a: bỏ qua approve: lần đưa duyệt blockout-v1-1 đã qua (hiện tại: texture-v1-1)"
+    assert lines[1].startswith("s2: LỖI:") and lines[3] == "board pull: 3 dòng mới"
+    assert remote.load_state()["pulled"] == ["s1", "s3"]

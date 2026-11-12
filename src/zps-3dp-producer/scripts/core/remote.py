@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import policy
 from .board import BOARD_DIR, GLB_MAX, asset_view
-from .loop import human_action
+from .loop import ACTIONS, act
 from .state import ROOT, ProducerError, all_status, die, load_cfg, rel, sort_key, write_atomic
 
 ASSET_MAX = 20 << 20
@@ -117,11 +117,15 @@ def row_args(b) -> tuple:
             die(f"dòng sai dạng: {k}")
     if not AID.fullmatch(b["aid"]):
         die("dòng sai dạng: aid")
+    if b["action"] not in ACTIONS:
+        die("action phải là " + " | ".join(ACTIONS))
     return b["aid"], b["action"], b["text"][:TEXT_MAX], b["step"], b["regions"], b["key"]
 
 
 def pull(a):
-    """Each feedback row once, oldest first, through the same `human_action` as the local board (D22.8 dedupe)."""
+    """Each feedback row, oldest first, through the same `act` as the local board (D22.8 dedupe). A row is pulled once
+    `act` applied it or skipped it as stale, or when its shape can never apply. Any other refusal keeps the row for the
+    next pull, so a Cần sửa sent while the Meshy question is open is not lost."""
     s = load_state()
     done, rows = set(s["pulled"]), []
     for f in sorted((Path(a.dir) if a.dir else ROOT / "board" / "inbox").glob("feedback/*.json")):
@@ -136,10 +140,17 @@ def pull(a):
     lines = []
     for _, doc, body in sorted(rows, key=lambda r: r[:2]):
         try:
-            msg = human_action(*row_args(body))
+            args = row_args(body)
         except ProducerError as ex:
-            msg = f"LỖI: {ex}"
-        lines.append(f"{doc}: {msg}")
+            lines.append(f"{doc}: LỖI: {ex}")
+            s["pulled"].append(doc)
+            save_state(s)
+            continue
+        try:
+            lines.append(f"{doc}: {act(*args)[1]}")
+        except ProducerError as ex:
+            lines.append(f"{doc}: LỖI: {ex}")
+            continue
         s["pulled"].append(doc)
         save_state(s)
     print("\n".join(lines + [f"board pull: {len(lines)} dòng mới"]))
