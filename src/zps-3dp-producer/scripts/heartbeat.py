@@ -22,6 +22,9 @@ LOG = "heartbeat.log"
 VERSION = re.compile(r"^v\d+$")
 STOP = (signal.SIGTERM, signal.SIGHUP)
 CODEX_EXEC = "codex exec"
+_LIVE: set[subprocess.Popen] = set()
+_LIVE_LOCK = threading.RLock()
+_stopped: list[int] = []
 
 
 def vdir_of(*paths) -> Path | None:
@@ -106,10 +109,15 @@ def run(cmd: list[str], *, tool: str, vd: Path | None, timeout: float | None = N
         env: dict | None = None, cwd=None, every: float = EVERY_S) -> subprocess.CompletedProcess:
     """subprocess.run(cmd, capture_output=True, text=True, ...) with the heartbeat. Raises TimeoutExpired as it does.
     The child runs in its own session, so a timeout, an exception, a SIGTERM or a SIGHUP kills every process under it;
-    the new session no longer gets a signal sent to this process, so those signals become a group kill here."""
-    write(vd, tool, "start")
-    p = subprocess.Popen(cmd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
+    the new session no longer gets a signal sent to this process, so those signals become a group kill here (stop).
+    After stop() no new child starts: run() raises SystemExit."""
+    with _LIVE_LOCK:
+        if _stopped:
+            raise SystemExit(_stopped[0])
+        write(vd, tool, "start")
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
+        _LIVE.add(p)
     old = {}
     try:
         if threading.current_thread() is threading.main_thread():
@@ -120,12 +128,28 @@ def run(cmd: list[str], *, tool: str, vd: Path | None, timeout: float | None = N
         kill_group(p)
         raise
     finally:
+        with _LIVE_LOCK:
+            _LIVE.discard(p)
         for s, h in old.items():
             signal.signal(s, h)
 
 
 def stop(signum, _frame):
+    """Kill the process group of every child that run() started, in any thread, and start no new one; then exit."""
+    with _LIVE_LOCK:
+        _stopped.append(128 + signum)
+        for p in _LIVE:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                pass
     raise SystemExit(128 + signum)
+
+
+def stop_on_signals(signals=STOP + (signal.SIGINT,)):
+    """For a tool that calls run() from worker threads: run() sets its handlers on the main thread only."""
+    for s in signals:
+        signal.signal(s, stop)
 
 
 def kill_group(p: subprocess.Popen):

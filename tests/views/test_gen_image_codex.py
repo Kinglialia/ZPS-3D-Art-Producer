@@ -551,6 +551,16 @@ def gen_slots(tmp_path, names, limit=2, mode="ok", delay=None, holders=(), keys=
     """A run of the script in a project root whose pipeline.toml allows `limit` codex_image slots; each of `holders`
     is a live process with a pid file of another run. Returns the process, the logged calls, the records, the seconds,
     and the pid file name the brief would give."""
+    args, env, outs, log, pid = slot_project(tmp_path, names, limit, mode, delay, holders, keys, extra)
+    t0 = time.monotonic()
+    p = subprocess.run(args, capture_output=True, text=True, env=env, cwd=tmp_path)
+    secs = time.monotonic() - t0
+    calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
+    recs = {n: json.loads(o.with_suffix(".json").read_text()) for n, o in outs.items()}
+    return p, calls, recs, secs, pid
+
+
+def slot_project(tmp_path, names, limit, mode, delay, holders, keys, extra):
     root = tmp_path / "production"
     (root / "pids/codex_image").mkdir(parents=True)
     (root / "pipeline.toml").write_text(f"[limits]\ncodex_image = {limit}\n" if limit else "", encoding="utf-8")
@@ -569,13 +579,29 @@ def gen_slots(tmp_path, names, limit=2, mode="ok", delay=None, holders=(), keys=
            "CODEX_HOME": str(tmp_path / "codex-home"), "PATH": fake_codex.install(tmp_path / "bin"),
            **({"FAKE_CODEX_DELAY": delay} if delay else {}), **(keys or {})}
     env.pop("PRODUCER_ROOT", None)
-    t0 = time.monotonic()
-    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(pid),
-                        f"--image={ref}", *pairs, *extra], capture_output=True, text=True, env=env, cwd=tmp_path)
-    secs = time.monotonic() - t0
-    calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
-    recs = {n: json.loads(o.with_suffix(".json").read_text()) for n, o in outs.items()}
-    return p, calls, recs, secs, pid
+    return ([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(pid), f"--image={ref}",
+             *pairs, *extra], env, outs, log, pid)
+
+
+@pytest.mark.parametrize("sig, code", [("SIGTERM", 143), ("SIGINT", 130)])
+def test_a_stopped_gen_kills_its_codex_calls_so_none_keeps_spending_or_writes_an_image_later(tmp_path, sig, code):
+    """A Bash timeout or a user stop sends SIGTERM, Ctrl-C SIGINT. Codex runs in its own session, so it does not hear
+    them: the calls in pool threads kept running, spent quota and wrote back.png after the worker moved on."""
+    import signal
+    args, env, outs, log, pid = slot_project(tmp_path, ["back", "left"], 2, "slow:6", None, (), None, ())
+    p = subprocess.Popen(args, env=env, cwd=tmp_path, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    end = time.monotonic() + 30
+    while len(log.read_text().splitlines() if log.exists() else []) < 2:
+        assert time.monotonic() < end and p.poll() is None, "codex never started twice"
+        time.sleep(0.05)
+    calls = subprocess.run(["pgrep", "-P", str(p.pid)], capture_output=True, text=True).stdout.split()
+    assert len(calls) == 2
+    p.send_signal(getattr(signal, sig))
+    assert p.wait(timeout=10) == code
+    time.sleep(0.5)
+    assert [c for c in calls if subprocess.run(["kill", "-0", c], capture_output=True).returncode == 0] == []
+    time.sleep(6)
+    assert ([o.name for o in outs.values() if o.exists()], list(pid.parent.glob("hut-*.pid"))) == ([], [])
 
 
 def test_two_jobs_with_two_free_slots_finish_in_about_the_time_of_one_call_so_the_step_does_not_wait_n_times(tmp_path):

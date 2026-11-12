@@ -29,7 +29,8 @@ after a --prompt, before the next, serves that job only (its images come after t
 shared one), so one run can paint views with different guides and sizes. With --batch the position does not count: every
 image is attached to the one call. D30.20: after each call every expected file is
 checked on its own (exists, PNG header, Pillow reads it, long side); only the files that failed are made again.
-3 failed tries of one file: that file fails, and the script exits 1 at the end (D8.3). Writes <dir/name>.json and prints
+3 failed tries of one file: that file fails, and the script exits 1 at the end (D8.3). SIGTERM, SIGHUP or SIGINT kill
+every codex call in flight, in any thread, start no new call, remove the pid files and exit 128 + the signal number. Writes <dir/name>.json and prints
 one line per file. D30.22: --batch (the brief adds it when the step has `codex_batch = true`) asks for every pending file
 in one call, then checks each file and asks again only for the failed ones; all --out files share one folder, and the
 CODEX_HOME fallback holds only for a call with one file. --timeout is per call; the brief gives it from pipeline.toml [codex] timeout_s (≥ 300).
@@ -441,4 +442,5 @@ def main():
 
 if __name__ == "__main__":
     require_root()
+    heartbeat.stop_on_signals()
     main()
