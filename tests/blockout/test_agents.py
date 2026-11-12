@@ -137,6 +137,11 @@ def test_the_worker_renders_with_the_legend_tool_not_the_kit_render_views():
     assert "render_views.py" not in body and "RUN bl render_critic.py" in body
 
 
+def test_the_reference_names_render_critic_as_the_writer_of_the_critic_renders():
+    pg = (AGENT / "references/part-graph.md").read_text(encoding="utf-8")
+    assert "| `render_critic.py --outdir` |" in pg and "render_views" not in pg
+
+
 def test_gate5_text_says_a_dirty_mesh_fails_the_gate_because_gate5_health_requires_a_clean_union():
     """B5: the text said a blockout need not have a clean mesh, while gates.py fails gate5.health on any open edge."""
     pg = (AGENT / "references/part-graph.md").read_text(encoding="utf-8")

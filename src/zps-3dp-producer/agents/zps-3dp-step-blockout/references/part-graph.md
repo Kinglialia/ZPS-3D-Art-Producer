@@ -79,7 +79,7 @@ Mọi tool ghi một file JSON cùng dạng kit (`lib/common.write_result`): `ov
 | `final/assembly.json`, `final/parts/`, `final/assembled.glb` | `assembly.py` |
 | `final/review/gates/<part>.json` | `gates.py --out` |
 | `final/review/checks/<tên>.json`, `fix_<F>.json` | `check_*.py` |
-| `final/review/renders/` (`renders.json`, `clay_*`, `normal_*`, `parts_*`, `overlay_*`) | `render_views.py --outdir` |
+| `final/review/renders/` (`renders.json`, `clay_*`, `normal_*`, `parts_*`, `overlay_*`) | `render_critic.py --outdir` |
 | `final/review/review.json`, `game_cam.png`, `lineup.png`, `foot_front_*.png` | `render_review.py` |
 
 ## `blockout.md`
