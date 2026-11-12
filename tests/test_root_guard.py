@@ -25,7 +25,7 @@ GUARDED = [
         "base_fill", "check_inputs", "check_meshy", "crop_edit", "id_map", "project_views", "render_paint_views",
         "render_texture", "seam_fix", "tex_measure", "texture_complexity", "tone_fix")),
     *(f"agents/zps-3dp-step-views/tools/{n}.py" for n in (
-        "check_inputs", "check_package", "concept_colors", "diff_guides", "measure", "pick_bg", "views_sheet")),
+        "check_inputs", "check_package", "concept_colors", "diff_guides", "measure", "pick_bg", "pick_size", "views_sheet")),
 ]
 READ_ONLY = {"scripts/check_card.py", "scripts/check_profile.py"}
 # Imported, not run: the guard belongs to the tool that imports them. settings_merge runs from install.py before
