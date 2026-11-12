@@ -48,6 +48,44 @@ def test_a_blender_that_cannot_start_still_writes_a_blocked_report_whose_finding
     assert (errs, [(f["priority"], f["kind"]) for f in fs.values()]) == ([], [("blocker", "script")])
 
 
+def renders_json(t: Path, sha: str | None):
+    tf = t / "production/assets" / AID / "texture/v1/final"
+    (tf / "review").mkdir(parents=True, exist_ok=True)
+    doc = {"albedo": f"final/albedo_{RES}.png", "renders": {"unlit_34_front": "review/unlit_34_front.png"}}
+    (tf / "review/renders.json").write_text(json.dumps(doc | ({"albedo_sha256": sha} if sha else {})), encoding="utf-8")
+
+
+def assemble_cli(t: Path):
+    return subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", "/nonexistent/blender", "--", AID,
+                           "1", "abc123"], cwd=t, capture_output=True, text=True)
+
+
+def test_an_albedo_changed_after_its_renders_is_refused_before_blender_so_the_package_never_ships_old_pictures_t2(
+        tmp_path):
+    """The texture renders are the pictures the owner approved. An albedo edited after them would ship a texture that
+    nobody saw, and the compare would only blame the renders."""
+    rep = project(tmp_path)
+    renders_json(tmp_path, "0" * 64)
+    assert assemble_cli(tmp_path).returncode == 1
+    assert rep.read_text(encoding="utf-8").splitlines()[2] == (
+        f"ISSUES: albedo texture: albedo_{RES}.png đã đổi sau lần render của bước texture (sha256 khác renders.json)")
+
+
+def test_a_renders_json_without_an_albedo_hash_is_accepted_as_before_t2(tmp_path):
+    rep = project(tmp_path)
+    renders_json(tmp_path, None)
+    assemble_cli(tmp_path)
+    assert "FileNotFoundError" in rep.read_text(encoding="utf-8").splitlines()[2], "it went on to start Blender"
+
+
+def test_a_matching_albedo_hash_goes_on_to_blender_t2(tmp_path):
+    rep = project(tmp_path)
+    albedo = tmp_path / "production/assets" / AID / f"texture/v1/final/albedo_{RES}.png"
+    renders_json(tmp_path, hashlib.sha256(albedo.read_bytes()).hexdigest())
+    assemble_cli(tmp_path)
+    assert "FileNotFoundError" in rep.read_text(encoding="utf-8").splitlines()[2], "it went on to start Blender"
+
+
 def test_the_codex_rule_shape_reads_no_option_after_the_double_dash_so_a_second_blender_never_runs(tmp_path):
     project(tmp_path)
     evil = tmp_path / "evil.sh"

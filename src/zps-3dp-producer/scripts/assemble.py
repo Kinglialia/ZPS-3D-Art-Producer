@@ -3,7 +3,8 @@
 
 Usage: assemble.py --blender <BLENDER> -- <id> <N> <profile hash>
 Reads the approved `model` and `texture` versions of status.json and writes assemble/vN/ only:
-  1 sha256 of model final/<id>-untextured.glb = locked.model; albedo_<texture_res>.png is res x res.
+  1 sha256 of model final/<id>-untextured.glb = locked.model; albedo_<texture_res>.png is res x res, and its sha256 equals
+    albedo_sha256 of the texture step's renders.json when that key is there (T2).
   2 one Blender session, assemble_qa.py (D37.4): assemble_glb.build writes final/model/<id>.glb (1 mesh, 1 node, 1 material,
     unlit, base colour) and <id>.blend; then kit QA on a byte copy of that GLB in work/qa_input/ (the validator writes
     beside its input), results in work/evidence/qa/: mesh_check, uv_check, export_check (expect_unlit), screen_tris_check;
@@ -246,9 +247,14 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
     if size != (res, res):
         return [fail_point("albedo", "texture", f"work/evidence: {albedo.name} cỡ {size}", f"texture_res của thẻ là {res}",
                            "làm lại texture đúng texture_res (`redo --step texture`)", f"albedo {res}x{res}")], data
+    renders = tf / "review" / "renders.json"
+    want = json.loads(renders.read_text(encoding="utf-8")).get("albedo_sha256") if renders.is_file() else None
+    if want and sha256(albedo) != want:
+        return [fail_point("albedo", "texture", f"work/evidence: {albedo.name} đã đổi sau lần render của bước texture "
+                           "(sha256 khác renders.json)", "gói cuối mang texture chưa ai xem trên render",
+                           "render lại texture (`redo --step texture`)", "sha256 albedo bằng albedo_sha256 của renders.json")], data
     glb = final / "model" / f"{a.id}.glb"
     probe = work / "qa_input" / glb.name
-    renders = tf / "review" / "renders.json"
     views = recorded_views(renders)
     data["skipped_views"] = [v for v in COMPARE if v not in views]
     session = work / "evidence" / "session.json"
