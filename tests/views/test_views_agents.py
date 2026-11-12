@@ -81,24 +81,31 @@ def test_worker_points_only_at_references_and_tools_that_exist():
     _, body = front(WORKER)
     for ref in re.findall(r"`R/([\w.-]+)`", body):
         assert (AGENT / "references" / ref).is_file(), ref
-    for tool in set(re.findall(r"T/([\w.]+\.(?:py|sh))", body)):
+    for tool in set(re.findall(r"`RUN (?:bl )?([\w.]+\.py)", body)):
         assert (AGENT / "tools" / tool).is_file(), tool
+
+
+def test_every_tool_command_of_the_worker_goes_through_run_and_none_through_a_bare_python_or_a_pid_wrapper():
+    _, body = front(WORKER)
+    assert re.findall(r"PY T/|\bBLENDER\b|PID|\bnohup\b|`PY (?!\"<GEN_IMAGE>\")", body) == []
+    assert re.findall(r"`PY ([^ ]+)", body) == ['"<GEN_IMAGE>"']
+    assert "Chạy mọi lệnh Bash ở foreground và chờ xong trong lượt." in body
 
 
 def test_every_flag_the_worker_passes_is_one_its_tool_parses():
     _, body = front(WORKER)
-    calls = re.findall(r"`PY (T/[\w.]+\.py|\"<GEN_IMAGE>\" <GEN_ARGS>)([^`]*)`", body)
-    assert len(calls) == 12
-    for script, args in calls:
-        src = (SKILL / "scripts/gen_image_codex.py" if "GEN_IMAGE" in script else AGENT / "tools" / script[2:])
+    calls = re.findall(r"`(?:RUN (?:bl )?([\w.]+\.py)|PY (\"<GEN_IMAGE>\" <GEN_ARGS>))([^`]*)`", body)
+    assert len(calls) == 15
+    for script, gen, args in calls:
+        src = SKILL / "scripts/gen_image_codex.py" if gen else AGENT / "tools" / script
         text = src.read_text(encoding="utf-8")
         for flag in set(re.findall(r"(--[a-z][a-z-]*)", args)):
-            assert f'"{flag}"' in text, (script, flag)
+            assert f'"{flag}"' in text, (script or gen, flag)
 
 
 def test_every_blender_command_uses_the_brief_blender_path_and_only_views_front_renders():
     _, body = front(WORKER)
-    assert re.findall(r"(?<![A-Z_])blender -b", body) == [] and body.count("BLENDER -b") == 1
+    assert re.findall(r"(?<![A-Z_])blender -b|BLENDER", body) == [] and re.findall(r"`RUN bl ([\w.]+\.py)", body) == ["render_blockout_views.py"]
     steps = {s["id"]: s for s in tomllib.loads((SKILL / "templates/pipeline.toml").read_text(encoding="utf-8"))["steps"]}
     assert (steps["views_front"]["uses"], steps["views_rest"]["uses"]) == (["blender", "codex_image"], ["codex_image"])
 

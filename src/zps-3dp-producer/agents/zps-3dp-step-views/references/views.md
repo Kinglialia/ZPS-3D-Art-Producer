@@ -8,7 +8,7 @@ Vật quay mặt về −Y. `left` là bên trái của chính vật (camera ở
 
 Mỗi prompt là một file `V/work/prompts/<view>-<k>.md`, chỉ chứa phần vẽ; `gen_image_codex.py` thêm khung cố định. Giữ mọi prompt và mọi ảnh gen trong `V/work/` để gen lại được. Prompt, bản không chọn, log không vào `final/`.
 
-`--size`: `1536x1024` khi guide rộng hơn cao, `1024x1536` khi cao hơn rộng. Cạnh dài phải > 1040 px.
+`--size`: lấy từ `V/work/sizes.json`, do `pick_size.py` tính từ kích thước bbox của `guides/views.json`. Mỗi view một cỡ. Cạnh dài phải > 1040 px.
 
 Thay mỗi `[...]` bằng thông tin thật:
 - `[MATERIAL LIST]`: từ `guides/views.json` `materials` (mã → màu ID), tên vật liệu lấy từ `<id>.material.md`. Ví dụ `#E6194B red = STONE, cream plastered stone`.
@@ -72,6 +72,7 @@ Gen lại: giữ prompt cũ, thêm một dòng nêu đúng lỗi, ví dụ "the 
 |---|---|---|
 | Sai hình: silhouette, mốc chiều cao, thiếu hoặc dính props | Gen lại | — |
 | Sai màu cả mặt, có bóng đổ, có ánh sáng một hướng | Gen lại | — |
+| Vật chạm mép ảnh (`border`), số khối rời khác guide (`components`) | Gen lại | — |
 | Sai màu một vùng nhỏ (ví dụ đầu dầm thành đá) | Không gen lại | TEXTURE NOTE |
 | Vị trí chi tiết lệch nhỏ (ví dụ dải ngang mỏng lệch 3–4%) | Không gen lại | NGOẠI LỆ, kèm con số |
 | Motif hai màu, đèn | Reviewer kiểm bằng mắt | — |
