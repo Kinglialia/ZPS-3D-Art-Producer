@@ -1761,6 +1761,7 @@ def test_a_crop_served_from_disk_goes_back_to_the_reviewer_that_asked_with_a_sho
                        evidence="game_cam, game_cam-crop1", prior=["- F1: resolved | evidence: game_cam-crop1"]) == (
         "house-a: review PASS (0 mở) → blockout/waiting_human. Tiếp: chờ người dùng: duyệt blockout v1 (review page)\n")
     assert rounds(flow) == [("worker", 1, None), ("reviewer", 1, "full"), ("reviewer", 1, "full")]
+    assert [x.get("evidence") for x in flow.st["dispatches"]] == [None, None, 1]
 
 
 def test_without_the_agent_id_of_the_reviewer_a_served_crop_goes_to_a_new_reviewer_with_the_full_brief_q4(flow):
@@ -1771,6 +1772,7 @@ def test_without_the_agent_id_of_the_reviewer_a_served_crop_goes_to_a_new_review
 def test_a_resumed_reviewer_that_stalls_is_replaced_by_a_new_one_with_the_full_brief_q4(flow):
     """The stall rung gives the same work to a new agent; that agent has no first brief to go back to."""
     sent = json.loads(asks_crop(flow).splitlines()[-1])
+    assert sent["resume"] == "r1"
     assert json.loads(flow.call(briefs.run, Namespace(id=AID))) == sent
     st = flow.st
     st["dispatches"][-1]["ended"] = {"at": "2026-11-12 10:00:00", "why": "no_report"}
@@ -1779,9 +1781,13 @@ def test_a_resumed_reviewer_that_stalls_is_replaced_by_a_new_one_with_the_full_b
     assert (again["resume"], again["brief"]) == (None, f"production/assets/{AID}/blockout/v1/brief-review.md")
 
 
-def test_the_review_of_a_new_version_never_resumes_the_reviewer_of_the_old_one_q4(flow):
-    """A reviewer anchored on its own findings of v1 would judge v2 against them, not against the concept."""
+def test_the_review_of_a_new_version_never_resumes_the_reviewer_that_asked_for_a_crop_of_the_old_one_q4(flow, held):
+    """A reviewer anchored on its own findings of v1 would judge v2 against them, not against the concept. The crop is
+    served but not yet sent when the user asks for a redo."""
+    asks_crop(flow)
+    assert flow.st["evidence"]["agent_id"] == "r1"
+    flow.human("redo", "mái cao hơn")
     flow.work()
-    flow.review(agent_id="r1", findings=[finding("F1", "major", "structure")])
-    out = json.loads(flow.work().splitlines()[-1])
-    assert (out["role"], out["resume"]) == ("reviewer", None)
+    out = flow.brief()
+    assert (out["role"], out["resume"], out["brief"]) == (
+        "reviewer", None, f"production/assets/{AID}/blockout/v2/brief-review.md")

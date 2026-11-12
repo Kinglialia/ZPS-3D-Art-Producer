@@ -115,7 +115,7 @@ def test_structure_findings_on_different_parts_are_fixed_in_one_round_w8():
     doc, errs, warns = warned(None, top_fix="structure: F1, F3", findings=[
         finding("F1", "major", "structure", region="roof: mái thấp"),
         finding("F2", "minor", "param", region="roof: mái hẹp"),
-        finding("F3", "major", "structure", region="door, frame: thiếu cửa")])
+        finding("F3", "major", "structure", region="leg_fl, top: chân lệch")])
     assert (errs, warns, doc["top_fix"]) == ([], [], {"kind": "structure", "ids": ["F1", "F3"]})
 
 
