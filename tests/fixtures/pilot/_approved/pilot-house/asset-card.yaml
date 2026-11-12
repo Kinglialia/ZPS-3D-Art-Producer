@@ -4,6 +4,8 @@ tier: standard
 view: front
 texture_res: null
 tris_max: null
+views: full
+counts: {}
 scale_overrides:
   - {name: cửa, height_m: 1.8}
 symmetric: {left_right: true, front_back: false}

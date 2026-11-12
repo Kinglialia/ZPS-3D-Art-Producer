@@ -1,9 +1,11 @@
 """D35: the `views` field of the asset card decides which views steps run and which side images they make."""
 import copy
+import json
 import sys
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from flowkit import AID, A, PROJECT_KEY, Flow, counts
 from shared import SCRIPTS, pilot_project
@@ -20,23 +22,38 @@ def test_the_four_values_and_their_side_views_are_the_d32_table():
     """full has no top: no step after views needs a top image (D35.5); back keeps front as the colour reference."""
     assert check_card.VIEW_SETS == {"none": (), "back": ("back",), "full": ("back", "left", "right"),
                                     "full_top": ("back", "left", "right", "top")}
-    assert check_card.DEFAULT_VIEWS == "full"
+    assert check_card.NO_CARD_VIEWS == "full"
 
 
-@pytest.mark.parametrize("value", [None, "none", "back", "full", "full_top"])
-def test_each_views_value_and_no_field_pass_check_card(tmp_path, value):
-    card = copy.deepcopy(CARD) if value is None else mutated(views=value)
-    assert messages(make_asset(tmp_path, card=card)) == []
+@pytest.mark.parametrize("value", ["none", "back", "full", "full_top"])
+def test_each_views_value_passes_check_card(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(views=value))) == []
+
+
+def test_a_card_without_views_fails_check_card_because_guideline_and_code_once_disagreed_on_the_default(tmp_path):
+    card = copy.deepcopy(CARD)
+    del card["views"]
+    assert messages(make_asset(tmp_path, card=card)) == ["thẻ: thiếu trường views"]
 
 
 @pytest.mark.parametrize("value", ["top", "all", ["back"], True])
 def test_an_unknown_views_value_fails_check_card_with_the_allowed_values(tmp_path, value):
     assert messages(make_asset(tmp_path, card=mutated(views=value))) == [
-        f"thẻ: views sai: '{value}' (none | back | full | full_top; không ghi = full)"]
+        f"thẻ: views sai: '{value}' (none | back | full | full_top)"]
+
+
+def test_an_asset_made_by_new_has_no_card_and_gets_the_full_set(tmp_path):
+    """No card = no choice was made: the whole set stays as it was before the field was required."""
+    st = {"id": "x", "concept_dir": None}
+    assert (asset_card.views(st), asset_card.sides(st)) == ("full", ("back", "left", "right"))
+    assert check_card.card_views(tmp_path) == "full"
 
 
 def asset(tmp_path, value):
-    d = make_asset(tmp_path, card=copy.deepcopy(CARD) if value is None else mutated(views=value))
+    card = copy.deepcopy(CARD)
+    if value is None:
+        del card["views"]
+    d = make_asset(tmp_path, card=card if value is None else mutated(views=value))
     return {"id": "05-warehouse", "concept_dir": str(d), "state": "waiting_human", "stage": "blockout"}
 
 
@@ -83,7 +100,7 @@ def no_views_flow(root: Path) -> Flow:
     f = Flow(root)
     pilot_project(root)
     card = root / "concepts/_approved" / AID / "asset-card.yaml"
-    card.write_text(card.read_text(encoding="utf-8") + "views: none\n", encoding="utf-8")
+    card.write_text(card.read_text(encoding="utf-8").replace("views: full", "views: none"), encoding="utf-8")
     (root / ".env").write_text(f"MESHY_API_KEY={PROJECT_KEY}\n", encoding="utf-8")
     f.p("intake", AID)
     f.p("ready", AID)

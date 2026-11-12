@@ -29,7 +29,7 @@ PROFILE = {
 }
 CARD = {
     "asset": "05-warehouse", "type": "building", "tier": "standard", "view": "front", "texture_res": None,
-    "tris_max": None,
+    "tris_max": None, "views": "full", "counts": {},
     "scale_overrides": [{"name": "cửa", "height_m": 1.6}],
     "symmetric": {"left_right": True, "front_back": True},
     "size_m": {"w": 12, "d": 8, "h": 6},
@@ -161,7 +161,8 @@ def test_asset_id_must_match_the_folder_name_because_the_id_follows_the_asset_to
     assert messages(d) == ["thẻ: asset sai: '06-smithy' khác tên thư mục '05-warehouse'"]
 
 
-@pytest.mark.parametrize("key", ["asset", "type", "tier", "view", "symmetric", "hidden_sides", "real_texture_only_notes"])
+@pytest.mark.parametrize("key", ["asset", "type", "tier", "view", "views", "counts", "symmetric", "hidden_sides",
+                                 "real_texture_only_notes"])
 def test_required_card_field_missing_is_reported_by_key(tmp_path, key):
     c = copy.deepcopy(CARD)
     del c[key]
@@ -188,7 +189,7 @@ def test_hidden_sides_names_the_unseen_faces_it_lacks_so_blockout_never_guesses_
 
 @pytest.mark.parametrize("view", ["front", "34", 34, "game_camera"])
 def test_card_view_takes_the_three_concept_angles_and_an_unquoted_34_d27_6(tmp_path, view):
-    assert messages(make_asset(tmp_path, card=mutated(view=view))) == []
+    assert messages(make_asset(tmp_path, card=mutated(view=view, view_side="left"))) == []
 
 
 @pytest.mark.parametrize("bevel", [None, "none", "toon"])
@@ -264,6 +265,128 @@ def test_card_cli_warns_when_a_note_asks_to_round_edges_but_the_bevel_field_is_e
 ])
 def test_card_field_with_a_wrong_value_is_reported_with_the_allowed_values(tmp_path, patch, expected):
     assert messages(make_asset(tmp_path, card=mutated(**patch))) == [expected]
+
+
+@pytest.mark.parametrize("value", ["none", "back", "full", "full_top"])
+def test_views_is_required_and_takes_the_four_values_because_guideline_and_code_disagreed_on_the_default(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(views=value))) == []
+
+
+@pytest.mark.parametrize("value", [None, "top", "all", ["back"], True])
+def test_views_null_or_unknown_is_an_error_and_there_is_no_default(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(views=value))) == [
+        f"thẻ: views sai: '{value}' (none | back | full | full_top)"]
+
+
+@pytest.mark.parametrize("value", [{}, {"doors": 1, "windows_2": 0}])
+def test_counts_is_required_and_an_empty_map_is_valid_for_an_asset_with_nothing_repeated(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(counts=value))) == []
+
+
+@pytest.mark.parametrize("value", [None, [1], {"Doors": 1}, {"doors": -1}, {"doors": "2"}])
+def test_counts_null_or_malformed_is_an_error(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(counts=value))) == [
+        "thẻ: counts sai: cần map {khóa: số nguyên ≥ 0}, khóa là tên param (chữ thường, số, _; bắt đầu bằng chữ)"]
+
+
+@pytest.mark.parametrize("view", ["34", 34])
+def test_view_34_needs_view_side_because_a_worker_cannot_tell_which_face_the_concept_shows(tmp_path, view):
+    assert messages(make_asset(tmp_path, card=mutated(view=view))) == ["thẻ: view_side thiếu (bắt buộc khi view: '34')"]
+    assert messages(make_asset(tmp_path / "ok", card=mutated(view=view, view_side="left"))) == []
+
+
+@pytest.mark.parametrize("side", ["front", "Left", 1, True])
+def test_view_side_takes_left_or_right_only(tmp_path, side):
+    assert messages(make_asset(tmp_path, card=mutated(view="34", view_side=side))) == [
+        f"thẻ: view_side sai: '{side}' (left | right)"]
+
+
+def test_view_side_is_optional_for_the_other_views_but_still_checked_when_written(tmp_path):
+    assert messages(make_asset(tmp_path, card=mutated(view_side="right"))) == []
+    assert messages(make_asset(tmp_path / "bad", card=mutated(view_side="up"))) == [
+        "thẻ: view_side sai: 'up' (left | right)"]
+
+
+LIGHT_ERR = "thẻ: light sai: cần {from: left | right | front, elevation_deg: số}"
+
+
+@pytest.mark.parametrize("light", [None, {"from": "left", "elevation_deg": 45}, {"from": "front", "elevation_deg": 30.5}])
+def test_light_is_optional_and_takes_a_side_and_an_elevation(tmp_path, light):
+    assert messages(make_asset(tmp_path, card=mutated(light=light))) == []
+
+
+@pytest.mark.parametrize("light", [
+    "left", {"from": "left"}, {"elevation_deg": 45}, {"from": "top", "elevation_deg": 45},
+    {"from": "left", "elevation_deg": "45"}, {"from": "left", "elevation_deg": True},
+    {"from": "left", "elevation_deg": 45, "color": "red"}])
+def test_light_with_a_wrong_shape_is_an_error(tmp_path, light):
+    assert messages(make_asset(tmp_path, card=mutated(light=light))) == [LIGHT_ERR]
+
+
+MARKS_ERR = "thẻ: marks sai: cần danh sách {name, z_m > 0}"
+
+
+@pytest.mark.parametrize("marks", [None, [], [{"name": "mép trên thân", "z_m": 1.2}, {"name": "mặt bệ", "z_m": 0.3}]])
+def test_marks_is_optional_and_lists_named_heights(tmp_path, marks):
+    assert messages(make_asset(tmp_path, card=mutated(marks=marks))) == []
+
+
+@pytest.mark.parametrize("marks", [
+    {"name": "x", "z_m": 1}, [{"name": "x", "z_m": 0}], [{"name": "x", "z_m": -1}], [{"name": "", "z_m": 1}],
+    [{"name": "x", "z_m": "1"}], [{"z_m": 1}], ["x"]])
+def test_marks_with_a_wrong_shape_or_a_height_that_is_not_above_the_ground_is_an_error(tmp_path, marks):
+    assert messages(make_asset(tmp_path, card=mutated(marks=marks))) == [MARKS_ERR]
+
+
+@pytest.mark.parametrize("value", [None, True, False])
+def test_bottom_visible_is_optional_and_a_bool(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(bottom_visible=value))) == []
+
+
+@pytest.mark.parametrize("value", ["yes", 1, [True]])
+def test_bottom_visible_that_is_not_a_bool_is_an_error(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(bottom_visible=value))) == [
+        "thẻ: bottom_visible sai: cần true | false"]
+
+
+@pytest.mark.parametrize("value", [None, [], ["SIGN", "RUNE_STONE"]])
+def test_text_codes_is_optional_and_lists_material_codes(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(text_codes=value))) == []
+
+
+@pytest.mark.parametrize("value", ["SIGN", [1], [""], {"SIGN": 1}])
+def test_text_codes_that_is_not_a_list_of_strings_is_an_error(tmp_path, value):
+    assert messages(make_asset(tmp_path, card=mutated(text_codes=value))) == [
+        "thẻ: text_codes sai: cần danh sách mã vật liệu (chuỗi)"]
+
+
+def test_concept_34_is_an_optional_image_and_a_card_without_it_passes(tmp_path):
+    d = make_asset(tmp_path)
+    assert not (d / "concept_34.png").exists() and messages(d) == []
+    png(d / "concept_34.png", (1500, 1100))
+    assert messages(d) == []
+
+
+def test_concept_34_may_have_another_frame_than_albedo_because_it_shows_another_angle(tmp_path):
+    d = make_asset(tmp_path)
+    png(d / "concept_34.png", (1024, 700))
+    assert messages(d) == []
+
+
+def test_concept_34_gets_the_same_image_checks_as_the_other_concept_images(tmp_path):
+    d = make_asset(tmp_path)
+    png(d / "concept_34.png", (1023, 600))
+    assert messages(d) == ["ảnh concept_34.png: cạnh dài 1023 px, cần ≥ 1024 px"]
+    (d / "concept_34.png").write_bytes(b"x")
+    assert messages(d) == ["ảnh concept_34.png: không đọc được"]
+
+
+def test_card_cli_warns_when_the_background_of_concept_34_is_not_one_flat_colour(tmp_path):
+    d = make_asset(tmp_path)
+    im = Image.new("RGB", (1024, 1024), (238, 238, 238))
+    im.paste((40, 90, 160), (0, 0, 1024, 300))
+    im.save(d / "concept_34.png")
+    assert card_cli(d) == (0, ["cảnh báo: ảnh concept_34.png: nền viền ảnh không phẳng một màu"])
 
 
 def test_card_cli_prints_one_line_per_error_and_exits_non_zero(tmp_path):
@@ -462,6 +585,13 @@ def test_templates_pass_their_own_checks_so_a_copy_of_the_template_is_a_valid_st
         (d / n).write_bytes(b"x")
     assert messages(d, has_map=True) == []
     assert messages(d, has_map=False) == []
+
+
+def test_card_template_shows_every_d43_field_with_a_comment_on_its_own_line(tmp_path):
+    lines = (S / "templates/asset-card.yaml").read_text(encoding="utf-8").splitlines()
+    for key in ("views", "counts", "view_side", "light", "marks", "bottom_visible", "text_codes"):
+        row = next(l for l in lines if l.startswith(f"{key}:"))
+        assert "#" in row, key
 
 
 class Proj:

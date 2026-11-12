@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 SIDE_IMAGE = re.compile(r"^final/(back|left|right|top)\.png$")
 
@@ -11,10 +12,19 @@ def views(st: dict) -> str:
     return card_views(st.get("concept_dir"))
 
 
+def card(st: dict) -> dict:
+    """The asset card as a map; {} for an asset made by `new` (no card) or a card that is not a map."""
+    from check_card import CARD
+    from check_profile import load_yaml
+    f = Path(st["concept_dir"]) / CARD if st.get("concept_dir") else None
+    c = load_yaml(f) if f and f.is_file() else None
+    return c if isinstance(c, dict) else {}
+
+
 def sides(st: dict) -> tuple[str, ...]:
     """The side views this asset's views_rest makes."""
-    from check_card import DEFAULT_VIEWS, VIEW_SETS
-    return VIEW_SETS.get(views(st), VIEW_SETS[DEFAULT_VIEWS])
+    from check_card import NO_CARD_VIEWS, VIEW_SETS
+    return VIEW_SETS.get(views(st), VIEW_SETS[NO_CARD_VIEWS])
 
 
 def skipped(step: dict, st: dict) -> bool:

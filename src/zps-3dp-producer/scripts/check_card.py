@@ -19,15 +19,18 @@ from check_profile import is_num, is_pos_int, is_str, load_yaml
 TYPES = ("building", "prop", "tree", "rock")
 UNSUPPORTED = ("character", "creature")
 TIERS = ("hero", "standard", "background")
-REQUIRED = ("asset", "type", "tier", "view", "symmetric", "hidden_sides", "real_texture_only_notes")
+REQUIRED = ("asset", "type", "tier", "view", "views", "counts", "symmetric", "hidden_sides", "real_texture_only_notes")
 CARD = "asset-card.yaml"
 SIDES = ("back", "left", "right", "top")
 VIEWS = ("front", "34", "game_camera")
+VIEW_SIDES = ("left", "right")
+LIGHT_FROM = ("left", "right", "front")
 BEVELS = ("none", "toon")
-# D35: `views` -> the side views views_rest makes; views_front always makes front unless `none`. No field = full.
+# D35: `views` -> the side views views_rest makes; views_front always makes front unless `none`.
 VIEW_SETS = {"none": (), "back": ("back",), "full": ("back", "left", "right"), "full_top": ("back", "left", "right", "top")}
-DEFAULT_VIEWS = "full"
+NO_CARD_VIEWS = "full"
 IMAGES = ("concept_albedo.png", "concept_shadow.png")
+IMAGE_34 = "concept_34.png"
 MIN_EDGE = 1024
 BORDER_PX, BORDER_TOL, BORDER_OFF_MAX = 4, 12, 0.02
 
@@ -38,15 +41,16 @@ def required_files(aid: str, has_map: bool | None) -> list[str]:
 
 
 def views_of(card) -> str:
-    """The card's `views` mode; no field or null = full (D35). A wrong value is check()'s error, not this function's."""
+    """The card's `views` mode. check() refuses a card without it (D43.6); a card registered before that rule gets
+    NO_CARD_VIEWS here instead of a crash. A wrong value is check()'s error, not this function's."""
     v = card.get("views") if isinstance(card, dict) else None
-    return DEFAULT_VIEWS if v is None else str(v)
+    return NO_CARD_VIEWS if v is None else str(v)
 
 
 def card_views(concept_dir) -> str:
     """views_of() of `<concept_dir>/asset-card.yaml`; no dir or no card (an asset made by `new`) = full."""
     f = Path(concept_dir) / CARD if concept_dir else None
-    return views_of(load_yaml(f)) if f and f.is_file() else DEFAULT_VIEWS
+    return views_of(load_yaml(f)) if f and f.is_file() else NO_CARD_VIEWS
 
 
 def present(f: Path) -> bool:
@@ -72,12 +76,25 @@ def image_errors(d: Path) -> list[tuple[str, str]]:
     return []
 
 
+def image_34_errors(d: Path) -> list[tuple[str, str]]:
+    """concept_34.png is optional and shows another angle, so it need not share the frame of the other two."""
+    if not (d / IMAGE_34).is_file():
+        return []
+    try:
+        with Image.open(d / IMAGE_34) as im:
+            edge = max(im.size)
+    except OSError:
+        return [("files", f"ảnh {IMAGE_34}: không đọc được")]
+    return [("files", f"ảnh {IMAGE_34}: cạnh dài {edge} px, cần ≥ {MIN_EDGE} px")] if edge < MIN_EDGE else []
+
+
 def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     errs: list[tuple[str, str]] = []
     for name in required_files(d.name, has_map):
         if not present(d / name):
             errs.append(("files", f"thiếu file {name}"))
     errs += image_errors(d)
+    errs += image_34_errors(d)
     if any(m == f"thiếu file {CARD}" for _, m in errs):
         return errs
     try:
@@ -103,11 +120,32 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
     if "view" in c and not (isinstance(c["view"], (str, int)) and not isinstance(c["view"], bool)
                             and str(c["view"]) in VIEWS):
         bad("view", f"'{c['view']}' ({' | '.join(VIEWS)})")
-    if c.get("views") is not None and not (isinstance(c["views"], str) and c["views"] in VIEW_SETS):
-        bad("views", f"'{c['views']}' ({' | '.join(VIEW_SETS)}; không ghi = {DEFAULT_VIEWS})")
-    if c.get("counts") is not None and not (isinstance(c["counts"], dict) and all(
+    side = c.get("view_side")
+    if side is None:
+        if str(c.get("view")) == "34":
+            errs.append(("card", "thẻ: view_side thiếu (bắt buộc khi view: '34')"))
+    elif not (isinstance(side, str) and side in VIEW_SIDES):
+        bad("view_side", f"'{side}' ({' | '.join(VIEW_SIDES)})")
+    if "views" in c and not (isinstance(c["views"], str) and c["views"] in VIEW_SETS):
+        bad("views", f"'{c['views']}' ({' | '.join(VIEW_SETS)})")
+    if "counts" in c and not (isinstance(c["counts"], dict) and all(
             is_key(k) and isinstance(v, int) and not isinstance(v, bool) and v >= 0 for k, v in c["counts"].items())):
         bad("counts", "cần map {khóa: số nguyên ≥ 0}, khóa là tên param (chữ thường, số, _; bắt đầu bằng chữ)")
+    if c.get("light") is not None:
+        lt = c["light"]
+        if not (isinstance(lt, dict) and set(lt) == {"from", "elevation_deg"} and isinstance(lt["from"], str)
+                and lt["from"] in LIGHT_FROM and is_num(lt["elevation_deg"])):
+            bad("light", f"cần {{from: {' | '.join(LIGHT_FROM)}, elevation_deg: số}}")
+    if c.get("marks") is not None:
+        mk = c["marks"]
+        if not (isinstance(mk, list) and all(
+                isinstance(m, dict) and set(m) == {"name", "z_m"} and is_str(m["name"]) and is_num(m["z_m"]) and m["z_m"] > 0
+                for m in mk)):
+            bad("marks", "cần danh sách {name, z_m > 0}")
+    if c.get("bottom_visible") is not None and not isinstance(c["bottom_visible"], bool):
+        bad("bottom_visible", "cần true | false")
+    if c.get("text_codes") is not None and not (isinstance(c["text_codes"], list) and all(is_str(x) for x in c["text_codes"])):
+        bad("text_codes", "cần danh sách mã vật liệu (chuỗi)")
     if c.get("bevel") is not None and c["bevel"] not in BEVELS:
         bad("bevel", f"'{c['bevel']}' (null | {' | '.join(BEVELS)})")
     for k in ("texture_res", "tris_max"):
@@ -158,7 +196,7 @@ def is_key(k) -> bool:
 def warnings(d: Path, counts_keys: dict | None = None) -> list[str]:
     """counts_keys: the profile's `counts_keys` ({} when the profile has none); None when no profile was given."""
     out = []
-    for name in IMAGES:
+    for name in (*IMAGES, IMAGE_34):
         try:
             if present(d / name) and not flat_background(d / name):
                 out.append(f"cảnh báo: ảnh {name}: nền viền ảnh không phẳng một màu")

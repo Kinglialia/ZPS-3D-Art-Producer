@@ -4,13 +4,20 @@ asset: 05-warehouse            # bắt buộc. Đúng tên thư mục
 type: building                 # bắt buộc. building | prop | tree | rock (character, creature: v1 chưa hỗ trợ)
 tier: standard                 # bắt buộc. hero | standard | background. Hạng chỉ quyết định trần tris
 view: front                    # bắt buộc. Góc vẽ concept: front | '34' | game_camera ('34' là góc 3/4, ghi trong nháy)
+view_side: null                # bắt buộc khi view: '34'. left | right: mặt bên nào của vật hiện ra trên concept 3/4. Góc khác thì null
 texture_res: null              # null = 2048. Hoặc số nguyên, vd 1024
 tris_max: null                 # null = theo hạng. Hoặc số nguyên
 bevel: null                    # null = theo style.bevel của profile. none | toon: bo cạnh riêng asset này
-views: full                    # không ghi = full. Ảnh view mặt khuất: none (không gen, mặt khuất theo hidden_sides) | back |
+views: full                    # bắt buộc, không có mặc định. Ảnh view mặt khuất: none (không gen, mặt khuất theo hidden_sides) | back |
                                # full (back, left, right; right lật khi đối xứng) | full_top (thêm top: chỉ khi mái có thiết kế riêng)
-counts: {}                     # tùy chọn. Số đếm gate so với part graph, vd {doors: 1}. Khóa lấy từ counts_keys trong
-                               # PROJECT-PROFILE.yaml của dự án; khóa khác thì check_card.py --profile cảnh báo
+counts: {}                     # bắt buộc. {} khi asset không có thành phần lặp lại. Số đếm gate so với part graph, vd {doors: 1}.
+                               # Khóa lấy từ counts_keys trong PROJECT-PROFILE.yaml; khóa khác thì check_card.py --profile cảnh báo
+light: {from: left, elevation_deg: 45}   # tùy chọn. Hướng nắng của concept_shadow.png: from left | right | front, elevation_deg là độ cao nắng. null = worker đoán
+marks:                         # tùy chọn. 2 đến 3 mốc cao thấy rõ trên concept; check_proportion.py so với blockout. null hoặc [] = bỏ qua
+  - {name: mép trên thân, z_m: 3.6}
+  - {name: mặt bệ, z_m: 0.4}
+bottom_visible: false          # tùy chọn, mặc định false. true khi camera game thấy mặt đáy của vật
+text_codes: []                 # tùy chọn. Mã vật liệu có chữ hoặc biểu tượng (vd [SIGN]); check UV lật chỉ chạy cho các mã này
 scale_overrides:               # [] = dùng thước của profile. Ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
 symmetric: {left_right: true, front_back: true}   # bắt buộc. true | false cho từng cặp
