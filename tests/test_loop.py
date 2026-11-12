@@ -1021,6 +1021,31 @@ def test_accepted_fail_without_the_readme_entry_or_a_number_is_refused_d31_3(flo
         "running", True)
 
 
+def fix_lines(text: str) -> list[str]:
+    return [l.split(". ", 1)[1] for l in text.splitlines() if re.match(r"\d+\. (Bản gốc|Lý do|Sửa đúng|Ưu tiên 1)", l)]
+
+
+def test_every_fix_brief_opens_its_fix_items_with_the_same_bản_gốc_line_and_a_direct_round_names_no_absent_feedback(
+        flow):
+    """Agent files need one trigger for a fix round. The direct round said "Lý do phải sửa: feedback mới nhất của người
+    dùng" when there was no feedback, so the worker looked for a user request instead of the failing JSON."""
+    v = f"production/assets/{AID}/blockout"
+    flow.work(checks={"join.json": "fail"})
+    assert fix_lines(flow.text(flow.brief())) == [
+        f"Bản gốc: `{v}/v1/` (bản vừa dựng, check fail; final/ + work/). **Sửa từ bản này, không làm lại từ đầu.**",
+        "Lý do phải sửa: các JSON check fail ở trên; reviewer chưa chấm bản này. feedback.md có yêu cầu mới của người "
+        "dùng thì sửa cả yêu cầu đó."]
+    flow.work()
+    flow.review(findings=[finding("F1", "major", "structure")])
+    assert fix_lines(flow.text(flow.brief()))[0].startswith(f"Bản gốc: `{v}/v2/` (bản tốt nhất")
+    flow.work(fixed="F1")
+    flow.review(verdict="PASS", top_fix=None, rubric="mass=pass", compare="F1=better",
+                prior=["- F1: resolved | evidence: clay_front"])
+    flow.human("redo", "mái cao hơn")
+    got = fix_lines(flow.text(flow.brief()))
+    assert got[0].startswith(f"Bản gốc: `{v}/v3/` (bản tốt nhất") and got[1].startswith("Ưu tiên 1, feedback")
+
+
 def test_a_failed_check_after_the_direct_round_cap_goes_to_the_human_w7(flow):
     out = flow.brief()
     st = flow.st

@@ -272,7 +272,9 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
                f"{fp}. Rồi tới feedback mới nhất của người dùng trong feedback.md."
                if tf else "Lý do phải sửa: feedback mới nhất của người dùng trong feedback.md." + (f" {outside}" if outside else ""))
         if st.get("direct"):
-            why = "Lý do phải sửa trước tiên: các JSON check fail ở trên; reviewer chưa chấm bản này. " + why
+            why = ("Lý do phải sửa trước tiên: các JSON check fail ở trên; reviewer chưa chấm bản này. " + why if tf else
+                   "Lý do phải sửa: các JSON check fail ở trên; reviewer chưa chấm bản này. feedback.md có yêu cầu mới của "
+                   "người dùng thì sửa cả yêu cầu đó." + (f" {outside}" if outside else ""))
         if human:
             why = (f"Ưu tiên 1, feedback của người dùng: sửa {', '.join(f'`{i}`' for i in human)} (nguyên văn trong "
                    f"`acceptance` của {fp} và feedback.md). Đối chiếu từng ý với concept; không bỏ ý nào. "
