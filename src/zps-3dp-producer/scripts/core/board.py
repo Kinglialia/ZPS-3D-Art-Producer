@@ -25,6 +25,7 @@ HERO = {"blockout": "game_cam.png", "views_front": "front.png", "views_rest": "V
         "texture": "final_lit_vs_concept.png", "assemble": "final_lit_vs_concept.png"}
 SUMMARY_LINES = 3
 CONCEPT_IMAGES = ("concept_albedo.png", "concept_shadow.png")
+MAT_SIDES = ("mat_left.png", "mat_right.png", "mat_back.png", "mat_top.png")
 LINE_FIELDS = ("region", "evidence", "repair")
 HOSTS = ("127.0.0.1", "localhost")
 MAX_BODY = 1 << 20
@@ -104,7 +105,7 @@ def view_images(cfg: dict, st: dict, step: str, n: int | None) -> list[tuple[Pat
     if ev:
         newer = {p.name for p in images_of(ev)}
         pics = [p for p in pics if p.name not in newer] + images_of(ev)
-    pics.sort(key=lambda p: p.name != hero)
+    pics.sort(key=lambda p: (p.name != hero, MAT_SIDES.index(p.name) if p.name in MAT_SIDES else len(MAT_SIDES)))
     out = [(p, (p.relative_to(final) if p.is_relative_to(final) else p.relative_to(ev.parent)).as_posix()) for p in pics]
     approved = cfg["paths"]["approved"]
     cd = Path(st["concept_dir"]) if st.get("concept_dir") else None

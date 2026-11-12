@@ -75,6 +75,21 @@ def test_prepare_lists_the_files_to_upload_and_the_rows_to_write_so_the_producer
     assert push == {"at": push["at"], "project": "Pilot", "open": {AID: f"{PUSH}~house-a"}}
 
 
+def test_the_remote_row_of_a_blockout_carries_the_material_side_views_after_hero_and_concept_as_the_local_card(
+        remote_on, capsys):
+    """D44.1: the owner approves the hidden sides at the blockout gate, on the claude.ai page too."""
+    review = vdir(AID, "blockout", 2) / "final/review"
+    for name in ("mat_back.png", "mat_left.png", "mat_right.png"):
+        Image.new("RGB", (60, 60), "white").save(review / name)
+    out = prepare(capsys, url=URL)
+    row = json.loads((remote_on / f"production/board/push/{PUSH}/offers/{PUSH}~house-a.json").read_text(encoding="utf-8"))
+    assert [i["n"] for i in row["images"]] == [
+        "review/game_cam.png", "concept/concept_albedo.png", "review/mat_left.png", "review/mat_right.png",
+        "review/mat_back.png", "review/lineup.png"]
+    assert out["upload"][2:5] == [f"{FINAL}/review/mat_left.png", f"{FINAL}/review/mat_right.png",
+                                  f"{FINAL}/review/mat_back.png"]
+
+
 def test_a_second_prepare_with_nothing_new_writes_nothing(remote_on, capsys):
     prepare(capsys, url=URL)
     assert prepare(capsys) == "board prepare: không có gì mới (1 asset chờ duyệt đã đẩy)\n"

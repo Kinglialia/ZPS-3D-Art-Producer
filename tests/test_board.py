@@ -73,6 +73,22 @@ def test_concept_sits_next_to_the_hero_and_newest_evidence_replaces_the_same_ren
         "/p/assets/house-a/blockout/v2/review/evidence-2/lineup.png"]
 
 
+def test_the_blockout_card_shows_the_material_side_views_right_after_hero_and_concept_so_the_sides_are_approved_there(project):
+    """D44.1: the owner approves the layout of the hidden sides at the blockout gate, so the mat_* renders come before the
+    other renders, in the order left, right, back, top."""
+    review = project / "production/assets" / AID / "blockout/v2/final/review"
+    for name in ("mat_top.png", "mat_back.png", "mat_right.png", "mat_left.png", "foot_front_left.png"):
+        (review / name).write_bytes(PNG)
+    assert [i["n"] for i in view()["images"]] == [
+        "review/game_cam.png", "concept/concept_albedo.png", "review/mat_left.png", "review/mat_right.png",
+        "review/mat_back.png", "review/mat_top.png", "review/foot_front_left.png", "review/lineup.png"]
+
+
+def test_a_blockout_without_material_side_views_keeps_its_old_card(project):
+    assert [i["n"] for i in view()["images"]] == [
+        "review/game_cam.png", "concept/concept_albedo.png", "review/lineup.png"]
+
+
 def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_line(project):
     v = view()
     assert v == {
