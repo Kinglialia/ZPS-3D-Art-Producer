@@ -1027,8 +1027,8 @@ def test_a_failed_check_after_the_direct_round_cap_goes_to_the_human_w7(flow):
     save_st(st)
     assert flow.work(out=out, checks={"join.json": "fail"}) == (
         "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: hết 2 vòng trả thẳng; check fail "
-        "ở v1: join.json (review page)\n")
-    assert (flow.st["offer"], flow.st["label"]) == (1, "chưa đạt")
+        "ở v1: join.json; bản chưa chấm, không duyệt được → Cần sửa kèm lời, hoặc sửa asset-card/profile rồi `retry house-a` (review page)\n")
+    assert (flow.st["offer"], flow.st["label"]) == (1, "chưa chấm")
 
 
 def test_the_fix_rounds_of_the_reviewer_do_not_stop_a_direct_round_w7(flow):
@@ -1050,8 +1050,26 @@ def test_the_same_failing_names_as_the_round_before_ask_the_human_at_once_and_na
     assert flow.st["direct_names"] == ["join.json", "layout.json"]
     assert flow.work(checks={"layout.json": "fail", "join.json": "fail"}) == (
         "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: check fail y hệt vòng trả thẳng "
-        "trước, ở v2: join.json, layout.json (review page)\n")
-    assert (flow.st["fix_round"], flow.st["direct_rounds"], flow.st["label"]) == (0, 1, "chưa đạt")
+        "trước, ở v2: join.json, layout.json; bản chưa chấm, không duyệt được → Cần sửa kèm lời, hoặc sửa asset-card/profile rồi `retry house-a` (review page)\n")
+    assert (flow.st["fix_round"], flow.st["direct_rounds"], flow.st["label"]) == (0, 1, "chưa chấm")
+
+
+def test_a_direct_round_stop_offers_its_version_as_unreviewed_and_approve_is_refused_until_a_retry_rebuilds_it(flow):
+    """The stop offered for approval a version that fails a hard gate and that no reviewer judged."""
+    flow.work(checks={"counts.json": "fail"})
+    assert flow.work(checks={"counts.json": "fail"}).splitlines()[0] == (
+        "house-a: worker DONE (check fail) → blockout/waiting_human. Tiếp: chờ người dùng: check fail y hệt vòng trả thẳng "
+        "trước, ở v2: counts.json; bản chưa chấm, không duyệt được → Cần sửa kèm lời, hoặc sửa asset-card/profile rồi "
+        "`retry house-a`; gate cứng counts.json không nhận ACCEPTED_FAIL (review page)")
+    assert (flow.st["offer"], flow.st["label"]) == (2, "chưa chấm")
+    with pytest.raises(ProducerError, match="không duyệt được blockout v2: bản chưa chấm"):
+        flow.human("approve")
+    head, line = flow.call(loop.retry, Namespace(id=AID)).splitlines()
+    assert head == "house-a: → fix. Tiếp: giao worker → `brief house-a`"
+    sent = json.loads(line)
+    assert (sent["brief"], flow.st["direct"], flow.st["direct_rounds"]) == (
+        f"production/assets/{AID}/blockout/v3/brief-worker.md", 2, 1)
+    assert "Đây là vòng trả thẳng 1." in flow.text(sent)
 
 
 def test_other_failing_names_than_the_round_before_are_progress_so_the_round_goes_on_w6(flow):

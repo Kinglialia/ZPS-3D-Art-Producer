@@ -53,7 +53,7 @@ MOVES = {
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0, "evidence_served": 0,
             "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None, "direct_rounds": 0,
-            "direct_names": None, "retry_why": None}
+            "direct_names": None, "direct_stop": None, "retry_why": None}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -373,7 +373,13 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
     if stop:
         move(st, "ask_human")
         best = findings.best_version([findings.load(st["id"], sid, v) for v in st.get("round_versions", [])]) or n
-        offer(st, sid, best, note=stop, label=NOT_PASSED)
+        judged = best in st.get("round_versions", [])
+        hard = [x for x in failing if x in HARD_GATES]
+        if not judged:
+            stop += (f"; bản {UNREVIEWED}, không duyệt được → Cần sửa kèm lời, hoặc sửa asset-card/profile rồi "
+                     f"`retry {st['id']}`" + (f"; gate cứng {', '.join(hard)} không nhận ACCEPTED_FAIL" if hard else ""))
+        st["direct_stop"] = n
+        offer(st, sid, best, note=stop, label=NOT_PASSED if judged else UNREVIEWED)
     else:
         move(st, "checks_failed")
         st |= {"direct": n, "direct_rounds": rounds + 1, "direct_names": failing,
@@ -831,6 +837,10 @@ def retry(a):
         return
     if st["state"] == "done_enabled":
         move(st, "resume", load_cfg())
+    elif st["state"] == "waiting_human" and st.get("direct_stop"):
+        move(st, "answer_fix")
+        st |= {"direct": st.pop("direct_stop"), "direct_rounds": 1, "direct_names": None, "note": "", "offer": None,
+               "offer_key": None, "label": ""}
     elif st["state"] == "waiting_human" and st.get("stalled_from"):
         was = st["stalled_from"]
         move(st, f"restall_{was}")
@@ -934,6 +944,10 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
             and step.get("reviewer")):
         die(f"{aid}: không duyệt được {key}: bản {UNREVIEWED} (kẹt ở {st['stalled_from']}) → `retry {aid}` để giao lại, "
             "hoặc Cần sửa, hoặc ghi chú")
+    if (action == "approve" and st["state"] == "waiting_human" and target == st["stage"] and st.get("direct_stop")
+            and st.get("label") == UNREVIEWED and step.get("reviewer")):
+        die(f"{aid}: không duyệt được {key}: bản {UNREVIEWED} (check fail, reviewer chưa chấm) → Cần sửa kèm lời, hoặc "
+            f"sửa asset-card/profile rồi `retry {aid}`")
     if by == "producer" and policy.load().get("test_mode") is not True:
         die(f"{aid}: --by producer chỉ chạy khi production/policy.yaml có test_mode: true; dự án thật do người dùng duyệt")
     if zip_path and not (action == "approve" and target == "assemble" and by == "user"):
