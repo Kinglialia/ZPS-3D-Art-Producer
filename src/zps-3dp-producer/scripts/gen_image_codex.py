@@ -126,6 +126,9 @@ def session_id(stderr: str | None) -> str | None:
 
 
 def error_kind(err: str) -> str | None:
+    """Only text that came from Codex counts: this script's own messages (a timeout of 429 s) are never an error kind."""
+    if not err.startswith(("codex: ", "không có file ảnh (codex exit")):
+        return None
     return "quota" if QUOTA.search(err) else "policy" if POLICY.search(err) else None
 
 

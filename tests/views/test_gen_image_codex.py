@@ -521,3 +521,11 @@ def test_without_a_session_id_a_pid_file_of_a_dead_run_does_not_block_the_fallba
     (gen.pid.parent / f"old-{dead.pid}.pid").write_text(str(dead.pid), encoding="utf-8")
     r = gen("home")
     assert (r["rc"], r["record"]["fallback"]) == (0, True)
+
+
+def test_only_text_from_codex_is_classified_so_a_429_s_timeout_is_not_a_quota_error_v12():
+    import gen_image_codex
+    assert [gen_image_codex.error_kind(e) for e in (
+        "hết thời gian chờ 429 s", "hết thời gian tổng 429 s (D33.3): không gọi thêm", "codex: rate limit reached",
+        "không có file ảnh (codex exit 1: Quota exceeded)", "file ảnh hỏng", "codex: content policy")] == [
+        None, None, "quota", "quota", None, "policy"]
