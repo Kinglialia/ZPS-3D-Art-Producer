@@ -257,6 +257,9 @@ def test_a_same_size_edit_of_an_approved_file_after_the_cache_is_warm_still_stop
     approve_blockout(flow)
     assert (flow.root / "production/hash-cache.json").is_file()
     flow.brief()
+    st = flow.st
+    st["dispatches"][-1]["ended"] = st["dispatches"][-1]["at"]
+    save_st(st)
     graph = flow.v(2) / "final/part_graph.json"
     assert graph.read_text(encoding="utf-8") == "x"
     graph.write_text("z", encoding="utf-8")
