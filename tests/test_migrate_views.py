@@ -322,3 +322,57 @@ def test_an_old_pipeline_toml_is_one_line_that_says_how_to_update_it_not_a_key_e
         "LỖI: production/pipeline.toml của v0.7.1 có bước views_front, views_rest: thay hai khối [[steps]] đó bằng "
         "khối `views` của zps-3dp-producer/templates/pipeline.toml, đổi hai id đó thành `views` trong inputs, review_inputs của model "
         "và texture, rồi chạy `migrate <id>` cho mỗi asset mà `next` nêu (references/setup.md, mục Nâng cấp từ v0.7.1)\n"))
+
+
+def validate(root: Path) -> list[str]:
+    return subprocess.run([sys.executable, str(SCRIPTS / "producer.py"), "validate"], cwd=root, capture_output=True,
+                          text=True).stdout.splitlines()
+
+
+def test_a_an_asset_before_the_views_step_with_the_old_rubric_is_named_by_validate_and_migrate_fixes_only_its_rubric(
+        tmp_path):
+    """Its status.json is clean, but its next views brief would point at a `## views` its rubric.md lacks."""
+    f = Flow(tmp_path)
+    pilot_project(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    old_rubric(tmp_path)
+    before = st_of(tmp_path)
+    line = f"{AID}: rubric.md của v0.7.1 còn mục views_front, views_rest → chạy `migrate {AID}`"
+    assert line in validate(tmp_path)
+    assert f.p("migrate", AID) == f"{AID}: không có bước view cũ, không đổi gì; rubric.md có mục ## views\n"
+    assert (st_of(tmp_path), [l for l in validate(tmp_path) if l.startswith(AID)]) == (before, [])
+
+
+def test_b_a_model_worker_dispatched_by_v0_7_1_is_ingested_after_migrate_because_the_old_folders_stay(case_b, monkeypatch):
+    """The open model dispatch recorded the hashes of the two old finals; they are still on disk and unchanged."""
+    from core.hashes import tree_hash
+    from flowkit import put_all, OUTPUTS
+    monkeypatch.chdir(case_b.root)
+    st = st_of(case_b.root)
+    ph = st["inputs"]["views_front"]["v2"]["profile"]
+    old = {s: {"v": 2, "hash": tree_hash(case_b.root / A / f"{s}/v2/final")} for s in OLD}
+    st |= {"state": "running", "versions": st["versions"] | {"model": 1}, "dispatch_out": None,
+           "inputs": st["inputs"] | {"model": {"v1": {"blockout": {"v": 1, "hash": st["approved_hash"]["blockout"]},
+                                                       **old, "profile": ph}}},
+           "dispatches": st["dispatches"] + [{"step": "model", "v": 1, "role": "worker", "model": None,
+                                              "at": "2026-11-11 09:00:00", "brief": f"{A}/model/v1/brief-worker.md"}]}
+    (case_b.root / A / "status.json").write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
+    case_b.p("migrate", AID)
+    vd = case_b.root / A / "model/v1"
+    put_all(vd / "final", "model", OUTPUTS["model"], "m1")
+    import glbkit
+    glbkit.write(vd / "final" / f"{AID}-untextured.glb", *glbkit.box((1.0, 1.0, 1.0)))
+    (vd / "worker-out.md").write_text(f"STATUS: DONE\nRUBRIC: mass=pass\nISSUES: none\nPROFILE_HASH: {ph}\n",
+                                      encoding="utf-8")
+    assert case_b.p("ingest", AID).splitlines()[0] == (
+        f"{AID}: worker DONE → model/review. Tiếp: giao reviewer → `brief {AID}`")
+
+
+def test_a_pair_whose_final_is_gone_stops_migrate_with_one_line_and_changes_nothing(case_b):
+    shutil.rmtree(case_b.root / A / "views_front/v2/final")
+    before = st_of(case_b.root)
+    assert case_b.p("migrate", AID, ok=False) == (
+        f"LỖI: {AID}: thiếu {A}/views_front/v2/final: không gộp được bộ view cũ; làm lại bước views bằng tay "
+        "(references/setup.md)\n")
+    assert st_of(case_b.root) == before

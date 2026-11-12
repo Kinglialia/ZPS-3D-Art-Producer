@@ -168,6 +168,9 @@ def test_the_worker_measures_the_front_alone_before_it_generates_a_side_and_meas
                                       "views_sheet.py make", "check_package.py")]
     assert order == sorted(order)
     assert "Chỉ sang bước 9 khi front pass, hoặc sau lần gen lại và `--pick-best` này." in steps
+    # accept_fails keeps one claim per JSON file: a second item for measure.json would hide the first reason.
+    assert ("Front đã khai ở bước 8 và một view khác cùng fail: một mục `ACCEPTED_FAIL` cho `measure.json`, nối hai lý "
+            "do bằng ` / `.") in steps
 
 
 def test_the_fix_round_lives_in_a_reference_read_only_in_a_fix_round_and_a_new_front_remakes_every_side():

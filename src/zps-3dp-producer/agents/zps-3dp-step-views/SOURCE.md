@@ -18,6 +18,7 @@ Không sửa file chép nguyên. `tests/views/test_views_source.py` so sha256 v�
 - D36 (V2, V4, V5, V6, V15): `tools/measure.py` bọc `measure_view` và `internal_boundaries` của `measure_views.py` (ranh hai màu dưới dE 10 không đo `detail`), sửa `regen` và danh sách view sau khi kit chạy, và thêm phép đo border, components, ring, light. File kit giữ nguyên.
 - D37 (L7, L9): `tools/make_prompt.py` holds the prompt templates, cut from `references/views.md`. `tools/measure.py` has the `--pick-best` mode. Both sit beside the kit files.
 - D36 (V3): `tools/concept_colors.py` lấy trung vị của ô bằng `hexc` của `measure_views.py`. Nó không dùng `vivid` của `palette_report.py` nữa.
+- D44.3: `tools/measure.py --front` là cờ: front nằm chung `final/` với các view, và check front của lần đo front một mình được giữ. `tools/views_sheet.py crop --frac` cắt theo box 0–1 mà reviewer xin. File kit giữ nguyên.
 - Không chép `sheet.py`: chỉ Way B (một ảnh nhiều view) dùng nó, và Producer chỉ chạy Way A.
 
 ## Rút từ kit (không chép nguyên)
