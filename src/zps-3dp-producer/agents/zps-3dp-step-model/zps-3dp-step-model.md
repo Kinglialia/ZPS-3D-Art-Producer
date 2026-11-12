@@ -22,7 +22,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa>
 - Mỗi lệnh in một dòng: tên tool, `pass`, `fail` hoặc `error`, rồi đường dẫn. Thoát 0 khi pass. Thoát 1 khi tool lỗi, hoặc khi JSON kết quả tool vừa ghi là `fail` hay `error`: đọc JSON hoặc log trong dòng đó.
 - Thư mục `V/variants/<b|c>/`: `RUN` không thấy JSON fail ở đó. Đọc `overall` của từng JSON.
 
-Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/BT/custom_lib.py`, hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief. Không viết `parts_lib.py`: tool dựng chép `custom_lib.py` vào `F`. Part gọi hàm của file `CUSTOM_PARTS:`: trước mỗi lần dựng sau khi sửa `part_graph.json` hoặc file đó, chạy `RUN BT/custom_mesh.py --work F` (cùng `--work` với lệnh dựng; lưới JSON vào `V/work/custom_mesh/`; Blender chỉ dựng từ JSON).
+Detail pass, `model.md`, file nào do tool nào ghi: `R/model.md`. Hợp đồng part graph: `T/../../zps-3dp-step-blockout/references/part-graph.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `custom_lib.py` trong `BT`, hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief. Không viết `parts_lib.py`: tool dựng chép `custom_lib.py` vào `F`. Part gọi hàm của file `CUSTOM_PARTS:`: trước mỗi lần dựng sau khi sửa `part_graph.json` hoặc file đó, chạy `RUN BT/custom_mesh.py --work F` (cùng `--work` với lệnh dựng; lưới JSON vào `V/work/custom_mesh/`; Blender chỉ dựng từ JSON).
 
 ## Quy trình
 
