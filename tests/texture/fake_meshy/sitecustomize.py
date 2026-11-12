@@ -9,13 +9,14 @@ failed_after_running (the first n task GETs say IN_PROGRESS, every later one say
 with original UVs, or the file FAKE_MESHY_GLB (a real Meshy GLB, normalized). A succeeded task also has
 texture_urls[0].base_color: a PNG of FAKE_MESHY_BASE_PX (default 2048) square, one colour, or
 one-pixel black and white columns when FAKE_MESHY_BASE_STRIPES is set.
-Each request is logged to FAKE_MESHY_LOG (method, url, authorization, the texture_resolution of a POST, and the pid
-files in FAKE_MESHY_PIDS)."""
+Each request is logged to FAKE_MESHY_LOG (method, url, authorization, the texture_resolution of a POST, the wait limit
+TIMEOUT_S the kit has in that process, and the pid files in FAKE_MESHY_PIDS)."""
 import base64
 import io
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -42,6 +43,7 @@ def log(entry):
     pids = os.environ.get("FAKE_MESHY_PIDS")
     if pids:
         entry["pids"] = sorted(x.name for x in Path(pids).glob("*.pid"))
+    entry["kit_wait_s"] = getattr(sys.modules.get("gen_api"), "TIMEOUT_S", None)
     with open(LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 

@@ -39,7 +39,7 @@ An <out> of an earlier call is refused, unless its task has no GLB or no base_co
 from that task), or both files are there and topology.json is missing (then only the topology gate runs: no request, no
 charge). A GLB counts only with the glTF magic and a header length equal to the file size; an image only when its
 PNG or JPEG end marker is there.
-Pending (D33.5): --timeout is the wait of one run (default 1700 s). When it runs out after the task
+Pending (D33.5): --timeout is the wait of one run (default 1700 s); the kit wait inside each child follows it. When it runs out after the task
 exists, the run exits 5 with status `pending` (not an error, not a try); task_id stays in <out>/task.json. Run it again
 with --resume and the same --out: it waits on that task only, never sends a new task, never charges again. --resume
 without a task_id in <out>/task.json is refused. Past --total-s (default 1800) since the first run of <out>: one status
@@ -73,6 +73,7 @@ GEN_API = Path(__file__).resolve().parent / "kit" / "tools" / "gen" / "gen_api.p
 TRIES = 3
 REFUSED, FAILED, TOPOLOGY, PENDING = 3, 1, 4, 5
 UV_TOL = 1e-4
+WAIT_ENV = "ZPS_MESHY_WAIT_S"
 MESHY_RES = {"2k": 2048, "4k": 4096, "8k": 8192}
 
 
@@ -102,10 +103,17 @@ def env_file() -> Path:
     return (p if p.is_absolute() else ROOT.parent / p).resolve()
 
 
-def child_env(ef: Path) -> dict:
+def child_env(ef: Path, wait_s: int | None = None) -> dict:
     env = {k: v for k, v in os.environ.items() if k != "MESHY_API_KEY"}
     env["ZPS_ART_ENV_FILE"] = str(ef)
+    if wait_s:
+        env[WAIT_ENV] = str(wait_s)
     return env
+
+
+def kit_wait(G):
+    """The kit stops waiting at 1200 s by itself, which would end a 1700 s run as an error and a retry, not as pending."""
+    G.TIMEOUT_S = int(os.environ.get(WAIT_ENV) or G.TIMEOUT_S)
 
 
 def secret(ef: Path) -> str | None:
@@ -132,8 +140,8 @@ def gen_api(args: list[str], ef: Path, timeout: int | None = None,
             texture_resolution: str | None = None) -> tuple[int | None, dict]:
     cmd = ([str(Path(__file__).resolve()), "_kit", texture_resolution] if texture_resolution else [str(GEN_API)])
     try:
-        r = heartbeat.run([sys.executable, *cmd, *args], tool="meshy gen_api", vd=heartbeat.vdir_of(*args), env=child_env(ef),
-                          timeout=timeout)
+        r = heartbeat.run([sys.executable, *cmd, *args], tool="meshy gen_api", vd=heartbeat.vdir_of(*args),
+                          env=child_env(ef, timeout), timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, {"error": f"hết thời gian chờ {timeout} s"}
     text = scrub(r.stdout + r.stderr, secret(ef)).strip()
@@ -317,6 +325,7 @@ def kit(texture_resolution: str, argv: list[str]):
     """In a child: run the kit gen_api.py unchanged, with texture_resolution added to the Meshy retexture body."""
     sys.path.insert(0, str(GEN_API.parent))
     import gen_api as G
+    kit_wait(G)
     plan = G.plan
 
     def with_resolution(a):
@@ -333,6 +342,7 @@ def resume(out: Path):
     """In a child with the project env: wait on the task of <out>/task.json, download its GLB again."""
     sys.path.insert(0, str(GEN_API.parent))
     import gen_api as G
+    kit_wait(G)
     rec = task(out)
     key = G.key_for("meshy") or sys.exit(json.dumps({"error": "MESHY_API_KEY is not set"}))
     try:
@@ -365,6 +375,7 @@ def base_color(out: Path):
     Prints the file, never the URL."""
     sys.path.insert(0, str(GEN_API.parent))
     import gen_api as G
+    kit_wait(G)
     rec = task(out)
     key = G.key_for("meshy") or sys.exit(json.dumps({"error": "MESHY_API_KEY is not set"}))
     try:
@@ -487,9 +498,9 @@ def paid_call(a, ef: Path, budget: Path, base: list[str]) -> tuple[int, dict, st
             paid = task(a.out).get("expected_credits")
             if not isinstance(paid, (int, float)):
                 paid = used(budget) - start
+            (a.out / "task.json").rename(a.out / "task-ended.json")
             refund(budget, max(used(budget) - paid, 0))
             start = used(budget)
-            (a.out / "task.json").rename(a.out / "task-ended.json")
             rec["tries"].append({"stage": "task_ended", "task_id": tid, "error": err, "refunded": True})
             break
         if tid:
@@ -533,7 +544,7 @@ def paid_call(a, ef: Path, budget: Path, base: list[str]) -> tuple[int, dict, st
 def child(cmd: str, out: Path, ef: Path, timeout: int) -> tuple[int | None, dict]:
     try:
         r = heartbeat.run([sys.executable, str(Path(__file__).resolve()), cmd, "--out", str(out)], tool=f"meshy {cmd}",
-                          vd=heartbeat.vdir_of(out), env=child_env(ef), timeout=timeout)
+                          vd=heartbeat.vdir_of(out), env=child_env(ef, timeout), timeout=timeout)
     except subprocess.TimeoutExpired:
         return None, {"error": f"hết thời gian chờ {timeout} s"}
     text = scrub((r.stdout + r.stderr).strip(), secret(ef))

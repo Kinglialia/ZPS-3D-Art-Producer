@@ -629,3 +629,23 @@ def test_a_folder_with_its_gate_result_is_still_refused_because_the_gate_only_re
 def test_one_run_waits_up_to_1700_seconds_by_default_so_a_slow_task_is_not_cut_at_8_minutes(meshy):
     p = subprocess.run([sys.executable, str(CALL), "texture", "--help"], cwd=meshy.tmp, capture_output=True, text=True)
     assert "default: 1700" in " ".join(p.stdout.split())
+
+
+def test_the_kit_wait_inside_every_child_follows_timeout_because_its_own_1200_s_would_end_a_run_as_a_retry(meshy):
+    """The kit gives up at 1200 s with an error; the wrapper counts an error as a try, three tries are BLOCKED."""
+    assert meshy(mode="poll_fail:3")["rc"] == 1
+    r = meshy()
+    assert (r["rc"], {c["kit_wait_s"] for c in r["calls"]}) == (0, {1700})
+
+
+def test_an_explicit_timeout_sets_the_kit_wait_of_the_children(meshy):
+    r = meshy("--timeout", "900")
+    assert (r["rc"], {c["kit_wait_s"] for c in r["calls"]}) == (0, {900})
+
+
+def test_a_failed_task_is_refunded_once_because_its_task_file_moves_away_before_the_refund(meshy):
+    meshy("--timeout", "2", mode="failed_after_running:1")
+    r = meshy("--resume", mode="failed_after_running:1")
+    assert (r["rc"], r["budget"]["used_credits"], "task.json" in r["files"]) == (1, 0, False)
+    r = meshy("--resume", mode="failed_after_running:1")
+    assert (r["rc"], r["budget"]["used_credits"]) == (3, 0)
