@@ -184,7 +184,7 @@ def parse_review(text: str) -> tuple[dict, list[str]]:
     rubric = {}
     for k, val in value_pairs(c.get("RUBRIC", "")):
         if val in RUBRIC_VALUES:
-            rubric[k] = val
+            rubric[k.lower()] = val
         else:
             errs.append(f"RUBRIC {k}: '{val}' phải là {'|'.join(RUBRIC_VALUES)}")
     counts = None

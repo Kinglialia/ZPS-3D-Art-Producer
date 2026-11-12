@@ -360,7 +360,7 @@ def validate(_a):
         if rub.exists() and (t := rub.read_text(encoding="utf-8")) != views_rubric(t):
             problems.append(f"{aid}: rubric.md của v0.7.1 còn mục {', '.join(OLD_VIEWS)} → chạy `migrate {aid}`")
             continue
-        if rub.exists() and not re.search(r"^- [a-z0-9_]+:", rub.read_text(encoding="utf-8"), re.M):
+        if rub.exists() and not re.search(r"^- [A-Za-z0-9_]+:", rub.read_text(encoding="utf-8"), re.M):
             problems.append(f"{aid}: rubric.md chưa có tiêu chí dạng `- key: mô tả`")
         if rub.exists() and (gone := [s["id"] for s in cfg["steps"] if s["enabled"] and s.get("reviewer")
                                       and not re.search(rf"^## {s['id']}\s*$", rub.read_text(encoding="utf-8"), re.M)]):

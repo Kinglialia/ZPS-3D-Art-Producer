@@ -1232,6 +1232,21 @@ def test_a_full_review_that_leaves_rubric_keys_out_is_a_contract_error_that_name
                             "## blockout: silhouette, identity, open_closed, foot, own_decisions")
 
 
+def test_a_rubric_key_in_another_case_counts_as_the_key_of_the_rubric_section(flow):
+    """`Mass=pass` judged the key `mass`; a case-sensitive match refused the report as "RUBRIC thiếu key … mass". A
+    capitalised key written in rubric.md is the same key too."""
+    rub = flow.root / f"production/assets/{AID}/rubric.md"
+    rub.write_text(rub.read_text(encoding="utf-8").replace("\n- foot:", "\n- Foot:", 1), encoding="utf-8")
+    assert briefs.rubric_keys(AID, "blockout")[-2:] == ["foot", "own_decisions"]
+    flow.work()
+    out = flow.brief()
+    upper = "; ".join(f"{k.upper()}=pass" for k in ("mass", "silhouette", "identity", "open_closed", "props", "foot",
+                                                     "own_decisions"))
+    assert raw_review(flow, out, verdict="PASS", top_fix=None, counts=counts(), rubric=upper).startswith(
+        "house-a: review PASS (0 mở) → blockout/waiting_human")
+    assert flow.st["last_rubric"].startswith("mass=pass; silhouette=pass")
+
+
 def test_a_pass_in_a_fix_round_that_leaves_a_key_out_is_refused_so_it_cannot_skip_the_full_review(flow):
     fix_v1(flow, 1)
     flow.work()

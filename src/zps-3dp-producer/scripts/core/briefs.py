@@ -390,13 +390,13 @@ def accepted_names(st, n: int) -> set[str]:
 
 
 def rubric_keys(aid: str, sid: str) -> list[str]:
-    """The keys of the section `## <step>` in the rubric.md of the asset."""
+    """The keys of the section `## <step>` in the rubric.md of the asset, in lower case as parse_review reads RUBRIC."""
     try:
         text = (ASSETS / aid / "rubric.md").read_text(encoding="utf-8")
     except OSError:
         return []
     m = re.search(rf"^## {re.escape(sid)}[ \t]*$(.*?)(?=^## |\Z)", text, re.M | re.S)
-    return re.findall(r"^- ([a-z0-9_]+):", m.group(1), re.M) if m else []
+    return [k.lower() for k in re.findall(r"^- ([A-Za-z0-9_]+):", m.group(1), re.M)] if m else []
 
 
 def decide(pairs: list[tuple[str, str]], accepted: set[str]) -> str | None:
