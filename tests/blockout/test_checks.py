@@ -1,10 +1,11 @@
 """Pure blockout checks (docs/agents/blockout.md §5, §9): plain Python, one JSON, one line, exit 1 on fail."""
 import copy
 import json
+import sys
 
 import pytest
 
-from conftest import HUT_ROWS, HUT_SOURCES, hut, part, write_build
+from conftest import HUT_ROWS, HUT_SOURCES, TOOLS, hut, part, write_build
 
 
 def assert_pass(r):
@@ -494,3 +495,36 @@ def test_every_check_prints_one_line_and_errors_exit_2(tmp_path, run_check):
         r = run_check(name, "--work", tmp_path / "missing")
         assert (r.rc, r.overall, len(r.lines)) == (2, "error", 1), name
         assert "No such file" in r.json["data"]["error"], name
+
+
+# ---------------------------------------------------------------- render_review foot framing
+def row(name, lo, hi):
+    return {"name": name, "parent": None, "contact": None, "depth": None, "bbox_min": lo, "bbox_max": hi}
+
+
+@pytest.fixture
+def render_review():
+    pytest.importorskip("numpy")
+    sys.path.insert(0, str(TOOLS))
+    import render_review as RR
+    return RR
+
+
+def test_foot_crop_of_a_prop_without_a_base_tag_aims_at_the_ground_not_at_the_top_of_a_tall_part(render_review):
+    """A 3 m post on a 0.4 m footing: aiming at the top of the lowest parts puts the camera at 3 m with a 12 m frame,
+    so the crop shows sky, not the corner where the post meets the ground."""
+    rows = [row("post", [-0.15, -0.15, 0.0], [0.15, 0.15, 3.0]), row("cap", [-0.2, -0.2, 3.0], [0.2, 0.2, 3.2])]
+    f = render_review.foot_frame(rows, {"parts": [{"name": "post"}, {"name": "cap"}]})
+    assert f == {"base": False, "scale": 1.0, "left": [0.15, -0.15, 0.0], "right": [-0.15, -0.15, 0.0]}
+
+
+def test_foot_crop_frame_grows_with_the_footprint_so_a_wide_prop_is_not_cropped_to_one_metre(render_review):
+    rows = [row("a", [-4.0, -2.0, 0.0], [4.0, 2.0, 0.5])]
+    f = render_review.foot_frame(rows, {"parts": [{"name": "a"}]})
+    assert (f["scale"], f["left"], f["right"]) == (2.0, [4.0, -2.0, 0.0], [-4.0, -2.0, 0.0])
+
+
+def test_foot_crop_with_a_base_tag_keeps_the_frame_on_the_base_top(render_review):
+    rows = [row("plinth", [-2.0, -2.0, 0.0], [2.0, 2.0, 0.5]), row("hall", [-1.0, -1.0, 0.5], [1.0, 1.0, 3.0])]
+    f = render_review.foot_frame(rows, {"parts": [{"name": "plinth", "tag": "base"}, {"name": "hall"}]})
+    assert f == {"base": True, "scale": 2.0, "left": [2.0, -2.0, 0.5], "right": [-2.0, -2.0, 0.5]}

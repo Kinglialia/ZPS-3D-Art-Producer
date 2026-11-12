@@ -126,3 +126,6 @@ def test_a_prop_without_a_base_part_still_gets_foot_crops_from_the_parts_on_the_
     blender("--python", TOOLS / "render_review.py", "--", "--work", f, "--size", "256")
     rr = read(f / "review/review.json")
     assert {"foot_front_left", "foot_front_right"} <= set(rr["artifacts"])
+    foot = rr["data"]["foot"]
+    assert (foot["base"], foot["scale"], foot["left"], foot["right"]) == (
+        False, 1.0, [2.0, -2.0, 0.0], [-2.0, -2.0, 0.0])

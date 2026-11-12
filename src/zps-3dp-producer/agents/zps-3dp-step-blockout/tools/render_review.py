@@ -57,6 +57,29 @@ def figure(height, x, y):
     return np.asarray(m.vertices, float), np.asarray(m.faces, np.int64)
 
 
+def foot_frame(rows, graph):
+    """Where the two foot crops look: the front corner, left = +X. With a `tag: base` part the camera looks at the top
+    of the base and the frame is four times its height; without one it looks at the ground (z = 0) at the front corner
+    of the parts resting on the ground and the frame is a quarter of the longer side of the footprint."""
+    if not rows:
+        return None
+    base = [r for r in rows if any(p["name"] == r["name"] and p.get("tag") == "base" for p in graph["parts"])]
+    if base:
+        blo = np.min([r["bbox_min"] for r in base], axis=0)
+        bhi = np.max([r["bbox_max"] for r in base], axis=0)
+        z, scale = float(bhi[2]), max(1.0, 4 * float(bhi[2] - blo[2]))
+    else:
+        floor = min(r["bbox_min"][2] for r in rows)
+        ground = [r for r in rows if r["bbox_min"][2] <= floor + 0.01]
+        blo = np.min([r["bbox_min"] for r in ground], axis=0)
+        bhi = np.max([r["bbox_max"] for r in ground], axis=0)
+        lo, hi = np.min([r["bbox_min"] for r in rows], axis=0), np.max([r["bbox_max"] for r in rows], axis=0)
+        z, scale = 0.0, max(1.0, 0.25 * float(max(hi[0] - lo[0], hi[1] - lo[1])))
+    return {"base": bool(base), "scale": round(scale, 4),
+            "left": [round(float(bhi[0]), 4), round(float(blo[1]), 4), round(z, 4)],
+            "right": [round(float(blo[0]), 4), round(float(blo[1]), 4), round(z, 4)]}
+
+
 def run(work, outdir, size):
     import bpy
     sources = common.read_json(os.path.join(work, "sources.json"))
@@ -97,24 +120,19 @@ def run(work, outdir, size):
     else:
         checks.append(common.check("render.game_cam", "not_checked", note="sources.json has no camera"))
 
-    base = [r for r in rows if any(p["name"] == r["name"] and p.get("tag") == "base" for p in graph["parts"])]
-    if not base and rows:
-        floor = min(r["bbox_min"][2] for r in rows)
-        base = [r for r in rows if r["bbox_min"][2] <= floor + 0.01]
-    if base:
-        blo = np.min([r["bbox_min"] for r in base], axis=0)
-        bhi = np.max([r["bbox_max"] for r in base], axis=0)
+    frame = foot_frame(rows, graph)
+    if frame:
         cam.data.type = "ORTHO"
-        cam.data.ortho_scale = max(1.0, 4 * float(bhi[2] - blo[2]))
-        for label, x, az in (("foot_front_left", bhi[0], 45.0), ("foot_front_right", blo[0], -45.0)):
-            look(cam, raster.camera_dir(az, FOOT_EL), (x, blo[1], bhi[2]), 10 * diag)
+        cam.data.ortho_scale = frame["scale"]
+        for label, side, az in (("foot_front_left", "left", 45.0), ("foot_front_right", "right", -45.0)):
+            look(cam, raster.camera_dir(az, FOOT_EL), frame[side], 10 * diag)
             files[label] = os.path.join(outdir, f"{label}.png")
             shoot(bpy, scene, files[label], size // 2, size // 2)
     else:
         checks.append(common.check("render.foot", "not_checked", note="no part rests on the ground"))
     bpy.data.objects.remove(ground)
     checks.insert(0, common.check("render.files", "info", value=len(files)))
-    return checks, files
+    return checks, files, frame
 
 
 def main():
@@ -127,11 +145,11 @@ def main():
     out = os.path.join(outdir, "review.json")
     src = os.path.join(a.work, "assembled.glb")
     try:
-        checks, files = run(a.work, outdir, a.size)
+        checks, files, frame = run(a.work, outdir, a.size)
     except Exception as e:  # noqa: BLE001
         common.write_error(out, TOOL, e, source=src)
         sys.exit(1)
-    common.write_result(out, TOOL, checks, artifacts=files, source=src)
+    common.write_result(out, TOOL, checks, artifacts=files, data={"foot": frame}, source=src)
 
 
 if __name__ == "__main__":
