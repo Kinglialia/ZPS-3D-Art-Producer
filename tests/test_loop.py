@@ -1117,6 +1117,26 @@ def test_the_template_lets_a_blockout_worker_accept_a_proportion_check_that_has_
     assert (flow.st["state"], flow.st["accepted_fail"]) == ("reviewing", {"blockout": {"proportion.json": 1}})
 
 
+def test_an_accepted_fail_never_reaches_a_later_version_or_step_with_the_same_number(flow):
+    """`accepted` holds a version number and no step: blockout v1's ACCEPTED_FAIL showed up in the model v1 review brief."""
+    why = "front lệch 12% do mái chìa 0.4 m"
+    (flow.v(1) / "final").mkdir(parents=True, exist_ok=True)
+    out = flow.brief()
+    (flow.v(1) / "final/README.md").write_text(f"## NGOẠI LỆ\n- proportion.json — {why}\n", encoding="utf-8")
+    flow.work(out=out, checks={"proportion.json": "fail"}, extra=f"ACCEPTED_FAIL: proportion.json — {why}\n")
+    assert flow.st["accepted"] == {"v": 1, "items": [f"proportion.json — {why}"]}
+    flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")])
+    flow.work()
+    assert flow.st["accepted"] is None
+    st = flow.st
+    st["accepted"] = {"v": 2, "items": [f"proportion.json — {why}"]}
+    save_st(st)
+    flow.review(verdict="PASS", top_fix=None, rubric="mass=pass", compare="F1=better",
+                prior=["- F1: resolved | evidence: clay_front"])
+    flow.human("approve")
+    assert flow.st["accepted"] is None
+
+
 def test_a_gate_json_whose_only_failing_check_is_gate5_health_can_be_accepted_c19(flow):
     gate_json(flow, "roof", failing=["gate5.health"])
     st = accept(flow, "roof.json")

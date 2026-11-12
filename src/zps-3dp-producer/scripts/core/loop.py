@@ -53,7 +53,7 @@ MOVES = {
 def fresh() -> dict:
     return {"fix_round": 0, "fix_base": None, "round_versions": [], "evidence": None, "evidence_used": 0, "evidence_served": 0,
             "offer": None, "offer_key": None, "label": "", "note": "", "rereview": None, "direct": None, "direct_rounds": 0,
-            "direct_names": None, "direct_stop": None, "retry_why": None}
+            "direct_names": None, "direct_stop": None, "retry_why": None, "accepted": None}
 
 
 def move(st: dict, event: str, cfg: dict | None = None):
@@ -351,7 +351,7 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
         print(f"{st['id']}: {skipped}", file=sys.stderr)
     done = {"direct_rounds": 0, "direct_names": None}
     if not (bad := [*failed_checks(d), *extra]):
-        st |= done
+        st |= done | {"accepted": None}
         return False
     sid, r = step["id"], cfg["review"]
     ok, refused = accept_fails(step, d, bad, c["ACCEPTED_FAIL"])
