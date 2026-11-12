@@ -240,27 +240,13 @@ def test_model_brief_names_the_light_of_the_card_so_make_spec_does_not_guess_the
     assert briefs.card_lines(st, step_of("blockout")) == []
 
 
-def test_model_brief_names_the_fitted_camera_file_of_the_approved_blockout_only_when_it_exists_c21(at_root):
+def test_the_model_brief_names_no_camera_fit_file_because_make_spec_finds_it_itself(at_root):
+    """No tool or agent text read the CAMERA_FIT line: make_spec.py reads B/camera_fit.json of the approved blockout."""
     from core import briefs
     st = card_asset(at_root)
-    assert briefs.card_lines(st, step_of("model")) == []
-    work = at_root / "production/assets/05-warehouse/blockout/v2/work"
-    work.mkdir(parents=True)
-    (work / "camera_fit.json").write_text("{}", encoding="utf-8")
-    assert briefs.card_lines(st, step_of("model")) == []
     final = at_root / "production/assets/05-warehouse/blockout/v2/final"
-    final.mkdir()
+    final.mkdir(parents=True)
     (final / "camera_fit.json").write_text("{}", encoding="utf-8")
-    assert briefs.card_lines(st, step_of("model")) == [
-        "CAMERA_FIT: production/assets/05-warehouse/blockout/v2/final/camera_fit.json", ""]
-
-
-def test_camera_fit_of_another_blockout_version_is_not_named_c21(at_root):
-    from core import briefs
-    st = card_asset(at_root)
-    other = at_root / "production/assets/05-warehouse/blockout/v1/work"
-    other.mkdir(parents=True)
-    (other / "camera_fit.json").write_text("{}", encoding="utf-8")
     assert briefs.card_lines(st, step_of("model")) == []
 
 

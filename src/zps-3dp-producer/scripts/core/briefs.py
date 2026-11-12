@@ -165,12 +165,6 @@ def concept_colors_line(st, step) -> list[str]:
     return [f"CONCEPT_COLORS: {rel(f)}" if f.is_file() else COLORS_NONE]
 
 
-def camera_fit_file(st) -> Path | None:
-    """The fitted concept camera of the approved blockout: prep_overlay.py writes it to final/, where make_spec.py reads it."""
-    v = (st.get("approved") or {}).get("blockout")
-    return f if v and (f := vdir(st["id"], "blockout", v) / "final" / "camera_fit.json").is_file() else None
-
-
 def card_lines(st, step) -> list[str]:
     """D43: the card fields and measured files a worker would otherwise guess, one line each."""
     card = asset_card.card(st)
@@ -180,7 +174,6 @@ def card_lines(st, step) -> list[str]:
         out.append(f"VIEW_SIDE: {card['view_side']}")
     if step["id"] == "model":
         out += [f"LIGHT: from={light['from']} elevation={light['elevation_deg']:g}"] if light else []
-        out += [f"CAMERA_FIT: {rel(f)}"] if (f := camera_fit_file(st)) else []
     out += concept_colors_line(st, step)
     return [*out, ""] if out else []
 
