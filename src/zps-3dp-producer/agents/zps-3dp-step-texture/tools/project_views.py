@@ -2,16 +2,24 @@
 
 Usage: python3 T/project_views.py --glb <locked GLB> --model M --views V/work/paint --base V/work/paint/base_fill.png
        --res N --out V/work/paint/projected.png [--padding 16]
-Drawn from kit project_concept.py (orthographic projection, cos weights, occlusion), with the cameras of
-render_paint_views.py instead of a bbox fit to a concept, so 8 views of any angle work:
-  each texel's 3D point is projected into every view; a view counts when the face looks at the camera
-  (cos = n . -d > MIN_COS), the point is the nearest surface there (the view's own z-buffer, tolerance DEPTH_EPS of the
-  asset size) and the painted pixel is opaque (paint alpha, else guide alpha); weight cos^2.
+Drawn from kit project_concept.py (orthographic projection, occlusion), with the cameras of render_paint_views.py instead
+of a bbox fit to a concept, so 8 views of any angle work. The paintings are made one by one, so a texel takes one view:
+  registration: each painting's object mask (its alpha, else the pixels away from its border colour) is compared with
+    its guide's alpha. IoU under LIMITS["min_iou"] or an offset (phase correlation of the two masks) over
+    LIMITS["max_shift_px"] rejects the view, so no background or neighbour material lands on the model.
+  seen: a view sees a texel when the face looks at the camera (cos = n . back > MIN_COS), the point is the nearest
+    surface there (the view's z-buffer, tolerance DEPTH_EPS of the asset size), every pixel within EDGE_PX shows that
+    surface too (so no bilinear tap reads a nearer or farther one) and it lies inside the guide alpha shrunk by ERODE_PX.
+  winner: per face the view of best cos; a face takes the view that wins its UV island (area x cos) when that view is
+    within HYST of its best, so coplanar faces agree. A texel its winner does not see takes the best other view that
+    sees it. Sampling is bilinear.
+  feather: only texels within FEATHER_PX of another face's winner in the same UV island blend, by the share of each
+    winner in that window. A texel taken by another view than its winner keeps that one view.
   texels no view sees take, in order: the mean of the seen texels of the same face; of the same material code and side
   (+X -X +Y -Y top bottom: the same normal direction); else the base fill.
-  a paint view of another aspect than its guide is skipped and named, so only that view is painted again.
-Writes <out> and <out>.json (share of island texels per source, skipped views). Prints one line. Exit 0, 1 when a
-view was skipped, 2 on error.
+A painting missing, of another aspect than its guide, or rejected is named in `redo`: paint only those views again.
+Writes <out> and <out>.json (share of island texels per source, feather share, registration per view, skipped, redo).
+Prints one line. Exit 0, 1 when a view is in `redo`, 2 on error.
 """
 import argparse
 import json
@@ -25,11 +33,17 @@ import numpy as np  # noqa: E402
 
 import id_map  # noqa: E402
 import tex  # noqa: E402
+import texture_complexity  # noqa: E402
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
 from root_guard import require_root  # noqa: E402
 
 MIN_COS = 0.2
 DEPTH_EPS = 0.004
+EDGE_PX = 1
+ERODE_PX = 3
+FEATHER_PX = 2
+HYST = 0.05
+LIMITS = {"min_iou": 0.9, "max_shift_px": 3}  # provisional until the pilot: the share of good paintings they reject
 
 
 class Aspect(ValueError):
@@ -43,7 +57,7 @@ def project(cam, pts):
     k = max(cam["w"], cam["h"]) / cam["ortho_scale"]
     px = cam["w"] / 2 + (rel @ right) * k
     py = cam["h"] / 2 - (rel @ up) * k
-    return px, py, -(rel @ back), -back
+    return px, py, -(rel @ back), back
 
 
 def zbuffer(cam, v, f):
@@ -81,42 +95,158 @@ def rgba(path, size=None):
     return np.asarray(im, float)
 
 
+def window(a, px, fn, fill):
+    """fn (min or and) over the (2 px + 1)^2 window of each pixel; outside the image counts as fill."""
+    out = a
+    for axis in (0, 1):
+        p = np.pad(out, [(px, px) if k == axis else (0, 0) for k in range(2)], constant_values=fill)
+        n = out.shape[axis]
+        out = fn.reduce([np.take(p, range(s, s + n), axis=axis) for s in range(2 * px + 1)])
+    return out
+
+
+def registration(paint, guide_alpha):
+    """IoU of the painting's object mask with the guide alpha, and the painting's offset [dx, dy] in px."""
+    pm, gm = texture_complexity.object_mask(paint), guide_alpha >= 128
+    iou = float((pm & gm).sum() / max((pm | gm).sum(), 1))
+    r = np.fft.fft2(pm.astype(float)) * np.conj(np.fft.fft2(gm.astype(float)))
+    c = np.fft.ifft2(r / np.maximum(np.abs(r), 1e-9)).real
+    dy, dx = np.unravel_index(int(c.argmax()), c.shape)
+    h, w = c.shape
+    return iou, [int(dx - w if dx > w // 2 else dx), int(dy - h if dy > h // 2 else dy)]
+
+
+def bilinear(img, x, y):
+    h, w = img.shape[:2]
+    x, y = np.clip(x - 0.5, 0, w - 1), np.clip(y - 0.5, 0, h - 1)
+    x0, y0 = np.minimum(x.astype(int), w - 2), np.minimum(y.astype(int), h - 2)
+    fx, fy = (x - x0)[:, None], (y - y0)[:, None]
+    return ((img[y0, x0] * (1 - fx) + img[y0, x0 + 1] * fx) * (1 - fy)
+            + (img[y0 + 1, x0] * (1 - fx) + img[y0 + 1, x0 + 1] * fx) * fy)
+
+
+def islands(uv, f):
+    """UV island of every face: faces joined through a shared UV point."""
+    _, vid = np.unique(np.round(uv * 65536).astype(np.int64), axis=0, return_inverse=True)
+    fv = vid.reshape(-1)[f]
+    lab = np.arange(fv.max() + 1)
+    while True:
+        new = lab.copy()
+        np.minimum.at(new, fv.reshape(-1), np.repeat(lab[fv].min(1), 3))
+        new = new[new]
+        if np.array_equal(new, lab):
+            return lab[fv[:, 0]]
+        lab = new
+
+
+def winners(cos, area, isl):
+    """Winner view per face (-1 when no view looks at it), cos (V, F)."""
+    vis = cos > MIN_COS
+    best = np.where(vis, cos, -np.inf).argmax(0)
+    score = np.stack([np.bincount(isl, area * np.where(vis[k], cos[k], 0), isl.max() + 1) for k in range(len(cos))])
+    dom = score.argmax(0)[isl]
+    at = np.arange(cos.shape[1])
+    take = vis[dom, at] & (cos[dom, at] >= cos[best, at] - HYST)
+    return np.where(vis.any(0), np.where(take, dom, best), -1)
+
+
+def shifted(a, dy, dx):
+    """a[y + dy, x + dx], -1 outside."""
+    out = np.full_like(a, -1)
+    h, w = a.shape
+    out[max(-dy, 0):h - max(dy, 0), max(-dx, 0):w - max(dx, 0)] = a[max(dy, 0):h - max(-dy, 0), max(dx, 0):w - max(-dx, 0)]
+    return out
+
+
+def feather(tm, src, win, isl, seen):
+    """Weights (N, V) of the views per texel: one-hot of src; a texel of a face's winner within FEATHER_PX of another
+    face's winner in the same island blends the winners there. A texel its winner does not see stays one view."""
+    ins = tm.inside
+    srcmap, islmap = np.full(ins.shape, -1), np.full(ins.shape, -1)
+    srcmap[ins], islmap[ins] = np.where(src == win, src, -1), isl[tm.face[ins]]
+    offs = [(dy, dx) for dy in range(-FEATHER_PX, FEATHER_PX + 1) for dx in range(-FEATHER_PX, FEATHER_PX + 1)]
+    band = np.zeros(ins.shape, bool)
+    for dy, dx in offs:
+        ns = shifted(srcmap, dy, dx)
+        band |= (srcmap >= 0) & (ns >= 0) & (ns != srcmap) & (shifted(islmap, dy, dx) == islmap)
+    w = np.zeros((len(src), len(seen)))
+    w[src >= 0, src[src >= 0]] = 1
+    idx = np.full(ins.shape, -1)
+    idx[ins] = np.arange(len(src))
+    by, bx = np.nonzero(band)
+    if not len(by):
+        return w
+    cnt = np.zeros((len(by), len(seen)))
+    for dy, dx in offs:
+        ns, ni = shifted(srcmap, dy, dx)[by, bx], shifted(islmap, dy, dx)[by, bx]
+        ok = (ns >= 0) & (ni == islmap[by, bx])
+        np.add.at(cnt, (np.flatnonzero(ok), ns[ok]), 1)
+    t = idx[by, bx]
+    cnt *= np.stack([s[t] for s in seen], 1)
+    keep = cnt.sum(1) > 0
+    w[t[keep]] = cnt[keep] / cnt[keep].sum(1, keepdims=True)
+    return w
+
+
 def run(a):
     codes, g = id_map.face_codes(a.model, a.glb)
     tm = tex.TexelMap(g["v"], g["f"], g["uv"], a.res)
     ins = tm.inside
-    pos, nrm = tm.pos[ins], tm.nrm[ins]
+    pos, face = tm.pos[ins], tm.face[ins]
+    fn = tex.face_normals(g["v"], g["f"])
+    area = np.linalg.norm(np.cross(g["v"][g["f"][:, 1]] - g["v"][g["f"][:, 0]], g["v"][g["f"][:, 2]] - g["v"][g["f"][:, 0]]),
+                          axis=1) / 2
     diag = float(np.linalg.norm(g["v"].max(0) - g["v"].min(0)))
-    acc, wsum = np.zeros((len(pos), 3)), np.zeros(len(pos))
     views = json.load(open(os.path.join(a.views, "cameras.json"), encoding="utf-8"))["views"]
-    used, skipped = 0, {}
+    used, skipped, reg = [], {}, {}
     for vw in views:
-        paint = os.path.join(a.views, vw["paint"])
-        if not os.path.isfile(paint):
+        name, cam = vw["paint"], vw["camera"]
+        path = os.path.join(a.views, name)
+        if not os.path.isfile(path):
+            skipped[name] = "thiếu file"
             continue
-        cam = vw["camera"]
         try:
-            img = rgba(paint, (cam["w"], cam["h"]))
+            img = rgba(path, (cam["w"], cam["h"]))
         except Aspect as e:
-            skipped[vw["paint"]] = str(e)
+            skipped[name] = str(e)
             continue
-        used += 1
-        guide = rgba(os.path.join(a.views, vw["guide"]))
-        alpha = img[..., 3] if (img[..., 3] < 250).any() else guide[..., 3]
-        px, py, depth, look = project(cam, pos)
-        cos = nrm @ -look
+        alpha = rgba(os.path.join(a.views, vw["guide"]))[..., 3]
+        iou, off = registration(img, alpha)
+        reg[name] = {"iou": round(iou, 4), "offset_px": off}
+        if iou < LIMITS["min_iou"] or max(map(abs, off)) > LIMITS["max_shift_px"]:
+            skipped[name] = f"lệch guide: IoU {iou:.2f}, dời {off[0]},{off[1]} px"
+            continue
+        mask = window(alpha >= 128, ERODE_PX, np.logical_and, False)
+        if (img[..., 3] < 250).any():
+            mask &= img[..., 3] >= 128
+        px, py, depth, back = project(cam, pos)
         xi, yi = np.clip(px.astype(int), 0, cam["w"] - 1), np.clip(py.astype(int), 0, cam["h"] - 1)
+        cosf = fn @ back
+        c = np.clip(cosf[face], MIN_COS, 1)
+        tol = DEPTH_EPS * diag + 2 * EDGE_PX * cam["ortho_scale"] / max(cam["w"], cam["h"]) * np.sqrt(1 - c ** 2) / c
         z = zbuffer(cam, g["v"], g["f"])
-        seen = (cos > MIN_COS) & (depth <= z[yi, xi] + DEPTH_EPS * diag) & (alpha[yi, xi] >= 128)
-        w = np.where(seen, cos ** 2, 0)
-        acc += w[:, None] * img[yi, xi, :3]
-        wsum += w
-    face = tm.face[ins]
-    side = tex.side_of(nrm)
+        near, far = window(z, EDGE_PX, np.minimum, np.inf)[yi, xi], window(z, EDGE_PX, np.maximum, -np.inf)[yi, xi]
+        seen = (cosf[face] > MIN_COS) & (depth <= near + tol) & (far <= depth + tol) & mask[yi, xi]
+        used.append((vw, cosf, seen, img[..., :3].astype(np.float32)))
+    src, w = np.full(len(pos), -1), np.zeros((len(pos), 0))
+    if used:
+        isl = islands(g["uv"], g["f"])
+        win = winners(np.stack([u[1] for u in used]), area, isl)[face]
+        best = np.full(len(pos), -np.inf)
+        for k, (_, cosf, seen, _) in enumerate(used):
+            sc = np.where(seen, cosf[face] + 2.0 * (win == k), -np.inf)
+            src, best = np.where(sc > best, k, src), np.maximum(sc, best)
+        w = feather(tm, src, win, isl, [u[2] for u in used])
+    acc = np.zeros((len(pos), 3))
+    for k, (vw, _, _, img) in enumerate(used):
+        t = np.flatnonzero(w[:, k] > 0)
+        px, py, _, _ = project(vw["camera"], pos[t])
+        acc[t] += w[t, k, None] * bilinear(img, px, py)
+    side = tex.side_of(tm.nrm[ins])
     cs = np.array([f"{codes[fc]}|{s}" for fc, s in zip(face, side)])
-    out = np.where(wsum[:, None] > 0, acc / np.maximum(wsum, 1e-9)[:, None], np.nan)
-    source = np.where(wsum > 0, "projected", "")
-    seen = wsum > 0
+    out = np.where((src >= 0)[:, None], acc, np.nan)
+    source = np.where(src >= 0, "projected", "")
+    seen = src >= 0
     for key, label in ((face, "face"), (cs, "code_side")):
         _, inv = np.unique(key, return_inverse=True)
         cnt = np.bincount(inv, seen)
@@ -131,7 +261,9 @@ def run(a):
     img[ins] = out
     tex.save_rgb(tex.gutter(img, ins, a.padding), a.out)
     share = {k: round(float((source == k).mean()), 4) for k in ("projected", "face", "code_side", "base")}
-    return share, used, skipped
+    return {"views": len(used), "of": len(views), "share": share,
+            "feather_share": round(float(((w > 0).sum(1) > 1).mean()), 4), "registration": reg, "skipped": skipped,
+            "redo": [v["paint"] for v in views if v["paint"] in skipped]}
 
 
 def main():
@@ -142,16 +274,17 @@ def main():
     p.add_argument("--padding", type=int, default=16)
     a = p.parse_args()
     try:
-        share, n, skipped = run(a)
+        r = run(a)
     except Exception as e:  # noqa: BLE001
         print(f"[project_views] error: {e!r}")
         sys.exit(2)
-    json.dump({"views": n, "share": share, "skipped": skipped}, open(os.path.splitext(a.out)[0] + ".json", "w",
-                                                                      encoding="utf-8"), ensure_ascii=False, indent=1)
-    skip = "".join(f"; bỏ {k} ({v}): gen lại view đó" for k, v in skipped.items())
-    print(f"[project_views] {n} view; chiếu {share['projected']:.0%}, mặt {share['face']:.0%}, "
-          f"mã+hướng {share['code_side']:.0%}, nền {share['base']:.0%}{skip} -> {a.out}")
-    sys.exit(1 if skipped else 0)
+    json.dump(r, open(os.path.splitext(a.out)[0] + ".json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    share = r["share"]
+    skip = "".join(f"; bỏ {k} ({v})" for k, v in r["skipped"].items())
+    redo = f"; gen lại {', '.join(r['redo'])} rồi chạy lại" if r["redo"] else ""
+    print(f"[project_views] {r['views']}/{r['of']} view; chiếu {share['projected']:.0%}, mặt {share['face']:.0%}, "
+          f"mã+hướng {share['code_side']:.0%}, nền {share['base']:.0%}{skip}{redo} -> {a.out}")
+    sys.exit(1 if r["redo"] else 0)
 
 
 if __name__ == "__main__":

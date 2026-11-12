@@ -37,11 +37,16 @@ MOTIF = re.compile(r"\b(hoa văn|chữ|biển|motif|logo|họa tiết|pattern|te
 def object_pixels(path):
     from PIL import Image
     im = np.asarray(Image.open(path).convert("RGBA"), float)
+    return im, object_mask(im)
+
+
+def object_mask(im):
+    """Object pixels of an RGBA array (h, w, 4): alpha when the image has one, else away from the border colour."""
     if (im[..., 3] < 250).any():
-        return im, im[..., 3] >= 128
+        return im[..., 3] >= 128
     rgb = im[..., :3]
     border = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
-    return im, np.linalg.norm(rgb - np.median(border, 0), axis=-1) > BG_DIST
+    return np.linalg.norm(rgb - np.median(border, 0), axis=-1) > BG_DIST
 
 
 def clusters(path):

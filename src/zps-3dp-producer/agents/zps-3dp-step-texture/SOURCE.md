@@ -17,7 +17,7 @@ Không sửa file chép nguyên. `tests/texture/test_texture_source.py` so sha25
 
 | File | Nguồn kit | sha256 nguồn | Cách rút |
 |---|---|---|---|
-| `tools/project_views.py` | `zps-3d-artist/tools/texture/project_concept.py` | `797948a6746bee5d68b495c66c662c570d1b48cb2d92e88c0b1968e47bb9a2c9` | orthographic projection, cos weights, occlusion of the kit; cameras of render_paint_views.py (8 views, any angle) instead of a bbox fit to one concept; z-buffer in numpy instead of a BVH ray; unseen texels filled by face, then code + side, then base fill, instead of facet fit, palette and inpaint |
+| `tools/project_views.py` | `zps-3d-artist/tools/texture/project_concept.py` | `797948a6746bee5d68b495c66c662c570d1b48cb2d92e88c0b1968e47bb9a2c9` | orthographic projection and occlusion of the kit; cameras of render_paint_views.py (8 views, any angle) instead of a bbox fit to one concept; one view per face (best cos, island hysteresis) and bilinear sampling instead of cos weights, because the 8 paintings are made one by one; each painting checked against its guide; z-buffer in numpy instead of a BVH ray; unseen texels filled by face, then code + side, then base fill, instead of facet fit, palette and inpaint |
 | `tools/setup_deps.sh` | `zps-3d-artist/tools/setup_deps.sh` | `61a8837f13e208373e39c8662a8142599b7198a99ef313907a72889b7072a7ea` | reduced: venv numpy, pyyaml, Pillow; Blender target pyyaml, Pillow |
 | `zps-3dp-check-texture.md` | `zps-texture-review/references/texture-checks.md` | `39eba7b01a1036fdebca1937e305748a1fa1388af75528eccf5c403f2c4c7329` | diagnosis order (colour space, alpha, normal before repaint; UV and padding before blur), restated in the reviewer contract |
 
