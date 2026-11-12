@@ -313,14 +313,24 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 ### 6.6 Không có thời gian chết (D33)
 
 Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên đĩa.
-- Worker và reviewer không chạy lệnh nền. Lệnh dài (Blender, `codex exec`, `meshy_call.py`) đi qua tool của Producer, mỗi tool có timeout riêng. Bash timeout mặc định 10 phút trong `settings.snippet.json`; `P preflight` báo khi chưa đặt.
-- Meshy chưa xong sau khoảng 8 phút → `pending`; `meshy_call.py --resume` chờ tiếp đúng task, không tạo task mới. Hạn tổng 30 phút → `BLOCKED`.
+- Worker và reviewer không chạy lệnh nền. Lệnh dài (Blender, `codex exec`, `meshy_call.py`) đi qua tool của Producer, mỗi tool có timeout riêng, và mọi lệnh tool của worker đi qua `run_tool.py` (dưới). Bash timeout mặc định 10 phút trong `settings.snippet.json`; `P preflight` báo khi chưa đặt.
+- `meshy_call.py` có `--timeout` mặc định 1700 giây cho một lần chạy. Chưa xong thì `pending`; `--resume` chờ tiếp đúng task, không tạo task mới. Quá hạn tổng 30 phút: wrapper hỏi trạng thái task một lần, `SUCCEEDED` thì tải kết quả, chưa xong thì `BLOCKED` và Producer hỏi anh (D36.8).
 - Tool ghi `vN/heartbeat.log` khi bắt đầu, khi xong, và khoảng 30 giây một lần khi tiến trình con còn dùng CPU hoặc còn ra output. File output (`worker-out.md`, `review-out.md`) là tín hiệu xong việc.
 - Hook `SubagentStop` gọi `P on-stop`: script ghi trạng thái lần giao xuống đĩa, kể cả khi Producer không nhận thông báo.
-- Mỗi lần giao có hạn chót trong ledger. Kẹt (quá `stall_min` không có nhịp tim, hoặc quá hạn chót) → nudge → giao lại cho agent mới cùng brief → `waiting_human`.
-- `dispatch: foreground` (mặc định, pilot): giao subagent chế độ thường; song song thì giao nhiều agent trong cùng một lượt. `dispatch: background` (lô): giao chạy nền và một `P wait` duy nhất (file khóa).
+- Mỗi lần giao có hạn chót trong ledger. **Kẹt** là không có nhịp tim và không có file đổi trong `stall_min`. Hạn chót một mình không phải là kẹt (D39.3). Thời gian thường lệ tính riêng cho từng (bước, vai trò, lần dựng đầu hay vòng sửa).
+- Kẹt → nudge → giao lại cho agent mới cùng brief → `waiting_human`. Chỉ giao agent mới khi `on-stop` đã ghi agent cũ dừng; chưa dừng thì script in lệnh dừng agent cũ trước (D39.4).
+- Kẹt lần 3 vào `waiting_human` với nhãn "chưa chấm", và script từ chối `approve` khi bước có reviewer (D36.2). Script xóa dấu kẹt khi asset sang bước sau.
+- `dispatch: foreground` (mặc định, pilot): giao subagent chế độ thường; song song thì giao nhiều agent trong cùng một lượt. `dispatch: background` (lô): giao chạy nền và một `P wait` duy nhất (file khóa). `P wait` thức khi có asset giao được.
 - `P next` hiện mỗi việc đang chạy một dòng (bước, version, vai trò, thời gian, nhịp tim gần nhất, hạn chót, trạng thái). `P stats` đếm kẹt, nudge, giao lại. Trang duyệt gắn nhãn "kẹt".
 - Người dùng thoát bằng Esc rồi `P retry`; trạng thái không mất.
+- **Phiên chính không đứng im** (D39.1, D39.2): mục "Nhận kết quả" của `SKILL.md` là danh sách đánh số với ba luật chống đứng im, không có ngoại lệ. Lời mời truyền `--tokens` bị xóa, vì chính nó gây lần chờ ở Run 5. Hook `Stop` của phiên chính (`P on-main-stop`) từ chối dừng khi còn lần giao đã có report mà chưa ingest, hoặc còn dòng giao việc script đã in mà chưa giao. Hook chỉ làm sau khi kiểm trên bản Claude Code đang dùng. Không chạy được thì giữ luật trong `SKILL.md` và ghi kết quả kiểm vào `decisions.md` D39.1.
+- **`run_tool.py <tool> [args]`** (D36.1) là điểm vào cho mọi lệnh tool của worker; dòng `RUN:` của brief cho tiền tố lệnh đầy đủ.
+  - Chỉ nhận tool nằm trong `agents/*/tools/` và `scripts/` của skill, sau khi resolve đường dẫn. Đường dẫn ngoài hai chỗ đó, symlink ra ngoài và file trong `production/` bị từ chối (thoát 2, không chạy).
+  - Ghi và xóa file PID khi tool dùng Blender hoặc Codex.
+  - Mã thoát là 1 khi tool thoát khác 0, hoặc khi JSON kết quả vừa ghi có `overall` là `fail` hay `error`.
+  - Stdout và stderr vào `vN/work/logs/<tool>.log`. Lệnh in đúng một dòng: tên tool, `overall`, đường dẫn JSON fail.
+  - `--blender` từ brief được truyền cho `setup_deps.sh`, để cài deps đúng bản Blender.
+  - `settings.snippet.json` có một allow rule cho `run_tool.py` và một cho `assemble.py`. `P preflight` báo khi thiếu.
 - Bản đã làm (G4): Bash timeout default 600000, max 3600000 (`env` của snippet); `P stall <id> [--agent-id]`, `P wait`, `P on-stop`; `usual_min` trong `pipeline.toml`; Meshy thoát 5 `pending`, `--resume`. Chi tiết: `decisions.md` D33 mục "Đã làm ở G4".
 
 ## 7. Vòng sửa (D11, D21.1, D21.4, bằng script)
@@ -360,23 +370,25 @@ production/                            KHU 2 — LÀM VIỆC. Chỉ script và a
   rubrics/<loại>.md
   assets/<id>/
     status.json, brief.md, rubric.md, feedback.md, feedback/
-    <bước>/vN/{final, work, review, findings.json, brief-*.md, worker-out.md, review-out.md}
+    <bước>/vN/{final, work (kèm logs/<tool>.log), review (kèm sheet-<n>.png, summary.json), findings.json, brief-*.md, worker-out.md, review-out.md}
     texture/budget-<mesh_hash>.json
 
 deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
   nội dung `assemble/vN/final/` đã duyệt: README.md, model/, texture/, review/
+  RUN-REPORT.md                        báo cáo thời gian và token (D41)
 ```
 
 - **Chép khi duyệt** (D20.2): chỉ khi `assemble` được duyệt (DUYỆT 2), script chép `assemble/vN/final/` sang `deliver/<id>/`. Các bước giữa nằm lại trong `production/`.
 - **Làm lại sau DUYỆT 2:** README trong `deliver/<id>/` ghi "đang làm lại". Bản cũ giữ cho tới khi có bản duyệt mới.
 - **Version bị loại** (D22.2, thay D14.9): khi một bước được duyệt, script đánh dấu các version khác của bước đó là `rejected` trong `status.json`. **Không di chuyển thư mục**, vì brief cũ, `inputs`, ảnh khoanh, evidence và `ab/mapping.json` đều trỏ tới đường dẫn version.
-- **Xóa** (D29, thay `P cleanup` của D22.2):
-  - Chỉ DUYỆT 2 `by: user` mở lệnh xóa. DUYỆT 2 in danh sách xóa và tổng dung lượng. Producer tự duyệt thì không xóa.
-  - Xóa ở đầu phiên sau: hook SessionStart gọi `P next --session`; script chỉ xóa khi `source` của hook là `startup` hoặc `clear` (không xóa khi `resume`, `compact`, hay `P next` gõ tay). Không xóa trong cùng phiên đã duyệt. Bản Codex không tự xóa.
-  - `P keep <id>` hủy lệnh xóa. `P purge <id> --by "<nguyên văn>"` xóa ngay. `--zip <file>` (ở `P purge` và ở `P feedback ... --action approve` của DUYỆT 2) nén phần sắp xóa ra chỗ khác.
-  - Producer tự duyệt (`--by producer`, chỉ khi `test_mode: true`) thì không mở lệnh xóa. Sau khi xóa, `redo` bị từ chối.
+- **Xóa** (D29, sửa theo D40, thay `P cleanup` của D22.2):
+  - Chỉ DUYỆT 2 `by: user` xóa. Script xóa ngay trong lệnh `approve`, sau khi chép `deliver/<id>/` và ghi `RUN-REPORT.md` (D41). Không còn xóa ở đầu phiên sau. Bản Codex cũng tự xóa.
+  - Trước khi xóa, lệnh in một dòng: số file, dung lượng, "sau lệnh này không `redo` được". Nút DUYỆT 2 trên trang (local và remote) hiện đúng dòng đó và cần bấm xác nhận.
+  - Muốn giữ: `P keep <id>` trước khi duyệt, thì lần duyệt đó không xóa. Hoặc `purge: off` trong `policy.yaml`. `purge_zip: <thư mục>` nén phần sắp xóa vào đó trước khi xóa. `P purge <id> --by "<nguyên văn>"` xóa ngay. `--zip <file>` (ở `P purge` và ở `P feedback ... --action approve` của DUYỆT 2) nén phần sắp xóa ra chỗ khác.
+  - Ngay trước khi xóa, script kiểm lại: asset còn `done`, bản `assemble` đã duyệt không đổi, có `deliver/<id>/` (D29.5). Sai một điều thì không xóa.
+  - Producer tự duyệt (`--by producer`, chỉ khi `test_mode: true`) thì không xóa. Sau khi xóa, `redo` bị từ chối.
   - A/B: thư mục `production-<runtime>/` không xóa trước khi cặp có `ab prefer` hoặc đủ hai lần `ab judge` (D29.11).
-  - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Giữ cả `custom_parts.py` của asset, như file nguồn text (D32.3). Mọi thứ khác xóa thật, không vào Thùng rác, kể cả file JSON lưới tạm do `custom_parts.py` sinh ra. Script ghi manifest.
+  - Còn lại: `deliver/<id>/`; hồ sơ text (`status.json`, ledger, findings, report, feedback); file nguồn text của từng bước (`part_graph.json`, `sources.json`, `spec.json`, `texture_spec.json`); ảnh thu nhỏ để đường dẫn trên trang duyệt không gãy. Giữ cả `custom_parts.py` của asset, như file nguồn text (D32.3). Mọi thứ khác xóa thật, không vào Thùng rác, kể cả file JSON lưới tạm do `custom_parts.py` sinh ra. Xóa thêm (D40.3): `production/show/<id>*`, file đẩy lên trang claude.ai của asset (`production/board/push/*/`), file PID (`pids/*/<id>*`) và mọi `*.rejected-*.md`. Script ghi manifest.
   - `P disk`: dung lượng theo asset, bước, loại file. `P next` cảnh báo khi `production/` vượt `disk_warn_gb`.
   - Sau đó `P archive`.
 - **Agent chỉ đọc và ghi đường dẫn trong brief.** Mọi file agent có dòng: "Chỉ đọc file và thư mục brief chỉ định. Chỉ ghi trong thư mục version brief giao. Không quét thư mục asset."
@@ -509,6 +521,8 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - Runtime không báo số thì ledger ghi "không có số", không ghi 0.
 - Script tính thêm **khoảng chờ Producer** = thời điểm giao lần sau − thời điểm ingest lần trước.
 - `P stats <id>` in bảng theo bước: thời gian worker, reviewer, chờ Producer, chờ anh; token worker, reviewer, Producer. Thời gian bước tính từ lần giao worker đầu tới lúc bước được duyệt.
+- **Report khi asset `done`** (D41): script ghi `deliver/<id>/RUN-REPORT.md` và in bảng, trước khi dọn (mục 8). `P report <id>` chạy lại được bất cứ lúc nào. `P report` không có id in bảng theo asset và tổng của lô. Mỗi dòng một bước: thời gian bước, worker, reviewer, chờ Producer, chờ anh, token worker, token reviewer, token Producer, số version, số vòng sửa, số lần giao, số lần gọi Codex, credit Meshy, số lần kẹt, và model của từng lần giao. Dòng cuối là tổng. Producer dán nguyên bảng vào chat, không tự tính lại. `P dashboard` có cột thời gian và token đã dùng.
+- **Chỉ số thật** (D41.3, D41.5): số lấy từ transcript của runtime. Không có số thì ghi "không có số" kèm lý do (không có transcript, bản Codex). Không ước lượng, không chia đều. Hai asset chạy cùng lúc: token Producer của khoảng chồng nhau có ghi chú "tính chung với <id>" và không cộng hai lần vào tổng lô.
 - **Tách reviewer theo loại vòng** (D31.4): vòng đầu, vòng sửa, vòng chấm cuối (`full`). Lần giao ghi `REVIEW_SCOPE` để script tách được.
 - **Token Producer** (D30.10): hook SessionStart ghi đường dẫn transcript vào `production/session.json`. Script đọc `usage` trong JSONL, bỏ dòng `isSidechain`. Lỗi → "không có số". Bản Codex ghi "chưa hỗ trợ".
 - **Model ảnh** (D28.1): `gen_image_codex.py` ghi model đã yêu cầu và model thực tế vào ledger và `inputs` của version. Ledger ghi thêm phiên bản codex-cli của mỗi lần gen (D30.19). Không biết model thực tế → "không có số".
@@ -557,7 +571,7 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 | `P board prepare` (Review Board §6) | mới | — |
 | `P ab board`, `P compare`, cột `runtime` trong ledger | mới | ~150 dòng |
 | Intake: `check_card`, file bắt buộc, `type` từ thẻ, `check_profile` | `scan_approved`, `cmd_intake`, `create_asset` | ~60 dòng |
-| Tên `zps-3dp-producer`, adapter, đường dẫn | `SKILL.md`, `setup.md`, `adapters/` | — |
+| Tên `zps-3dp-producer`, adapter, đường dẫn | `SKILL.md`, `setup.md`, `editions/*/adapter.md` | — |
 | v0.7.0 (D28.1, D29, D30, D31, D35): thứ tự và test của từng đơn vị | `docs/intents/v0.7.0-plan.md` | — |
 | v0.7.1 (D32, D33, D34, D30.16–22): thứ tự, phân loại và test của từng đơn vị | `docs/intents/v0.7.1-plan.md` | — |
 | v0.8.0 (D36–D45): thứ tự, phân loại và test của từng đơn vị | `docs/intents/v0.8.0-plan.md`, `docs/intents/v0.8.0-tickets.md` | — |
