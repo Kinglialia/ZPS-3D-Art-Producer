@@ -306,3 +306,14 @@ def test_texture_brief_of_the_pilot_points_at_the_colour_file_that_intake_wrote_
     assert "CONCEPT_COLORS: production/assets/pilot-house/concept_colors.json" in none_flow.cp["t1"]["text"].splitlines()
     colors = none_flow.root / "production/assets/pilot-house/concept_colors.json"
     assert json.loads(colors.read_text(encoding="utf-8")) == {"STONE": "#808080", "TIMBER": "#A06E3C", "TEAL": "#288C8C"}
+
+
+@pytest.mark.parametrize("sid", ["blockout", "model", "views_front", "texture"])
+def test_a_card_written_before_counts_and_views_were_required_still_builds_every_brief_line_g3(at_root, sid):
+    """An asset registered earlier keeps running: its card has neither field, and its handoff has no box column."""
+    from core import briefs
+    card = {k: v for k, v in CARD.items() if k not in ("counts", "views")}
+    d = make_asset(at_root / "_approved", card=card)
+    st = {"id": "05-warehouse", "concept_dir": str(d), "approved": {}}
+    lines = briefs.card_lines(st, step_of(sid))
+    assert lines == ([briefs.COLORS_NONE, ""] if sid in ("views_front", "texture") else [])
