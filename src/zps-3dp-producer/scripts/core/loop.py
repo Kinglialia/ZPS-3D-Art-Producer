@@ -529,14 +529,15 @@ WAIVE_DISPATCH = ("todo", "fix", "review", "evidence")  # running: the worker al
 
 def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
     """D27.2, D30.5: the next dispatch goes out in the same turn as the state change: the dispatch line of `P brief`.
-    A worker waits while a resource of its step has no free slot, as in `P next`."""
+    A worker waits while a resource of its step has no free slot, as in `P next`. A `retry` that already moved the asset
+    to running goes out: held there, nothing would show it waits."""
     if st["state"] not in states or st["state"] in FINISHED:
         return
     from .briefs import run
-    from .limits import full, slots
+    from .limits import DISPATCH, full, slots
     from .state import all_status
     _, step = step_of(cfg, st["stage"])
-    if st["state"] != "review" and full(step, slots(cfg, all_status())):
+    if st["state"] in DISPATCH and full(step, slots(cfg, all_status())):
         return
     try:
         run(Namespace(id=st["id"]))

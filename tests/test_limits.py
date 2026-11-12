@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from argparse import Namespace
@@ -168,3 +169,20 @@ def test_next_reads_no_card_of_an_asset_that_is_not_parked_at_done_enabled(proj,
     st |= {"concept_dir": str(card), "state": "done"}
     save_st(st)
     assert next_lines(capsys) == ["[b-barn] blockout/todo → giao worker → `brief b-barn`"]
+
+
+def test_a_retry_out_of_a_stall_goes_out_although_another_asset_took_the_slot_c17(proj, capsys):
+    """While b-barn waited on the user after a stall, a-hut took the one blender slot. `retry` moves b-barn to running:
+    held back there, it had no dispatch, `P next` showed no "chờ slot" for it, and `P wait` never named it."""
+    from core import loop
+    briefs.run(Namespace(id="b-barn"))
+    st = load_st("b-barn")
+    st["dispatches"][-1]["ended"] = {"at": st["dispatches"][-1]["at"], "why": "x"}
+    st |= {"state": "waiting_human", "stalled_from": "running"}
+    save_st(st)
+    briefs.run(Namespace(id="a-hut"))
+    capsys.readouterr()
+    loop.retry(Namespace(id="b-barn"))
+    out = capsys.readouterr().out.splitlines()
+    assert out[0] == "b-barn: → running. Tiếp: đang chờ subagent (mất kết nối thì `brief b-barn` để giao lại)"
+    assert json.loads(out[-1])["brief"] == "production/assets/b-barn/blockout/v1/brief-worker.md"
