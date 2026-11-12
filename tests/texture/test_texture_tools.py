@@ -617,6 +617,19 @@ def test_tone_fix_does_not_lift_the_concept_ink_in_a_groove_nor_shift_its_hue_d3
     assert np.abs(after - before).max() < 1.5 and after[:, 0].mean() < 10
 
 
+def test_known_limit_the_shared_groove_mask_misses_part_of_a_narrow_ledge_so_ink_there_is_still_moved_by_tone_fix(
+        tmp_path):
+    gm = grooved_model(tmp_path / "model")
+    g, tm = tex.load_map(gm / f"{AID}-untextured.glb", GROOVE_RES)
+    ledge = tm.inside & (tm.nrm[..., 2] > 0.7) & (np.abs(tm.pos[..., 2] - 0.49) < 1e-6)
+    missed = ledge & ~tex.groove_texels(tm, g["v"], g["f"], {"px_per_m": 363.64, "alpha_min_px": 16}, 0.55)
+    assert missed.sum() > 0.3 * ledge.sum()
+    img, _ = groove_texture(gm, tmp_path)
+    tex.save_rgb(img, tmp_path / "ledge.png")
+    fixed, _ = tone_fix_run(gm, tmp_path, tmp_path / "ledge.png", GROOVE_RES, "--no-seams")
+    moved = tex.lab(fixed[missed])[:, 0] - tex.lab(tex.load_rgb(tmp_path / "ledge.png")[missed])[:, 0]
+    assert moved.mean() > 20
+
 def test_tone_fix_still_lifts_baked_ao_beside_an_inked_groove(tmp_path):
     gm = grooved_model(tmp_path / "model")
     img, _ = groove_texture(gm, tmp_path, ao=18)

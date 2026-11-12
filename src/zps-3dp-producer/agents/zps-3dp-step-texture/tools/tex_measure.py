@@ -3,7 +3,7 @@
 
 Usage: python3 T/tex_measure.py --final F --glb <locked GLB> --model M --albedo F/albedo_<res>.png
        --concept-colors VF/concept_colors.json --profile <profile> --pilot <PILOT line of the brief, or none>
-Per material code (CIE L*; colour differences in dE2000):
+Per material code (CIE L*; the colour check is dE2000, the seam check dE76):
   1 light     light.side_spread_L.<c>: max - min of the four side means <= side_spread_L
               light.top_vs_side_L.<c>: |top - side - style.top_vs_side_L| <= top_tol_L
               light.shaded_share.<c>: share of texels whose L* and low-pass L* are both shade_L below the side mean
