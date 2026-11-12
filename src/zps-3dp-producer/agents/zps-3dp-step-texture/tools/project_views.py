@@ -159,8 +159,8 @@ def shifted(a, dy, dx):
 
 
 def feather(tm, src, win, isl, seen):
-    """Weights (N, V) of the views per texel: one-hot of src; a texel of a face's winner within FEATHER_PX of another
-    face's winner in the same island blends the winners there. A texel its winner does not see stays one view."""
+    """Texels that blend and their weights (n, V); every other texel takes src alone. A texel of a face's winner within
+    FEATHER_PX of another face's winner in the same island blends the winners there."""
     ins = tm.inside
     srcmap, islmap = np.full(ins.shape, -1), np.full(ins.shape, -1)
     srcmap[ins], islmap[ins] = np.where(src == win, src, -1), isl[tm.face[ins]]
@@ -169,13 +169,9 @@ def feather(tm, src, win, isl, seen):
     for dy, dx in offs:
         ns = shifted(srcmap, dy, dx)
         band |= (srcmap >= 0) & (ns >= 0) & (ns != srcmap) & (shifted(islmap, dy, dx) == islmap)
-    w = np.zeros((len(src), len(seen)))
-    w[src >= 0, src[src >= 0]] = 1
     idx = np.full(ins.shape, -1)
     idx[ins] = np.arange(len(src))
     by, bx = np.nonzero(band)
-    if not len(by):
-        return w
     cnt = np.zeros((len(by), len(seen)))
     for dy, dx in offs:
         ns, ni = shifted(srcmap, dy, dx)[by, bx], shifted(islmap, dy, dx)[by, bx]
@@ -184,8 +180,7 @@ def feather(tm, src, win, isl, seen):
     t = idx[by, bx]
     cnt *= np.stack([s[t] for s in seen], 1)
     keep = cnt.sum(1) > 0
-    w[t[keep]] = cnt[keep] / cnt[keep].sum(1, keepdims=True)
-    return w
+    return t[keep], cnt[keep] / cnt[keep].sum(1, keepdims=True)
 
 
 def run(a):
@@ -227,8 +222,8 @@ def run(a):
         z = zbuffer(cam, g["v"], g["f"])
         near, far = window(z, EDGE_PX, np.minimum, np.inf)[yi, xi], window(z, EDGE_PX, np.maximum, -np.inf)[yi, xi]
         seen = (cosf[face] > MIN_COS) & (depth <= near + tol) & (far <= depth + tol) & mask[yi, xi]
-        used.append((vw, cosf, seen, img[..., :3].astype(np.float32)))
-    src, w = np.full(len(pos), -1), np.zeros((len(pos), 0))
+        used.append((vw, cosf, seen, img[..., :3].astype(np.uint8)))
+    src, band, bw = np.full(len(pos), -1), np.zeros(0, int), np.zeros((0, 0))
     if used:
         isl = islands(g["uv"], g["f"])
         win = winners(np.stack([u[1] for u in used]), area, isl)[face]
@@ -236,12 +231,14 @@ def run(a):
         for k, (_, cosf, seen, _) in enumerate(used):
             sc = np.where(seen, cosf[face] + 2.0 * (win == k), -np.inf)
             src, best = np.where(sc > best, k, src), np.maximum(sc, best)
-        w = feather(tm, src, win, isl, [u[2] for u in used])
+        band, bw = feather(tm, src, win, isl, [u[2] for u in used])
     acc = np.zeros((len(pos), 3))
     for k, (vw, _, _, img) in enumerate(used):
-        t = np.flatnonzero(w[:, k] > 0)
+        wk = (src == k).astype(np.float32)
+        wk[band] = bw[:, k]
+        t = np.flatnonzero(wk > 0)
         px, py, _, _ = project(vw["camera"], pos[t])
-        acc[t] += w[t, k, None] * bilinear(img, px, py)
+        acc[t] += wk[t, None] * bilinear(img, px, py)
     side = tex.side_of(tm.nrm[ins])
     cs = np.array([f"{codes[fc]}|{s}" for fc, s in zip(face, side)])
     out = np.where((src >= 0)[:, None], acc, np.nan)
@@ -262,7 +259,7 @@ def run(a):
     tex.save_rgb(tex.gutter(img, ins, a.padding), a.out)
     share = {k: round(float((source == k).mean()), 4) for k in ("projected", "face", "code_side", "base")}
     return {"views": len(used), "of": len(views), "share": share,
-            "feather_share": round(float(((w > 0).sum(1) > 1).mean()), 4), "registration": reg, "skipped": skipped,
+            "feather_share": round(float(((bw > 0).sum(1) > 1).sum() / len(pos)), 4), "registration": reg, "skipped": skipped,
             "redo": [v["paint"] for v in views if v["paint"] in skipped]}
 
 
