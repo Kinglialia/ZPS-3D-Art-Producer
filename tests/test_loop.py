@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from argparse import Namespace
 from pathlib import Path
@@ -6,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from shared import SCRIPTS, SUBAGENT_WRITE_BLOCKED, blockout_only, brief_hash, finding, report, write_profile
-from core import briefs, findings, intake, loop, policy
+from core import briefs, findings, hashes, intake, loop, policy, texture
 from core.state import ProducerError, load_cfg, load_st, save_st
 
 AID = "house-a"
@@ -178,7 +179,8 @@ def write_json(p: Path, d: dict):
     p.write_text(json.dumps(d), encoding="utf-8")
 
 
-def test_fix_brief_lists_only_the_failing_gate_and_check_json_of_the_base_so_the_worker_reads_script_errors_first(flow):
+def test_fix_brief_lists_only_the_failing_gate_and_check_json_of_the_base_so_the_worker_reads_script_errors_first(
+        flow, held):
     fix_v1(flow, 1)
     rv = flow.v(1) / "final/review"
     write_json(rv / "gates/roof.json", {"overall": "fail"})
@@ -1440,3 +1442,72 @@ def test_a_redo_for_a_later_step_than_the_stage_is_still_refused_and_stores_noth
     with pytest.raises(ProducerError, match="không làm lại views_rest được"):
         flow.human("redo", "x", "views_rest")
     assert flow.st.get("pending_redo", {}) == {}
+
+
+def test_brief_again_while_an_agent_is_out_prints_the_stored_dispatch_and_touches_nothing_c13(flow, monkeypatch):
+    """`P brief` is also how a Producer re-sends a job after a lost connection. It rehashed the approved finals, rebuilt the
+    sheet, ran the texture gate (a Meshy price dry-run) and rewrote the brief file the agent was reading."""
+    for who in ("worker", "reviewer"):
+        out = flow.brief()
+        brief = flow.root / out["brief"]
+        os.utime(brief, (1_000_000, 1_000_000))
+        status = flow.root / f"production/assets/{AID}/status.json"
+        before = status.read_bytes()
+
+        def boom(*a, **k):
+            raise AssertionError("work done again")
+        with monkeypatch.context() as m:
+            for mod, name in ((hashes, "record_inputs"), (briefs, "sheet_of"), (texture, "gate"), (briefs, "worker_brief"),
+                              (briefs, "review_brief")):
+                m.setattr(mod, name, boom)
+            assert flow.call(briefs.run, Namespace(id=AID)) == json.dumps(out, ensure_ascii=False) + "\n", who
+        assert (brief.stat().st_mtime, status.read_bytes()) == (1_000_000, before), who
+        if who == "worker":
+            flow.work(out=out)
+
+
+def test_brief_again_does_not_run_the_texture_gate_of_a_running_texture_worker_c13(flow, monkeypatch):
+    out = flow.brief()
+    st = flow.st
+    st |= {"stage": "texture", "versions": {"texture": 1}}
+    st["dispatches"][0] |= {"step": "texture", "v": 1}
+    save_st(st)
+    monkeypatch.setattr(texture, "gate", lambda *a: pytest.fail("the texture gate ran again"))
+    assert json.loads(flow.call(briefs.run, Namespace(id=AID))) == out
+
+
+def test_brief_after_a_retry_builds_again_because_no_agent_is_out_c13(flow, monkeypatch):
+    flow.work(status="NEEDS_CONTEXT")
+    monkeypatch.setattr(loop, "dispatch_next", lambda *a: None)
+    flow.call(loop.retry, Namespace(id=AID))
+    sent = json.loads(flow.call(briefs.run, Namespace(id=AID)))
+    assert (flow.root / sent["brief"]).is_file()
+    assert flow.call(briefs.run, Namespace(id=AID)) == json.dumps(sent, ensure_ascii=False) + "\n"
+
+
+def test_the_brief_of_a_new_dispatch_waits_for_a_free_slot_but_the_stored_one_does_not_k04(flow):
+    """limits.gate holds a worker in `P next`; `P brief` read no slot at all, so a Producer could run past the cap."""
+    p = flow.root / "production/pipeline.toml"
+    full = p.read_text(encoding="utf-8")
+    p.write_text(full.replace("blender = 2", "blender = 0"), encoding="utf-8")
+    assert flow.call(briefs.run, Namespace(id=AID)) == f"{AID}: chờ slot blender, chưa giao\n"
+    assert (flow.st["state"], flow.st["versions"], flow.st.get("dispatches")) == ("todo", {}, None)
+    p.write_text(full, encoding="utf-8")
+    out = flow.brief()
+    p.write_text(full.replace("blender = 2", "blender = 0"), encoding="utf-8")
+    assert json.loads(flow.call(briefs.run, Namespace(id=AID))) == out
+
+
+def test_a_fix_dispatch_takes_its_deadline_from_the_median_of_fix_rounds_not_of_every_round_k04(flow, held):
+    """The first build took 10 minutes. No fix round has run, so a fix round gets the step's usual 40 minutes, twice for
+    the factor. The pooled median would give it 20."""
+    import datetime as dt
+    flow.work()
+    st = flow.st
+    st["dispatches"][0]["duration_ms"] = 600_000
+    save_st(st)
+    flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")])
+    flow.brief()
+    rec = flow.st["dispatches"][-1]
+    assert (rec["role"], rec["v"]) == ("worker", 2)
+    assert dt.datetime.fromisoformat(rec["deadline"]) - dt.datetime.fromisoformat(rec["at"]) == dt.timedelta(minutes=80)

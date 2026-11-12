@@ -102,6 +102,16 @@ class Flow:
     def keep(self, name, out, **kw):
         self.cp[name] = {"out": out, "st": self.st(), **kw}
 
+    def lost(self):
+        """The agent of the open dispatch is gone. `P brief` prints the stored line while an agent is out (C13), so a test
+        that needs a new brief ends the dispatch first, as a stop or a stall does."""
+        p = self.root / A / "status.json"
+        st = json.loads(p.read_text(encoding="utf-8"))
+        for rec in st["dispatches"]:
+            if "ingested" not in rec and "ended" not in rec:
+                rec["ended"] = rec["at"]
+        p.write_text(json.dumps(st), encoding="utf-8")
+
     def brief(self, name):
         """D30.5: a feedback that moved the asset already printed the next dispatch (or the texture gate's stop line)."""
         raw, self.sent = self.sent or self.p("brief", AID), None

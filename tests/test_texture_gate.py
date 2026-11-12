@@ -50,6 +50,7 @@ def test_an_asset_without_an_approved_concept_folder_stops_with_one_line_not_a_t
     f = to_texture(tmp_path)
     st = f.st() | {"concept_dir": None}
     (tmp_path / A / "status.json").write_text(json.dumps(st), encoding="utf-8")
+    f.lost()
     assert f.p("brief", AID, ok=False) == (
         "LỖI: pilot-house: bước texture cần concept trong _approved/ (asset tạo bằng `new` không có)\n")
 
@@ -179,6 +180,7 @@ def test_a_worker_dispatched_again_after_a_paid_call_is_told_to_reuse_its_glb_in
     f = to_texture(tmp_path)
     out = f.brief("t1 brief")
     f.meshy("t1", (tmp_path / out["report"]).parent, "")
+    f.lost()
     f.brief("t1 again brief")
     t = f.cp["t1 again brief"]["text"].splitlines()
     assert [l for l in t if l.startswith("MESHY")] == [
@@ -192,6 +194,7 @@ def test_a_paid_task_without_its_glb_is_named_in_the_next_brief_and_resumed_on_i
     out = f.brief("t1 brief")
     vd = (tmp_path / out["report"]).parent
     f.meshy("t1", vd, "poll_fail:3")
+    f.lost()
     f.brief("t1 again brief")
     t = f.cp["t1 again brief"]["text"].splitlines()
     call = f"{A}/texture/v1/work/meshy/call-1"
@@ -231,6 +234,7 @@ def blocked_total_asset(tmp_path):
 def test_after_blocked_total_the_next_brief_asks_the_user_and_does_not_offer_a_rerun_without_credit(tmp_path):
     """A rerun of a blocked task asks Meshy again and may block again. The paid credit is the user's call now."""
     f, _ = blocked_total_asset(tmp_path)
+    f.lost()
     assert f.brief("t1 again") is None
     assert f.cp["t1 again"]["out"] == (
         "pilot-house: texture → waiting_human trước khi giao. Tiếp: chờ người dùng: task Meshy task-1 chưa xong sau hạn "
@@ -242,6 +246,7 @@ def test_after_blocked_total_the_next_brief_asks_the_user_and_does_not_offer_a_r
 
 def test_answering_call_after_blocked_total_gives_a_new_version_one_more_call_and_no_old_task_to_rerun(tmp_path):
     f, _ = blocked_total_asset(tmp_path)
+    f.lost()
     f.brief("t1 again")
     f.p("meshy", AID, "call")
     f.brief("t2 brief")
@@ -254,6 +259,7 @@ def test_answering_call_after_blocked_total_gives_a_new_version_one_more_call_an
 
 def test_answering_paint_after_blocked_total_paints_and_never_calls_meshy_again(tmp_path):
     f, _ = blocked_total_asset(tmp_path)
+    f.lost()
     f.brief("t1 again")
     f.p("meshy", AID, "paint")
     f.brief("t2 brief")
@@ -268,6 +274,7 @@ def test_both_files_downloaded_without_topology_json_are_not_called_unusable_bef
     f.meshy("t1", vd, "")
     call = f"{A}/texture/v1/work/meshy/call-1"
     (tmp_path / call / "topology.json").unlink()
+    f.lost()
     f.brief("t1 again brief")
     t = f.cp["t1 again brief"]["text"].splitlines()
     assert [l for l in t if l.startswith("MESHY")] == [
@@ -313,7 +320,9 @@ def test_a_spent_budget_keeps_meshy_sua_on_the_paid_layer_and_a_rebrief_adds_no_
     f = to_texture(tmp_path)
     out = f.brief("t1 brief")
     f.meshy("t1", (tmp_path / out["report"]).parent, "")
+    f.lost()
     f.brief("t1 again brief")
+    f.lost()
     f.brief("t1 third brief")
     why = "hết lần gọi: sửa trên lớp Meshy qua topology"
     assert mode_lines(f, "t1 third brief") == [f"MODE: Meshy SỬA ({why})"]
@@ -327,6 +336,7 @@ def test_a_spent_budget_whose_only_layer_failed_topology_paints_because_that_lay
     monkeypatch.setenv("FAKE_MESHY_BASE_PX", "32")
     f.meshy("t1", (tmp_path / out["report"]).parent, "")
     assert f.cp["t1 meshy"]["rc"] == 4
+    f.lost()
     f.brief("t1 again brief")
     assert mode_lines(f, "t1 again brief") == [
         "MODE: VẼ MỚI (hết lần gọi, không có lớp Meshy qua topology)"]
@@ -386,6 +396,7 @@ def test_texture_mode_meshy_with_the_budget_spent_and_no_usable_layer_blocks_ins
     monkeypatch.setenv("FAKE_MESHY_BASE_PX", "32")
     f.meshy("t1", (tmp_path / out["report"]).parent, "")
     f.p("texture-mode", AID, "meshy")
+    f.lost()
     f.brief("t1 again")
     assert f.cp["t1 again"]["out"].startswith("pilot-house: texture → blocked trước khi giao. Tiếp: xử lý: "
                                               "`texture-mode meshy`: hết budget Meshy cho mesh này")

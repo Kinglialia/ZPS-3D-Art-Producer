@@ -528,9 +528,18 @@ def stop(a, cfg, st, sid, s, event: str, note: str):
     print(f"{a.id}: {sid} → {st['state']} trước khi giao. Tiếp: {next_action(st)}")
 
 
+def stored_dispatch(st) -> dict | None:
+    """C13: the JSON line the open dispatch of this asset went out with; None when no agent is out or the line is lost."""
+    from .watch import job
+    rec, out = job(st), st.get("dispatch_out")
+    return out if rec and out and out.get("brief") == rec.get("brief") else None
+
+
 def run(a):
     cfg = load_cfg()
     st = load_st(a.id)
+    if sent := stored_dispatch(st):
+        return print(json.dumps(sent, ensure_ascii=False))
     i, step = step_of(cfg, st["stage"])
     sid, s, r = step["id"], st["state"], cfg["review"]
     if not step["enabled"]:
@@ -541,6 +550,10 @@ def run(a):
     ph, pf, preset = hashes.digest(prof), preflight.load(), PRESETS / f"{prof['preset']}.yaml"
     if s in ("todo", "fix", "running", "evidence", "evidence_running") and (off := preflight.off(step, pf)):
         die(f"{a.id}: bước {sid} cần {', '.join(off)} đang tắt (preflight) → sửa môi trường rồi chạy lại `preflight`")
+    from .limits import DISPATCH, full, slots
+    from .state import all_status
+    if s in DISPATCH and (busy := full(step, slots(cfg, all_status()))):
+        return print(f"{a.id}: chờ slot {', '.join(busy)}, chưa giao")
     for res in step["uses"]:
         if res in cfg["limits"]:
             (ROOT / "pids" / res).mkdir(parents=True, exist_ok=True)
@@ -606,14 +619,15 @@ def run(a):
         out["model"] = model_of(out["model"])
         if EDITION.get("agent_file"):
             out["agent_file"] = rel(agent_file(out["agent"]))
+        st["dispatch_out"] = out
         if not again:
-            from .watch import deadline
+            from .watch import deadline, kind_of
             t0 = stamp()
-            due = deadline(cfg, sid, out["role"], t0)
-            st.setdefault("dispatches", []).append({"step": sid, "v": n, "role": out["role"], "model": out["model"],
-                                                    "at": t0, "brief": out["brief"]} | ({"scope": st["review_scope"]}
-                                                                      if out["role"] == "reviewer" else {})
-                                                   | ({"deadline": due} if due else {}))
+            rec = {"step": sid, "v": n, "role": out["role"], "model": out["model"], "at": t0, "brief": out["brief"]} | (
+                {"scope": st["review_scope"]} if out["role"] == "reviewer" else {})
+            mine = [x for x in st.get("dispatches", []) if x.get("step") == sid and x.get("role") == out["role"]]
+            due = deadline(cfg, sid, out["role"], t0, kind=kind_of([*mine, rec], rec))
+            st.setdefault("dispatches", []).append(rec | ({"deadline": due} if due else {}))
         who = f"{out['agent']}, {out['model'] or 'model của phiên'}"
     save_st(st)
     if not again:
