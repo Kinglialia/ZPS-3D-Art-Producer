@@ -3,7 +3,8 @@
 Usage: python3 T/id_map.py --final F --model M [--res N]
 The model join keeps the part triangles as they are, moved by its origin offset (M/review/join.json). Each face of
 M/<id>-untextured.glb takes the part whose triangle centroid lies nearest (M/parts/<part>.glb, Y-up GLB of kit
-assembly.py); the part's code is its `material` in M/part_graph.json, or that of the part named in `mirror_of`.
+assembly.py), looked up in cells of MATCH_M so memory grows with the mesh, not with faces x part triangles; the part's
+code is its `material` in M/part_graph.json, or that of the part named in `mirror_of`.
 A face farther than MATCH_M from every part triangle is `?`.
 Writes F/review/id_map.png (one flat colour per code) and F/review/id_map.json {codes: {code: hex}, faces: {code: n},
 unmatched}. Prints one line. Exit 0, 1 when a face is unmatched, 2 on error.
@@ -53,14 +54,28 @@ def face_codes(model, glb=None):
             p = tex.read_glb(os.path.join(model, "parts", name))
             cents.append(p["v"][p["f"]].mean(1) + off)
             names += [name[:-4]] * len(p["f"])
-    cents = np.concatenate(cents)
-    best, dist = np.zeros(len(c), int), np.full(len(c), np.inf)
-    for s in range(0, len(cents), 4096):
-        d = np.linalg.norm(c[:, None, :] - cents[None, s:s + 4096, :], axis=2)
-        k = d.argmin(1)
-        closer = d[np.arange(len(c)), k] < dist
-        best[closer], dist[closer] = k[closer] + s, d[np.arange(len(c)), k][closer]
-    return [code(names[b]) if d <= MATCH_M else UNKNOWN for b, d in zip(best, dist)], g
+    best = nearest(c, np.concatenate(cents), MATCH_M)
+    return [code(names[b]) if b >= 0 else UNKNOWN for b in best], g
+
+
+def nearest(points, cents, r):
+    """Index of the nearest of cents within r of each point (lowest index on a tie), -1 when none. Cells of size r: a
+    centroid within r lies in one of the 27 cells round the point's own, so a float32 join near a cell border still
+    finds its part."""
+    grid = {}
+    for j, key in enumerate(map(tuple, np.floor(cents / r).astype(np.int64).tolist())):
+        grid.setdefault(key, []).append(j)
+    out = np.full(len(points), -1)
+    for i, (p, key) in enumerate(zip(points, np.floor(points / r).astype(np.int64).tolist())):
+        near = [j for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+                for j in grid.get((key[0] + dx, key[1] + dy, key[2] + dz), ())]
+        if near:
+            near.sort()
+            d = np.linalg.norm(cents[near] - p, axis=1)
+            k = int(d.argmin())
+            if d[k] <= r:
+                out[i] = near[k]
+    return out
 
 
 def palette(codes):
