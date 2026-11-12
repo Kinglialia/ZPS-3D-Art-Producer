@@ -239,3 +239,12 @@ def test_a_closing_note_after_the_last_item_does_not_reject_the_report_because_n
                                    extra="Xong.\n\n## Ghi chú\n- đã xem đủ ảnh\n"))
     assert errs == []
     assert (list(rv["findings"]), rv["prior"]) == (["F1"], {"F2": "open"})
+
+
+def test_worker_status_and_unfixable_are_read_from_their_first_word_so_the_loop_branches_on_clean_values():
+    c, errs = parse_worker("STATUS: **Done** (xong hết)\nPROFILE_HASH: abc\nUNFIXABLE: Yes (UV chồng)\n")
+    assert errs == []
+    assert (c["STATUS"], c["UNFIXABLE"]) == ("DONE", "yes")
+    c, errs = parse_worker("STATUS: DONE_WITH_CONCERNS.\nPROFILE_HASH: abc\n")
+    assert (errs, c["STATUS"], "UNFIXABLE" in c) == ([], "DONE_WITH_CONCERNS", False)
+    assert parse_worker("STATUS: DONE\nPROFILE_HASH: abc\nUNFIXABLE: maybe\n")[1] == ["UNFIXABLE phải là yes|no"]

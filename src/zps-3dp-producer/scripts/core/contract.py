@@ -121,12 +121,14 @@ def parse_worker(text: str) -> tuple[dict, list[str]]:
     errs = []
     c["RESOLVED_NOTES"] = note_ids(c, "RESOLVED_NOTES", errs)
     c["ACCEPTED_FAIL"] = accepted_fails(c.get("ACCEPTED_FAIL", ""), errs)
-    c["STATUS"] = word(c.get("STATUS", "")).upper() or c.get("STATUS")
+    for k, up in (("STATUS", str.upper), ("UNFIXABLE", str.lower)):
+        if k in c:
+            c[k] = up(word(c[k])) or c[k]
     if c.get("STATUS") not in WORKER_STATUS:
         errs.append(f"STATUS phải là {'|'.join(sorted(WORKER_STATUS))}")
     if not c.get("PROFILE_HASH"):
         errs.append("thiếu PROFILE_HASH")
-    if (word(c.get("UNFIXABLE", "no")) or "?") not in ("yes", "no"):
+    if c.get("UNFIXABLE", "no") not in ("yes", "no"):
         errs.append("UNFIXABLE phải là yes|no")
     return c, errs
 
