@@ -84,7 +84,7 @@ texture_res: null              # null = 2048
 tris_max: null                 # null = theo hạng
 scale_overrides:               # ví dụ cửa riêng của công trình này
   - {name: cửa, height_m: 1.6}
-view: front                    # góc vẽ concept: front | 34 | game_camera (D27.6); 34 hoặc game_camera thì Blockout chạy fit_camera
+view: front                    # góc vẽ concept: front | 34 | game_camera (D27.6); 34 hoặc game_camera thì Blockout chạy fit_view
 bevel: null                    # none | toon; null = theo style.bevel của profile (D27.10)
 symmetric: {left_right: true, front_back: true}
 size_m: null                   # {w, d, h} (mét); bắt buộc khi has_map: false; check_card.py kiểm

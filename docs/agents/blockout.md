@@ -73,12 +73,12 @@ Số trong ví dụ chỉ để minh họa định dạng. Khi `has_map: false`,
 | 6 | Thêm part phụ, mỗi lần một part (`assembly.py --upto`) | `gates.py` |
 | 7 | Chạy các script kiểm (mục 5). Nếu script fail, Blockout tự sửa trước khi báo cáo | Script |
 | 8 | Render bộ review (mục 6). Ghi báo cáo contract (`STATUS / OUTPUT / RUBRIC / ISSUES`), rồi dừng | — |
-| 9 | Producer giao check-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở, kèm 2–3 phương án giá trị cho reviewer chọn (D26.2, `docs/producer.md` §7). Mỗi finding một lần `apply_edit.py`, chạy `check_fix.py` sau mỗi lần. Đọc file JSON gate và check fail mà brief liệt kê trước khi sửa (D26.4). Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
+| 9 | Producer giao check-blockout (D14.1). Nếu FIX, Producer giao lại Blockout với các finding trong `TOP_FIX` (D21.1): loại `structure` đúng một finding; loại `param` mọi finding `param` đang mở, kèm 2–3 phương án giá trị cho reviewer chọn (D26.2, `docs/producer.md` §7). Mỗi finding một lần sửa `part_graph.json`, chạy `check_fix.py` sau mỗi lần. Đọc file JSON gate và check fail mà brief liệt kê trước khi sửa (D26.4). Ghi `FIXED:` vào báo cáo | Reviewer, `check_fix.py` |
 | 10 | Duyệt theo `approvals.blockout` (D14.4). Script khóa version bằng hash | Anh hoặc chính sách |
 
 Blockout không gọi reviewer, không gọi agent khác (D14.1). Chỉ đọc file và thư mục brief chỉ định.
 
-`fit_camera.py` và `param_fit.py` không bắt buộc. Chỉ dùng chúng khi concept vẽ ở góc 3/4. Chúng không được đổi param trong `fixed_params`.
+`fit_view.py` và `param_fit.py` không bắt buộc. Chỉ dùng chúng khi concept vẽ ở góc 3/4. Chúng không được đổi param trong `fixed_params`.
 
 ## 4. Đầu ra mỗi công trình
 
@@ -124,7 +124,7 @@ final/
 
 - `check_base.py` và `check_support.py` chỉ chạy trên các part có `tag`. Nếu graph không có part nào có tag tương ứng, script trả `not_checked`.
 - Hai script này đọc bbox trong `assembly.json`, không dựng lại. Với mái dốc hoặc part tròn, bbox lớn hơn hình thật. Script có thể bỏ sót lỗi nhỏ, nhưng không báo lỗi sai. Reviewer kiểm phần còn lại trên crop.
-- `check_fix.py` chạy **sau** khi áp dụng `top_fix`. Lý do: với `top_fix` loại `structure`, chỉ khi code đã sửa xong mới biết nó đổi gì. Script so `part_graph.json` cũ với bản mới. Nếu fail, Blockout chạy `apply_edit.py --revert` và ghi lý do vào JSON của vòng đó, để reviewer đọc ở vòng sau.
+- `check_fix.py` chạy **sau** khi áp dụng `top_fix`. Lý do: với `top_fix` loại `structure`, chỉ khi code đã sửa xong mới biết nó đổi gì. Script so `part_graph.json` cũ với bản mới. Nếu fail, Blockout chép lại bản đã lưu trước khi sửa (`work/edits/<F>/`) và ghi lý do vào JSON của vòng đó, để reviewer đọc ở vòng sau.
 
 ## 6. Bộ review và rubric
 
@@ -171,16 +171,14 @@ agents/zps-3dp-step-blockout/
   references/
     part-graph.md            ← hợp đồng schema blockout-1, kiểu attach, quy tắc dựng
     craft.md                 ← chép từ kit: blockout.md §A, technique.md §1–2, preflight
-    bpy_cookbook.md          ← chép nguyên; chỉ đọc khi viết part custom
   config.yaml                ← paths.blender, optimize.raster_size, khối self_build
   tools/
-    self_build/              ← chép từ kit: graph, assembly, gates, apply_edit,
-                               render_views, fit_camera, param_fit
+    self_build/              ← chép từ kit: graph, assembly, gates,
+                               render_views, param_fit
     lib/                     ← chép từ kit: common, raster, bootstrap
-    render_blockout_views.py ← chép từ Concept Views
     check_inputs.py, check_schema.py, check_base.py, check_support.py,
     check_layout.py, check_materials.py, check_markers.py, check_fix.py,
-    render_review.py, concept_mask.py      ← mới
+    render_review.py, concept_mask.py, fit_view.py      ← mới
     setup_deps.sh            ← rút gọn từ kit
   SOURCE.md                  ← nguồn kit v0.10.4, commit 905dc93, danh sách file đã chép kèm sha256
 agents/zps-3dp-check-blockout.md   ← reviewer (D1)
