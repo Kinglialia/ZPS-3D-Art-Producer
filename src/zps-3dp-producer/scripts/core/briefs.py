@@ -40,12 +40,18 @@ def pilot_line(prof: dict) -> str:
     return f"PILOT: {rel(DELIVER / p)}/" if p else "PILOT: none (pilot_asset: null): so với pilot ghi not_checked"
 
 
+def run_line(step, n: int, t: Path, blender: str | None, aid: str) -> str:
+    """D36.1: everything fixed for the dispatch; the worker adds `[bl] <tool> <args>` (scripts/run_tool.py)."""
+    return "RUN: " + shlex.join([str(SKILL_DIR / "scripts" / "run_tool.py"), *(["--blender", blender] if blender else []),
+                                 "--agent", t.parent.name, "--version-dir", rel(vdir(aid, step["id"], n))])
+
+
 def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = (),
-               cfg: dict | None = None) -> list[str]:
+               cfg: dict | None = None, n: int | None = None) -> list[str]:
     t = SKILL_DIR / "agents" / agent_name(step.get("agent")) / "tools"
-    out = ([f"TOOLS: {t}"] if t.is_dir() else []) + (
-        [f"BLENDER: {((pf or {}).get('blender') or {}).get('path') or 'blender'}"] if "blender" in step["uses"] else []
-    ) + list(extra)
+    blender = (((pf or {}).get('blender') or {}).get('path') or 'blender') if "blender" in step["uses"] else None
+    out = ([f"TOOLS: {t}"] if t.is_dir() else []) + ([f"BLENDER: {blender}"] if blender else []) + (
+        [run_line(step, n, t, blender, st['id'])] if t.is_dir() and n is not None else []) + list(extra)
     if gen and "codex_image" in step["uses"]:
         ig = image_gen(preset)
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
@@ -146,7 +152,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         "",
         "Đọc hết file này trước khi làm. Đây là toàn bộ yêu cầu; không cần hỏi lại.",
         "",
-        *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra), cfg=cfg),
+        *tools_line(st, step, pf, preset, extra=([pilot_line(prof)] if step["pilot"] else []) + list(extra), cfg=cfg, n=n),
         *views_line(st, step),
         *counts_line(st, step),
         *custom_parts_line(st, step),
@@ -417,7 +423,7 @@ def evidence_brief(st, step, n, ed, ph: str, pf: dict | None, preset: Path) -> s
         "",
         f"PROFILE_HASH: {ph}",
         "",
-        *tools_line(st, step, pf, preset, gen=False),
+        *tools_line(st, step, pf, preset, gen=False, n=n),
         f"Reviewer cần thêm ảnh để chấm {', '.join(tf['ids'])}: đọc region, viewing_condition, evidence, acceptance "
         f"của các id này trong `{rel(findings.path(aid, sid, n))}`.",
         f"- Chỉ render các ảnh đó, ghi vào `{rel(ed)}/`. Không tạo version mới.",
