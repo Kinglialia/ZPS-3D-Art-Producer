@@ -245,6 +245,36 @@ def test_base_fails_when_a_part_sits_closer_than_10_cm_to_the_edge(tmp_path, run
     assert r.json["data"]["margin"]["crate"] == 0.08
 
 
+def small_base_rows(margin):
+    """A 0.4 m square plinth (a lantern, a pot, a milestone) with a 0.1 m cube whose left side is `margin` from its edge."""
+    return [
+        {"name": "base", "parent": None, "contact": None, "depth": None,
+         "bbox_min": [-0.2, -0.2, 0.0], "bbox_max": [0.2, 0.2, 0.05]},
+        {"name": "post", "parent": "base", "contact": {"axis": 2, "sign": 1}, "depth": None,
+         "bbox_min": [-0.2 + margin, -0.05, 0.05], "bbox_max": [-0.1 + margin, 0.05, 0.4]},
+    ]
+
+
+def small_base_graph():
+    return {"parts": [{"name": "base", "tag": "base"}, {"name": "post"}]}
+
+
+def test_base_margin_shrinks_with_a_small_base_because_a_fixed_10_cm_cannot_fit_a_pot_or_a_lantern(tmp_path, run_check):
+    """0.1 m of margin on a 0.4 m base would leave a 0.2 m centred part at most. A part 3 cm from the edge of a
+    plinth that small is placed on purpose, so the check must not call it a fault."""
+    w = write_build(tmp_path / "w", small_base_graph(), small_base_rows(0.03), HUT_SOURCES)
+    r = run_check("check_base", "--work", w)
+    assert_pass(r)
+    assert r.json["data"]["margin"] == {"post": 0.03}
+
+
+def test_base_still_fails_a_part_that_hangs_over_the_edge_of_a_small_base(tmp_path, run_check):
+    w = write_build(tmp_path / "w", small_base_graph(), small_base_rows(0.005), HUT_SOURCES)
+    r = run_check("check_base", "--work", w)
+    assert_fail(r)
+    assert r.check("base.edge_margin") == {"status": "fail", "value": ["post"]}
+
+
 def test_base_is_not_checked_without_a_base_tag(tmp_path, run_check):
     g = hut()
     del part(g, "base")["tag"]

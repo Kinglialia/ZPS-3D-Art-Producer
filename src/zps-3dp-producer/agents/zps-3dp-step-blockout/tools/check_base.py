@@ -1,4 +1,5 @@
-"""Parts standing on a `tag: base` part keep >= 0.1 m from its edge. Plain Python, bbox only.
+"""Parts standing on a `tag: base` part keep >= 0.1 m from its edge, or 5 % of the base's shorter side when that is less.
+Plain Python, bbox only.
 
 Usage: python3 tools/check_base.py --work <dir> [--out <json>]
 A part stands on a base when assembly.json gives it that parent with contact on +Z.
@@ -17,6 +18,7 @@ from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/check_base"
 MIN_MARGIN = 0.1
+MARGIN_RATIO = 0.05   # of the base's shorter side; temporary, set by hand, to re-measure on small bases
 
 
 def run(a, graph, rows, sources):
@@ -24,17 +26,18 @@ def run(a, graph, rows, sources):
     if not any(t == "base" for t in tag.values()):
         return [common.check("base.edge_margin", "not_checked", note="no part has tag: base")], {}, "not_checked"
     by = {r["name"]: r for r in rows}
-    margin = {}
+    margin, need = {}, {}
     for r in rows:
         b = by.get(r["parent"])
         if b is None or tag.get(b["name"]) != "base" or r["contact"] != {"axis": 2, "sign": 1}:
             continue
         lo, hi, blo, bhi = r["bbox_min"], r["bbox_max"], b["bbox_min"], b["bbox_max"]
         margin[r["name"]] = round(min(lo[0] - blo[0], bhi[0] - hi[0], lo[1] - blo[1], bhi[1] - hi[1]), 4)
-    bad = sorted(n for n, m in margin.items() if m < MIN_MARGIN - 1e-6)
+        need[r["name"]] = round(min(MIN_MARGIN, MARGIN_RATIO * min(bhi[0] - blo[0], bhi[1] - blo[1])), 4)
+    bad = sorted(n for n, m in margin.items() if m < need[n] - 1e-6)
     c = common.check("base.edge_margin", "fail" if bad else "pass", value=bad, threshold=MIN_MARGIN,
                      note=f"{len(margin)} parts on a base")
-    return [c], {"margin": margin}, None
+    return [c], {"margin": margin, "required": need}, None
 
 
 if __name__ == "__main__":
