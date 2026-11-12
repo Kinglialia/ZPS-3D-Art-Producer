@@ -185,6 +185,36 @@ def test_r0_refuses_a_flag_value_that_would_make_the_open_rule_run_something_els
     assert (codes, marker.exists(), (elsewhere / "work").exists()) == ([2, 2, 2, 2], False, False)
 
 
+def test_r0_a_flag_given_twice_is_refused_so_the_blender_the_codex_rule_pins_is_the_one_that_runs(rt):
+    """The Codex rule allows `run_tool.py --blender <B>` by prefix and runs it outside the sandbox. A worker can edit
+    production/preflight.json, so a second --blender that parse kept would run any program the worker wrote."""
+    marker = rt.base / "ran-evil"
+    evil = rt.base / "production/evil.sh"
+    evil.write_text(f'#!/bin/sh\ntouch "{marker}"\n', encoding="utf-8")
+    evil.chmod(0o755)
+    (rt.base / "production/preflight.json").write_text(json.dumps({"blender": {"path": str(evil)}}), encoding="utf-8")
+    rt.tool("ok.py", "")
+    vd = ["--version-dir", rt.relpath(rt.vd)]
+    twice = ["--blender", str(rt.bl), "--blender", str(evil), "--agent", "zps-3dp-step-model", *vd, "bl", "ok.py"]
+    assert (run_tool.main(twice, skill=rt.skill), marker.exists()) == (2, False)
+    assert "given twice" in rt.cap.readouterr().err
+    for argv in (["--agent", "zps-3dp-step-model", "--agent", "zps-3dp-step-blockout", *vd, "ok.py"],
+                 ["--agent", "zps-3dp-step-model", *vd, *vd, "ok.py"]):
+        assert run_tool.main(argv, skill=rt.skill) == 2
+    assert run_tool.parse(["--blender", str(rt.bl), *vd, "bl", "ok.py"])[0]["--blender"] == str(rt.bl)
+
+
+def test_r0_a_version_folder_outside_the_production_folder_of_this_project_is_refused(rt):
+    """Logs, the heartbeat and the pid file go to --version-dir: another project's vN is not this worker's folder."""
+    other = rt.base / "other/production/assets/hut/model/v1"
+    (other / "work").mkdir(parents=True)
+    rt.tool("ok.py", "")
+    assert run_tool.main(["--agent", "zps-3dp-step-model", "--version-dir", str(other), "ok.py"], skill=rt.skill) == 2
+    assert "not under the production folder" in rt.cap.readouterr().err
+    assert not (other / "work/logs").exists()
+    assert rt.run("ok.py")[:2] == (0, "ok pass\n")
+
+
 def test_r0_in_the_codex_edition_run_tool_refuses_scripts_and_agent_code_because_its_rule_runs_outside_the_sandbox(rt):
     """The Codex rule for run_tool.py runs Blender outside the sandbox. producer.py, the paid scripts and the tools that
     run code the agent wrote must never reach that path. The Claude edition has no such rule and runs them."""

@@ -5,11 +5,13 @@
 
 The `RUN:` line of a brief holds everything before `[bl] <tool>`. A worker adds the tool name and the tool's own arguments.
 The script starts itself on the python of scripts/.deps/venv.
-  --version-dir  production/assets/<id>/<step>/vN. Logs go to vN/work/logs/, the heartbeat to vN/heartbeat.log.
+  --version-dir  production/assets/<id>/<step>/vN of the project in the working folder. Logs go to vN/work/logs/, the
+                 heartbeat to vN/heartbeat.log.
   --agent NAME   the agent of the step. A relative <tool> is resolved against agents/NAME/tools, the `TOOLS:` line of the
                  brief. A plain tool runs on the python of agents/NAME/tools/.deps/venv. Without it the base is scripts/.
   --blender EXE  only in the brief of a step that uses Blender. It must equal the Blender in production/preflight.json.
-                 That guards a mistyped path; a worker who edits that file can still change it.
+                 That guards a mistyped path; a worker who edits that file can still change it. The Codex rule pins the
+                 first --blender, and a flag given twice exits 2, so there the pinned Blender is the one that runs.
                  agents/NAME/tools/setup_deps.sh gets it as $BLENDER when agents/NAME/tools/.deps is missing.
   bl             run the tool in Blender: EXE -b --python-exit-code 1 --python <tool> -- <tool args>. It holds the slot file
                  production/pids/blender/<id>-<pid>.pid (the file limits.used counts) while Blender runs.
@@ -65,6 +67,8 @@ def parse(argv: list[str]) -> tuple[dict, bool, str, list[str]]:
     while i < len(argv) and argv[i].startswith("--"):
         if argv[i] not in FLAGS or i + 1 == len(argv):
             raise Refused(USAGE)
+        if argv[i] in opts:
+            raise Refused(f"refused {argv[i]}: given twice")
         opts[argv[i]] = argv[i + 1]
         i += 2
     bl = argv[i:i + 1] == ["bl"]
@@ -96,6 +100,8 @@ def version_dir(raw: str) -> Path:
     d = Path(raw).resolve()
     if heartbeat.vdir_of(d) != d or not d.is_dir():
         raise Refused(f"refused --version-dir {raw}: not production/assets/<id>/<step>/vN")
+    if not d.is_relative_to(Path(root_guard.MARK).parent.resolve() / "assets"):
+        raise Refused(f"refused --version-dir {raw}: not under the production folder of this project")
     return d
 
 
