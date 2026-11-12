@@ -19,6 +19,7 @@ JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không 
 - `RUN` in một dòng: `<tool> pass`, `<tool> fail <JSON>` hoặc `<tool> error <log>`. Fail: đọc JSON, không đọc log. Error: đọc log. Log đầy đủ ở `V/work/logs/<tool>.log`.
 - `PY` = `T/.deps/venv/bin/python`, chỉ cho lệnh gen ảnh và Meshy.
 - `R` = `T/../references` (tài liệu của agent này).
+- `CC` = file màu concept: đường dẫn ở dòng `CONCEPT_COLORS:` của brief, cả khi `VIEWS: none`. Dòng ghi `none`: `CC` = `F/concept_colors.json` (bước 1).
 - `R/texture.md`: đọc khi chọn chế độ (mục 1), khi làm SỬA (mục 2) hay VẼ MỚI (mục 3), khi viết `notes.md` (mục 4) và khi sửa theo crop (mục 5).
 - `R/fix.md`: chỉ đọc ở vòng sửa (brief có `P` và `TOP_FIX`).
 - `F` = `V/final/`. `B`, `VF`, `VR`, `M` = `final/` đã duyệt của `blockout`, `views_front`, `views_rest`, `model` trong brief. `C` = thư mục concept. `G` = `M/<id>-untextured.glb` (mesh đã khóa). `RES` = độ phân giải trong tên `albedo_<RES>.png` của dòng "Bắt buộc có".
@@ -30,11 +31,11 @@ JSON fail trong `final/review/{gates,checks}/` trả thẳng về bạn, không 
 
 ## Quy trình
 
-1. `RUN check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Brief có dòng `VIEWS: none`: không có `VF`, `VR`, bỏ cờ của chúng ở mọi tool. TEXTURE NOTE, NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và `C/<id>.material.md`. Màu concept: mỗi mã vật liệu một ô pixel nằm trọn trong vùng đó trên `C/concept_albedo.png`, rồi `RUN ../../zps-3dp-step-views/tools/concept_colors.py --final F --concept C/concept_albedo.png --box <MÃ>=x0,y0,x1,y1 ...`; `VF/concept_colors.json` ở các bước sau thành `F/concept_colors.json`. Fail: `STATUS: NEEDS_CONTEXT`.
+1. `RUN check_inputs.py --final F --blockout B --views-front VF --views-rest VR --model M --concept C`. Brief có dòng `VIEWS: none`: không có `VF`, `VR`, bỏ cờ của chúng ở mọi tool. TEXTURE NOTE, NGOẠI LỆ lấy từ `real_texture_only_notes` của thẻ và `C/<id>.material.md`. Màu concept: dòng `CONCEPT_COLORS:` có đường dẫn thì dùng nó, không chọn ô. Dòng ghi `none`: mỗi mã vật liệu một ô pixel nằm trọn trong vùng đó trên `C/concept_albedo.png`, rồi `RUN ../../zps-3dp-step-views/tools/concept_colors.py --final F --concept C/concept_albedo.png --box <MÃ>=x0,y0,x1,y1 ...`. Fail: `STATUS: NEEDS_CONTEXT`.
 2. `RUN texture_complexity.py --final F --blockout B --concept C --views-rest VR --profile <profile> --mode <meshy|paint> --glb G` (`meshy` khi brief có `MODE: Meshy SỬA`, `paint` khi có `MODE: VẼ MỚI`; cùng mesh với một version trước thì tool lấy lại điểm, không đo lại), rồi `RUN id_map.py --final F --model M --res RES`.
 3. Chọn chế độ (`R/texture.md` mục 1): theo dòng `MODE:` của brief (script chọn). `MODE: Meshy SỬA`: dòng `MESHY_DONE:` có topology pass thì SỬA trên lớp đó, không thì gọi Meshy. Ghi `used` và `reason` (một dòng) vào `F/texture_spec.json`.
 4. Làm theo chế độ: SỬA (`R/texture.md` mục 2) hoặc VẼ MỚI (mục 3). Kết quả là `F/albedo_<RES>.png`.
-5. `RUN tex_measure.py --final F --glb G --model M --albedo F/albedo_<RES>.png --concept-colors VF/concept_colors.json --profile <profile> --pilot <dòng PILOT của brief, none khi không có>`. Fail: sửa bằng script trước (`tone_fix.py`, `seam_fix.py`), rồi sửa theo crop; đo lại cho tới khi pass. Chưa có ảnh render: `read.hf_noise` là `not_checked`, không phải lỗi.
+5. `RUN tex_measure.py --final F --glb G --model M --albedo F/albedo_<RES>.png --concept-colors CC --card C/asset-card.yaml --profile <profile> --pilot <dòng PILOT của brief, none khi không có>`. Fail: sửa bằng script trước (`tone_fix.py`, `seam_fix.py`), rồi sửa theo crop; đo lại cho tới khi pass. Chưa có ảnh render: `read.hf_noise` là `not_checked`, không phải lỗi.
 6. `RUN bl render_texture.py --glb G --albedo F/albedo_<RES>.png --spec M/spec.json --concept C/concept_shadow.png --final F`. Chỉ chạy sau khi bước 5 pass. Sửa albedo sau bước này thì chạy lại bước 5 và 6: `review/renders.json` ghi sha256 của albedo đã render.
 7. Mở `F/final_lit_vs_concept.png`, `F/review/lit_34_front.png`, `F/review/thumb.png`. Viết `F/notes.md` (`R/texture.md` mục 4). Ghi báo cáo theo brief, thêm dòng `UNFIXABLE: yes|no`. Rồi dừng.
 

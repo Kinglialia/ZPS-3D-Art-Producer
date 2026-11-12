@@ -115,13 +115,34 @@ def test_every_tool_command_is_a_run_line_so_the_exit_code_and_the_log_come_from
     assert not re.search(r"\bBL\b|dòng PID|nohup|disown|không `&`", text)
 
 
-def test_a_fix_round_keeps_the_review_evidence_of_the_version_it_fixes_and_rerenders_only_what_steps_5_and_6_write():
-    body = FIX.read_text(encoding="utf-8")
+def test_a_fix_round_is_prepared_by_p_brief_so_the_fix_text_has_no_copy_list_and_the_toml_has_it_l14():
+    """One wrong copy by hand left a stale measure or render in the new version: the list moved to pipeline.toml."""
+    fix = FIX.read_text(encoding="utf-8")
     assert "Brief có `P` và `TOP_FIX`: làm theo `R/fix.md`" in front(WORKER)[1]
-    assert ("Chép `P/final/` vào `F`, cả `review/` (`id_map.*`, `meshy_albedo.png`, `checks/meshy.json` là bằng chứng "
-            "của lớp đang sửa), trừ file bước 5–6 ghi lại: `review/lit_*`, `review/unlit_*`, `review/thumb.png`, "
-            "`review/renders.json`, `review/render_texture.json`, `review/checks/tex_measure.json`.") in body
-    assert "trừ `review/`" not in body
+    assert "`F` đã có bản chép của `P/final/`" in fix and "Không chép tay." in fix
+    assert not re.search(r"Chép `P/final/`|review/lit_|review/renders\.json|tex_measure\.json", fix)
+    step = {s["id"]: s for s in tomllib.loads((SKILL / "templates/pipeline.toml").read_text(encoding="utf-8"))["steps"]}
+    assert step["texture"]["fix_copy_exclude"] == [
+        "review/lit_*", "review/unlit_*", "review/thumb.png", "review/renders.json", "review/render_texture.json",
+        "review/checks/tex_measure.json", "review/checks/render_fresh.json", "final_lit_vs_concept.png"]
+    assert "id_map" not in " ".join(step["texture"]["fix_copy_exclude"])
+
+
+def test_every_tool_gets_the_concept_colours_of_the_briefs_concept_colors_line_t14():
+    """The colours come from intake (D43.1), also when the asset has no view set: no tool reads a views-step folder."""
+    text, calls = commands()
+    body = front(WORKER)[1]
+    assert "`CC` = file màu concept: đường dẫn ở dòng `CONCEPT_COLORS:` của brief, cả khi `VIEWS: none`." in body
+    assert "`F/concept_colors.json` (bước 1)" in body and "Dòng ghi `none`" in body
+    assert "VF/concept_colors.json" not in text
+    users = [(s, a) for s, a in calls if "--concept-colors" in a]
+    assert sorted(s for s, _ in users) == ["base_fill.py", "make_paint_prompts.py", "tex_measure.py", "tone_fix.py"]
+    assert all("--concept-colors CC " in a for _, a in users)
+
+
+def test_tex_measure_gets_the_card_so_the_flipped_uv_check_knows_the_text_codes_g7():
+    got = {s: a for s, a in commands()[1]}
+    assert "--card C/asset-card.yaml" in got["tex_measure.py"]
 
 
 def steps():
