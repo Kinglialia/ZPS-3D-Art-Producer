@@ -26,7 +26,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 - Không có hook SessionStart. Chạy `P next --session` khi mở phiên.
 - Không có hook Stop: `P on-main-stop` không chạy, nên không có gì chặn Producer kết thúc lượt. Luật trong `SKILL.md` "Nhận kết quả" là chỗ chặn duy nhất; giữ nó đúng từng chữ.
 - Không có hook SubagentStop (D33.20): `P on-stop` không chạy. Nhịp tim, hạn chót, `P stall`, `P wait` dựa trên file nên dùng như bản Claude. Chưa chạy thử bản Codex để biết có đứng im như Run 5 không.
-- Không tự xóa file sau DUYỆT 2 (D29): `P next` nhắc lệnh xóa đang chờ; người dùng muốn xóa thì `P purge <id> --by "<nguyên văn>"`.
+- DUYỆT 2 xóa file trung gian ngay trong lệnh duyệt, như bản Claude. Không cần hook.
 
 ## Gửi file
 

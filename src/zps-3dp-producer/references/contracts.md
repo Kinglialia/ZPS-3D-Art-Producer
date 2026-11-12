@@ -16,7 +16,7 @@ production/                     # trong project Claude Code; chỉ script và su
   pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; gen_image_codex.py ghi <id>-<pid>.pid mỗi lần chạy; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: `- <giờ> · <runtime> · <sự kiện>` + RULING
-  session.json                  # P next --session ghi JSON hook SessionStart nhận qua stdin: {session_id, source, transcript_path, at, transcripts[]} (D29.4, D30.10)
+  session.json                  # P next --session ghi JSON hook SessionStart nhận qua stdin: {session_id, source, transcript_path, at, transcripts[]} (D30.10)
   .lock                         # mỗi lệnh ghi và mỗi nút trên review page giữ flock file này
   schedule.md                   # `- YYYY-MM-DD · milestone`
   dashboard.md                  # tự sinh
@@ -27,8 +27,7 @@ production/                     # trong project Claude Code; chỉ script và su
     brief.md · rubric.md · feedback.md
     feedback/<step>-vN-<k>/     # một lần gửi có khoanh: regions.json, ảnh đã khoanh <tên ảnh>.png
     custom_parts.py             # D32: hàm `custom` riêng của asset (Python thuần, chỉ math), worker blockout/model viết (dòng CUSTOM_PARTS: của brief); D29 giữ (D32.3)
-    purge-pending.json          # D29: lệnh xóa sau DUYỆT 2 của người dùng: {asset, armed, assemble, session, bytes, zip, delete[], thumbs[]}
-    purge-manifest.json         # D29: đã xóa gì: {asset, at, source, by, assemble, freed_bytes, zip, deleted[], thumbnails[]}
+    purge-manifest.json         # D29: đã xóa gì: {asset, at, source (approve|purge), by, assemble, freed_bytes, zip, deleted[] (đường dẫn trong assets/<id>/), deleted_other[] (đường dẫn trong production/: show, board/push, pids), thumbnails[]}
     <step>/vN/
       brief-worker.md · worker-out.md · brief-review.md · review-out.md · findings.json
       review/sheet.png, sheet.json (sheet review, D31.1; sheet-<b|c>.png cho phương án param)
@@ -61,6 +60,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `texture_choice`: chế độ người dùng chọn bằng `P texture-mode` (D30.11): `{mode: auto|meshy|paint, by, at}`. Không có = `auto`: chế độ `texture_default` của `policy.yaml` (`meshy | paint`, D34.2; thiếu khóa = giá trị của template). `gate()` của bước texture đọc trường này.
 - `texture_mode`: chế độ texture script chọn lần cuối (D30.11): `{mode, reason, mesh}`, `mode` là `Meshy SỬA` hoặc `VẼ MỚI`, `mesh` là 12 ký tự đầu hash mesh. Ledger ghi một dòng khi giá trị này đổi.
 - `purged`: `{at, manifest, freed_bytes, zip}` sau khi xóa file trung gian (D29). Có trường này thì `redo` bị từ chối.
+- `keep_files`: giờ `P keep` trước DUYỆT 2; lần duyệt đó không xóa, rồi script bỏ trường. `purge_hold`: `ab` khi `production-<runtime>/` chưa có kết quả so A/B; `P next` nhắc tới khi có kết quả. `policy.yaml`: `purge` (`on_approve` | `off`), `purge_zip` (thư mục).
 - `blocked_from`: state (`todo`, `fix`) trước khi brief chặn asset; `retry` trả về đúng state đó.
 - `dispatches`: mỗi lần giao subagent `{step, v, role, model, at}`; `model` là model thật của runtime (`runtime.json` `models`), `null` = model của phiên; `at` tính tới giây. `brief` gọi lại khi subagent chưa trả về thì không thêm lần giao. `ingest` đóng lần giao cùng bước, version và vai trò: `ingested` (giờ ingest), `tokens` (`--tokens N`), `duration_ms` (`--duration-ms M`), `after` (state sau ingest); không có số thì `null`, ledger ghi "không có số". `P stats` tính khoảng chờ Producer từ `ingested` của lần trước tới `at` của lần sau, khi `after` là `todo`, `review`, `fix` hoặc `evidence`. Lần giao reviewer có thêm `scope` (`full` | `fix`, D31.2), để `P stats` tách vòng đầu, vòng sửa, vòng chấm cuối (D31.4). Không có `scope` (lần giao cũ): reviewer đầu tiên của bước là vòng đầu, các lần sau là vòng sửa. Thời gian bước: `at` của worker đầu tiên tới `approved_at`, chỉ khi bước đang được duyệt. Chờ anh: `offer_log` từ `at` tới `decided`.
 - `session.json`: `source` là của lần mở phiên gần nhất (`startup`, `resume`, `clear`, `compact`). `transcripts` gom mọi transcript của phiên chính, không trùng. `P stats` cộng `usage` của từng message một lần (theo `message.id`): `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`. Bỏ dòng `isSidechain` và dòng hỏng. Token Producer của bước là các message có `timestamp` trong khoảng thời gian bước. Hai asset chạy cùng lúc thì khoảng chồng nhau, nên một message được tính cho cả hai.
