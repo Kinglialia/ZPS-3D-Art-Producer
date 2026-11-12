@@ -189,8 +189,8 @@ def test_hidden_sides_names_the_unseen_faces_it_lacks_so_blockout_never_guesses_
     assert messages(make_asset(tmp_path, card=card)) == [HIDDEN_ERR + "; thiếu: left, right"]
 
 
-@pytest.mark.parametrize("view", ["front", "34", 34, "game_camera"])
-def test_card_view_takes_the_three_concept_angles_and_an_unquoted_34_d27_6(tmp_path, view):
+@pytest.mark.parametrize("view", ["front", "34", 34])
+def test_card_view_takes_the_two_concept_angles_and_an_unquoted_34_d27_6(tmp_path, view):
     assert messages(make_asset(tmp_path, card=mutated(view=view, view_side="left"))) == []
 
 
@@ -259,8 +259,9 @@ def test_card_cli_warns_when_a_note_asks_to_round_edges_but_the_bevel_field_is_e
     ({"hidden_sides": "tường trơn"}, HIDDEN_ERR),
     ({"hidden_sides": {**SIDES4, "left": ""}}, HIDDEN_ERR),
     ({"hidden_sides": {**SIDES4, "bottom": "trống"}}, HIDDEN_ERR),
-    ({"view": "side"}, "thẻ: view sai: 'side' (front | 34 | game_camera)"),
-    ({"view": True}, "thẻ: view sai: 'True' (front | 34 | game_camera)"),
+    ({"view": "side"}, "thẻ: view sai: 'side' (front | 34)"),
+    ({"view": True}, "thẻ: view sai: 'True' (front | 34)"),
+    ({"view": "game_camera"}, "thẻ: view sai: 'game_camera' (front | 34)"),
     ({"bevel": "soft"}, "thẻ: bevel sai: 'soft' (null | none | toon)"),
     ({"real_texture_only_notes": "x"}, "thẻ: real_texture_only_notes sai: cần danh sách chuỗi"),
     ({"scale_overrides": [{"name": "cửa", "height_m": 0}]}, "thẻ: scale_overrides sai: cần danh sách {name, height_m > 0}"),
