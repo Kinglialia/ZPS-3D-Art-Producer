@@ -6,6 +6,7 @@ Checks file existence only, not input hashes: the Producer script owns those (D2
   inputs.sources_keys   required keys of sources.json
   inputs.layout_source  has_map true: files.layout is <id>.layout.md; has_map false: files.layout is
                         asset-card.yaml and layout w/d/h equal its size_m (D20.12)
+  inputs.todo           no value in sources.json starts with TODO (init_sources.py leaves those for the worker to fill)
 data.sources_reusable: the recorded layout/material sha256 still match, so a rebuild may keep sources.json.
 Writes <dir>/review/checks/inputs.json. Exit 0 pass, 1 fail, 2 error.
 """
@@ -32,6 +33,15 @@ def get(d, dotted):
             return None
         d = d[k]
     return d
+
+
+def todo_keys(node, prefix=""):
+    """Dotted names of every value that is a string starting with TODO."""
+    if isinstance(node, dict):
+        return [k for key, v in node.items() for k in todo_keys(v, f"{prefix}{key}.")]
+    if isinstance(node, list):
+        return [k for i, v in enumerate(node) for k in todo_keys(v, f"{prefix}{i}.")]
+    return [prefix.rstrip(".")] if isinstance(node, str) and node.startswith("TODO") else []
 
 
 def yaml_load(path):
@@ -64,7 +74,10 @@ def run(work, approved, profile):
         diff = [k for k in ("w", "d", "h") if get(s, f"layout.{k}") != size.get(k)]
         if diff:
             src_ok, value = False, diff
+    todo = sorted(todo_keys(s))
     checks = [common.check("inputs.files", "fail" if missing else "pass", value=sorted(missing)),
+              common.check("inputs.todo", "fail" if todo else "pass", value=todo,
+                           note="fill these values of sources.json" if todo else None),
               common.check("inputs.sources_keys", "fail" if keys else "pass", value=sorted(keys)),
               common.check("inputs.layout_source", "pass" if src_ok else "fail", value=value,
                            note=f"has_map {str(has_map).lower()}; files.layout must be {os.path.basename(want)}")]
