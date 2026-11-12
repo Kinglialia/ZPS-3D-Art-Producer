@@ -258,6 +258,37 @@ def test_custom_mesh_refuses_a_function_that_fails_or_returns_no_mesh_and_writes
     assert (rc, line, out) == (1, f"[blockout/custom_mesh] fail: {why}", {})
 
 
+OPEN_ROOF = ROOF.replace("(0, 3, 2, 1), ", "")
+LEAKY_ROOF = ROOF.replace("(2, 3, 4, 5), ", "(2, 3, 4, 5), (2, 3, 4, 5), ")
+
+
+@needs_venv
+@pytest.mark.parametrize("source, used", [(OPEN_ROOF, "1 time"), (LEAKY_ROOF, "3 times")])
+def test_custom_mesh_refuses_a_mesh_that_is_not_closed_and_names_the_part_and_the_function(tmp_path, source, used):
+    """The gate and the union of the build assume a closed shell. A roof with no floor face, or with a face listed
+    twice, makes the union fail later in Blender with no hint of the function that caused it."""
+    f = asset_dir(tmp_path, roof_graph(), source)
+    rc, line, out = meshes(f)
+    assert (rc, out) == (1, {})
+    assert line.startswith("[blockout/custom_mesh] fail: roof: ridge_roof returned a bad mesh: not closed")
+    assert f"used {used}" in line
+
+
+@needs_venv
+def test_custom_mesh_still_accepts_a_pile_of_closed_shells_that_share_no_vertex(tmp_path):
+    f = asset_dir(tmp_path, pile_graph(3), PILE)
+    assert meshes(f)[0] == 0
+
+
+def test_a_hand_edited_json_mesh_that_is_not_closed_stops_the_build_too(tmp_path):
+    import mesh_from_json as MJ
+    doc = {"tool": MJ.TOOL, "verts": [[0, 0, 0], [1, 0, 0], [0, 1, 0]], "faces": [[0, 1, 2]]}
+    path = tmp_path / "roof.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(ValueError, match="not closed"):
+        MJ.read(path)
+
+
 @needs_venv
 def test_build_parts_stops_when_a_param_changed_after_custom_mesh_and_names_the_command(tmp_path):
     """The JSON mesh is fixed for the args it was made with; a changed param must not build the old shape."""

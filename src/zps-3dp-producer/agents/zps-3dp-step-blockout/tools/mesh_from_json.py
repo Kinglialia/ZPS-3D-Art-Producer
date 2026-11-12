@@ -2,7 +2,7 @@
 build_parts.py calls it inside Blender. It reads numbers only; it never imports or runs custom_parts.py.
 
 JSON: {"tool", "part", "fn", "args": [float], "source_sha256", "verts": [[x, y, z]], "faces": [[i, j, k, ...]]}.
-errors() is the one validation of a mesh: custom_mesh.py runs it before it writes, and read() again before Blender
+errors() is the one validation of a closed mesh (every edge shared by exactly 2 faces): custom_mesh.py runs it before it writes, and read() again before Blender
 builds, so a hand-edited file stops the build too. Plain Python except to_bmesh().
 """
 import json
@@ -11,8 +11,18 @@ import math
 TOOL = "blockout/custom_mesh"
 
 
+def open_edges(faces):
+    """Edges, by vertex index, that the faces do not use exactly twice: {(a, b): times used}, sorted."""
+    used = {}
+    for f in faces:
+        for a, b in zip(f, [*f[1:], f[0]]):
+            key = (min(a, b), max(a, b))
+            used[key] = used.get(key, 0) + 1
+    return {k: n for k, n in sorted(used.items()) if n != 2}
+
+
 def errors(verts, faces):
-    """Reasons the (verts, faces) pair is not a mesh, one line each (empty: valid)."""
+    """Reasons the (verts, faces) pair is not a closed mesh, one line each (empty: valid)."""
     if not isinstance(verts, (list, tuple)) or not verts:
         return ["verts must be a non-empty list of [x, y, z]"]
     if not isinstance(faces, (list, tuple)) or not faces:
@@ -27,6 +37,11 @@ def errors(verts, faces):
             errs.append(f"faces[{i}] must hold >= 3 vertex indexes in 0..{n - 1}")
         elif len(set(f)) != len(f):
             errs.append(f"faces[{i}] repeats a vertex")
+    loose = None if errs else open_edges(faces)
+    if loose:
+        (a, b), n = next(iter(loose.items()))
+        return [f"not closed: {len(loose)} edges are not shared by exactly 2 faces (first: vertices {a}-{b} "
+                f"used {n} time{'s' if n != 1 else ''})"]
     return errs
 
 
