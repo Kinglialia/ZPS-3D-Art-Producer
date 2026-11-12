@@ -10,10 +10,10 @@ region). The crop is padded with the atlas round it to 3:2 or 2:3, whichever add
 a band of the crop's mean colour. 1:1 is not offered: a 1024x1024 image fails the 1040 px long side of
 gen_image_codex.py. Writes <out>/crop.png (the padded crop), <out>/send.png (it at 1536x1024 or 1024x1536) and
 <out>/crop.json {box, crop, pad, send}. Codex gets send.png.
-paste: the edited image may have any size of send.png's shape (1% tolerance); it is scaled to send.png. Outside the
-box by more than --feather px nothing should change, so the mean RGB difference to send.png there (the ring) over
-LIMITS["ring_diff"] refuses the edit: it moved or redrew the surroundings. Then it is scaled to the pad, and only
-pixels inside the box change, blended with a weight that rises from 0 at the box edge to 1 at --feather px inside; every
+paste: the edited image may have any size of send.png's shape (1% tolerance); it is scaled to the pad. Outside the
+box by more than --feather px nothing should change, so the mean RGB difference to crop.png there (the ring, at atlas
+scale, where detail finer than a texel no longer counts) over LIMITS["ring_diff"] refuses the edit: it moved or redrew
+the surroundings. Only pixels inside the box change, blended with a weight that rises from 0 at the box edge to 1 at --feather px inside; every
 pixel outside the box is compared with A and must be equal, else nothing is written. Last, the gutter (non-island
 texels of G's UV within --padding px of the box) is grown again from the new island colours (tex.gutter).
 Writes <out>.json next to A2. Prints one line. Exit 0, 1 refused, 2 error.
@@ -76,14 +76,12 @@ def cut(a):
                f"-> {a.out}/send.png")
 
 
-def ring_diff(ed, send, meta, feather):
-    """Mean RGB difference of the edit to send.png outside the box grown by feather px, at send.png's scale."""
-    (x0, y0, x1, y1), (px0, py0, px1, py1) = meta["box"], meta["pad"]
-    k = send.shape[1] / (px1 - px0)
-    yy, xx = np.mgrid[0:send.shape[0], 0:send.shape[1]]
-    ax, ay = px0 + (xx + 0.5) / k, py0 + (yy + 0.5) / k
-    ring = (ax < x0 - feather) | (ax > x1 + feather) | (ay < y0 - feather) | (ay > y1 + feather)
-    return float(np.abs(ed - send)[ring].mean()) if ring.any() else 0.0
+def ring_diff(ed, crop, meta, feather):
+    """Mean RGB difference of the edit to the padded crop outside the box grown by feather px, both at atlas scale."""
+    (x0, y0, x1, y1), (px0, py0, _, _) = meta["box"], meta["pad"]
+    yy, xx = np.mgrid[py0:py0 + crop.shape[0], px0:px0 + crop.shape[1]]
+    ring = (xx < x0 - feather) | (xx >= x1 + feather) | (yy < y0 - feather) | (yy >= y1 + feather)
+    return float(np.abs(ed - crop)[ring].mean()) if ring.any() else 0.0
 
 
 def paste(a):
@@ -94,12 +92,11 @@ def paste(a):
     (px0, py0, px1, py1), (x0, y0, x1, y1) = meta["pad"], meta["box"]
     if abs(ed.width / ed.height - sw / sh) > 0.01 * sw / sh:
         return 1, f"ảnh sửa {ed.width}x{ed.height} khác tỉ lệ ảnh gửi {sw}x{sh}: bỏ kết quả", None
-    ed = ed.resize((sw, sh), Image.LANCZOS)
-    send = np.asarray(Image.open(os.path.join(a.crop, "send.png")).convert("RGB"), float)
-    ring = ring_diff(np.asarray(ed, float), send, meta, a.feather)
+    ed = np.asarray(ed.resize((px1 - px0, py1 - py0), Image.LANCZOS), float)
+    crop = np.asarray(Image.open(os.path.join(a.crop, "crop.png")).convert("RGB"), float)
+    ring = ring_diff(ed, crop, meta, a.feather)
     if ring > LIMITS["ring_diff"]:
         return 1, f"vùng quanh chỗ sửa bị dời hoặc đổi (lệch {ring:.0f} > {LIMITS['ring_diff']:.0f}): bỏ kết quả, gen lại", None
-    ed = np.asarray(ed.resize((px1 - px0, py1 - py0), Image.LANCZOS), float)
     out = base.copy()
     yy, xx = np.mgrid[y0:y1, x0:x1]
     inner = np.minimum.reduce([xx - x0 + 0.5, x1 - xx - 0.5, yy - y0 + 0.5, y1 - yy - 0.5])
