@@ -18,8 +18,8 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 ## Token
 
-- Kết quả subagent có khối usage: số token (`subagent_tokens` hoặc `total_tokens`) → `--tokens <N>`, `duration_ms` → `--duration-ms <M>` của `P ingest`. Thiếu số nào thì bỏ cờ đó.
-- Không chờ thông báo mang số (D33.22). Thiếu cờ thì `P ingest` đọc `<transcript chính>/subagents/agent-<agent id>.jsonl` (transcript chính ghi trong `production/session.json`). Không tìm thấy thì script tìm transcript có prompt nêu brief của lần giao.
+- `P ingest` tự đọc token và thời lượng từ `<transcript chính>/subagents/agent-<agent id>.jsonl` (transcript chính ghi trong `production/session.json`). Không tìm thấy thì script tìm transcript có prompt nêu brief của lần giao.
+- Không chờ thông báo mang số.
 
 ## Hook mở phiên
 

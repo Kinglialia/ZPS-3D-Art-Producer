@@ -435,3 +435,59 @@ def test_each_runtime_adapter_says_whether_a_hook_guards_the_end_of_the_turn_d39
     codex = (editions / "codex/adapter.md").read_text(encoding="utf-8")
     assert "hook Stop (`P on-main-stop`)" in claude and "mã 2" in claude
     assert "Không có hook Stop" in codex and "on-main-stop" in codex
+
+
+def skill_md():
+    return (SKILL / "SKILL.md").read_text(encoding="utf-8")
+
+
+def receive_section():
+    text = skill_md()
+    return text[text.index("**Nhận kết quả**"):text.index("**Lệnh đổi state cũng in lệnh giao việc:**")]
+
+
+def test_receiving_a_result_is_a_numbered_list_whose_first_three_rules_have_no_exception_d39_2():
+    """Run 5: the old paragraph ended with 'when nothing else runs', and the Producer found that nothing else ran."""
+    lines = receive_section().splitlines()
+    items = [l for l in lines if l[:1].isdigit()]
+    assert [l.split(".", 1)[0] for l in items] == [str(n) for n in range(1, len(items) + 1)] and len(items) >= 3
+    first = " ".join(items[:3])
+    assert ("`P ingest <id> --agent-id <id subagent>` ngay" in items[0] and "cùng lượt" in items[1]
+            and items[2] == "3. Không kết thúc lượt khi còn report chưa ingest hoặc còn dòng giao việc chưa giao.")
+    assert not any(w in first for w in ("trừ", "nếu không có", "khi không có việc"))
+    assert not any(l.startswith("`P stats") for l in items), "P stats is not a rule of the list"
+    assert "`P stats <id>` in bảng theo bước" in receive_section()
+
+
+def test_no_runtime_text_asks_the_producer_to_pass_token_or_duration_numbers_d39_2():
+    """Waiting for those numbers is what held Run 5; the script reads them from the subagent transcript."""
+    editions = SKILL.parents[1] / "editions"
+    for f in (SKILL / "SKILL.md", editions / "claude/adapter.md", editions / "codex/adapter.md"):
+        assert "--tokens" not in f.read_text(encoding="utf-8") and "--duration-ms" not in f.read_text(encoding="utf-8"), f
+
+
+def test_every_rule_of_the_old_receiving_paragraph_is_still_in_the_skill_d39_2():
+    section = receive_section()
+    for kept in ("Không giao thêm", "Bạn không bao giờ sửa report của worker hay reviewer.", "Đừng tự diễn giải report",
+                 "Report sai contract: <dòng lỗi của script>. Sửa `<report>` rồi trả lại các dòng brief yêu cầu.",
+                 "`references/runtime.md` mục Resume", "không giao lại", "reviewer `full` chấm lại sau PASS ở vòng `fix`",
+                 "chuyển state và in bước tiếp theo", "Không chờ số token hay thời lượng"):
+        assert kept in section, kept
+
+
+def test_a_doubt_about_the_reviewer_is_noted_and_asked_never_decided_and_no_reminder_goes_in_the_prompt_d39_7():
+    """The Producer never opens reviewer output, so it cannot judge a verdict; a reminder in the next dispatch prompt
+    would break 'Không thêm gì vào prompt'."""
+    text = skill_md()
+    auto = text[text.index("## Tự quyết hay hỏi"):text.index("Chỉ dừng lại hỏi người dùng khi")]
+    assert "reviewer chấm sai" not in auto
+    ask = text[text.index("Chỉ dừng lại hỏi người dùng khi"):text.index("## Giữ context nhỏ")]
+    assert "nghi reviewer chấm sai" in ask and '`P feedback <id> "<nguyên văn>" --action note`' in ask
+    assert "nhắc nó giữ" not in text and "ở lần giao sau" not in text
+
+
+def test_with_a_remote_board_the_producer_runs_next_again_after_every_board_pull_d39():
+    text = skill_md()
+    board = text[text.index("**Trang claude.ai**"):text.index("**Ai duyệt:**")]
+    assert "rồi `P board pull`. Báo lại các dòng script in, rồi luôn chạy lại `P next`" in board
+    assert "không chạy lại, trừ khi bạn vừa chạy `P board pull`" in text
