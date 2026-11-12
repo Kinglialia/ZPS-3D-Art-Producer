@@ -175,3 +175,29 @@ def test_the_copy_in_another_agent_finds_its_checks_beside_itself_and_gives_them
     assert r.stdout.splitlines() == [
         "review/gates/b.json: g.x 3", "review/checks/bad.json: c.y 1", "gate_all fail: 2 failing"], r.stderr
     assert sorted(p.name for p in (work / "review/checks").iterdir()) == ["bad.json", "good.json"]
+
+
+@needs_venv
+def test_a_path_with_a_space_reaches_check_inputs_when_it_is_quoted_inside_check_args(tmp_path):
+    """The agent file shows inner single quotes: shlex.split keeps `x y` as one argument."""
+    from test_checks import approved, sources_for
+    a, prof = approved(tmp_path / "x y", has_map=False)
+    f = final_dir(tmp_path)
+    (f / "sources.json").write_text(json.dumps(sources_for(a, "asset-card.yaml")), encoding="utf-8")
+    rc, lines, _ = gate_all(f, "--check-args", f"check_inputs=--approved '{a}' --profile '{prof}'")
+    assert (rc, lines, read(f / "review/checks/inputs.json")["overall"]) == (0, ["gate_all pass: 6 parts, 8 checks"], "pass")
+
+
+@pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh")
+def test_the_copy_finds_the_build_in_the_blockout_folder_of_the_codex_edition_too(tmp_path):
+    tools = fake_skill(tmp_path)
+    blockout = tools.parents[1] / "zps-3dp-step-blockout-codex/tools"
+    blockout.mkdir(parents=True)
+    (tools / "build_parts.py").rename(blockout / "build_parts.py")
+    (tmp_path / "production").mkdir(exist_ok=True)
+    (tmp_path / "production/pipeline.toml").touch()
+    work = tmp_path / "final"
+    work.mkdir()
+    r = subprocess.run([sys.executable, str(tools / "gate_all.py"), "--work", str(work), "--check-flag", "final"],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert "no build_parts.py" not in r.stdout and (work / "assembly.json").is_file(), r.stdout + r.stderr

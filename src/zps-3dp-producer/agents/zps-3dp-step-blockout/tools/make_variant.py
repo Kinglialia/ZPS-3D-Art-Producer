@@ -13,8 +13,9 @@ When the chain built the variant, it writes the bbox line, the hashes and the me
 It refuses a name that is not a param, a name in fixed_params, a value that is not a number, and an --out whose folder is not
 called `variants`. A graph that calls a function of the asset's custom_parts.py is copied and not built: the meshes of
 those functions are made by custom_mesh.py, which this tool never runs (it runs agent code). The last line then names the
-commands to run: custom_mesh.py, gate_all.py, and check_fix.py for each finding.
-Output as gate_all.py: the failing lines, then one summary line. Exit 0 pass or copied, 1 fail, 2 refused.
+commands to run (custom_mesh.py, gate_all.py, check_fix.py for each finding, blockout_md.py) and the tool exits 1, so RUN
+prints `error <log>` and the line is in the log: the variant is not built yet, and a pass line would hide that.
+Output as gate_all.py: the failing lines, then one summary line. Exit 0 pass, 1 fail or not built, 2 refused.
 """
 import argparse
 import json
@@ -122,12 +123,13 @@ def main():
         print(f"{NAME} refused: {ex}")
         sys.exit(2)
     extra = {n.removesuffix(".py"): shlex.split(args) for n, _, args in (i.partition("=") for i in a.check_args)}
-    pending = [f"RUN custom_mesh.py --work {out}", f"RUN gate_all.py --work {out}"] + [
-        f"RUN check_fix.py --work {out} --old {a.old} --finding {fid}" for fid in a.finding]
-    pending[1] += "".join(f" --skip {x}" for x in a.skip)
+    args = "".join(f' --check-args "{c}"' for c in a.check_args) + "".join(f" --skip {x}" for x in a.skip)
+    pending = [f"RUN custom_mesh.py --work {out}", f"RUN gate_all.py --work {out}{args}"] + [
+        f"RUN check_fix.py --work {out} --old {a.old} --finding {fid}" for fid in a.finding] + [
+        f"RUN blockout_md.py --work {out}"]
     if uses_asset_function(out, graph):
         print(f"{NAME} copied {out}; not built, the graph calls custom_parts.py. next: " + "; ".join(pending))
-        return
+        sys.exit(1)
     lines, parts, ran = gate_all.run(out, extra, {*gate_all.ALWAYS_SKIP, *(x.removesuffix(".py") for x in a.skip)}, "--work")
     if not any(x.startswith("build:") for x in lines):
         lines += refresh_md(out)

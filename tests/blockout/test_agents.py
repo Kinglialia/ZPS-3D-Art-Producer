@@ -260,3 +260,10 @@ def test_the_count_example_names_no_removed_function_and_two_kinds_of_object_wit
     assert "grooved_box" not in body + pg and "vault" not in body + pg
     line = next(l for l in body.splitlines() if l.startswith("Brief có dòng `COUNTS:`"))
     assert "`tag: legs`" in line and "`custom_parts.py`" in line and "chân bàn" in line and "lớp đá" in line
+
+
+def test_the_worker_does_not_start_blockout_md_by_hand_because_blockout_md_py_makes_the_skeleton_after_the_build():
+    """blockout_md.py refuses a file that does not start with the title, so the measuring table goes to notes.md first."""
+    _, body = front(WORKER)
+    assert "V/work/notes.md" in body and "Đừng tạo `blockout.md` bằng tay" in body
+    assert "Khi `RUN` in `error`, đọc log" in body and "đủ mục" not in body

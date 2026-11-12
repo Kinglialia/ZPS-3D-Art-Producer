@@ -108,9 +108,19 @@ def render(work, text):
     asm = common.read_json(os.path.join(work, "assembly.json"))
     new_head, new_sections = skeleton(work, graph)
     head, sections, _ = split(text) if text else (new_head, {}, [])
+    lines = [x for x in head if x.strip()]
+    if lines and not lines[0].startswith("# Blockout"):
+        raise ValueError("blockout.md does not start with `# Blockout <id> v<N>`: keep your notes elsewhere "
+                         "(V/work/notes.md) and let this tool make the file")
+    changed = bool(lines) and new_head[0].startswith("# Blockout ") and "<id>" not in new_head[0] and lines[0] != new_head[0]
+    lines = lines or new_head[:2]
+    if "<id>" not in new_head[0]:
+        lines[0] = new_head[0]
+    own = len(lines) > 2 and lines[2].startswith("Bbox dựng")
+    lines = lines[:1] + (lines[1:2] or [new_head[1]]) + [item2(graph, rows, sources)] + lines[3 if own else 2:]
     sections = {**new_sections, **sections}
-    lines = [x for x in head if x.strip()] or new_head[:2]
-    lines = lines[:1] + (lines[1:2] or [new_head[1]]) + [item2(graph, rows, sources)] + lines[3:]
+    if changed:
+        sections[9], sections[10] = new_sections[9], new_sections[10]
     sections[3] = [sections[3][0], *section3(work, graph, asm)]
     sections[8] = [sections[8][0], *section8(asm)]
     out = [*lines, ""]

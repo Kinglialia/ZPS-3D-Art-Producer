@@ -115,3 +115,36 @@ def test_it_stops_when_assembly_json_is_not_built_from_this_graph_because_the_nu
     (f / "part_graph.json").write_text(json.dumps(g), encoding="utf-8")
     rc, line, text = md(f)
     assert (rc, text, "assembly.json is not built from this part_graph.json" in line) == (2, None, True), line
+
+
+@needs_venv
+def test_a_file_the_worker_started_by_hand_keeps_every_line_and_gets_the_bbox_line_inserted_not_written_over_one(tmp_path):
+    f = built(tmp_path)
+    (f / "blockout.md").write_text("# Blockout hut v1\n1 nhà\n| param | giá trị |\n| wall_h | 2.4 |\n", encoding="utf-8")
+    rc, line, text = md(f)
+    lines = text.splitlines()
+    assert lines[:2] == ["# Blockout hut v1", "1 nhà"] and lines[2].startswith("Bbox dựng")
+    assert lines[3:5] == ["| param | giá trị |", "| wall_h | 2.4 |"]
+
+
+@needs_venv
+def test_a_file_that_does_not_start_with_the_title_is_refused_and_left_as_it_is(tmp_path):
+    f = built(tmp_path)
+    (f / "blockout.md").write_text("| param | giá trị |\n| wall_h | 2.4 |\n", encoding="utf-8")
+    rc, line, text = md(f)
+    assert (rc, text) == (2, "| param | giá trị |\n| wall_h | 2.4 |\n") and "does not start with" in line
+
+
+@needs_venv
+def test_a_file_copied_from_the_base_version_gets_its_own_title_changes_section_and_status(tmp_path):
+    """The fix round copies blockout.md of v1 into v2/final: line 1 must say v2, and the first-version text of section 9
+    would be a false record of the changes."""
+    f1 = built(tmp_path / "one", version="v1")
+    md(f1)
+    f2 = built(tmp_path / "two", version="v2")
+    (f2 / "blockout.md").write_text((f1 / "blockout.md").read_text(encoding="utf-8").replace(
+        "Chờ duyệt,", "Anh duyệt,"), encoding="utf-8")
+    rc, line, text = md(f2)
+    assert text.splitlines()[0] == "# Blockout hut v2"
+    assert "## 9. Thay đổi so với version trước\nTODO: part nào, param nào đổi, vì sao" in text
+    assert "Anh duyệt," not in text and "## 10. Trạng thái duyệt\nChờ duyệt," in text

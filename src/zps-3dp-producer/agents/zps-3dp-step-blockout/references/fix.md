@@ -25,7 +25,7 @@ Mọi finding trong `TOP_FIX`.
 
 1. Áp giá trị của mọi finding vào `F/part_graph.json`. Đó là phương án `a`.
 2. `RUN gate_all.py --work F ...` một lần. Rồi `RUN check_fix.py --work F --old <bản gốc>/final/part_graph.json --finding <Fid>` một lần cho mỗi id.
-3. Dựng thêm 1–2 phương án (`b`, `c`): `RUN make_variant.py --from F --out V/variants/<b|c> --set <param>=<giá trị> [--set ...] --old <bản gốc>/final/part_graph.json --finding <Fid> [--finding ...] --check-args "check_inputs=..."`. Một lệnh chép graph, đổi giá trị, dựng, gate, chạy mọi `check_*` và `check_fix` cho thư mục đó. Graph gọi hàm của file `CUSTOM_PARTS:`: tool chỉ chép, rồi in các lệnh cần chạy (`custom_mesh.py`, `gate_all.py`, `check_fix.py`). Chạy đúng các lệnh đó.
+3. Dựng thêm 1–2 phương án (`b`, `c`): `RUN make_variant.py --from F --out V/variants/<b|c> --set <param>=<giá trị> [--set ...] --old <bản gốc>/final/part_graph.json --finding <Fid> [--finding ...] --check-args "check_inputs=..."`. Một lệnh chép graph, đổi giá trị, dựng, gate, chạy mọi `check_*` và `check_fix` cho thư mục đó. Graph gọi hàm của file `CUSTOM_PARTS:`: tool chỉ chép rồi thoát 1, nên `RUN` in `error` và đường dẫn log. Mở log, đọc dòng `next:` và chạy đúng các lệnh trong dòng đó.
 4. Render từng phương án một lần: `RUN bl render_critic.py --work V/variants/<b|c> --mode critic --outdir V/variants/<b|c>/review/renders [--spec V/work/spec.json]` và `RUN bl render_review.py --work V/variants/<b|c>`.
 5. Reviewer chọn phương án nào thì thư mục đó thành `final/`, nên mỗi phương án giữ JSON của chính nó. Ghi giá trị của từng phương án vào `blockout.md`.
 

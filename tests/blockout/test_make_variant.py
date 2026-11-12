@@ -3,6 +3,7 @@ fix round of a param finding used to take about 60 commands for two variants."""
 import hashlib
 import json
 import subprocess
+import sys
 
 import pytest
 
@@ -144,17 +145,36 @@ def test_a_second_run_replaces_the_old_variant_folder(tmp_path):
 
 
 @needs_venv
-def test_a_graph_with_an_asset_function_is_copied_and_not_built_and_the_last_line_names_the_commands(tmp_path):
-    """custom_mesh.py runs agent code; the Codex edition keeps it out of run_tool.py, so no tool run through RUN starts it."""
+def test_a_graph_with_an_asset_function_is_copied_and_not_built_and_exits_1_with_the_commands_in_the_last_line(tmp_path):
+    """custom_mesh.py runs agent code; the Codex edition keeps it out of run_tool.py, so no tool run through RUN starts it.
+    Exit 1, because a zero would make RUN print a pass for a variant that was never built."""
     g = pile_graph(2)
     f = asset_dir(tmp_path, g, PILE)
-    rc, lines, v = make(f, "--set", "courses=3")
-    assert rc == 0 and not (v / "assembly.json").exists()
+    rc, lines, v = make(f, "--set", "courses=3", "--old", str(f / "part_graph.json"), "--finding", "F2",
+                        "--check-args", "check_inputs=--approved 'a b' --profile p")
+    assert rc == 1 and not (v / "assembly.json").exists()
     assert lines == [f"make_variant copied {v}; not built, the graph calls custom_parts.py. next: "
-                     f"RUN custom_mesh.py --work {v}; RUN gate_all.py --work {v} --skip check_inputs"], lines
+                     f"RUN custom_mesh.py --work {v}; RUN gate_all.py --work {v} --check-args "
+                     f"\"check_inputs=--approved 'a b' --profile p\" --skip check_inputs; "
+                     f"RUN check_fix.py --work {v} --old {f / 'part_graph.json'} --finding F2; "
+                     f"RUN blockout_md.py --work {v}"], lines
     assert read(v / "part_graph.json")["params"]["courses"] == 3
     done = subprocess.run([str(VPY), str(TOOLS / "custom_mesh.py"), "--work", str(v)], capture_output=True, text=True)
     (v / "sources.json").write_text(json.dumps(HUT_SOURCES), encoding="utf-8")
     gate = subprocess.run([str(VPY), str(TOOLS / "gate_all.py"), "--work", str(v), "--skip", "check_inputs"],
                           capture_output=True, text=True)
     assert (done.returncode, gate.returncode) == (0, 0), (done.stdout, gate.stdout)
+
+
+@needs_venv
+def test_through_run_tool_the_unbuilt_variant_shows_as_error_with_the_log_that_holds_the_next_line(tmp_path):
+    """The worker sees only what run_tool.py prints: `<tool> error <log>`, never a pass for a copy."""
+    f = asset_dir(tmp_path, pile_graph(2), PILE)
+    skill = TOOLS.parents[2]
+    r = subprocess.run([sys.executable, str(skill / "scripts/run_tool.py"), "--agent", "zps-3dp-step-blockout",
+                        "--version-dir", str(f.parent), "make_variant.py", "--from", str(f), "--out",
+                        str(f.parent / "variants/b"), "--set", "courses=3", "--skip", "check_inputs"],
+                       capture_output=True, text=True, cwd=tmp_path)
+    log = f.parent / "work/logs/make_variant.log"
+    assert (r.returncode, r.stdout.split()[:2]) == (1, ["make_variant", "error"]), (r.stdout, r.stderr)
+    assert "next: RUN custom_mesh.py" in log.read_text(encoding="utf-8")

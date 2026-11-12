@@ -8,7 +8,7 @@ Steps, in order:
   1. Deletes <w>/review/gates/*.json: a gate JSON of an older build never counts.
   2. Runs check_schema, check_materials and check_inputs, when they exist beside this file. A failed check_schema stops
      here: the kit cannot read the graph.
-  3. Builds the whole graph once: build_parts.py assembly --work <w>, found beside this file or in the blockout tools.
+  3. Builds the whole graph once: build_parts.py assembly --work <w>, found beside this file or in the blockout tools (zps-3dp-step-blockout*, so the Codex edition's folder too).
      The kit places each part only from the parts before it, so this build gives the same assembly.json as one build per
      part with --upto.
   4. Gates every row of assembly.json with self_build/gates.py, in this process. Part i is gated from rows[:i + 1], so the
@@ -22,6 +22,7 @@ Exit 0 pass, 1 any failure.
 """
 import argparse
 import contextlib
+import glob
 import io
 import json
 import os
@@ -40,7 +41,7 @@ PRE_BUILD = ("check_inputs", "check_materials", "check_schema")
 STOPS_BUILD = ("check_schema",)
 ALWAYS_SKIP = ("check_fix",)
 BUILD_AT = (os.path.join(HERE, "build_parts.py"),
-            os.path.join(HERE, "..", "..", "zps-3dp-step-blockout", "tools", "build_parts.py"))
+            os.path.join(HERE, "..", "..", "zps-3dp-step-blockout*", "tools", "build_parts.py"))
 LINE_MAX = 220
 LINES_MAX = 12
 
@@ -99,7 +100,7 @@ def run_check(name, work, flag, extra):
 
 def build(work):
     """Failure lines of the one build (empty: the build ran)."""
-    tool = next((os.path.abspath(p) for p in BUILD_AT if os.path.isfile(p)), None)
+    tool = next((os.path.abspath(p) for pattern in BUILD_AT for p in sorted(glob.glob(pattern))), None)
     if tool is None:
         return [f"build: no build_parts.py beside {NAME}.py or in the blockout tools"]
     p = subprocess.run([sys.executable, tool, "assembly", "--work", work], capture_output=True, text=True)
