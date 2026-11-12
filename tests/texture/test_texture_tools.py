@@ -656,3 +656,28 @@ def test_renders_json_names_the_albedo_it_was_rendered_from_by_sha256_so_a_later
         shas.append(doc["albedo_sha256"])
         assert doc["albedo_sha256"] == hashlib.sha256(albedo.read_bytes()).hexdigest() and doc["albedo"] == "albedo_128.png"
     assert shas[0] != shas[1]
+
+
+def complexity_in(tmp, version, glb, mode="meshy"):
+    f = tmp / "texture" / version / "final"
+    rc, out = tool("texture_complexity.py", "--final", f, "--blockout", tmp / "B", "--concept", tmp / "C", "--views-rest",
+                   tmp / "VR", "--profile", profile(tmp), "--mode", mode, "--glb", glb)
+    assert rc == 0, out
+    return out, json.loads((f / "texture_spec.json").read_text())
+
+
+def test_texture_complexity_runs_once_per_mesh_and_a_later_version_reuses_its_scores_q14(m, tmp_path):
+    """The scores are reference only, so a new version of the same locked mesh does not measure the concept again."""
+    complexity(tmp_path, ["WOOD", "IRON"], [(120, 80, 40), (60, 60, 64)])
+    glb = m / f"{AID}-untextured.glb"
+    _, first = complexity_in(tmp_path, "v1", glb)
+    first.update(used="meshy", reason="có key")
+    (tmp_path / "texture/v1/final/texture_spec.json").write_text(json.dumps(first), encoding="utf-8")
+    concept(tmp_path / "C/concept_albedo.png", [(200, 0, 0), (0, 200, 0), (0, 0, 200), (200, 200, 0)])
+    out, second = complexity_in(tmp_path, "v2", glb, mode="paint")
+    assert out == (f"[texture_complexity] dùng lại điểm của v1 (cùng mesh) → paint -> "
+                   f"{tmp_path}/texture/v2/final/texture_spec.json\n")
+    assert second == first | {"proposed": "paint", "used": None, "reason": None}
+    other = glbkit.write(tmp_path / "other.glb", *glbkit.box((2, 1, 1)))
+    _, third = complexity_in(tmp_path, "v3", other)
+    assert third["scores"]["color_clusters"] == 4 and third["mesh_sha256"] != first["mesh_sha256"]

@@ -1,7 +1,7 @@
 """Simple or not: the five numbers of docs/agents/texture-artist.md §2.1 (D10), and the proposed mode (D30.11).
 
 Usage: python3 T/texture_complexity.py --final F --blockout B --concept C [--views-rest VR] --profile <profile> \
-         --mode meshy|paint
+         --mode meshy|paint [--glb G]
   1 materials       codes in B/sources.json `materials`
   2 colour clusters palette_report (kit) clusters with share >= CLUSTER_SHARE on the concept albedo object pixels
                     (alpha when the image has one, else pixels away from the border colour by > BG_DIST)
@@ -12,10 +12,13 @@ Usage: python3 T/texture_complexity.py --final F --blockout B --concept C [--vie
 Simple when materials <= texture_simple.max_materials, clusters <= texture_simple.max_color_clusters, no motif, tier not
 hero. `simple` is information only (D30.11): the proposed mode is --mode, the mode the Producer script chose from the
 Meshy key and budget (brief line `MODE: Meshy SỬA` = meshy, `MODE: VẼ MỚI` = paint).
-Writes F/texture_spec.json {scores, thresholds, simple, proposed, used: null, reason: null}; the worker fills `used` and
-`reason`. Prints one line. Exit 0, 2 on error.
+Writes F/texture_spec.json {scores, thresholds, simple, proposed, used: null, reason: null, mesh_sha256}; the worker
+fills `used` and `reason`. Once per mesh (row Q14): with --glb, a texture_spec.json of another version of the step
+(F/../../v*/final/) for the same sha256 of G gives its scores, thresholds and simple, and nothing is measured again.
+Prints one line. Exit 0, 2 on error.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -97,21 +100,44 @@ def score(a, mode):
             "simple": bool(simple), "proposed": mode, "used": None, "reason": None}
 
 
+def earlier(final, sha):
+    """(version, texture_spec) of the latest other version of the step measured on the same mesh, or None."""
+    here = os.path.abspath(final)
+    step = os.path.dirname(os.path.dirname(here))
+    found = []
+    for v in os.listdir(step) if os.path.isdir(step) else []:
+        spec = os.path.join(step, v, "final", "texture_spec.json")
+        if re.fullmatch(r"v\d+", v) and os.path.join(step, v, "final") != here and os.path.isfile(spec):
+            r = json.load(open(spec, encoding="utf-8"))
+            if r.get("mesh_sha256") == sha:
+                found.append((int(v[1:]), v, r))
+    return max(found, key=lambda x: x[0])[1:] if found else None
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     for k in ("--final", "--blockout", "--concept", "--profile"):
         p.add_argument(k, required=True)
     p.add_argument("--views-rest")
     p.add_argument("--mode", required=True, choices=("meshy", "paint"))
+    p.add_argument("--glb")
     a = p.parse_args()
+    out = os.path.join(a.final, "texture_spec.json")
     try:
-        r = score(a, a.mode)
+        sha = hashlib.sha256(open(a.glb, "rb").read()).hexdigest() if a.glb else None
+        prev = earlier(a.final, sha) if sha else None
+        if prev:
+            r = prev[1] | {"proposed": a.mode, "used": None, "reason": None}
+        else:
+            r = score(a, a.mode) | ({"mesh_sha256": sha} if sha else {})
     except Exception as e:  # noqa: BLE001
         print(f"[texture_complexity] error: {e!r}")
         sys.exit(2)
-    out = os.path.join(a.final, "texture_spec.json")
     os.makedirs(a.final, exist_ok=True)
     json.dump(r, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    if prev:
+        print(f"[texture_complexity] dùng lại điểm của {prev[0]} (cùng mesh) → {a.mode} -> {out}")
+        return
     s = r["scores"]
     print(f"[texture_complexity] {'đơn giản' if r['simple'] else 'phức tạp'} → {r['proposed']} (vật liệu "
           f"{s['materials']}, cụm màu {s['color_clusters']}, motif {len(s['motif'])}, hạng {s['tier']}) -> {out}")
