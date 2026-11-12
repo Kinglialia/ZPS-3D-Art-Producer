@@ -614,7 +614,8 @@ def run(a):
             st["review_scope"] = review_scope(st, sid, n)
         bp = d / "brief-review.md"
         bp.write_text(review_brief(cfg, st, step, n), encoding="utf-8")
-        out = {"role": "reviewer", "agent": agent_name(step["reviewer"]), "model": r["reviewer_model"],
+        out = {"role": "reviewer", "agent": agent_name(step["reviewer"]),
+               "model": step.get("reviewer_model") or r["reviewer_model"],
                "resume": None, "brief": rel(bp), "report": rel(d / "review-out.md")}
     else:
         die(f"{a.id}: state={s}, không có việc để giao ({next_action(st)})")

@@ -42,6 +42,8 @@ PORT = 8765
 FEEDBACK_LOG_WARN = 12  # số dòng log feedback trước khi nhắc gộp
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 GATES = {"review", "review_human", "checks_human"}
+MODEL_NAMES = ("opus", "sonnet", "haiku")  # the runtime maps these to its real models (edition `models`)
+MODEL_KEYS = ("model", "escalate_model", "reviewer_model")
 # D31.3: hash, schema, export_check, Meshy topology and card counts (D30.6) never take an ACCEPTED_FAIL, whatever pipeline.toml says.
 HARD_GATES = ("inputs.json", "package.json", "schema.json", "qa_export_check.json", "meshy.json", "counts.json")
 
@@ -157,6 +159,9 @@ def load_cfg() -> dict:
             s.get("reviewer") or die(f"step {s['id']}: thiếu reviewer")
         elif not s.get("agent") and not s["script"]:
             die(f"step {s['id']}: gate checks_human cần agent hoặc script")
+        for k in MODEL_KEYS:
+            if k in s and s[k] not in MODEL_NAMES:
+                die(f"step {s['id']}: {k} = {s[k]!r} phải là {' | '.join(MODEL_NAMES)}")
     pa = cfg.setdefault("paths", {})
     pa["approved"] = Path(os.path.expanduser(pa.get("approved", ""))) if pa.get("approved") else None
     pa["art_direction"] = Path(os.path.expanduser(pa.get("art_direction", ""))) if pa.get("art_direction") else None
@@ -167,6 +172,8 @@ def load_cfg() -> dict:
     r.setdefault("resume_rounds", 2)
     r.setdefault("max_direct_rounds", 2)
     r.setdefault("reviewer_model", "opus")
+    if r["reviewer_model"] not in MODEL_NAMES:
+        die(f"pipeline.toml [review] reviewer_model = {r['reviewer_model']!r} phải là {' | '.join(MODEL_NAMES)}")
     return cfg
 
 

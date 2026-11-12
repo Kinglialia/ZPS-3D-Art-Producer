@@ -1639,3 +1639,52 @@ def test_a_recheck_the_runner_refuses_is_one_line_and_not_a_failure_l15(flow, mo
     out = flow.work()
     assert json.loads(out.splitlines()[-1])["role"] == "reviewer"
     assert flow.err.strip() == f"{AID}: ingest không kiểm lại gate_all.py được: run_tool: refused gate_all.py: not a .py file"
+
+
+def models(f, step: dict, fallback="haiku"):
+    """Rewrites pipeline.toml: blockout gets the keys in `step`, `[review] reviewer_model` the fallback, and no step keeps
+    another value of those keys, so each value in the test names one source."""
+    p = f.root / "production/pipeline.toml"
+    text = p.read_text(encoding="utf-8")
+    for k in {"reviewer_model", *step}:
+        text = re.sub(rf'^{k} = .*\n', "", text, flags=re.M)
+    text = text.replace("[review]\n", f'[review]\nreviewer_model = "{fallback}"\n', 1)
+    keys = "".join(f'{k} = {json.dumps(v)}\n' for k, v in step.items())
+    p.write_text(text.replace('id = "blockout"\n', f'id = "blockout"\n{keys}', 1), encoding="utf-8")
+
+
+@pytest.mark.parametrize("step, want", [({"reviewer_model": "sonnet"}, "sonnet"), ({}, "haiku")])
+def test_the_reviewer_takes_the_model_of_its_step_and_the_review_section_only_as_fallback_q9_a1(flow, step, want):
+    """D45: the owner lowers the reviewer of one step after a pilot; one key for all steps would lower every reviewer."""
+    models(flow, step)
+    out = json.loads(flow.work().splitlines()[-1])
+    assert (out["role"], out["model"], flow.st["dispatches"][-1]["model"]) == ("reviewer", want, want)
+    assert f"giao reviewer (zps-3dp-check-blockout, {want})" in flow.ledger()
+
+
+def test_a_worker_after_the_resume_rounds_takes_the_escalate_model_of_its_step_a1(flow):
+    models(flow, {"model": "sonnet", "escalate_model": "opus"})
+    p = flow.root / "production/pipeline.toml"
+    p.write_text(p.read_text(encoding="utf-8").replace("resume_rounds = 2", "resume_rounds = 0"), encoding="utf-8")
+    first = flow.brief()
+    flow.work(out=first)
+    line = flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")]).splitlines()[-1]
+    out = json.loads(line)
+    assert (first["model"], out["role"], out["model"], out["resume"]) == ("sonnet", "worker", "opus", None)
+
+
+@pytest.mark.parametrize("key", ["model", "escalate_model", "reviewer_model"])
+def test_a_model_name_outside_opus_sonnet_haiku_is_refused_when_the_pipeline_loads_a1(flow, key):
+    """A typo would reach the Agent tool as a model name and fail there, after the brief was built."""
+    models(flow, {key: "sonet"})
+    with pytest.raises(ProducerError) as e:
+        load_cfg()
+    assert str(e.value) == f"step blockout: {key} = 'sonet' phải là opus | sonnet | haiku"
+
+
+def test_a_fallback_reviewer_model_outside_the_names_is_refused_too_a1(flow):
+    models(flow, {}, fallback="gpt")
+    with pytest.raises(ProducerError) as e:
+        load_cfg()
+    assert str(e.value) == "pipeline.toml [review] reviewer_model = 'gpt' phải là opus | sonnet | haiku"
+

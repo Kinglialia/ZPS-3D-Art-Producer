@@ -1,6 +1,9 @@
 # Pipeline của Producer — nơi DUY NHẤT định nghĩa thứ tự bước, agent, model, gate, output bắt buộc, giới hạn chạy song song.
 # Các bước chạy tuần tự theo thứ tự [[steps]] bên dưới. GĐ 4 bật cả 6 bước.
 # gate: review (reviewer PASS → bước sau) | review_human (reviewer PASS → người duyệt) | checks_human (script pass → người duyệt)
+# model: model của worker. escalate_model: model của worker mới khi vòng sửa vượt [review] resume_rounds (không ghi =
+#   model). reviewer_model: model của reviewer bước này (không ghi = [review] reviewer_model). Giá trị: opus | sonnet |
+#   haiku; runtime đổi sang model thật. Hạ model của một bước chỉ sau khi pilot đo được số vòng sửa (D45).
 # top_fix: loại TOP_FIX reviewer được dùng ở bước này; `need_evidence` dùng được ở mọi bước có reviewer.
 # inputs: bước đã duyệt mà brief trỏ tới `final/` (mặc định: bước liền trước).
 # review_inputs: bước trong inputs mà brief reviewer trỏ tới `final/` (mặc định: inputs).
@@ -63,6 +66,7 @@ usual_min = { worker = 40, reviewer = 10 }
 agent = "step-blockout"
 reviewer = "check-blockout"
 model = "opus"
+reviewer_model = "opus"
 gate = "review_human"
 uses = ["blender"]
 top_fix = ["structure", "param"]
@@ -79,6 +83,8 @@ usual_min = { worker = 30, reviewer = 10 }
 agent = "step-views"
 reviewer = "check-views"
 model = "opus"
+escalate_model = "opus"
+reviewer_model = "opus"
 gate = "review"
 uses = ["blender", "codex_image"]
 top_fix = ["regen"]
@@ -95,6 +101,8 @@ usual_min = { worker = 40, reviewer = 10 }
 agent = "step-views"
 reviewer = "check-views"
 model = "opus"
+escalate_model = "opus"
+reviewer_model = "opus"
 gate = "review_human"
 uses = ["codex_image"]
 top_fix = ["regen", "regen_front", "note_exception", "note_texture"]
@@ -113,6 +121,7 @@ usual_min = { worker = 60, reviewer = 15 }
 agent = "step-model"
 reviewer = "check-clay"
 model = "opus"
+reviewer_model = "opus"
 gate = "review_human"
 uses = ["blender"]
 top_fix = ["structure", "param"]
@@ -138,6 +147,7 @@ usual_min = { worker = 16, reviewer = 15 }
 agent = "step-texture"
 reviewer = "check-texture"
 model = "opus"
+reviewer_model = "opus"
 gate = "review"
 uses = ["blender", "codex_image", "meshy"]
 top_fix = ["repaint", "fix_uv_mesh", "meshy_regen", "note"]
