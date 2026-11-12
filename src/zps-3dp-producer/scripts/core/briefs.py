@@ -445,7 +445,7 @@ def review_brief(cfg, st, step, n) -> str:
         "```",
         "VERDICT: PASS | FIX | ESCALATE",
         f"RUBRIC: <key trong mục ## {sid}>=pass|fail|unclear{'|not_checked' if scope == 'fix' else ''}; ...",
-        f"TOP_FIX: <{'|'.join(findings.top_fix_kinds(step))}>: F<n>[, F<m>]",
+        f"TOP_FIX: <{'|'.join(findings.top_fix_kinds(step))}>[: F<n>[, F<m>]]",
         "EVIDENCE_OPENED: <nhãn ảnh và file đã mở>",
         *([f"COMPARE: {'; '.join(f'{i}=?' for i in cmp_ids)}"] if cmp_ids else []),
         *(["PICK: a|b|c"] if pick else []),
@@ -477,14 +477,11 @@ def review_brief(cfg, st, step, n) -> str:
         "- VERDICT: còn blocker/major → FIX; chỉ còn unclear → FIX với TOP_FIX need_evidence; không còn → PASS; "
         "người dùng phải chọn gu hoặc rubric mâu thuẫn brief → ESCALATE. preference không chặn PASS.",
         "- TOP_FIX chỉ khi FIX: loại của finding nặng nhất" + (f" (cùng mức: {', '.join(tie)} trước)" if tie else "")
-        + (f"; {', '.join(single)} đúng 1 id; loại khác:" if single else ";")
-        + " mọi finding blocker/major/minor đang mở của loại đó; "
-        "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
-        "- Không ghi COUNTS. TOP_FIX loại lô" + (": chỉ ghi loại, script điền id. structure: 1 id mỗi part, region "
-                                                 "`<part>: …`." if findings.PER_PART in single else
-                                                 (f" (không phải {', '.join(single)})" if single else "")
-                                                 + ": chỉ ghi loại, script điền id.")
-        + " Mỗi key unclear trong RUBRIC cần một finding unclear.",
+        + "; " + "".join(f"{k} " + ("1 id mỗi part, region `<part>: …`" if k == findings.PER_PART else "1 id") + "; "
+                          for k in single)
+        + "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi "
+        "loại, script điền mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
+        "- Không ghi COUNTS. Mỗi key unclear trong RUBRIC cần một finding unclear.",
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]

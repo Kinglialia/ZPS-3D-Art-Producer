@@ -236,3 +236,16 @@ def test_a_reviewer_ingested_before_its_transcript_was_found_gets_its_number_at_
     row = f.p("stats", AID).splitlines()[2].split(" | ")
     assert row[0] == "| blockout" and row[HEAD.split(" | ").index("Token reviewer đầu")] == "150"
     assert f.st()["dispatches"][1]["tokens"] is None
+
+
+def test_a_full_review_of_a_new_version_is_a_fix_round_and_only_a_rereview_of_the_same_version_is_final_d38_3():
+    """D38.3: a fix round whose worker covered every blocking finding is judged `full`; counting it as the closing
+    review would hide the fix rounds and show a closing cost that no longer exists. A served crop goes on its round."""
+    def r(v, at, scope, **kw):
+        return d("blockout", "reviewer", f"2026-11-10 09:{at}:00", f"2026-11-10 09:{at + 1}:00", "fix", tokens=10 * at,
+                 scope=scope) | {"v": v} | kw
+    st = {"dispatches": [d("blockout", "worker", "2026-11-10 09:00:00", "2026-11-10 09:09:00", "review", tokens=1),
+                         r(1, 10, "full"), r(1, 12, "full", evidence=1), r(2, 20, "full"), r(3, 30, "fix"),
+                         r(3, 40, "full")]}
+    row = stats.table({"steps": [{"id": "blockout"}]}, st, USAGE)[2].split(" | ")
+    assert row[9:12] == ["220", "500", "400"]

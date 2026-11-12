@@ -153,7 +153,7 @@ def test_check_texture_gets_only_the_view_set_and_two_concept_images(flow):
     assert inputs == [f"- Đầu ra đã duyệt của bước `views_rest` (đầu vào, không chấm lại): `{A}/views_rest/v1/final/`."]
     assert [l for l in lines(t["text"]) if "Concept đã duyệt" in l][0].endswith(
         ": chỉ `concept_albedo.png`, `concept_shadow.png`.")
-    assert "TOP_FIX: <repaint|fix_uv_mesh|meshy_regen|need_evidence>: F<n>[, F<m>]" in lines(t["text"])
+    assert "TOP_FIX: <repaint|fix_uv_mesh|meshy_regen|need_evidence>[: F<n>[, F<m>]]" in lines(t["text"])
 
 
 def test_a_texture_pass_moves_straight_on_to_assemble_and_its_brief_is_a_script_command(flow):

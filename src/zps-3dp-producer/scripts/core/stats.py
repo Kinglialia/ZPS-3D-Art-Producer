@@ -68,14 +68,21 @@ def tokens(xs: list[dict]) -> str:
     return f"{sum(told)}" + (f" (+{untold} {NO_NUMBER})" if untold else "")
 
 
-def round_kind(i: int, x: dict) -> str:
-    """D31.2: the dispatch's REVIEW_SCOPE. A `full` after the first review is the closing review. A dispatch from before
-    the scope existed: the first review of the step is `first`, every later one `fix`."""
-    if x.get("scope") == "full":
-        return "first" if i == 0 else "final"
-    if x.get("scope") == "fix":
-        return "fix"
-    return "first" if i == 0 else "fix"
+def round_kinds(revs: list[dict]) -> list[str]:
+    """D31.4, D38.3: the first review is `first`. A `full` review of a version a reviewer already judged, with no worker
+    between, is the closing review `final`. A review inside an evidence round (`evidence`) goes on the round it continues.
+    Every other review judges a new version: `fix`, whatever its scope."""
+    out = []
+    for i, x in enumerate(revs):
+        if i == 0:
+            out.append("first")
+        elif x.get("evidence"):
+            out.append(out[-1])
+        elif x.get("scope") == "full" and any(y["v"] == x["v"] for y in revs[:i]):
+            out.append("final")
+        else:
+            out.append("fix")
+    return out
 
 
 def window(st: dict, sid: str, mine: list[dict]) -> tuple[dt.datetime, dt.datetime | None]:
@@ -135,8 +142,9 @@ def table(cfg: dict, st: dict, usage=NO_NUMBER) -> list[str]:
             continue
         worker = [x for x in mine if x["role"] == "worker"]
         rv = {k: [] for k in ROUNDS}
-        for i, x in enumerate(x for x in mine if x["role"] == "reviewer"):
-            rv[round_kind(i, x)].append(x)
+        revs = [x for x in mine if x["role"] == "reviewer"]
+        for k, x in zip(round_kinds(revs), revs):
+            rv[k].append(x)
         start, end = window(st, sid, mine)
         cells = [sid, clock((end - start).total_seconds()) if end else NOT_APPROVED, spent(worker),
                  *(spent(rv[k]) for k in ROUNDS), clock(wait.get(sid)), clock(user_wait(st, sid)), tokens(worker),

@@ -77,10 +77,11 @@ def test_the_model_worker_knows_a_failed_check_comes_back_to_it_and_reads_how_to
 
 SCOPE = ("- `REVIEW_SCOPE` ở đầu brief. `full`: chấm đủ mọi key rubric, không dùng `not_checked`. `fix`: chỉ chấm id trong "
          "`COMPARE` và `TOP_FIX`, vùng `preserve` của chúng, rồi nhìn nhanh toàn bộ ảnh để bắt lỗi mới; key rubric không "
-         "chấm ghi `not_checked`. PASS ở vòng `fix` chưa cho bước qua: script giao thêm một lượt `full`.")
+         "chấm ghi `not_checked`. PASS ở vòng `fix` cho bước qua khi `RUBRIC` không có `not_checked`; có thì script giao "
+         "thêm một lượt `full`.")
 
 
 @pytest.mark.parametrize("step", sorted(COUNT))
-def test_each_step_reviewer_knows_what_a_fix_round_judges_and_that_only_a_full_round_passes_d31_2(step):
+def test_each_step_reviewer_knows_what_a_fix_round_judges_and_when_its_pass_is_final_d31_2_d38_3(step):
     """The brief carries only the REVIEW_SCOPE line, so the role file holds what each scope judges."""
     assert SCOPE in (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8").splitlines()

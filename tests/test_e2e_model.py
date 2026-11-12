@@ -222,7 +222,7 @@ def test_check_clay_reviews_model_against_the_blockout_only_with_the_structure_a
         "`concept_albedo.png`, `concept_shadow.png`, `asset-card.yaml`."]
     assert missing(t,
                    "- F1 [blocker|major|minor|preference|unclear] <structure|param>",
-                   "TOP_FIX: <structure|param|need_evidence>: F<n>[, F<m>]") == []
+                   "TOP_FIX: <structure|param|need_evidence>[: F<n>[, F<m>]]") == []
 
 
 def test_a_structure_fix_resumes_the_worker_from_the_best_version_and_reads_the_failing_kit_qa_first(flow):

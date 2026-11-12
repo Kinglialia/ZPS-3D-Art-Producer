@@ -148,7 +148,7 @@ def test_the_front_brief_names_the_approved_blockout_only_the_concept_files_view
 def test_the_front_reviewer_sees_the_blockout_as_input_not_as_work_to_judge(flow):
     t = flow["vf1 review brief"]["text"]
     assert lines(t, f"- Đầu ra đã duyệt của bước `blockout` (đầu vào, không chấm lại): `{A}/blockout/v1/final/`.",
-                 "- F1 [blocker|major|minor|preference|unclear] <regen>", "TOP_FIX: <regen|need_evidence>: F<n>[, F<m>]") == []
+                 "- F1 [blocker|major|minor|preference|unclear] <regen>", "TOP_FIX: <regen|need_evidence>[: F<n>[, F<m>]]") == []
     assert "region mở đầu bằng" not in t
 
 

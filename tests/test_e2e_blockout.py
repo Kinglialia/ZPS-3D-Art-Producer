@@ -128,7 +128,7 @@ def flow(tmp_path_factory):
     f.brief("v4 brief")
     f.work("v4", fixed=(3, 4))
     f.review("v4", verdict="PASS", counts=counts(0), top_fix=None, compare="F3=better; F4=better; H1=better",
-             rubric="concept_match=pass; scale=pass", prior=resolved(3, 4) + ["- H1: resolved | evidence: clay_front"])
+             rubric="concept_match=pass; scale=not_checked", prior=resolved(3, 4) + ["- H1: resolved | evidence: clay_front"])
     f.review("v4 full", verdict="PASS", counts=counts(0), top_fix=None, rubric="concept_match=pass; scale=pass")
     f.save("approve", f.p("feedback", AID, "đạt", "--action", "approve"))
     f.save("approve again", f.p("feedback", AID, "đạt", "--action", "approve"))
@@ -303,8 +303,8 @@ def test_redo_carries_the_open_findings_of_the_offered_version_into_the_new_roun
 
 
 def test_pass_on_a_review_human_step_waits_for_the_human_without_a_not_passed_label(flow):
-    """D31.2: v4's worker named F3, F4 but not H1 in FIXED, so its review was a `fix` round and its PASS only sends v4 to a
-    `full` review; that PASS waits for the human."""
+    """D31.2, D38.3: v4's worker named F3, F4 but not H1 in FIXED, so its review was a `fix` round. Its PASS left `scale`
+    not_checked, so it only sends v4 to a `full` review; that PASS waits for the human."""
     head, line = flow["v4 review"]["out"].splitlines()
     assert (head, json.loads(line)) == (
         "pilot-house: review PASS (0 mở) → blockout/review. Tiếp: giao reviewer → `brief pilot-house`", reviewer_json(4))
@@ -349,7 +349,7 @@ def test_the_ledger_records_every_dispatch_report_and_decision_in_order(flow):
         *rnd(2, "FIX (major=2) · concept_match=fail; scale=pass"),
         *rnd(3, "FIX (major=2) · concept_match=fail; scale=pass · không tiến bộ ở vòng 2"),
         "pilot-house · người dùng redo blockout · mái chìa thêm 10 cm",
-        *rnd(4, "PASS (0 mở) · concept_match=pass; scale=pass · PASS ở vòng fix → reviewer chấm full lại v4, không gọi "
+        *rnd(4, "PASS (0 mở) · concept_match=pass; scale=not_checked · PASS ở vòng fix → reviewer chấm full lại v4, không gọi "
                 "worker"),
         "pilot-house · blockout v4 · giao reviewer (zps-3dp-check-blockout, opus)",
         "pilot-house · blockout v4 · review PASS (0 mở) · concept_match=pass; scale=pass",

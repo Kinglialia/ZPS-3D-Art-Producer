@@ -52,20 +52,21 @@ def test_a_human_redo_on_a_set_whose_top_fix_is_regen_front_gets_no_instruction_
 
 def test_a_set_review_brief_says_regen_front_takes_exactly_one_id(ctx):
     text = briefs.review_brief(*ctx("views_rest")[:3], 1)
-    assert ("- TOP_FIX chỉ khi FIX: loại của finding nặng nhất (cùng mức: regen_front trước); regen_front đúng 1 id; loại khác: mọi finding "
-            "blocker/major/minor đang mở của loại đó; need_evidence: mọi finding unclear đang mở. "
-            "PASS hoặc ESCALATE: `TOP_FIX: none`.") in text.splitlines()
+    assert ("- TOP_FIX chỉ khi FIX: loại của finding nặng nhất (cùng mức: regen_front trước); regen_front 1 id; loại lô "
+            "chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi loại, "
+            "script điền mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.") in text.splitlines()
 
 
 def test_a_front_review_brief_names_no_single_id_kind_because_views_front_has_none(ctx):
     text = briefs.review_brief(*ctx("views_front")[:3], 1)
-    assert ("- TOP_FIX chỉ khi FIX: loại của finding nặng nhất; mọi finding blocker/major/minor đang mở của loại đó; "
-            "need_evidence: mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.") in text.splitlines()
+    assert ("- TOP_FIX chỉ khi FIX: loại của finding nặng nhất; loại lô chỉ ghi loại, script điền mọi finding "
+            "blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi loại, script điền mọi finding unclear đang "
+            "mở. PASS hoặc ESCALATE: `TOP_FIX: none`.") in text.splitlines()
 
 
 def test_a_blockout_review_brief_keeps_structure_as_its_single_id_kind(ctx):
     text = briefs.review_brief(*ctx("blockout")[:3], 1)
-    assert "; structure đúng 1 id; loại khác: mọi finding blocker/major/minor đang mở của loại đó;" in text
+    assert "; structure 1 id mỗi part, region `<part>: …`; loại lô chỉ ghi loại, script điền mọi finding" in text
 
 
 def test_a_views_evidence_brief_carries_the_tools_dir_but_no_gen_command_so_a_crop_round_cannot_spend_a_codex_call(ctx):
