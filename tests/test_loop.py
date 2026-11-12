@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import SCRIPTS, SUBAGENT_WRITE_BLOCKED, blockout_only, brief_hash, finding, report, write_profile
+from shared import SCRIPTS, SUBAGENT_WRITE_BLOCKED, blockout_only, brief_hash, finding, judged_all, report, write_profile
 from core import briefs, findings, hashes, intake, loop, policy, texture
 from core.state import ProducerError, load_cfg, load_st, save_st
 
@@ -63,7 +63,8 @@ class Flow:
 
     def review(self, out=None, agent_id=None, **kw):
         out = out or self.brief()
-        (self.root / out["report"]).write_text(report(**kw), encoding="utf-8")
+        rep = self.root / out["report"]
+        rep.write_text(judged_all(rep, report(**kw)), encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id=agent_id))
 
     def human(self, action, text="", step=None):
@@ -153,7 +154,8 @@ def test_three_fix_rounds_then_still_fix_sends_the_best_version_to_the_human_lab
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 3, "fix_base": 3, "offer": 3, "label": "chưa đạt",
                              "note": "hết 3 vòng sửa; còn mở: F3, F4"}
     assert flow.st["versions"] == {"blockout": 4}
-    assert "house-a · blockout v4 · review FIX (major=2) · massing=fail · hết 3 vòng sửa" in flow.ledger()
+    assert ("house-a · blockout v4 · review FIX (major=2) · massing=fail; mass=pass; silhouette=pass; identity=pass; "
+            "open_closed=pass; props=pass; foot=pass; own_decisions=pass · hết 3 vòng sửa") in flow.ledger()
 
 
 def test_round_1_without_progress_continues_but_round_2_without_progress_stops_and_fix_starts_from_the_best(flow):
@@ -625,7 +627,7 @@ def test_a_reviewer_reply_saved_whole_with_its_report_markers_ingests_like_the_b
     """Pilot run: every reviewer returned its report as text, and the Producer saved the reply as review-out.md."""
     flow.work()
     out = flow.brief()
-    body = report(counts=counts(major=1), findings=[finding("F1", "major")])
+    body = judged_all(flow.root / out["report"], report(counts=counts(major=1), findings=[finding("F1", "major")]))
     (flow.root / out["report"]).write_text(f"Đã chấm v1.\n--- report ---\n{body}--- end ---\n", encoding="utf-8")
     assert flow.call(loop.ingest, Namespace(id=AID, agent_id=None)).startswith(
         "house-a: review FIX (major=1) → blockout/fix.")
@@ -723,7 +725,7 @@ def test_a_report_the_producer_saved_from_a_reply_is_ingested_and_logged_as_a_fa
     """The fallback must stay rare, so every one is counted: in the ledger and on the dispatch (`P stats`)."""
     flow.work()
     out = flow.brief()
-    body = report(counts=counts(major=1), findings=[finding("F1", "major")])
+    body = judged_all(flow.root / out["report"], report(counts=counts(major=1), findings=[finding("F1", "major")]))
     (flow.root / out["report"]).write_text(f"--- report ---\n{body}--- end ---\n", encoding="utf-8")
     flow.call(loop.ingest, Namespace(id=AID, agent_id=None, fallback=True))
     assert [x.get("fallback", False) for x in flow.st["dispatches"]] == [False, True, False]
@@ -1209,6 +1211,44 @@ def test_not_checked_is_refused_in_a_full_review_d31_2(flow):
     assert str(e.value) == (f"production/assets/{AID}/blockout/v1/review-out.md sai contract: RUBRIC props=not_checked chỉ "
                             "dùng khi REVIEW_SCOPE: fix")
     assert flow.st["state"] == "reviewing"
+
+
+ALL_BUT_FOOT = "mass=pass; silhouette=pass; identity=pass; open_closed=pass; props=pass; own_decisions=pass"
+
+
+def raw_review(flow, out, **kw):
+    """A reviewer report written as is: no key of the rubric is added for the test."""
+    (flow.root / out["report"]).write_text(report(**kw), encoding="utf-8")
+    return flow.call(loop.ingest, Namespace(id=AID, agent_id=None))
+
+
+def test_a_full_review_that_leaves_rubric_keys_out_is_a_contract_error_that_names_them(flow):
+    """A key left out was never judged, yet a PASS without not_checked would let the version through."""
+    flow.work()
+    out = flow.brief()
+    with pytest.raises(ProducerError) as e:
+        raw_review(flow, out, verdict="PASS", top_fix=None, counts=counts(), rubric="mass=pass; props=pass")
+    assert str(e.value) == (f"production/assets/{AID}/blockout/v1/review-out.md sai contract: RUBRIC thiếu key của mục "
+                            "## blockout: silhouette, identity, open_closed, foot, own_decisions")
+
+
+def test_a_pass_in_a_fix_round_that_leaves_a_key_out_is_refused_so_it_cannot_skip_the_full_review(flow):
+    fix_v1(flow, 1)
+    flow.work()
+    out = flow.brief()
+    assert scope_of(flow, out) == "REVIEW_SCOPE: fix"
+    with pytest.raises(ProducerError) as e:
+        raw_review(flow, out, verdict="PASS", top_fix=None, counts=counts(), rubric=ALL_BUT_FOOT, compare="F1=better",
+                   prior=["- F1: resolved | evidence: clay_front"])
+    assert str(e.value).endswith("sai contract: RUBRIC thiếu key của mục ## blockout: foot")
+
+
+def test_a_key_the_script_filled_may_be_left_out_of_the_rubric(flow, monkeypatch):
+    monkeypatch.setitem(briefs.PREFILL, "blockout", {"foot": lambda fr, acc: ("pass", "base.json")})
+    flow.work()
+    out = flow.brief()
+    assert raw_review(flow, out, verdict="PASS", top_fix=None, counts=counts(), rubric=ALL_BUT_FOOT).startswith(
+        "house-a: review PASS (0 mở) → blockout/waiting_human")
 
 
 def test_a_pass_in_a_fix_round_sends_the_same_version_to_a_full_review_without_a_worker_and_no_extra_round_d31_2(flow):

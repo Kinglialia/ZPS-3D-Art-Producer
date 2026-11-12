@@ -10,7 +10,7 @@ import pytest
 from PIL import Image
 
 from flowkit import put_all
-from shared import P, finding, fixed_line, model_only, pilot_project, report, run
+from shared import P, finding, fixed_line, judged_all, model_only, pilot_project, report, run
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -90,7 +90,8 @@ class Flow:
 
     def review(self, name, **kw):
         out = self.brief(name + " review brief")
-        (self.root / out["report"]).write_text(report(**{"evidence": SEEN, "rubric": "mass=pass"} | kw), encoding="utf-8")
+        rep = self.root / out["report"]
+        rep.write_text(judged_all(rep, report(**{"evidence": SEEN, "rubric": "mass=pass"} | kw)), encoding="utf-8")
         self.keep(name + " review", self.p("ingest", AID))
 
     def human(self, name, *args):

@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from shared import finding
-from test_loop import AID, counts, flow, held  # noqa: F401  (flow is the blockout-only fixture)
+from test_loop import AID, counts, flow, held, raw_review  # noqa: F401  (flow is the blockout-only fixture)
 
 import review_sheet
 from core.state import TEMPLATES, save_st
@@ -399,8 +399,10 @@ def test_ingest_refuses_a_report_that_changes_a_filled_key_and_keeps_it_when_the
     assert "RUBRIC đổi key script đã điền từ JSON: props=fail (script điền pass)" in str(e.value)
     assert (flow.root / out["report"].replace("review-out.md", "review-out.rejected-1.md")).is_file()
     out = flow.brief()
-    flow.review(out=out, verdict="PASS", counts=counts(), top_fix=None, rubric="mass=pass")
-    assert flow.st["last_rubric"] == "mass=pass; props=pass"
+    raw_review(flow, out, verdict="PASS", counts=counts(), top_fix=None,
+               rubric="mass=pass; silhouette=pass; identity=pass; open_closed=pass; foot=pass; own_decisions=pass")
+    assert flow.st["last_rubric"] == ("mass=pass; silhouette=pass; identity=pass; open_closed=pass; foot=pass; own_decisions=pass; "
+                                      "props=pass")
 
 
 def results(fr, **files):
@@ -459,4 +461,5 @@ def test_a_fix_round_report_may_write_not_checked_for_a_filled_key_and_the_scrip
     assert flow.st["review_scope"] == "fix"
     flow.review(out=rb, verdict="PASS", counts=counts(), top_fix=None, rubric="mass=not_checked; props=not_checked",
                 prior=["- F1: resolved | evidence: clay_front.png", "- F2: resolved | evidence: clay_front.png"], compare="F1=better; F2=better")
-    assert flow.st["last_rubric"] == "mass=not_checked; props=pass"
+    assert flow.st["last_rubric"] == ("mass=not_checked; props=pass; silhouette=pass; identity=pass; open_closed=pass; foot=pass; "
+                                      "own_decisions=pass")

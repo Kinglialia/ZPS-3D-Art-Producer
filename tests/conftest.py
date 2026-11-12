@@ -110,6 +110,19 @@ def report(verdict="FIX", counts=None, top_fix="structure: F1", evidence="clay_f
     return "\n".join(lines) + "\n" + extra
 
 
+def judged_all(report_path, text: str) -> str:
+    """The text of a fake reviewer that judged every key of the step's rubric section: a key the test does not name is
+    pass."""
+    vd = Path(report_path).parent
+    rubric, line = vd.parents[1] / "rubric.md", re.search(r"^RUBRIC: (.*)$", text, re.M)
+    if not (line and rubric.is_file()):
+        return text
+    m = re.search(rf"^## {re.escape(vd.parent.name)}[ \t]*$(.*?)(?=^## |\Z)", rubric.read_text(encoding="utf-8"), re.M | re.S)
+    named = {kv.split("=")[0].strip() for kv in line.group(1).split(";")}
+    add = [f"{k}=pass" for k in re.findall(r"^- ([a-z0-9_]+):", m.group(1) if m else "", re.M) if k not in named]
+    return text.replace(line.group(0), "; ".join([line.group(0), *add]), 1) if add else text
+
+
 @pytest.fixture(scope="session", autouse=True)
 def project_cwd(tmp_path_factory):
     """D30.12: a tool that writes runs only from a project root, so a test that runs one without `cwd=` runs it from

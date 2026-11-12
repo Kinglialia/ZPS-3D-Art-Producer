@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 import glbkit
-from shared import PILOT, finding, fixed_line, pilot_project, report, run
+from shared import PILOT, finding, fixed_line, judged_all, pilot_project, report, run
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -159,8 +159,8 @@ class Flow:
 
     def review(self, name, evidence="lit_34_front.png, albedo_2048.png, tex_measure.json", **kw):
         out = self.brief(name + " review brief")
-        (self.root / out["report"]).write_text(report(**{"evidence": evidence, "rubric": "mass=pass"} | kw),
-                                               encoding="utf-8")
+        rep = self.root / out["report"]
+        rep.write_text(judged_all(rep, report(**{"evidence": evidence, "rubric": "mass=pass"} | kw)), encoding="utf-8")
         self.keep(name + " review", self.p("ingest", AID))
 
     def assemble(self, name, fail=None):

@@ -3,7 +3,7 @@
 import json
 
 from flowkit import A, AID, Flow, counts, mf
-from shared import pilot_project, report
+from shared import judged_all, pilot_project, report
 
 MINOR = "blocker=0; major=0; minor=2; preference=0; unclear=0"
 
@@ -37,11 +37,11 @@ def test_the_model_worker_is_asked_which_notes_it_did_and_its_reviewer_confirms_
                ) < 4096
     rep = tmp_path / out["report"]
     body = dict(verdict="PASS", counts=counts(), top_fix=None, evidence="lit_34_front.png")
-    rep.write_text(report(**body, extra="RESOLVED_CONFIRMED: views v1 F2\n"), encoding="utf-8")
+    rep.write_text(judged_all(rep, report(**body, extra="RESOLVED_CONFIRMED: views v1 F2\n")), encoding="utf-8")
     assert f.p("ingest", AID, ok=False) == (
         f"LỖI: {A}/model/v1/review-out.md sai contract: RESOLVED_CONFIRMED views v1 F2 không có trong "
         "RESOLVED_NOTES của worker\n")
-    rep.write_text(report(**body, extra="RESOLVED_CONFIRMED: views v1 F1\n"), encoding="utf-8")
+    rep.write_text(judged_all(rep, report(**body, extra="RESOLVED_CONFIRMED: views v1 F1\n")), encoding="utf-8")
     f.p("ingest", AID)
     doc = json.loads((tmp_path / A / "model/v1/findings.json").read_text(encoding="utf-8"))
     assert doc["resolved_notes"] == ["views v1 F1"]

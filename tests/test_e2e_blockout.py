@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from flowkit import blockout_files, put_all
-from shared import P, PILOT, PROFILE_HASH, blockout_only, finding, pilot_project, report, run
+from shared import P, PILOT, PROFILE_HASH, blockout_only, finding, judged_all, pilot_project, report, run
 
 AGENT = P.parents[1] / "agents/zps-3dp-step-blockout"
 TOOLS = AGENT / "tools"
@@ -89,7 +89,8 @@ class Pilot:
 
     def review(self, name, **kw):
         out = self.brief(name + " review brief")
-        (self.root / out["report"]).write_text(report(**kw), encoding="utf-8")
+        rep = self.root / out["report"]
+        rep.write_text(judged_all(rep, report(**kw)), encoding="utf-8")
         self.save(name + " review", self.p("ingest", AID))
 
 
@@ -335,6 +336,9 @@ def test_archive_accepts_done_enabled(flow):
     assert flow["archive"] == {"out": "Đã chuyển pilot-house vào production/archive/\n", "moved": True}
 
 
+BLOCKOUT_KEYS = "; mass=pass; silhouette=pass; identity=pass; open_closed=pass; props=pass; foot=pass; own_decisions=pass"
+
+
 def test_the_ledger_records_every_dispatch_report_and_decision_in_order(flow):
     def rnd(n, review, worker="DONE"):
         accepted = ["pilot-house · blockout v1 · ACCEPTED_FAIL layout.json · lần 1 · bbox lệch 8% do mái chìa 0.3 m"]
@@ -345,14 +349,14 @@ def test_the_ledger_records_every_dispatch_report_and_decision_in_order(flow):
                 f"pilot-house · blockout v{n} · review {review}"]
     assert flow["ledger"] == [
         "pilot-house · tạo mới (draft, rubric chưa duyệt)", "pilot-house · ready",
-        *rnd(1, "FIX (major=4) · concept_match=fail; scale=fail", "DONE_WITH_CONCERNS"),
-        *rnd(2, "FIX (major=2) · concept_match=fail; scale=pass"),
-        *rnd(3, "FIX (major=2) · concept_match=fail; scale=pass · không tiến bộ ở vòng 2"),
+        *rnd(1, "FIX (major=4) · concept_match=fail; scale=fail" + BLOCKOUT_KEYS, "DONE_WITH_CONCERNS"),
+        *rnd(2, "FIX (major=2) · concept_match=fail; scale=pass" + BLOCKOUT_KEYS),
+        *rnd(3, f"FIX (major=2) · concept_match=fail; scale=pass{BLOCKOUT_KEYS} · không tiến bộ ở vòng 2"),
         "pilot-house · người dùng redo blockout · mái chìa thêm 10 cm",
-        *rnd(4, "PASS (0 mở) · concept_match=pass; scale=not_checked · PASS ở vòng fix → reviewer chấm full lại v4, không gọi "
-                "worker"),
+        *rnd(4, f"PASS (0 mở) · concept_match=pass; scale=not_checked{BLOCKOUT_KEYS} · PASS ở vòng fix → reviewer chấm full lại "
+                "v4, không gọi worker"),
         "pilot-house · blockout v4 · giao reviewer (zps-3dp-check-blockout, opus)",
-        "pilot-house · blockout v4 · review PASS (0 mở) · concept_match=pass; scale=pass",
+        "pilot-house · blockout v4 · review PASS (0 mở) · concept_match=pass; scale=pass" + BLOCKOUT_KEYS,
         "pilot-house · blockout v4 · duyệt bởi người dùng", "pilot-house · người dùng approve blockout · đạt"]
 
 

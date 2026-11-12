@@ -448,12 +448,14 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     aid, sid, r = st["id"], step["id"], cfg["review"]
     rep = d / "review-out.md"
     rv = valid(rep, parse_review(read_report(rep)))
-    from .briefs import prefilled
+    from .briefs import prefilled, rubric_keys
     pre = {k: v for k, (v, _) in prefilled(st, step, n).items()}
     if changed := [f"{k}={rv['rubric'][k]} (script điền {v})" for k, v in pre.items()
                    if rv["rubric"].get(k, v) not in (v, "not_checked")]:
         reject(rep, f"RUBRIC đổi key script đã điền từ JSON: {', '.join(changed)}")
     rv["rubric"] = {**rv["rubric"], **pre}
+    if missing := [k for k in rubric_keys(aid, sid) if k not in rv["rubric"]]:
+        reject(rep, f"RUBRIC thiếu key của mục ## {sid}: {', '.join(missing)}")
     scope = st.get("review_scope") or "full"
     if scope == "full" and (nc := [k for k, x in rv["rubric"].items() if x == "not_checked"]):
         reject(rep, f"RUBRIC {', '.join(nc)}=not_checked chỉ dùng khi REVIEW_SCOPE: fix")

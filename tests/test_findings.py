@@ -10,7 +10,7 @@ from core.contract import parse_review  # noqa: E402
 from core.findings import apply, best_version, open_counts, progress  # noqa: E402
 from test_contract import finding, report  # noqa: E402
 from flowkit import put_all  # noqa: E402
-from shared import brief_hash, write_profile  # noqa: E402
+from shared import brief_hash, judged_all, write_profile  # noqa: E402
 
 P = Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts" / "producer.py"
 STEP = {"id": "blockout", "top_fix": ["structure", "param"]}
@@ -327,8 +327,9 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
     brief, v = worker_round(tmp_path, 1)
     assert "- F1 [blocker|major|minor|preference|unclear] <structure|param>" in brief
     assert "PRIOR:" not in brief
-    (v / "review-out.md").write_text(report(counts=counts(major=2), top_fix="structure: F1", findings=[
-        finding("F1", "major", "structure"), finding("F2", "major", "param", acceptance="mái chìa 0.3 m")]),
+    (v / "review-out.md").write_text(judged_all(v / "review-out.md", report(
+        counts=counts(major=2), top_fix="structure: F1",
+        findings=[finding("F1", "major", "structure"), finding("F2", "major", "param", acceptance="mái chìa 0.3 m")])),
         encoding="utf-8")
     head, line = run(tmp_path, "ingest", "house-a").splitlines()
     assert head == "house-a: review FIX (major=2) → blockout/fix. Tiếp: giao worker → `brief house-a`"
@@ -351,16 +352,16 @@ def test_ingest_keeps_findings_per_version_and_review_brief_prefills_prior(tmp_p
 
     bad = report(counts=counts(major=1), top_fix="param: F2", compare="F1=better",
                  prior=["- F1: resolved | evidence: clay_front"])
-    (v2 / "review-out.md").write_text(bad, encoding="utf-8")
+    (v2 / "review-out.md").write_text(judged_all(v2 / "review-out.md", bad), encoding="utf-8")
     assert run(tmp_path, "ingest", "house-a", ok=False) == (
         "LỖI: production/assets/house-a/blockout/v2/review-out.md sai contract: PRIOR thiếu F2\n")
     assert not (v2 / "findings.json").exists()
     assert json.loads((tmp_path / "production/assets/house-a/status.json").read_text())["state"] == "reviewing"
 
-    (v2 / "review-out.md").write_text(report(
+    (v2 / "review-out.md").write_text(judged_all(v2 / "review-out.md", report(
         counts=counts(major=1, minor=1), top_fix="param: F2, F3", compare="F1=better",
         prior=["- F1: resolved | evidence: clay_front", "- F2: open | evidence: ?"],
-        findings=[finding("F3", "minor", "param")]), encoding="utf-8")
+        findings=[finding("F3", "minor", "param")])), encoding="utf-8")
     assert run(tmp_path, "ingest", "house-a").splitlines()[0] == (
         "house-a: review FIX (major=1 minor=1) → blockout/fix. Tiếp: giao worker → `brief house-a`")
     doc = json.loads((v2 / "findings.json").read_text(encoding="utf-8"))
