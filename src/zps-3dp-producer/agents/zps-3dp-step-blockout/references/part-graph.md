@@ -64,7 +64,7 @@ Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material
 - Hàm chung trong `tools/custom_lib.py` (đọc docstring để biết tham số):
   - `bevel_box(w, d, h, r, seg, mask)`: hộp bo các cạnh chọn theo `mask`.
 - Hàm riêng của asset (D32.2): file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Python thuần, chỉ `import math`; mỗi hàm trả `(verts, faces)`. Check danh sách trắng (`project_parts.static_errors`): chỉ phép tính, tên do file định nghĩa, `math` và vài builtin số học; không class, `with`, `open`, `exec`, `eval`, `getattr`, import khác, tên `__…__`. Tên không trùng hàm chung. Chỉ thêm hàm, không sửa hàm một version đã dùng.
-- `PY tools/custom_mesh.py --work <w>` chạy file đó ngoài Blender và ghi mỗi part một lưới JSON vào `vN/work/custom_mesh/<part>.json` (graph khác `final/`: thư mục con, ví dụ `custom_mesh/variants/b/`). JSON ghi `fn`, `args` và sha256 của file. Trong Blender, `build_parts.py` chỉ dựng lưới từ JSON bằng `tools/mesh_from_json.py`; JSON thiếu, khác `args` hoặc khác sha256 → dừng dựng, báo lệnh cần chạy. `param_fit` không chỉnh param truyền vào hàm của asset.
+- `RUN custom_mesh.py --work <w>` chạy file đó ngoài Blender và ghi mỗi part một lưới JSON vào `vN/work/custom_mesh/<part>.json` (graph khác `final/`: thư mục con, ví dụ `custom_mesh/variants/b/`). JSON ghi `fn`, `args` và sha256 của file. Trong Blender, `build_parts.py` chỉ dựng lưới từ JSON bằng `tools/mesh_from_json.py`; JSON thiếu, khác `args` hoặc khác sha256 → dừng dựng, báo lệnh cần chạy. `param_fit` không chỉnh param truyền vào hàm của asset.
 - `build_parts.py` chép `custom_lib.py` vào `parts_lib.py` cạnh graph. Reviewer đọc `custom_parts.py` của asset như bằng chứng.
 - File của asset giữ cả sau DUYỆT 2, như file nguồn dạng text (D32.3). Lưới JSON nằm trong `work/`, D29 xóa cùng `work/`.
 - Hai mặt trùng khít tuyệt đối làm gate union lỗi: để lệch 1 mm khi acceptance cho phép.
@@ -93,6 +93,6 @@ Review page hiện ba dòng đầu (bỏ dòng trống) làm tóm tắt. Dòng �
 5. Ghi chú real/texture_only, chép nguyên từ concept.
 6. **Blockout tự quyết**: từng chỗ phần khuất hoặc kích thước mà mô tả không có, kèm lý do.
 7. Mâu thuẫn giữa các nguồn, và lựa chọn đã dùng.
-8. Số lỗi mesh còn lại (non-manifold, zero-area) từ `assembly.json` `union.health`. Blockout không bắt buộc mesh sạch.
+8. Số lỗi mesh còn lại (non-manifold, zero-area) từ `assembly.json` `union.health`. Gate `gate5.health` đòi mesh sạch: lỗi mesh là fail của `review/gates/<part>.json`. Sửa part. Chỉ khai `ACCEPTED_FAIL` khi file JSON đó nằm trong danh sách `ACCEPTED_FAIL` của brief.
 9. Thay đổi so với version trước (từ v02): part nào, param nào đổi, vì sao.
 10. Trạng thái duyệt: chờ duyệt / anh duyệt / reviewer duyệt theo ủy quyền, kèm ngày.

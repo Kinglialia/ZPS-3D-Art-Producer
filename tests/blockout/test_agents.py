@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from conftest import AGENT
+from conftest import AGENT, TOOLS
 
 FIXED = "Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. Không dùng khi người dùng gọi trực tiếp."
 WORKER = AGENT / "zps-3dp-step-blockout.md"
@@ -81,10 +81,68 @@ def test_worker_reads_blockout_md_sections_from_a_shipped_reference_with_the_sum
     assert items[2][1].startswith("Version, hash của `part_graph.json` + `parts_lib.py`")
 
 
-def test_every_blender_command_uses_the_brief_blender_path_not_a_bare_blender():
+def test_every_tool_command_goes_through_run_so_one_entry_holds_the_slot_the_log_and_the_exit_code():
+    """D36.1: a bare Blender path, a python path or a PID wrapper skips the exit code and the slot count."""
     _, body = front(WORKER)
-    assert "`BLENDER` = dòng `BLENDER:` của brief" in body
-    assert re.findall(r"(?<![A-Z_])blender -b", body) == [] and body.count("BLENDER -b") == 3
+    assert "`RUN` = dòng `RUN:` của brief" in body
+    assert re.findall(r"(?<![A-Z_])blender -b|BLENDER|\bPY\b|echo \$!|\.pid|dòng PID", body) == []
+    assert body.count("RUN bl ") == 5 and "`&`" not in body
+
+
+def test_the_rule_to_run_every_command_in_the_foreground_stays_after_the_pid_text_went():
+    _, body = front(WORKER)
+    assert "Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt" in body
+    assert "không tự viết vòng lặp canh file" in body and "với `timeout: 3600000` cho Bash" in body
+
+
+@pytest.mark.parametrize("command", [
+    "RUN bl build_parts.py assembly --work F", "RUN bl build_parts.py param_fit --work F --spec V/work/spec.json",
+    "RUN bl render_critic.py --work F --mode critic", "RUN bl render_review.py --work F",
+    "RUN custom_mesh.py --work F", "RUN clear_gates.py --work F", "RUN check_layout.py --work F"])
+def test_worker_writes_the_command_in_run_form(command):
+    _, body = front(WORKER)
+    assert command in body
+
+
+def test_a_graph_with_a_custom_part_fits_its_params_in_blender_because_python_has_no_bmesh():
+    """B1: param_fit builds the graph. A custom part is a bmesh, which exists only in Blender."""
+    _, body = front(WORKER)
+    assert ("Graph có part `custom`: `RUN bl build_parts.py param_fit --work F --spec V/work/spec.json`") in body
+
+
+def test_the_final_gate_pass_starts_from_an_empty_gates_folder_and_gates_every_part():
+    """B3: a gate JSON of an old build counts as a result, so step 7 clears them and gates every part again."""
+    _, body = front(WORKER)
+    step7 = next(l for l in body.splitlines() if l.startswith("7. "))
+    assert step7.index("clear_gates.py") < step7.index("gate từng part") < step7.index("mọi `check_*`")
+
+
+def test_a_build_with_upto_cannot_pass_check_layout_and_the_worker_is_told_to_read_the_bbox_check():
+    """B2: layout.complete fails on --upto, so step 5 must not promise a pass before the full build."""
+    _, body = front(WORKER)
+    step5 = next(l for l in body.splitlines() if l.startswith("5. "))
+    assert "`layout.complete` luôn fail" in step5 and "đọc `layout.bbox`" in step5
+    assert "Cả `layout.bbox` và `layout.complete` phải pass ở lần tự kiểm cuối" in step5
+
+
+def test_the_spec_json_the_worker_writes_has_no_blender_path_since_no_tool_reads_it():
+    _, body = front(WORKER)
+    assert '"paths"' not in body and "config.paths" not in body
+    assert '`{"concept": {"views": {"<view>": "masks/<view>.png"}}}`' in body
+
+
+def test_the_worker_renders_with_the_legend_tool_not_the_kit_render_views():
+    """B8: the kit legend is white on light grey. render_critic.py runs the kit and redraws it dark."""
+    _, body = front(WORKER)
+    assert "render_views.py" not in body and "RUN bl render_critic.py" in body
+
+
+def test_gate5_text_says_a_dirty_mesh_fails_the_gate_because_gate5_health_requires_a_clean_union():
+    """B5: the text said a blockout need not have a clean mesh, while gates.py fails gate5.health on any open edge."""
+    pg = (AGENT / "references/part-graph.md").read_text(encoding="utf-8")
+    assert "không bắt buộc mesh sạch" not in pg
+    assert "Gate `gate5.health` đòi mesh sạch" in pg
+    assert 'check("gate5.health", "pass" if bad_h == 0' in (TOOLS / "self_build/gates.py").read_text(encoding="utf-8")
 
 
 def test_dispatch_prompt_asks_for_the_lines_the_brief_names():
@@ -96,7 +154,10 @@ def test_worker_points_only_at_files_that_exist():
     _, body = front(WORKER)
     for ref in re.findall(r"`references/([\w.-]+)`", body):
         assert (AGENT / "references" / ref).is_file(), ref
-    for tool in set(re.findall(r"T/((?:self_build/)?[\w.]+\.(?:py|sh))", body)):
+    tools = set(re.findall(r"RUN (?:bl )?((?:self_build/)?\w+\.py)", body)) | set(
+        re.findall(r"T/((?:self_build/)?[\w.]+\.(?:py|sh))", body))
+    assert {"build_parts.py", "self_build/gates.py", "render_critic.py", "clear_gates.py", "custom_mesh.py"} <= tools
+    for tool in tools:
         assert (AGENT / "tools" / tool).is_file(), tool
 
 

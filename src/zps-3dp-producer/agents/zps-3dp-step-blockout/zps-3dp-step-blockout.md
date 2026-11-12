@@ -15,29 +15,29 @@ Brief có dòng `COUNTS:` (số đếm của thẻ, D30.6): mỗi mục `<khóa>
 
 ## Tool
 
-- `T` = dòng `TOOLS:` của brief. `PY` = `T/.deps/venv/bin/python`. Thiếu `T/.deps/`: chạy `bash T/setup_deps.sh` một lần.
-- `R` = `T/../references` (tài liệu của agent này).
-- `BLENDER` = dòng `BLENDER:` của brief (Blender mà `P preflight` tìm thấy). Không gọi `blender` trần.
+- `RUN` = dòng `RUN:` của brief. Mọi lệnh tool có dạng `RUN <tool> <đối số>`. Tool chạy trong Blender có dạng `RUN bl <tool> <đối số>`. `<tool>` tính từ `T`.
+- `RUN` in một dòng `<tool> pass|fail|error <đường dẫn>`. Thoát 0 là pass. Thoát 1 là fail hoặc error: đọc JSON hoặc log mà dòng đó chỉ. Thoát 2 là lệnh bị từ chối: sửa lệnh.
+- `RUN` tự chạy `setup_deps.sh` khi thiếu `T/.deps/`, và tự đếm slot Blender.
+- `T` = dòng `TOOLS:` của brief. Chỉ dùng `T` để đọc docstring của tool. `R` = `T/../references` (tài liệu của agent này).
 - Thư mục làm việc của tool là `F` = `V/final/` (nơi có `part_graph.json`). Snapshot, spec, ghi chú vào `V/work/`.
-- Dựng: `PY T/build_parts.py assembly --work F [--upto <n|tên>]`. Graph có part `custom`: `BLENDER -b --python T/build_parts.py -- assembly --work F`. Part gọi hàm của file `CUSTOM_PARTS:`: trước mỗi lần dựng sau khi sửa `part_graph.json` hoặc file đó, chạy `PY T/custom_mesh.py --work F` (cùng `--work` với lệnh dựng; lưới JSON vào `V/work/custom_mesh/`; Blender chỉ dựng từ JSON, không chạy file đó). Không gọi thẳng `T/self_build/assembly.py` hay `param_fit.py`: hai tool đó chạy `parts_lib.py` trong `F`.
-- Gate: `PY T/self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`.
-- Kiểm: `PY T/check_<x>.py --work F` (ghi `F/review/checks/<x>.json`, in một dòng, thoát 1 khi fail). `check_inputs.py` thêm `--approved <_approved/<id>> --profile <PROJECT-PROFILE.yaml>`.
-- Render: `BLENDER -b --python T/self_build/render_views.py -- --work F --mode critic --outdir F/review/renders [--spec V/work/spec.json]` và `BLENDER -b --python T/render_review.py -- --work F`.
-- Mọi lệnh `blender` chạy qua dòng PID của brief: `<lệnh> & echo $! > <file .pid>; wait $!; rm -f <file .pid>`. Producer đếm slot Blender theo file này.
-- Mask concept: `PY T/concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}, "config": {"paths": {"blender": "<BLENDER>"}}}` (view `front|back|left|right|top`; view `34` cần `PY T/fit_view.py --work F --spec V/work/spec.json --side <left|right> --write-spec`, `--side` là phía ảnh concept có mặt hông) để có `overlay_*`.
-- Đọc JSON của tool khi fail; đừng đọc log Blender.
+- Dựng: `RUN build_parts.py assembly --work F [--upto <n|tên>]`. Graph có part `custom`: `RUN bl build_parts.py assembly --work F`. Part gọi hàm của file `CUSTOM_PARTS:`: trước mỗi lần dựng sau khi sửa `part_graph.json` hoặc file đó, chạy `RUN custom_mesh.py --work F` (cùng `--work` với lệnh dựng; lưới JSON vào `V/work/custom_mesh/`; Blender chỉ dựng từ JSON, không chạy file đó). Không gọi thẳng `T/self_build/assembly.py` hay `param_fit.py`: hai tool đó chạy `parts_lib.py` trong `F`.
+- Gate: `RUN self_build/gates.py --work F --part <tên> --out F/review/gates/<tên>.json`. Trước lượt gate cuối, chạy `RUN clear_gates.py --work F`: JSON gate của bản dựng cũ không được tính.
+- Kiểm: `RUN check_<x>.py --work F` (ghi `F/review/checks/<x>.json`). `check_inputs.py` thêm `--approved <_approved/<id>> --profile <PROJECT-PROFILE.yaml>`. `check_proportion.py` đọc `V/work/spec.json`; thiếu mask concept thì `not_checked`.
+- Render: `RUN bl render_critic.py --work F --mode critic --outdir F/review/renders [--spec V/work/spec.json]` và `RUN bl render_review.py --work F`.
+- Mask concept: `RUN concept_mask.py --image <concept> --out V/work/masks/<view>.png`. Ghi `V/work/spec.json` = `{"concept": {"views": {"<view>": "masks/<view>.png"}}}` (view `front|back|left|right|top`) để có `overlay_*`. View `34` cần `RUN fit_view.py --work F --spec V/work/spec.json --side <left|right> --write-spec` (`--side` là phía ảnh concept có mặt hông).
+- Đọc JSON của tool khi fail. Đừng đọc log Blender.
 
 Hợp đồng `part_graph.json`, `sources.json`, nơi ghi kết quả: `R/part-graph.md`. Cách nhận việc, bằng chứng ảnh, preflight: `R/craft.md`. Part `custom` gọi hàm chung trong `FUNCTIONS` của `T/custom_lib.py` (đọc docstring để biết tham số), hoặc hàm riêng của asset trong file dòng `CUSTOM_PARTS:` của brief (D32).
 
 ## Quy trình
 
-1. Đọc nguồn (concept albedo, `asset-card.yaml`, Material Handoff, `<id>.layout.md` khi `has_map: true`, profile). Ghi `F/sources.json`, mỗi số kèm dòng trích nguồn. Nếu hash file nguồn không đổi so với version trước, dùng lại `sources.json` (`check_inputs` báo `sources_reusable`). Chạy `check_inputs.py`.
+1. Đọc nguồn (concept albedo, `asset-card.yaml`, Material Handoff, `<id>.layout.md` khi `has_map: true`, profile). Ghi `F/sources.json`, mỗi số kèm dòng trích nguồn. Nếu hash file nguồn không đổi so với version trước, dùng lại `sources.json` (`check_inputs` báo `sources_reusable`). Chạy `RUN check_inputs.py --work F --approved <_approved/<id>> --profile <PROJECT-PROFILE.yaml>`.
 2. Đếm thành phần trên concept. Ghi một dòng vào `F/blockout.md` (ví dụ "4 trụ, 1 cửa, 3 thùng" hoặc "1 thân, 3 cành, 2 tảng đá").
 3. Đo trên concept riêng, không đo trên map tổng. Lấy cửa làm thước. Ghi bảng đo vào `blockout.md`: param, giá trị, nguồn, cách đo.
-4. Viết `part_graph.json`. Không viết `parts_lib.py`: mỗi lần dựng, `build_parts.py` chép `T/custom_lib.py` vào đó. Chạy `check_schema.py`, `check_materials.py`.
-5. Khóa tỉ lệ chính trước: footprint, tường, mái, cửa, các tầng nền. Dựng với `--upto` tới part chính cuối cùng, chạy gate từng part và `check_layout.py`. Chỉ khi gate pass mới thêm part phụ. `size_m` tính cả viền, đai và chi tiết nhô, nên `check_layout` có thể fail ở bước này: ghi số lệch vào `work/notes.md`; `check_layout` phải pass ở lần tự kiểm cuối.
+4. Viết `part_graph.json`. Không viết `parts_lib.py`: mỗi lần dựng, `build_parts.py` chép `T/custom_lib.py` vào đó. Chạy `RUN check_schema.py --work F` và `RUN check_materials.py --work F`.
+5. Khóa tỉ lệ chính trước: footprint, tường, mái, cửa, các tầng nền. Dựng với `--upto` tới part chính cuối cùng, chạy gate từng part và `RUN check_layout.py --work F`. Chỉ khi gate pass mới thêm part phụ. Bản dựng `--upto` chưa đủ part nên `layout.complete` luôn fail: đọc `layout.bbox` trong JSON. `size_m` tính cả viền, đai và chi tiết nhô, nên `layout.bbox` có thể fail ở bước này: ghi số lệch vào `work/notes.md`. Cả `layout.bbox` và `layout.complete` phải pass ở lần tự kiểm cuối.
 6. Thêm part phụ, mỗi lần một part: `--upto <tên>`, rồi gate của part đó.
-7. Dựng đủ, chạy mọi `check_*` (trừ `check_fix`). Script fail thì tự sửa trước khi báo cáo. `not_checked` không phải lỗi.
+7. Dựng đủ, không `--upto`. Chạy `RUN clear_gates.py --work F`, rồi gate từng part theo thứ tự dựng. Chạy mọi `check_*` (trừ `check_fix`). Script fail thì tự sửa trước khi báo cáo. `not_checked` không phải lỗi.
 8. Render bộ review. Viết đủ `blockout.md` theo `R/part-graph.md` mục `blockout.md` (ba dòng tóm tắt trước, rồi mục 3–10). Ghi báo cáo theo brief, rồi dừng.
 
 ## Vòng sửa
@@ -47,7 +47,7 @@ Brief ghi bản gốc và `TOP_FIX`. Chép `part_graph.json`, `parts_lib.py`, `s
 - Mỗi finding một lần sửa, theo thứ tự trong `TOP_FIX`:
   1. Chép `part_graph.json`, `parts_lib.py` và file `CUSTOM_PARTS:` (nếu có) hiện tại vào `V/work/edits/<F>/`.
   2. Sửa theo `repair`, giữ `preserve`. Dựng lại, chạy gate của các part đổi.
-  3. `PY T/check_fix.py --work F --old <bản gốc>/final/part_graph.json --finding <F>`.
+  3. `RUN check_fix.py --work F --old <bản gốc>/final/part_graph.json --finding <F>`.
   4. Fail: chép lại từ `V/work/edits/<F>/`, dựng lại, ghi lý do vào báo cáo. Không sửa `fixed_params`.
 - `structure`: đúng một finding.
 - `param`: mọi finding trong `TOP_FIX`. Giá trị ở `F` là phương án `a`. Dựng thêm 1–2 phương án (`b`, `c`): chép `F` sang `V/variants/<b|c>/`, đổi giá trị, dựng, chạy gate, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào `V/variants/<b|c>/review/`. Reviewer chọn phương án nào thì thư mục đó thành `final/`, nên mỗi phương án giữ JSON của chính nó. Ghi giá trị của từng phương án vào `blockout.md`.
@@ -57,7 +57,7 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 
 ## Quy tắc
 
-- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `&`, `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua tool của brief (Blender, `GEN_IMAGE`, `MESHY`), với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
+- Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua `RUN`, với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings, D33.2, D33.4).
 - Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc (D33.8).
 - Thiếu concept, hoặc thiếu `<id>.layout.md` khi `has_map: true`: `STATUS: NEEDS_CONTEXT`. Vùng không có mã vật liệu: báo, không đoán mã.
 - Mô tả không có phần khuất hoặc kích thước: tự quyết theo quy tắc mặc định của dự án (`hidden_side_rules`), ghi từng chỗ vào "Blockout tự quyết".
@@ -71,4 +71,4 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
   - Không đặt tên trùng hàm của `T/custom_lib.py`. Không sửa `T/custom_lib.py`.
   - Chỉ thêm hàm. Không sửa, không xóa hàm mà một version đã dùng: một file phục vụ mọi version, và bản cũ dựng lại từ graph của nó. Cần dáng khác: thêm hàm tên mới.
   - Ghi tên từng hàm mới và lý do vào `blockout.md`. Reviewer đọc code này.
-- `fit_view.py`, `PY T/build_parts.py param_fit` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`.
+- `fit_view.py` và `build_parts.py param_fit` chỉ dùng khi concept vẽ góc 3/4. Chúng không đổi `fixed_params`. Lệnh: `RUN build_parts.py param_fit --work F --spec V/work/spec.json`. Graph có part `custom`: `RUN bl build_parts.py param_fit --work F --spec V/work/spec.json`.
