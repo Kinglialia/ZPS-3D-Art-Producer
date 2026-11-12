@@ -5,7 +5,8 @@ Usage: python3 tools/check_uv_edge.py --final F
   uv.edge_margin_px   smallest distance of a UV corner to the atlas border, px at spec uv.resolution, >= uv.min_padding_px
   uv.texel_px_per_m   sqrt(UV area in px / surface m2) of the whole mesh >= spec model.texel_min_px_per_m
   uv.texel_islands    the same for every UV piece with >= 0.5 % of the surface (a piece: triangles that share a vertex
-                      of the file, so a sharp edge may split an island into two pieces)
+                      of the file, so a sharp edge may split an island into two pieces); no such piece (a faceted
+                      mesh): every piece
 The kit uv_check measures the gaps between islands, not the gap to the border.
 data.at_<res> and data.at_1024 give the same numbers at the working resolution and at 1024 (scaled).
 Writes F/review/checks/uv_edge.json. Exit 0 pass, 1 fail, 2 error.
@@ -51,10 +52,12 @@ def numbers(g, res):
     used = uv[np.unique(f)]
     margin = float(np.minimum(used, 1 - used).min()) * res
     lab = pieces(f, len(uv))
-    big = [k for k in np.unique(lab) if world[lab == k].sum() >= ISLAND_MIN_SHARE * world.sum()]
-    isl = [float(np.sqrt(uva[lab == k].sum() / world[lab == k].sum())) * res for k in big]
+    every = np.unique(lab)
+    big = [k for k in every if world[lab == k].sum() >= ISLAND_MIN_SHARE * world.sum()]
+    faceted = not big
+    isl = [float(np.sqrt(uva[lab == k].sum() / world[lab == k].sum())) * res for k in (every if faceted else big)]
     return {"edge_margin_px": common.r(margin, 2), "texel_px_per_m": common.r(np.sqrt(uva.sum() / world.sum()) * res, 1),
-            "island_texel_min": common.r(min(isl), 1), "islands_checked": len(isl)}
+            "island_texel_min": common.r(min(isl), 1), "islands_checked": len(isl), "faceted": faceted}
 
 
 def check(a):
@@ -74,7 +77,8 @@ def check(a):
               common.check("uv.texel_px_per_m", "pass" if at["texel_px_per_m"] >= tmin else "fail",
                            at["texel_px_per_m"], tmin),
               common.check("uv.texel_islands", "pass" if at["island_texel_min"] >= tmin else "fail",
-                           at["island_texel_min"], tmin, note=f"{at['islands_checked']} mảnh ≥ 0,5 % diện tích")]
+                           at["island_texel_min"], tmin, note=f"{at['islands_checked']} mảnh" + (", không mảnh nào ≥ 0,5 % diện tích: đo mọi mảnh"
+                                                                    if at["faceted"] else " ≥ 0,5 % diện tích"))]
     return checks, {f"at_{res}": at, "at_1024": at1024}
 
 

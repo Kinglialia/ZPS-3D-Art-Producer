@@ -300,6 +300,21 @@ def test_one_low_density_island_fails_although_the_global_texel_passes(tmp_path)
     assert (rc, checks["uv.texel_px_per_m"], checks["uv.texel_islands"]) == (1, ("pass", 580.0), ("fail", 41.0))
 
 
+def test_a_faceted_mesh_of_300_loose_triangles_is_measured_piece_by_piece_instead_of_crashing(tmp_path):
+    """Every sharp edge splits the file's vertices, so a faceted mesh has no piece with 0.5 % of the surface; the check
+    then had no island to measure and stopped with an error instead of a texel number."""
+    f = tmp_path / "final"
+    spec_of(f)
+    k = np.arange(300)
+    x, y = (k % 20).astype(float), (k // 20).astype(float)
+    v = np.stack([np.c_[x, y, 0 * x], np.c_[x + 0.5, y, 0 * x], np.c_[x, y + 0.5, 0 * x]], 1).reshape(-1, 3)
+    uv = np.stack([np.c_[x, y], np.c_[x + 0.5, y], np.c_[x, y + 0.5]], 1).reshape(-1, 2) / 30 + 0.1
+    write_glb(f / "pilot-house-untextured.glb", v, np.arange(900).reshape(-1, 3), uv)
+    assert tool("check_uv_edge", "--final", f).returncode == 0
+    _, checks, data = result(f, "uv_edge")
+    assert (checks["uv.texel_islands"], data["at_2048"]["islands_checked"]) == (("pass", 68.3), 300)
+
+
 def test_a_mesh_without_uv_fails_uv_present(tmp_path):
     f = tmp_path / "final"
     spec_of(f)
