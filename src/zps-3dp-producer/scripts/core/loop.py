@@ -14,6 +14,7 @@ from .state import (ASSETS, DELIVER, FINISHED, HARD_GATES, ProducerError, die, l
                     stamp, step_of, vdir)
 
 NOT_PASSED = "chưa đạt"
+UNREVIEWED = "chưa chấm"
 NO_NUMBER = "không có số"
 ACTIONS = ("approve", "redo", "note", "paint")
 STATUS_LINE = "Trạng thái:"
@@ -51,6 +52,8 @@ def fresh() -> dict:
 
 def move(st: dict, event: str, cfg: dict | None = None):
     nxt = MOVES.get((st["state"], event)) or die(f"{st['id']}: không {event} được ở state={st['state']}")
+    if st["state"] == "waiting_human":
+        st.pop("stalled_from", None)
     if nxt != NEXT:
         st["state"] = nxt
         return
@@ -642,8 +645,11 @@ def retry(a):
     if st["state"] == "done_enabled":
         move(st, "resume", load_cfg())
     elif st["state"] == "waiting_human" and st.get("stalled_from"):
-        move(st, f"restall_{st.pop('stalled_from')}")
-        st["note"], st["worker_agent_id"] = "", None
+        was = st["stalled_from"]
+        move(st, f"restall_{was}")
+        st |= {"note": "", "offer": None, "offer_key": None, "label": ""}
+        if was in ("running", "evidence_running"):
+            st["worker_agent_id"] = None
     elif st["state"] == "blocked" and st.get("blocked_from"):
         move(st, f"retry_{st.pop('blocked_from')}")
         st["note"] = ""
@@ -734,6 +740,10 @@ def act(aid: str, action: str, text: str, step_id: str | None = None, regions=No
                        f"(hiện tại: {st.get('offer_key') or 'không chờ duyệt'})")
     if action == "paint" and not answer:
         die(f"{aid}: không có câu hỏi Meshy đang chờ")
+    if (action == "approve" and st["state"] == "waiting_human" and target == st["stage"] and st.get("stalled_from")
+            and step.get("reviewer")):
+        die(f"{aid}: không duyệt được {key}: bản {UNREVIEWED} (kẹt ở {st['stalled_from']}) → `retry {aid}` để giao lại, "
+            "hoặc Cần sửa, hoặc ghi chú")
     if by == "producer" and policy.load().get("test_mode") is not True:
         die(f"{aid}: --by producer chỉ chạy khi production/policy.yaml có test_mode: true; dự án thật do người dùng duyệt")
     if zip_path and not (action == "approve" and target == "assemble" and by == "user"):

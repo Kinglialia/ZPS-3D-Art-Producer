@@ -113,7 +113,7 @@ def stall(a):
     new agent with the same brief, then waiting_human. The script picks the rung and logs it; the Producer only sends.
     --agent-id: the id of the stuck subagent, from its launch; on-stop also records it."""
     from .briefs import run
-    from .loop import log_wait, move
+    from .loop import UNREVIEWED, move, offer
     from .board import build_outputs
     cfg, st = load_cfg(), load_st(a.id)
     rec = job(st) or die(f"{a.id}: state={st['state']}, không có lần giao nào đang chạy")
@@ -151,8 +151,8 @@ def stall(a):
     st.setdefault("stalls", []).append(entry | {"rung": "human"})
     st["stalled_from"] = st["state"]
     move(st, "ask_human")
-    st["note"] = f"kẹt: {c['why']}; đã nudge và giao lại → hỏi người dùng; giao lại: `retry {a.id}`"
-    log_wait(st, sid, n, st["note"])
+    offer(st, sid, n, label=UNREVIEWED,
+          note=f"kẹt: {c['why']}; đã nudge và giao lại → hỏi người dùng; giao lại: `retry {a.id}`")
     save_st(st)
     ledger(f"{head} · waiting_human")
     build_outputs(cfg)

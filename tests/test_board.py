@@ -360,3 +360,47 @@ def test_a_done_asset_card_links_its_run_report_and_the_board_serves_it_x9(proje
     assert board.safe_file(load_cfg(), f"/d/{AID}/RUN-REPORT.md").name == "RUN-REPORT.md"
     assert board.safe_file(load_cfg(), "/d/../production/pipeline.toml") is None
     assert board.asset_view(load_cfg(), load_st(AID), "blockout", 2)["report"] is None
+
+
+BUTTONS_JS = r"""
+const vm = require("vm"), fs = require("fs");
+const [js, payload] = [fs.readFileSync(process.argv[2], "utf8"), JSON.parse(fs.readFileSync(process.argv[3], "utf8"))];
+const el = tag => ({ tag, children: [], style: {}, classList: { add() {}, remove() {}, toggle() {} },
+  append(...k) { this.children.push(...k); }, replaceChildren(...k) { this.children = k; },
+  addEventListener() {}, setAttribute() {} });
+const app = el("div");
+const document = { createElement: el, createElementNS: (_, t) => el(t), head: el("head"), body: el("body"),
+                   getElementById: id => (id === "app" ? app : null), addEventListener() {} };
+const ctx = { document, window: { BOARD: { mode: "none" } }, addEventListener() {}, console };
+vm.runInNewContext(js, ctx);
+const walk = n => (n && typeof n === "object" ? [...(n.tag === "button" ? [n.textContent] : []), ...n.children.flatMap(walk)] : []);
+ctx.window.Board.start({ load: async () => payload, send: async () => ({}) }).then(() => console.log(JSON.stringify(walk(app))));
+"""
+
+
+def board_buttons(tmp_path, payload) -> list[str]:
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node không có trên máy: không chạy được board.js")
+    js, data = tmp_path / "buttons.js", tmp_path / "payload.json"
+    js.write_text(BUTTONS_JS, encoding="utf-8")
+    data.write_text(json.dumps(payload), encoding="utf-8")
+    r = subprocess.run([node, str(js), str(board.BOARD_DIR / "board.js"), str(data)], capture_output=True, text=True,
+                       timeout=30)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_the_board_hides_approve_for_a_version_no_reviewer_passed_d36_2_c1(project):
+    """A stalled review reaches the user labelled "chưa chấm": the page offers only Cần sửa and Ghi chú, so a click never
+    sends an approval the script must refuse."""
+    st = load_st(AID)
+    st |= {"label": loop.UNREVIEWED, "stalled_from": "reviewing"}
+    save_st(st)
+    unreviewed = {"project": "Pilot", "assets": [view()]}
+    st["label"] = loop.NOT_PASSED
+    save_st(st)
+    assert board_buttons(project, {"project": "Pilot", "assets": [view()]}) == ["Model 3D", "Duyệt", "Cần sửa", "Ghi chú"]
+    assert board_buttons(project, unreviewed) == ["Model 3D", "Cần sửa", "Ghi chú"]

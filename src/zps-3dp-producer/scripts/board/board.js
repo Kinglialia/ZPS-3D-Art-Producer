@@ -2,6 +2,7 @@ const MODEL_VIEWER_VERSION = "3.5.0";
 const MODEL_VIEWER_URL = `https://cdn.jsdelivr.net/npm/@google/model-viewer@${MODEL_VIEWER_VERSION}/dist/model-viewer.min.js`;
 const SWIPE_PX = 50, MAX_ZOOM = 6, TAP_ZOOM = 2.5, DOUBLE_TAP_MS = 300, MIN_MARK = 0.01, STEP_MARK = 0.003, MAX_POINTS = 500;
 const ACTIONS = [["Duyệt", "approve"], ["Cần sửa", "redo"], ["Ghi chú", "note"]];
+const UNREVIEWED = "chưa chấm";
 const PREFER = [["A tốt hơn", "A"], ["B tốt hơn", "B"], ["Ngang nhau", "tie"]];
 const SHAPES = [["circle", "○", "Vòng tròn"], ["rect", "▭", "Chữ nhật"], ["free", "✎", "Nét tự do"]];
 const LIGHT = "--bg:#f6f6f4;--card:#fff;--fg:#1d1d1f;--muted:#6b6b6b;--line:#ddd;--accent:#2f6fde;--warn:#b7791f;color-scheme:light";
@@ -268,7 +269,7 @@ function controls(a, items, open) {
   const out = $("div", { className: "msg", textContent: msgs[a.id] || "" });
   const where = a.redo_steps.length ? $("select", {}, a.redo_steps.map(s => $("option", { value: s, textContent: `Cần sửa ở ${s}` }))) : null;
   const acts = a.ask ? [[`Gọi Meshy thêm (${a.ask.price ?? "?"} credit)`, "approve"], ["VẼ MỚI", "paint"], ["Cần sửa", "redo"],
-                        ["Ghi chú", "note"]] : ACTIONS;
+                        ["Ghi chú", "note"]] : a.label === UNREVIEWED ? ACTIONS.filter(([, act]) => act !== "approve") : ACTIONS;
   const send = async action => {
     const body = { id: a.id, action, text: form.value, step: action === "redo" && where ? where.value : a.step,
                    offer: a.key, regions: L.length ? L : null };

@@ -1071,3 +1071,70 @@ def test_a_redo_of_a_held_fix_round_prints_the_dispatch_of_the_new_round_d30_5(f
     held_fix(flow, monkeypatch)
     out = cli(flow, "feedback", AID, "mái cao hơn", "--action", "redo").splitlines()
     assert (len(out), json.loads(out[-1])["brief"]) == (2, f"production/assets/{AID}/blockout/v2/brief-worker.md")
+
+
+def stall_to_human(f):
+    """The three rungs of `P stall` on the open dispatch: nudge, a new agent, then the user. Each rung starts from a
+    SubagentStop without a report, the one stall that needs no clock. The new agent has no id yet, so it is not nudged."""
+    import datetime as dt
+    from core import watch
+    old = (dt.datetime.now() - dt.timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+    for agent in ("a1", "a1", None):
+        st = f.st
+        st["dispatches"][-1] |= {"stopped": "no_report", "agent_id": agent} | (
+            {"nudged_at": old} if "nudged_at" in st["dispatches"][-1] else {})
+        save_st(st)
+        out = f.call(watch.stall, Namespace(id=AID, agent_id=None))
+    return out
+
+
+def test_a_review_that_stalled_three_times_is_offered_as_not_reviewed_and_cannot_be_approved_d36_2_c1_c2(flow):
+    """The reproduction: the reviewer of v1 stalled, the asset reached waiting_human with no offer, and the board's approve
+    sent offer=null, which act() accepted: v1 was approved although no reviewer passed it."""
+    flow.work()
+    assert flow.st["state"] == "reviewing"
+    stall_to_human(flow)
+    st = flow.st
+    assert pick(st) | {"offer_key": st["offer_key"], "stalled_from": st["stalled_from"]} == {
+        "state": "waiting_human", "fix_round": 0, "fix_base": None, "offer": 1, "label": "chưa chấm",
+        "note": "kẹt: subagent dừng, không có report; đã nudge và giao lại → hỏi người dùng; giao lại: `retry house-a`",
+        "offer_key": "house-a-blockout-v1-1", "stalled_from": "reviewing"}
+    assert [w["key"] for w in st["offer_log"]] == ["house-a-blockout-v1-1"]
+    with pytest.raises(ProducerError, match=r"house-a: không duyệt được blockout v1: bản chưa chấm \(kẹt ở reviewing\)"):
+        loop.human_action(AID, "approve", "ok", None, None, "house-a-blockout-v1-1")
+    assert (flow.st["state"], flow.st["approved"], flow.st.get("decisions")) == ("waiting_human", {}, {})
+    assert flow.human("note", "xem lại").startswith("house-a: đã ghi feedback")
+
+
+def test_a_redo_out_of_a_stall_clears_the_stall_so_the_next_reviewed_version_can_be_approved_d36_2_c1(flow):
+    flow.work()
+    stall_to_human(flow)
+    flow.human("redo", "mái cao hơn")
+    assert (flow.st["state"], "stalled_from" in flow.st) == ("fix", False)
+    flow.work(fixed="H1")
+    flow.review(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pass", compare="H1=better",
+                prior=["- H1: resolved | evidence: clay_front"])
+    assert flow.human("approve", "ok").startswith("house-a: đã duyệt blockout v2 → blockout/done")
+
+
+def test_retry_after_a_reviewer_stall_keeps_the_worker_agent_and_drops_the_unreviewed_offer_c11(flow):
+    """The worker that built v1 is still the one to resume in a fix round: only a stalled worker loses its agent id."""
+    flow.work()
+    assert flow.st["worker_agent_id"] == "w1"
+    stall_to_human(flow)
+    out = flow.call(loop.retry, Namespace(id=AID))
+    st = flow.st
+    assert (st["state"], st["worker_agent_id"], st["offer"], st["offer_key"], st["label"], "stalled_from" in st) == (
+        "reviewing", "w1", None, None, "", False)
+    assert json.loads(out.splitlines()[-1])["role"] == "reviewer"
+
+
+def test_retry_after_a_worker_stall_drops_the_worker_agent_so_the_new_build_never_resumes_it_c11(flow):
+    flow.brief()
+    st = flow.st
+    st["worker_agent_id"] = "w0"
+    save_st(st)
+    stall_to_human(flow)
+    out = flow.call(loop.retry, Namespace(id=AID))
+    assert (flow.st["state"], flow.st["worker_agent_id"], json.loads(out.splitlines()[-1])["resume"]) == (
+        "running", None, None)
