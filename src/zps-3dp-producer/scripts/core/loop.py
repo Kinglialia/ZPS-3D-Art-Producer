@@ -522,11 +522,13 @@ EVIDENCE_ASK = re.compile(r"xin ảnh\s+([^\s,;|]+?)(?:\.png)?(?:\s+box\s+([\d.]
 
 
 def evidence_on_disk(d, doc: dict, ids: list[str]) -> list[tuple[str, str, tuple | None]] | None:
-    """D31.1: what a need_evidence asks, when every id names a tile of vN/review/sheet.json in its viewing_condition
-    (`xin ảnh <nhãn>[ box x0,y0,x1,y1]`, box in 0–1 of the image). None when one id asks for an image not on disk or a
-    box outside 0–1 (a pixel box): the worker round handles those."""
+    """D31.1, D38.5: what a need_evidence asks, when every id names a tile of vN/review/sheet.json (any page) in its
+    viewing_condition (`xin ảnh <nhãn>[ box x0,y0,x1,y1]`, box in 0–1 of the image). The tile gives the image file; a
+    crop tile gives its own 1:1 file. None when one id asks for an image not on disk or a box outside 0–1 (a pixel
+    box): the worker round handles those."""
     sj = d / "review" / "sheet.json"
-    tiles = json.loads(sj.read_text(encoding="utf-8")) if sj.is_file() else {}
+    tiles = {label: t["src"] if isinstance(t, dict) else t
+             for label, t in (json.loads(sj.read_text(encoding="utf-8")) if sj.is_file() else {}).items()}
     out = []
     for i in ids:
         asks = EVIDENCE_ASK.findall(doc["findings"][i].get("viewing_condition", ""))
