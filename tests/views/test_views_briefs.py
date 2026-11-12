@@ -9,6 +9,7 @@ from shared import SCRIPTS, pilot_project, run
 sys.path.insert(0, str(SCRIPTS))
 from core import briefs, findings, hashes, intake  # noqa: E402
 from core.state import load_cfg, load_st, step_of  # noqa: E402
+from test_hashes import flow  # noqa: E402,F401  (the in-process blockout flow)
 
 AID = "pilot-house"
 SKILL = Path(__file__).resolve().parents[2] / "src/zps-3dp-producer"
@@ -98,3 +99,52 @@ def test_batching_is_off_in_a_new_project_and_on_only_for_the_step_that_sets_cod
     assert step["codex_batch"] is False and not gen_args(cfg, st, step, preset).endswith("--batch")
     assert gen_args(cfg, st, step | {"codex_batch": True}, preset).endswith(" --timeout 900 --batch")
     assert [s["id"] for s in cfg["steps"] if "codex_batch" in s] == ["texture"]
+
+
+def gen_lines(cfg, st, step, preset):
+    return [l for l in briefs.tools_line(st, step, None, preset, cfg=cfg) if l.startswith("GEN_")]
+
+
+@pytest.mark.parametrize("edition", [{}, {"image_gen": "codex_exec"}])
+def test_the_claude_edition_brief_keeps_the_nested_codex_call_with_model_reasoning_pid_file_and_timeout(ctx, monkeypatch,
+                                                                                                         edition):
+    monkeypatch.setattr(briefs, "EDITION", edition)
+    cfg, st, step, preset, _ = ctx("views")
+    assert gen_lines(cfg, st, step, preset) == [
+        f"GEN_IMAGE: {SKILL / 'scripts/gen_image_codex.py'}",
+        f"GEN_ARGS: --model gpt-6-astra --reasoning medium --pid-file production/pids/codex_image/{AID}.pid --timeout 900"]
+
+
+@pytest.mark.parametrize("stage", ["views", "texture"])
+def test_the_codex_edition_brief_makes_the_worker_draw_with_its_own_image_tool_and_the_script_only_check(ctx, monkeypatch,
+                                                                                                        stage):
+    """A sub-agent of a Codex session has the image tool itself; a nested `codex exec` would start a second session."""
+    monkeypatch.setattr(briefs, "EDITION", {"image_gen": "direct"})
+    cfg, st, step, preset, _ = ctx(stage)
+    lines = gen_lines(cfg, st, step | {"codex_batch": True}, preset)
+    assert lines[:2] == [f"GEN_IMAGE: {SKILL / 'scripts/gen_image_codex.py'}", "GEN_ARGS: --direct"]
+    assert len(lines) == 3 and lines[2].startswith("GEN_MODE: lệnh GEN_IMAGE không vẽ, chỉ kiểm ảnh.")
+    for part in ("`image_gen`", "`referenced_image_paths`", "\"Output: <W>x<H> pixels, <landscape|portrait|square>.\"",
+                 "chạy lệnh chỉ với cặp đó", "Thoát 3:", "Thoát 1:", "--tool-error"):
+        assert part in lines[2], part
+    assert "view_image" not in lines[2]
+
+
+def test_a_codex_edition_views_worker_is_spawned_on_the_preset_image_model_and_the_ledger_names_it(flow, monkeypatch):
+    """The owner rule: the agent that makes images runs on Astra. Reviewers and other steps keep the session model."""
+    from test_hashes import approve_blockout
+    monkeypatch.setattr(briefs, "EDITION", {"image_gen": "direct"})
+    approve_blockout(flow)
+    assert {(d["role"], d["model"]) for d in flow.st["dispatches"]} == {("worker", "opus"), ("reviewer", "opus")}
+    out = flow.brief()
+    assert (out["role"], out["model"], out["reasoning_effort"]) == ("worker", "gpt-6-astra", "medium")
+    assert flow.st["dispatches"][-1]["model"] == "gpt-6-astra"
+    led = (flow.root / "production/ledger.md").read_text(encoding="utf-8").splitlines()
+    assert " · house-a · views v1 · giao worker (zps-3dp-step-views, gpt-6-astra) · hạn chót " in led[-1]
+
+
+def test_a_claude_edition_views_worker_keeps_the_step_model(flow):
+    from test_hashes import approve_blockout
+    approve_blockout(flow)
+    out = flow.brief()
+    assert (out["model"], "reasoning_effort" in out) == ("opus", False)

@@ -14,7 +14,8 @@ Logs each call to FAKE_CODEX_LOG with the parsed image list, the output names an
 FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr.
 FAKE_CODEX_DELAY=<output name or *>:<s>: the call sleeps s seconds before it makes that file (every file with *).
 `codex --version` prints FAKE_CODEX_VERSION (default codex-cli 0.164.0). `codex exec --help` prints the option lines of
-the real codex-cli 0.164.0 help, without the flags in FAKE_CODEX_HELP_DROP (comma-separated). Neither call is logged."""
+the real codex-cli 0.164.0 help, without the flags in FAKE_CODEX_HELP_DROP (comma-separated). `codex features list`
+prints a feature table whose image_generation row ends in FAKE_CODEX_IMAGE_GEN (default true). No such call is logged."""
 import io
 import json
 import os
@@ -55,6 +56,10 @@ def install(bin_dir: Path) -> str:
 def main():
     if sys.argv[1:] == ["--version"]:
         print(os.environ.get("FAKE_CODEX_VERSION", "codex-cli 0.164.0"))
+        return
+    if sys.argv[1:] == ["features", "list"]:
+        print(f"undo                 stable        true\nimage_generation     experimental  "
+              f"{os.environ.get('FAKE_CODEX_IMAGE_GEN', 'true')}\nweb_search_request   stable        false")
         return
     if sys.argv[1:] == ["exec", "--help"]:
         drop = [f for f in os.environ.get("FAKE_CODEX_HELP_DROP", "").split(",") if f]

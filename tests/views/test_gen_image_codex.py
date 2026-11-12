@@ -814,3 +814,92 @@ def test_without_direct_the_model_is_still_required_so_the_claude_edition_cannot
     p = subprocess.run([sys.executable, str(GEN), "--prompt", str(direct.dir.parents[1] / "front.md"),
                         "--out", str(direct.dir / "front-1.png")], capture_output=True, text=True)
     assert p.returncode == 2 and "--model" in p.stderr
+
+
+def test_direct_mode_refuses_an_image_whose_aspect_ratio_is_off_by_more_than_2_percent_since_paste_needs_the_size(direct):
+    """The image tool has no size argument: a square image for a 3:2 slot cannot be scaled without stretching it."""
+    paint(direct.dir / "front-1.png", size=(1254, 1254))
+    r = direct(extra=["--size", "1536x1024"])
+    assert (r["rc"], (direct.dir / "front-1.png").exists()) == (3, False)
+    assert r["out"] == (f"[gen_image_codex] gen lại lần 2/3: ảnh 1254x1254 khác tỉ lệ --size 1536x1024 quá 2 % "
+                        f"-> {direct.dir / 'front-1.png'}\n")
+
+
+def test_direct_mode_scales_an_image_of_the_right_ratio_to_the_exact_size_because_crop_paste_needs_that_size(direct):
+    paint(direct.dir / "front-1.png", size=(1254, 836))
+    r = direct(extra=["--size", "1536x1024"])
+    assert (r["rc"], r["records"]["front"]["resized"], r["records"]["front"]["size"]) == (0, True, [1536, 1024])
+    with Image.open(direct.dir / "front-1.png") as im:
+        assert im.size == (1536, 1024)
+
+
+def test_direct_mode_keeps_an_image_of_the_exact_size_as_it_is(direct):
+    paint(direct.dir / "front-1.png", size=(1024, 1536))
+    before = (direct.dir / "front-1.png").read_bytes()
+    r = direct(extra=["--size", "1024x1536"])
+    assert (r["rc"], r["records"]["front"]["resized"], (direct.dir / "front-1.png").read_bytes()) == (0, False, before)
+
+
+def test_direct_mode_gives_a_policy_error_of_the_tool_one_more_try_and_another_error_three(direct):
+    policy = [direct(extra=["--tool-error", "blocked by the safety system"])["rc"] for _ in range(2)]
+    assert policy == [3, 1]
+    other = direct(names=("back",), extra=["--tool-error", "image service unavailable"])
+    assert other["out"] == f"[gen_image_codex] gen lại lần 2/3: tool: image service unavailable -> {direct.dir / 'back-1.png'}\n"
+
+
+def test_direct_mode_ignores_the_tool_error_for_a_file_the_worker_did_save(direct):
+    paint(direct.dir / "front-1.png")
+    assert direct(extra=["--tool-error", "usage limit reached"])["rc"] == 0
+
+
+def test_direct_mode_counts_a_new_image_saved_over_an_accepted_one_as_a_new_request_with_its_own_tries(direct):
+    """Texture paints paint_<k>.png again under the same name after project_views fails: the new image is checked."""
+    paint(direct.dir / "front-1.png")
+    assert direct()["rc"] == 0
+    paint(direct.dir / "front-1.png", size=(1024, 768))
+    r = direct()
+    assert (r["rc"], r["records"]["front"]["attempts"], (direct.dir / "front-1.png").exists()) == (3, 1, False)
+
+
+def test_direct_mode_starts_over_from_a_record_that_codex_exec_wrote(direct):
+    (direct.dir / "front-1.json").write_text(json.dumps({"status": "fail", "attempts": 3, "limit": 3, "errors": ["x"] * 3}))
+    assert direct()["rc"] == 3
+
+
+def test_direct_mode_refuses_batch_because_the_worker_makes_each_image_alone(direct):
+    r = direct(extra=["--batch"])
+    assert r["rc"] == 2 and "--batch" in r["err"]
+
+
+def test_direct_mode_writes_one_start_and_one_end_line_per_counted_try_and_the_session_tool_as_model(tmp_path):
+    """The run report counts image calls from these lines, and the Producer sees the version alive between images."""
+    import heartbeat
+    path = fake_codex.install(tmp_path / "bin")
+    root = tmp_path / "production"
+    (root / "assets/hut").mkdir(parents=True)
+    (root / "pipeline.toml").touch()
+    (root / "assets/hut/status.json").write_text(json.dumps({"id": "hut", "inputs": {}}), encoding="utf-8")
+    gen_dir = root / "assets/hut/views/v1/work/gen"
+    gen_dir.mkdir(parents=True)
+    (tmp_path / "front.md").write_text(REQUEST, encoding="utf-8")
+    env = {**os.environ, "PATH": path, "FAKE_CODEX_LOG": str(tmp_path / "calls.jsonl")}
+    env.pop("PRODUCER_ROOT", None)
+
+    def run():
+        return subprocess.run([sys.executable, str(GEN), "--direct", "--prompt", str(tmp_path / "front.md"), "--out",
+                               str(gen_dir / "front-1.png")], capture_output=True, text=True, env=env, cwd=tmp_path)
+    assert run().returncode == 3
+    paint(gen_dir / "front-1.png")
+    assert run().returncode == 0
+    assert run().returncode == 0
+    vd = root / "assets/hut/views/v1"
+    states = [l.split(" · ")[1:3] for l in (vd / "heartbeat.log").read_text(encoding="utf-8").splitlines()]
+    assert states == [[heartbeat.IMAGE_TOOL, "start"], [heartbeat.IMAGE_TOOL, "fail"],
+                      [heartbeat.IMAGE_TOOL, "start"], [heartbeat.IMAGE_TOOL, "done"]]
+    assert heartbeat.starts(vd, heartbeat.IMAGE_TOOL) == 2
+    led = (root / "ledger.md").read_text(encoding="utf-8").splitlines()
+    assert [l.split(" · ", 2)[2] for l in led] == [
+        "hut · views v1 · gen ảnh front-1.png: model yêu cầu tool ảnh của phiên · model thực tế không có số"
+        " · codex-cli 0.164.0"] * 2
+    inp = json.loads((root / "assets/hut/status.json").read_text(encoding="utf-8"))["inputs"]["views"]["v1"]
+    assert inp == {"image_model_requested": "tool ảnh của phiên", "image_model_actual": "không có số"}

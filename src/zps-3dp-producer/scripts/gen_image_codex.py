@@ -44,10 +44,20 @@ that `codex --version` prints (tested with codex-cli 0.164.0). FLAGS lists every
 D30.21: codex `--approve-for-me` approves every permission request by itself, so it is never a default and never in the
 brief's GEN_ARGS. It is passed only with --approve-for-me "<reason>" after a call was really blocked; the record and
 the ledger line keep the reason.
+--direct (the Codex edition, runtime.json `image_gen: direct`): the worker makes each image with its own image tool and
+saves it at --out; this run starts no `codex exec` and only checks. --model, --reasoning and --pid-file are then not
+needed; --batch and --approve-for-me are refused. The record <dir/name>.json keeps `attempts` across runs: a file whose
+record is ok and whose sha256 is unchanged is not counted again; an accepted file saved over starts a new record. Each
+counted try writes a `start` line and a `done` or `fail` line of heartbeat.IMAGE_TOOL to vN/heartbeat.log and one
+ledger line. A missing file is a failed try, with the text of --tool-error "<error>" when the worker passes it (same
+limits as above). Direct only: with --size WxH, an aspect ratio off by more than 2 % fails, and the right ratio at
+another pixel size is scaled to WxH (Lanczos), since the tool has no size argument and crop_edit.py paste needs the
+size. Exit 0: every file ok; 3: generate the printed files again, then run again; 1: a file is out of tries.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -75,6 +85,8 @@ IMAGES = {".png", ".jpg", ".jpeg", ".webp"}
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 CODEX_KEYS = {"OPENAI_API_KEY", "CODEX_API_KEY"}
 NO_NUMBER = "không có số"
+DIRECT_MODEL = "tool ảnh của phiên"
+RATIO_TOLERANCE = 0.02
 FLAGS = ("-m", "-c", "-C", "-s", "--skip-git-repo-check", "--image")
 FRAME = """You are one step of an art build pipeline. Do only this:
 1. Use your image generation tool once to make the image that REQUEST describes. Give the tool the attached images.
@@ -140,8 +152,9 @@ def session_id(stderr: str | None) -> str | None:
 
 
 def error_kind(err: str) -> str | None:
-    """Only text that came from Codex counts: this script's own messages (a timeout of 429 s) are never an error kind."""
-    if not err.startswith(("codex: ", "không có file ảnh (codex exit")):
+    """Only text that came from Codex or the worker's image tool counts: this script's own messages (a timeout of 429 s)
+    are never an error kind."""
+    if not err.startswith(("codex: ", "không có file ảnh (codex exit", "tool: ")):
         return None
     return "quota" if QUOTA.search(err) else "policy" if POLICY.search(err) else None
 
@@ -293,11 +306,18 @@ def check(a, j: dict, p, start: float, ctx: dict, alone: bool) -> tuple[str | No
             return f"hết thời gian chờ {a.timeout} s", False, None
         tail = (p.stderr.strip().splitlines() or [""])[-1][:200]
         return "không có file ảnh" + (f" (codex exit {p.returncode}: {tail})" if p.returncode else ""), False, None
+    err, size = verify(out, rec)
+    return err, fallback, size
+
+
+def verify(out: Path, rec: dict) -> tuple[str | None, list[int] | None]:
+    """The file at `out`: PNG header (a non-PNG that Pillow reads is converted, D36.12), Pillow reads it, long side."""
+    rec["converted"] = False
     with out.open("rb") as f:
         is_png = f.read(8) == PNG_SIGNATURE
     if not is_png:
         if not convert_to_png(out):
-            return "file ảnh hỏng", fallback, None
+            return "file ảnh hỏng", None
         rec["converted"] = True
     from PIL import Image
     try:
@@ -305,10 +325,10 @@ def check(a, j: dict, p, start: float, ctx: dict, alone: bool) -> tuple[str | No
             im.load()
             size = list(im.size)
     except (OSError, SyntaxError, ValueError):
-        return "file ảnh hỏng", fallback, None
+        return "file ảnh hỏng", None
     if max(size) < MIN_LONG:
-        return f"ảnh {size[0]}x{size[1]}, cạnh dài cần > 1040 px", fallback, size
-    return None, fallback, size
+        return f"ảnh {size[0]}x{size[1]}, cạnh dài cần > 1040 px", size
+    return None, size
 
 
 def attempt(a, group: list[dict]):
@@ -335,6 +355,62 @@ def attempt(a, group: list[dict]):
 
 def retry(j: dict) -> bool:
     return j["rec"]["status"] != "ok" and j["rec"]["attempts"] < j["rec"]["limit"]
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def fit(out: Path, rec: dict, want: str | None) -> str | None:
+    """--direct only: the image tool has no size argument, and crop_edit.py paste needs the exact --size."""
+    rec["resized"] = False
+    if not want:
+        return None
+    (w, h), (tw, th) = rec["size"], map(int, want.lower().split("x"))
+    if abs(w * th / (h * tw) - 1) > RATIO_TOLERANCE:
+        return f"ảnh {w}x{h} khác tỉ lệ --size {want} quá 2 %"
+    if (w, h) != (tw, th):
+        from PIL import Image
+        tmp = out.with_name(out.name + ".tmp")
+        with Image.open(out) as im:
+            im.resize((tw, th), Image.LANCZOS).save(tmp, "PNG")
+        tmp.replace(out)
+        rec["size"], rec["resized"] = [tw, th], True
+    return None
+
+
+def direct_try(a, j: dict):
+    """One check of a file the worker saved; the record of an earlier run carries the count (D36.12 limits)."""
+    out, rec_path = j["out"], j["out"].with_suffix(".json")
+    try:
+        old = json.loads(rec_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        old = None
+    if isinstance(old, dict) and old.get("direct") is True:
+        if old["status"] == "ok" and out.is_file() and old.get("sha256") == sha256(out):
+            j["rec"] = old
+            return
+        if old["status"] != "ok":
+            j["rec"] = old
+    rec = j["rec"]
+    if rec["attempts"] >= rec["limit"]:
+        return
+    j["counted"], vd = True, heartbeat.vdir_of(out)
+    heartbeat.write(vd, heartbeat.IMAGE_TOOL, "start")
+    rec["attempts"] += 1
+    if not out.is_file():
+        err = f"tool: {a.tool_error}" if a.tool_error else "không có file ảnh"
+    else:
+        err, rec["size"] = verify(out, rec)
+        err = err or fit(out, rec, j["want"])
+    if err is None:
+        rec["status"], rec["sha256"] = "ok", sha256(out)
+        heartbeat.write(vd, heartbeat.IMAGE_TOOL, "done", out.name)
+        return
+    rec["status"] = "fail"
+    rec["errors"].append(err)
+    rec["limit"] = min(rec["limit"], {"quota": 1, "policy": POLICY_TRIES}.get(error_kind(err), TRIES))
+    heartbeat.write(vd, heartbeat.IMAGE_TOOL, "fail", f"{out.name}: {err}")
 
 
 def run_jobs(a, jobs: list[dict]):
@@ -375,9 +451,11 @@ def run_jobs(a, jobs: list[dict]):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", required=True)
-    ap.add_argument("--reasoning", required=True)
-    ap.add_argument("--pid-file", required=True, type=Path)
+    ap.add_argument("--direct", action="store_true")
+    ap.add_argument("--tool-error", metavar="TEXT")
+    ap.add_argument("--model")
+    ap.add_argument("--reasoning")
+    ap.add_argument("--pid-file", type=Path)
     ap.add_argument("--prompt", required=True, action=Prompt, default=[])
     ap.add_argument("--image", action=Placed, default=[])
     ap.add_argument("--out", required=True, type=Path, action="append")
@@ -387,6 +465,15 @@ def main():
     ap.add_argument("--batch", action="store_true")
     ap.add_argument("--approve-for-me", metavar="REASON")
     a = ap.parse_args()
+    if not a.direct and (miss := [f for f, v in (("--model", a.model), ("--reasoning", a.reasoning),
+                                                 ("--pid-file", a.pid_file)) if v is None]):
+        ap.error(f"thiếu {', '.join(miss)} (chỉ --direct không cần)")
+    if a.direct and (bad := [f for f, v in (("--batch", a.batch), ("--approve-for-me", a.approve_for_me)) if v]):
+        ap.error(f"--direct không nhận {', '.join(bad)}: worker tự gọi tool ảnh cho từng ảnh")
+    if a.tool_error is not None and not (a.direct and a.tool_error.strip()):
+        ap.error("--tool-error chỉ đi với --direct và cần nguyên văn lỗi của tool ảnh")
+    if a.direct and (odd := [s for _, s in a.size if not re.fullmatch(r"[1-9]\d*x[1-9]\d*", s.lower())]):
+        ap.error(f"--size cần dạng WxH: {', '.join(odd)}")
     if a.approve_for_me is not None and not a.approve_for_me.strip():
         ap.error("--approve-for-me cần lý do: lần gọi trước bị chặn ở đâu")
     if len(a.prompt) != len(a.out):
@@ -397,16 +484,26 @@ def main():
     for k, (prompt, out) in enumerate(zip(a.prompt, a.out), 1):
         out = out.resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
-        images = placed_for(a.image, k, a.batch)
+        images, want = placed_for(a.image, k, a.batch), (placed_for(a.size, k, a.batch) or [None])[-1]
+        rec = {"status": "fail", "attempts": 0, "direct": True, "model_requested": DIRECT_MODEL, "model_actual": NO_NUMBER,
+               "codex_cli": NO_NUMBER, "prompt": str(prompt), "images": images, "size": None, "converted": False,
+               "resized": False, "limit": TRIES, "errors": []} if a.direct else {
+            "status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model, "model_actual": NO_NUMBER,
+            "codex_cli": NO_NUMBER, "reasoning": a.reasoning, "prompt": str(prompt), "images": images,
+            "approve_for_me": a.approve_for_me, "batch": a.batch, "size": None, "fallback": False, "converted": False,
+            "session": None, "limit": TRIES, "errors": []}
         jobs.append({"out": out, "result": out.with_name(out.stem + ".result.json"), "images": images,
-                     "size": (placed_for(a.size, k, a.batch) or ["1536x1024"])[-1],
-                     "request": prompt.read_text(encoding="utf-8").strip(),
-                     "rec": {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model,
-                             "model_actual": NO_NUMBER, "codex_cli": NO_NUMBER, "reasoning": a.reasoning,
-                             "prompt": str(prompt), "images": images, "approve_for_me": a.approve_for_me, "batch": a.batch,
-                             "size": None, "fallback": False, "converted": False, "session": None, "limit": TRIES,
-                             "errors": []}})
-    if shutil.which("codex") is None:
+                     "size": want or "1536x1024", "want": want, "request": prompt.read_text(encoding="utf-8").strip(),
+                     "rec": rec, "counted": False})
+    if a.direct:
+        for j in jobs:
+            direct_try(a, j)
+        if any(j["counted"] for j in jobs):
+            cli = cli_version()
+            for j in jobs:
+                if j["counted"]:
+                    j["rec"]["codex_cli"] = cli
+    elif shutil.which("codex") is None:
         for j in jobs:
             j["rec"]["errors"].append("không thấy codex trên PATH")
     else:
@@ -422,22 +519,26 @@ def main():
                 f.unlink(missing_ok=True)
         for j in jobs:
             j["rec"]["model_actual"], j["rec"]["codex_cli"] = a.actual or NO_NUMBER, cli
-    failed = False
+            j["counted"] = j["rec"]["attempts"] > 0
+    failed = again = False
     for j in jobs:
         out, rec, rec_path = j["out"], j["rec"], j["out"].with_suffix(".json")
         if rec["status"] != "ok":
             out.unlink(missing_ok=True)
         rec_path.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
-        if rec["attempts"]:
+        if j["counted"]:
             record_models(out, rec["model_requested"], rec["model_actual"], rec["codex_cli"], a.approve_for_me)
         if rec["status"] == "ok":
             print(f"[gen_image_codex] ok {rec['size'][0]}x{rec['size'][1]} lần {rec['attempts']} -> {out}")
-            continue
-        failed = True
-        tries = f" {rec['attempts']}/{rec['limit']}" if rec["attempts"] else ""
-        print(f"[gen_image_codex] fail{tries}: {rec['errors'][-1]} -> {rec_path}")
-    if failed:
-        sys.exit(1)
+        elif a.direct and rec["attempts"] < rec["limit"]:
+            again = True
+            print(f"[gen_image_codex] gen lại lần {rec['attempts'] + 1}/{rec['limit']}: {rec['errors'][-1]} -> {out}")
+        else:
+            failed = True
+            tries = f" {rec['attempts']}/{rec['limit']}" if rec["attempts"] else ""
+            print(f"[gen_image_codex] fail{tries}: {rec['errors'][-1]} -> {rec_path}")
+    if failed or again:
+        sys.exit(1 if failed else 3)
 
 
 if __name__ == "__main__":

@@ -48,13 +48,23 @@ def run_line(step, n: int, t: Path, blender: str | None, aid: str) -> str:
                                  "--agent", t.parent.name, "--version-dir", rel(vdir(aid, step["id"], n))])
 
 
+GEN_MODE = ("GEN_MODE: lệnh GEN_IMAGE không vẽ, chỉ kiểm ảnh. Với từng cặp --prompt/--out: gọi tool ảnh `image_gen` "
+            "một lần, `prompt` = nội dung file --prompt (có --size WxH: thêm câu cuối \"Output: <W>x<H> pixels, "
+            "<landscape|portrait|square>.\"), `referenced_image_paths` = mọi --image của cặp, ảnh chung trước, đúng thứ "
+            "tự; chép PNG tool trả về sang --out; rồi chạy lệnh chỉ với cặp đó (giữ --image, --size chung) trước ảnh "
+            "sau. Thoát 3: gen lại file được in, chạy lại lệnh. Thoát 1: dừng, `STATUS: BLOCKED`, chép dòng lỗi vào "
+            "`ISSUES`. Tool báo lỗi: chạy lệnh với --tool-error \"<lỗi>\".")
+
+
 def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra: list[str] = (),
                cfg: dict | None = None, n: int | None = None) -> list[str]:
     t = SKILL_DIR / "agents" / agent_name(step.get("agent")) / "tools"
     blender = (((pf or {}).get('blender') or {}).get('path') or 'blender') if "blender" in step["uses"] else None
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + ([f"BLENDER: {blender}"] if blender else []) + (
         [run_line(step, n, t, blender, st['id'])] if t.is_dir() and n is not None else []) + list(extra)
-    if gen and "codex_image" in step["uses"]:
+    if gen and "codex_image" in step["uses"] and EDITION.get("image_gen") == "direct":
+        out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}", "GEN_ARGS: --direct", GEN_MODE]
+    elif gen and "codex_image" in step["uses"]:
         ig = image_gen(preset)
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}",
                 f"GEN_ARGS: --model {ig['codex_model']} --reasoning {ig['reasoning']} "
@@ -859,6 +869,9 @@ def run(a):
     who, due = step["script"], None
     if out["role"] != "script":
         out["model"] = model_of(out["model"])
+        if out["role"] == "worker" and EDITION.get("image_gen") == "direct" and "codex_image" in step["uses"]:
+            ig = image_gen(preset)
+            out |= {"model": ig["codex_model"], "reasoning_effort": ig["reasoning"]}
         if EDITION.get("agent_file"):
             out["agent_file"] = rel(agent_file(out["agent"]))
         st["dispatch_out"] = out

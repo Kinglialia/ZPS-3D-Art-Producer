@@ -160,3 +160,49 @@ def test_preflight_takes_the_lock_for_the_write_so_it_waits_for_a_running_comman
         assert (pre.poll(), (proj.root / "production/preflight.json").exists()) == (None, False)
     out, err = pre.communicate(timeout=30)
     assert (pre.returncode, (proj.root / "production/preflight.json").is_file()) == (0, True)
+
+
+@pytest.fixture
+def direct(proj, monkeypatch, capsys):
+    """The Codex edition in-process: its runtime.json says `image_gen: direct`, and the worker draws with its own tool."""
+    from core import preflight
+    monkeypatch.chdir(proj.root)
+    monkeypatch.setattr(preflight, "EDITION", {"image_gen": "direct"})
+    monkeypatch.setattr(preflight, "settings_gap", lambda b: None)
+    monkeypatch.setenv("PATH", str(proj.bin))
+    monkeypatch.setenv("BLENDER", str(proj.bin / "blender"))
+    monkeypatch.delenv("PRODUCER_KIT", raising=False)
+    (proj.root / ".env").write_text("MESHY_API_KEY=\n", encoding="utf-8")
+
+    def run(image_gen=None):
+        if image_gen is not None:
+            monkeypatch.setenv("FAKE_CODEX_IMAGE_GEN", image_gen)
+        preflight.run_preflight(None)
+        return capsys.readouterr().out, proj.result()
+    return run
+
+
+def test_in_the_codex_edition_codex_image_is_on_when_the_image_generation_feature_is_on_whatever_exec_lacks(proj, direct,
+                                                                                                         monkeypatch):
+    """The worker never runs `codex exec` there, so a codex-cli without its flags still makes images."""
+    fake_codex.install(proj.bin)
+    monkeypatch.setenv("FAKE_CODEX_HELP_DROP", "-s,--image")
+    out, res = direct()
+    assert out == "preflight: bật codex_image; tắt blender, meshy; không có kit preflight.py → production/preflight.json\n"
+    assert (res["features"]["codex_image"], res["codex_cli"]) == (True, {"version": "0.164.0", "image_generation": True})
+
+
+def test_in_the_codex_edition_codex_image_is_off_with_the_reason_when_the_image_generation_feature_is_off(proj, direct):
+    fake_codex.install(proj.bin)
+    out, res = direct("false")
+    assert out == ("preflight: tắt blender, codex_image, meshy; codex-cli 0.164.0 chưa bật feature image_generation "
+                   "(`codex features list`) → bật nó rồi chạy lại `preflight`; không có kit preflight.py "
+                   "→ production/preflight.json\n")
+    assert (res["features"]["codex_image"], res["codex_cli"]) == (False, {"version": "0.164.0", "image_generation": False})
+
+
+def test_in_the_codex_edition_a_missing_codex_turns_codex_image_off_with_the_reason(direct):
+    out, res = direct()
+    assert out == ("preflight: tắt blender, codex_image, meshy; không thấy `codex` trên PATH: worker không có tool ảnh "
+                   "→ cài codex-cli rồi chạy lại `preflight`; không có kit preflight.py → production/preflight.json\n")
+    assert (res["features"]["codex_image"], res["codex"], res["codex_cli"]) == (False, None, None)

@@ -45,6 +45,17 @@ def codex_cli(path: str | None) -> dict | None:
     return {"version": gen_image_codex.cli_version(), "missing_flags": gen_image_codex.missing_flags(help_text)}
 
 
+def codex_direct(path: str | None) -> dict | None:
+    """Edition `image_gen: direct`: the worker draws with its session's image tool, so `codex exec` flags do not count;
+    the tool exists when the image_generation row of `codex features list` ends in `true`."""
+    if path is None:
+        return None
+    import gen_image_codex
+    _, out = run([path, "features", "list"], 60)
+    on = any(c[0] == "image_generation" and c[-1] == "true" for c in map(str.split, out.splitlines()) if c)
+    return {"version": gen_image_codex.cli_version(), "image_generation": on}
+
+
 def env_file() -> str:
     from check_profile import load_yaml
     try:
@@ -105,9 +116,11 @@ def run_preflight(a):
     ROOT.mkdir(parents=True, exist_ok=True)
     b, ef = blender(), env_file()
     codex = shutil.which("codex")
-    cli = codex_cli(codex)
+    direct = EDITION.get("image_gen") == "direct"
+    cli = codex_direct(codex) if direct else codex_cli(codex)
     k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
-    feats = {"blender": b is not None, "codex_image": cli is not None and not cli["missing_flags"], "meshy": has_meshy_key(ef)}
+    image = cli is not None and (cli["image_generation"] if direct else not cli["missing_flags"])
+    feats = {"blender": b is not None, "codex_image": image, "meshy": has_meshy_key(ef)}
     gap = settings_gap(b)
     doc = {"at": now(), "features": feats, "blender": b, "codex": codex, "codex_cli": cli, "env_file": ef, "kit": k} | (
         {"settings": gap} if gap else {})
@@ -115,7 +128,12 @@ def run_preflight(a):
         write_atomic(OUT, json.dumps(doc, ensure_ascii=False, indent=2))
     on, down = [f for f, v in feats.items() if v], [f for f, v in feats.items() if not v]
     parts = ([f"bật {', '.join(on)}"] if on else []) + ([f"tắt {', '.join(down)}"] if down else [])
-    if cli and cli["missing_flags"]:
+    if direct and cli is None:
+        parts.append("không thấy `codex` trên PATH: worker không có tool ảnh → cài codex-cli rồi chạy lại `preflight`")
+    elif direct and not image:
+        parts.append(f"codex-cli {cli['version']} chưa bật feature image_generation (`codex features list`) "
+                     "→ bật nó rồi chạy lại `preflight`")
+    if cli and cli.get("missing_flags"):
         parts.append(f"codex-cli {cli['version']} thiếu flag {', '.join(cli['missing_flags'])} của `codex exec` "
                      "→ cài codex-cli đã test (0.164.0) rồi chạy lại `preflight`")
     parts.append(f"kit {k['overall']}" if "overall" in k else "không có kit preflight.py")

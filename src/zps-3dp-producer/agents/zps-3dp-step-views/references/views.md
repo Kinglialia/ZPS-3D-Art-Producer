@@ -6,7 +6,7 @@ Nguồn: kit `zps-concept-views/references/process.md` (Step 3, Way A) và `.art
 
 Vật quay mặt về −Y. `left` là bên trái của chính vật (camera ở +X). `right` là bên phải của vật (camera ở −X). Giống Blockout.
 
-Mỗi prompt là một file `V/work/prompts/<view>-<k>.md`, chỉ chứa phần vẽ; `gen_image_codex.py` thêm khung cố định. Giữ mọi prompt và mọi ảnh gen trong `V/work/` để gen lại được. Prompt, bản không chọn, log không vào `final/`.
+Mỗi prompt là một file `V/work/prompts/<view>-<k>.md`, chỉ chứa phần vẽ; lệnh gen (hoặc dòng `GEN_MODE` của brief) lo phần lưu ảnh. Giữ mọi prompt và mọi ảnh gen trong `V/work/` để gen lại được. Prompt, bản không chọn, log không vào `final/`.
 
 `--size`: lấy từ `V/work/sizes.json`, do `pick_size.py` tính từ kích thước bbox của `guides/views.json`. Mỗi view một cỡ. Cạnh dài phải > 1040 px.
 
