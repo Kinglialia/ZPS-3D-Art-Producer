@@ -12,9 +12,10 @@ Usage: python3 T/texture_complexity.py --final F --blockout B --concept C [--vie
 Simple when materials <= texture_simple.max_materials, clusters <= texture_simple.max_color_clusters, no motif, tier not
 hero. `simple` is information only (D30.11): the proposed mode is --mode, the mode the Producer script chose from the
 Meshy key and budget (brief line `MODE: Meshy SỬA` = meshy, `MODE: VẼ MỚI` = paint).
-Writes F/texture_spec.json {scores, thresholds, simple, proposed, used: null, reason: null, mesh_sha256}; the worker
-fills `used` and `reason`. Once per mesh (row Q14): with --glb, a texture_spec.json of another version of the step
-(F/../../v*/final/) for the same sha256 of G gives its scores, thresholds and simple, and nothing is measured again.
+Writes F/texture_spec.json {scores, thresholds, simple, proposed, used: null, reason: null, mesh_sha256,
+concept_sha256}; the worker fills `used` and `reason`. Once per mesh (row Q14): with --glb, a texture_spec.json of
+another version of the step (F/../../v*/final/) for the same sha256 of G, the same sha256 of C/concept_albedo.png and the
+same card tier gives its scores, thresholds and simple, and nothing is measured again.
 Prints one line. Exit 0, 2 on error.
 """
 import argparse
@@ -100,8 +101,16 @@ def score(a, mode):
             "simple": bool(simple), "proposed": mode, "used": None, "reason": None}
 
 
-def earlier(final, sha):
-    """(version, texture_spec) of the latest other version of the step measured on the same mesh, or None."""
+def reuse_key(a, mesh_sha):
+    """What the scores depend on: the mesh, the concept image and the card tier."""
+    import yaml
+    card = yaml.safe_load(open(os.path.join(a.concept, "asset-card.yaml"), encoding="utf-8")) or {}
+    concept = hashlib.sha256(open(os.path.join(a.concept, "concept_albedo.png"), "rb").read()).hexdigest()
+    return {"mesh_sha256": mesh_sha, "concept_sha256": concept, "tier": card.get("tier") or "standard"}
+
+
+def earlier(final, key):
+    """(version, texture_spec) of the latest other version of the step measured on the same mesh, concept and tier."""
     here = os.path.abspath(final)
     step = os.path.dirname(os.path.dirname(here))
     found = []
@@ -109,7 +118,7 @@ def earlier(final, sha):
         spec = os.path.join(step, v, "final", "texture_spec.json")
         if re.fullmatch(r"v\d+", v) and os.path.join(step, v, "final") != here and os.path.isfile(spec):
             r = json.load(open(spec, encoding="utf-8"))
-            if r.get("mesh_sha256") == sha:
+            if {k: r.get("scores", {}).get(k) if k == "tier" else r.get(k) for k in key} == key:
                 found.append((int(v[1:]), v, r))
     return max(found, key=lambda x: x[0])[1:] if found else None
 
@@ -124,12 +133,12 @@ def main():
     a = p.parse_args()
     out = os.path.join(a.final, "texture_spec.json")
     try:
-        sha = hashlib.sha256(open(a.glb, "rb").read()).hexdigest() if a.glb else None
-        prev = earlier(a.final, sha) if sha else None
+        key = reuse_key(a, hashlib.sha256(open(a.glb, "rb").read()).hexdigest()) if a.glb else None
+        prev = earlier(a.final, key) if key else None
         if prev:
             r = prev[1] | {"proposed": a.mode, "used": None, "reason": None}
         else:
-            r = score(a, a.mode) | ({"mesh_sha256": sha} if sha else {})
+            r = score(a, a.mode) | ({k: key[k] for k in ("mesh_sha256", "concept_sha256")} if key else {})
     except Exception as e:  # noqa: BLE001
         print(f"[texture_complexity] error: {e!r}")
         sys.exit(2)

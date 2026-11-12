@@ -780,17 +780,31 @@ def complexity_in(tmp, version, glb, mode="meshy"):
 
 
 def test_texture_complexity_runs_once_per_mesh_and_a_later_version_reuses_its_scores_q14(m, tmp_path):
-    """The scores are reference only, so a new version of the same locked mesh does not measure the concept again."""
+    """The scores are reference only, so a new version of the same locked mesh, concept and tier does not measure the
+    concept again."""
     complexity(tmp_path, ["WOOD", "IRON"], [(120, 80, 40), (60, 60, 64)])
     glb = m / f"{AID}-untextured.glb"
     _, first = complexity_in(tmp_path, "v1", glb)
     first.update(used="meshy", reason="có key")
     (tmp_path / "texture/v1/final/texture_spec.json").write_text(json.dumps(first), encoding="utf-8")
-    concept(tmp_path / "C/concept_albedo.png", [(200, 0, 0), (0, 200, 0), (0, 0, 200), (200, 200, 0)])
     out, second = complexity_in(tmp_path, "v2", glb, mode="paint")
     assert out == (f"[texture_complexity] dùng lại điểm của v1 (cùng mesh) → paint -> "
                    f"{tmp_path}/texture/v2/final/texture_spec.json\n")
     assert second == first | {"proposed": "paint", "used": None, "reason": None}
     other = glbkit.write(tmp_path / "other.glb", *glbkit.box((2, 1, 1)))
     _, third = complexity_in(tmp_path, "v3", other)
-    assert third["scores"]["color_clusters"] == 4 and third["mesh_sha256"] != first["mesh_sha256"]
+    assert third["scores"]["color_clusters"] == 2 and third["mesh_sha256"] != first["mesh_sha256"]
+
+
+def test_a_new_concept_or_tier_on_the_same_mesh_is_measured_again(m, tmp_path):
+    """The scores come from the concept and the card tier: a repainted concept or a hero tier must not keep the old
+    'simple'."""
+    complexity(tmp_path, ["WOOD", "IRON"], [(120, 80, 40), (60, 60, 64)])
+    glb = m / f"{AID}-untextured.glb"
+    _, first = complexity_in(tmp_path, "v1", glb)
+    concept(tmp_path / "C/concept_albedo.png", [(200, 0, 0), (0, 200, 0), (0, 0, 200), (200, 200, 0)])
+    _, second = complexity_in(tmp_path, "v2", glb)
+    assert (first["scores"]["color_clusters"], second["scores"]["color_clusters"]) == (2, 4)
+    (tmp_path / "C/asset-card.yaml").write_text(yaml.safe_dump({"tier": "hero"}), encoding="utf-8")
+    _, third = complexity_in(tmp_path, "v3", glb)
+    assert (third["scores"]["tier"], third["simple"]) == ("hero", False)
