@@ -57,7 +57,7 @@ Mọi thay đổi workflow nằm ở `production/pipeline.toml`:
 - **Đổi model:** sửa `model`; `escalate_model` dùng khi vòng sửa vượt `resume_rounds`. Tên chung `opus`, `sonnet`, `haiku`; runtime đổi sang model thật (`references/runtime.md`, mục Model).
 - **Đổi output bắt buộc:** sửa `outputs`. Thiếu file thì asset bị blocked.
 - **Đổi chuẩn preview:** sửa `[preview].spec`. Brief đưa nguyên văn cho worker.
-- **Lệnh ngoài:** `external_command` của bước (biến `{request}`, `{vdir}`, `{log}`); brief ghi lệnh cho worker chạy nền.
+- **Lệnh ngoài:** `external_command` của bước (biến `{request}`, `{vdir}`, `{log}`); brief ghi lệnh cho worker chạy và chờ lệnh xong.
 - **Ai duyệt bước:** `gate = "review"` (reviewer duyệt), `"review_human"` (reviewer chấm, người duyệt theo `policy.yaml`), `"checks_human"` (script kiểm, người dùng duyệt).
 
 Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline mới ngay. Đổi `id` của bước mà asset đang đứng ở đó thì `validate` báo lỗi: sửa `stage` trong status.json của asset đó.

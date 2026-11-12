@@ -491,3 +491,24 @@ def test_with_a_remote_board_the_producer_runs_next_again_after_every_board_pull
     board = text[text.index("**Trang claude.ai**"):text.index("**Ai duyệt:**")]
     assert "rồi `P board pull`. Báo lại các dòng script in, rồi luôn chạy lại `P next`" in board
     assert "không chạy lại, trừ khi bạn vừa chạy `P board pull`" in text
+
+
+def test_the_brief_of_a_step_with_an_external_command_never_tells_the_worker_to_run_it_in_the_background_d39():
+    """A worker that starts a background command and ends its turn is never woken (D33.2): the brief must say to wait."""
+    import tempfile
+    from flowkit import AID, Flow
+    from shared import pilot_project
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        f = Flow(root)
+        pilot_project(root)
+        toml = root / "production/pipeline.toml"
+        toml.write_text(toml.read_text(encoding="utf-8").replace(
+            'id = "blockout"\n', 'id = "blockout"\nexternal_command = "tool --in {request} --log {log}"\n', 1), encoding="utf-8")
+        f.p("intake", AID)
+        f.p("ready", AID)
+        text = (root / f.brief("ext")["brief"]).read_text(encoding="utf-8")
+    assert "## Lệnh ngoài\nChạy lệnh, chờ lệnh xong;" in text and "tool --in " in text
+    assert "nền" not in text.lower()
+    setup = (SKILL / "references/setup.md").read_text(encoding="utf-8")
+    assert "chạy nền" not in [l for l in setup.splitlines() if "external_command" in l][0]

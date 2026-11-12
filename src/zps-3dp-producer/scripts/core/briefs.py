@@ -238,7 +238,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
         cmd = step["external_command"].format(
             request=rel(d / "work" / f"{step['id']}_request.md"), vdir=rel(d), log=rel(d / "work" / "external.log")
         )
-        lines += ["", "## Lệnh ngoài", "Chạy nền, chờ file output xuất hiện; chỉ xem cuối log khi lỗi:", "```", cmd, "```"]
+        lines += ["", "## Lệnh ngoài", "Chạy lệnh, chờ lệnh xong; chỉ xem cuối log khi lỗi:", "```", cmd, "```"]
     lines += [
         "",
         "## Báo cáo",
