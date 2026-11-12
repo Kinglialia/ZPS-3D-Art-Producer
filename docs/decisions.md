@@ -442,7 +442,7 @@ Lý do: Run 5 reviewer tốn 1,33M token, worker 1,04M.
 
 Nguyên tắc: repo skill chỉ chứa thứ dùng chung cho mọi object. Nguồn: backlog 4h. Lý do: hàm, fixture và dữ liệu của một asset (wooden-chest) đã vào repo. Chúng đi theo skill tới mọi project và kéo agent về asset đó.
 
-1. **Repo chỉ giữ hàm chung:** `bevel_box`, `vault`, `grooved_box` (nhận số khe `N`). Đã gỡ `plank_vault`, `arch_cap`, `arch_cap_pointed`, `strap_band`, `lock_plate` và tham số `seam` (`ef86fee`). Kiểm bằng test dữ liệu tổng hợp trong repo và bằng V6 trên asset mới. Không dựng lại wooden-chest. **[Sửa theo D42.2, chờ anh chốt]** Gỡ `vault`, `grooved_box`; giữ `bevel_box`.
+1. **Repo chỉ giữ hàm chung:** `bevel_box`, `vault`, `grooved_box` (nhận số khe `N`). Đã gỡ `plank_vault`, `arch_cap`, `arch_cap_pointed`, `strap_band`, `lock_plate` và tham số `seam` (`ef86fee`). Kiểm bằng test dữ liệu tổng hợp trong repo và bằng V6 trên asset mới. Không dựng lại wooden-chest. **[Sửa theo D42.2]** Gỡ `vault`, `grooved_box`; giữ `bevel_box`.
    - Hệ quả: part graph của wooden-chest gọi các hàm đã gỡ. Muốn sửa asset đó thì agent viết lại `custom_parts.py` cho nó. Gói `deliver/` (GLB, `.blend`) không bị ảnh hưởng.
 2. **Hàm riêng của agent** nằm trong `production/assets/<id>/custom_parts.py`.
    - Python thuần, chỉ dùng `math`. Hàm trả đỉnh và mặt. File chạy ngoài Blender và ghi một file JSON lưới.
@@ -629,7 +629,7 @@ Lý do: nguyên nhân Run 5 là Producer tự kết thúc lượt (D33 mục 1).
 ## D42 — Source chỉ giữ thứ pipeline dùng và thứ mọi object dùng chung (v0.8.0, nối D32, D34)
 
 1. **Đã gỡ 5 file kit không ai gọi** (nhánh `chore/remove-unused-files`, `2bd121c`): `apply_edit.py`, `fit_camera.py`, bản `render_blockout_views.py` của blockout, hai bản `bpy_cookbook.md`. Merge nhánh này trước khi bắt đầu code v0.8.0.
-2. **Gỡ `vault` và `grooved_box` khỏi `custom_lib.py`.** *Em đề xuất; anh chưa chốt.* Lý do: `vault` là `plank_vault` của cái rương, đổi tên ở `ef86fee`; tham số `planks`, `gap`, `depth` là rãnh ván của rương. Asset cần dáng đó viết hàm trong `custom_parts.py` của project (D32). Giữ `bevel_box`. Sửa D32.1.
+2. **Gỡ `vault` và `grooved_box` khỏi `custom_lib.py`.** Anh chốt 2026-11-12. Lý do: `vault` là `plank_vault` của cái rương, đổi tên ở `ef86fee`; tham số `planks`, `gap`, `depth` là rãnh ván của rương. Asset cần dáng đó viết hàm trong `custom_parts.py` của project (D32). Giữ `bevel_box`. Sửa D32.1.
 3. **Hàm chung còn lại trả `(verts, faces)` Python thuần**, như hàm của asset. Lý do: hàm dùng `bmesh` buộc mọi lần dựng mở Blender.
 4. **Luật giữ file kit:** một file chép từ kit chỉ nằm trong skill khi một tool hoặc file agent của bước đó gọi nó. Test quét: mỗi file trong bảng "Chép nguyên" của `SOURCE.md` có ít nhất một nơi gọi.
 5. Tài liệu `docs/` còn nhắc file đã gỡ thì sửa trong đợt spec.
