@@ -110,7 +110,9 @@ def test_review_renders_open_blender_once_each(built, tmp_path):
                                               ("front", "back", "left", "right", "34")] + ["parts_front", "parts_34"])
     blender("--python", TOOLS / "render_review.py", "--", "--work", built, "--size", "256")
     rr = read(built / "review/review.json")
-    assert sorted(rr["artifacts"]) == ["foot_front_left", "foot_front_right", "game_cam", "lineup"]
+    # N1: render_review.py also calls render_sides.py, in the same Blender session
+    assert sorted(rr["artifacts"]) == ["foot_front_left", "foot_front_right", "game_cam", "lineup", "mat_back", "mat_left",
+                                       "mat_right"]
     assert all(os.path.getsize(p) > 1000 for p in rr["artifacts"].values())
 
 

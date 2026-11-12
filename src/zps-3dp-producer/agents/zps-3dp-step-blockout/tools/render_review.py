@@ -1,6 +1,6 @@
 """Extra review renders for check-blockout, in one Blender run (docs/agents/blockout.md §6).
 
-Usage: blender -b --python tools/render_review.py -- --work <dir> [--outdir <dir>/review] [--size 1024]
+Usage: blender -b --python tools/render_review.py -- --work <dir> [--outdir <dir>/review] [--size 1024] [--top]
 Reads <dir>/assembled.glb, part_graph.json, assembly.json, sources.json. Clay shading as render_views.py.
   game_cam.png          perspective camera from sources.json camera (azimuth, elevation, fov_v);
                         no camera: not_checked
@@ -8,6 +8,9 @@ Reads <dir>/assembled.glb, part_graph.json, assembly.json, sources.json. Clay sh
   foot_front_left.png,  ortho close-ups of the base-ground-wall corner at the front, from the bbox of
   foot_front_right.png  the tag: base parts, or else the parts resting on the ground (props have no
                         base); left = the object's own left (+X), as the kit's views.
+  mat_left.png, mat_right.png, mat_back.png    each part in one flat colour per material code, with a legend
+  (mat_top.png with --top)                     (render_sides.py draws them in this Blender session; --top: the card says
+                                               views: full_top)
 Writes <outdir>/review.json (result JSON, artifacts = label -> path). Exit 0, 1 on error.
 """
 import math
@@ -17,12 +20,14 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "self_build"))
 sys.path.insert(0, os.path.join(HERE, "lib"))
+sys.path.insert(0, HERE)
 import bootstrap  # noqa: E402,F401
 import numpy as np  # noqa: E402
 
 import common  # noqa: E402
 import graph as G  # noqa: E402
 import raster  # noqa: E402
+import render_sides as RS  # noqa: E402
 import render_views as RV  # noqa: E402
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
 from root_guard import require_root  # noqa: E402
@@ -80,7 +85,7 @@ def foot_frame(rows, graph):
             "right": [round(float(blo[0]), 4), round(float(blo[1]), 4), round(z, 4)]}
 
 
-def run(work, outdir, size):
+def run(work, outdir, size, top=False):
     import bpy
     sources = common.read_json(os.path.join(work, "sources.json"))
     graph = common.read_json(os.path.join(work, "part_graph.json"))
@@ -92,7 +97,7 @@ def run(work, outdir, size):
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
     scene.collection.objects.link(cam)
     scene.camera = cam
-    RV.add_mesh(bpy, scene, "model", v, t)
+    model = RV.add_mesh(bpy, scene, "model", v, t)
     lo, hi = v.min(0), v.max(0)
     diag = float(np.linalg.norm(hi - lo)) or 1.0
     cam.data.clip_start, cam.data.clip_end = 0.01 * diag, 40 * diag
@@ -131,8 +136,11 @@ def run(work, outdir, size):
     else:
         checks.append(common.check("render.foot", "not_checked", note="no part rests on the ground"))
     bpy.data.objects.remove(ground)
+    bpy.data.objects.remove(model)
+    sides, side_data = RS.render(bpy, scene, cam, work, outdir, size, top)
+    files.update(sides)
     checks.insert(0, common.check("render.files", "info", value=len(files)))
-    return checks, files, frame
+    return checks, files, {"foot": frame, "sides": side_data}
 
 
 def main():
@@ -140,16 +148,17 @@ def main():
     p.add_argument("--work", required=True)
     p.add_argument("--outdir")
     p.add_argument("--size", type=int, default=1024)
+    p.add_argument("--top", action="store_true")
     a = p.parse_args(common.script_argv())
     outdir = a.outdir or os.path.join(a.work, "review")
     out = os.path.join(outdir, "review.json")
     src = os.path.join(a.work, "assembled.glb")
     try:
-        checks, files, frame = run(a.work, outdir, a.size)
+        checks, files, data = run(a.work, outdir, a.size, a.top)
     except Exception as e:  # noqa: BLE001
         common.write_error(out, TOOL, e, source=src)
         sys.exit(1)
-    common.write_result(out, TOOL, checks, artifacts=files, data={"foot": frame}, source=src)
+    common.write_result(out, TOOL, checks, artifacts=files, data=data, source=src)
 
 
 if __name__ == "__main__":
