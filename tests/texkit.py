@@ -15,8 +15,12 @@ WALLS, CAPS = ("-Y", "+Y", "-X", "+X"), ("-Z", "+Z")
 COLORS = {"TIMBER": "#8A5A3C", "STONE": "#B8B0A0"}
 
 
-def model_final(d: Path, res=128, parts=("walls", "caps")) -> Path:
+def model_final(d: Path, res=128, parts=("walls", "caps"), mirror=()) -> Path:
+    """mirror: names of the faces whose UV island is flipped left to right."""
     v, uv, f = glbkit.box()
+    for n in mirror:
+        k = list(glbkit.FACES).index(n) * 4
+        uv[k:k + 4, 0] = uv[k:k + 4, 0].min() + uv[k:k + 4, 0].max() - uv[k:k + 4, 0]
     (d / "parts").mkdir(parents=True)
     (d / "review").mkdir()
     glbkit.write(d / f"{AID}-untextured.glb", v, uv, f)

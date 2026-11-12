@@ -162,6 +162,30 @@ def lab(rgb255):
     return np.stack([116 * e[..., 1] - 16, 500 * (e[..., 0] - e[..., 1]), 200 * (e[..., 1] - e[..., 2])], -1)
 
 
+def de2000(c1, c2):
+    """CIEDE2000 colour difference of Lab colours, shape (..., 3) each (Sharma, Wu, Dalal 2005)."""
+    (L1, a1, b1), (L2, a2, b2) = (np.moveaxis(np.asarray(c, float), -1, 0) for c in (c1, c2))
+    cm7 = ((np.hypot(a1, b1) + np.hypot(a2, b2)) / 2) ** 7
+    g = 1 + 0.5 * (1 - np.sqrt(cm7 / (cm7 + 25.0 ** 7)))
+    a1, a2 = g * a1, g * a2
+    C1, C2 = np.hypot(a1, b1), np.hypot(a2, b2)
+    h1, h2 = (np.degrees(np.arctan2(b, a)) % 360 for b, a in ((b1, a1), (b2, a2)))
+    mono = C1 * C2 == 0
+    dh = np.where(mono, 0, h2 - h1)
+    dh = np.where(dh > 180, dh - 360, np.where(dh < -180, dh + 360, dh))
+    dH = 2 * np.sqrt(C1 * C2) * np.sin(np.radians(dh / 2))
+    hs = h1 + h2
+    hm = np.where(mono, hs, np.where(np.abs(h1 - h2) <= 180, hs / 2, np.where(hs < 360, hs + 360, hs - 360) / 2))
+    Cm, Lm = (C1 + C2) / 2, (L1 + L2) / 2
+    t = (1 - 0.17 * np.cos(np.radians(hm - 30)) + 0.24 * np.cos(np.radians(2 * hm))
+         + 0.32 * np.cos(np.radians(3 * hm + 6)) - 0.20 * np.cos(np.radians(4 * hm - 63)))
+    rc = 2 * np.sqrt(Cm ** 7 / (Cm ** 7 + 25.0 ** 7))
+    rt = -np.sin(np.radians(2 * 30 * np.exp(-(((hm - 275) / 25) ** 2)))) * rc
+    sl = 1 + 0.015 * (Lm - 50) ** 2 / np.sqrt(20 + (Lm - 50) ** 2)
+    xl, xc, xh = (L2 - L1) / sl, (C2 - C1) / (1 + 0.045 * Cm), dH / (1 + 0.015 * Cm * t)
+    return np.sqrt(xl ** 2 + xc ** 2 + xh ** 2 + rt * xc * xh)
+
+
 def lab_to_rgb(lab_):
     """Inverse of lab(): sRGB 0..255 (clipped)."""
     L, a, b = (np.asarray(lab_, float)[..., i] for i in range(3))
@@ -252,15 +276,17 @@ def border(inside):
     return out
 
 
-def seam_groups(tm, area):
-    """Border texels that meet texels of another face at the same 3D point (cell = 1.5 texel edges): returns the flat
-    texel indices and a group id per index. area: 3D surface area of the mesh, for the texel size in metres."""
+def seam_groups(tm, area, codes):
+    """Border texels that meet texels of another face of the same material code at the same 3D point (cell = 1.5 texel
+    edges): returns the flat texel indices and a group id per index. area: 3D surface area of the mesh, for the texel
+    size in metres. codes: the material code of every face. A border between two codes is no seam."""
     b = border(tm.inside) & tm.inside
     idx = np.flatnonzero(b)
     if not len(idx):
         return idx, idx
     cell = 1.5 * np.sqrt(area / max(tm.inside.sum(), 1))
-    key = np.floor(tm.pos.reshape(-1, 3)[idx] / cell).astype(np.int64)
+    cid = np.unique(np.asarray(codes, str), return_inverse=True)[1].reshape(-1)[tm.face.reshape(-1)[idx]]
+    key = np.c_[np.floor(tm.pos.reshape(-1, 3)[idx] / cell).astype(np.int64), cid]
     _, gid = np.unique(key, axis=0, return_inverse=True)
     gid = gid.reshape(-1)
     face = tm.face.reshape(-1)[idx]
@@ -324,3 +350,13 @@ def occluded(v, f, reach, polars=(30, 60, 80), k=8):
         hit = (u >= 0) & (w >= 0) & (u + w <= 1) & (t > 0) & (t <= reach)
         out[i] = np.median(hit.any(-1).mean(-1))
     return out
+
+
+def groove_texels(tm, v, f, model, limit):
+    """Texels of faces in a groove or an opening: tex.occluded >= limit within model.alpha_min_px / model.px_per_m
+    metres. The concept draws line art there, so light and colour checks leave them out."""
+    reach = model.get("alpha_min_px", 0) / model["px_per_m"] if model.get("px_per_m") else 0
+    if not reach:
+        return np.zeros(tm.face.shape, bool)
+    groove = occluded(v, f, reach) >= limit
+    return tm.inside & groove[np.where(tm.inside, tm.face, 0)]
