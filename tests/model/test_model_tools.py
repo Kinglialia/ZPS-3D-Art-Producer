@@ -75,7 +75,7 @@ def result(final, name):
 
 
 def spec_of(final, **over):
-    s = {"asset": "pilot-house", "budget": {"max_tris_total": 3000, "max_materials_total": 1},
+    s = {"asset": "pilot-house", "budget": {"max_tris_total": 3000, "max_materials_total": 1}, "dimensions_tolerance": 0.02,
          "uv": {"resolution": 2048, "min_padding_px": 16}, "model": {"texel_min_px_per_m": 64},
          "sources": {"tris_cap": "preset tiers.standard"}} | over
     final.mkdir(parents=True, exist_ok=True)
@@ -209,16 +209,22 @@ def test_check_inputs_wants_the_view_files_of_the_card_and_none_when_views_is_no
     assert inputs_of(tmp_path, card, views) == out
 
 
-def parts(d, **boxes):
+GRAPH = {"params": {"base_w": 4.0, "door_h": 1.8, "roof_h": 1.0}, "fixed_params": ["base_w", "door_h"]}
+
+
+def parts(d, graph=GRAPH, **boxes):
     for name, (lo, hi) in boxes.items():
         write_glb(d / f"parts/{name}.glb", *box(lo, hi))
-    (d / "assembly.json").write_text(json.dumps({"data": {"parts": [{"name": n} for n in boxes]}}), encoding="utf-8")
+    ext = (np.max([hi for _, hi in boxes.values()], 0) - np.min([lo for lo, _ in boxes.values()], 0)).tolist()
+    (d / "assembly.json").write_text(json.dumps({"data": {"parts": [{"name": n} for n in boxes],
+                                                          "union": {"extents": ext}}}), encoding="utf-8")
+    (d / "part_graph.json").write_text(json.dumps(graph), encoding="utf-8")
 
 
 @pytest.fixture
 def detail(tmp_path):
     b, f = tmp_path / "blockout", tmp_path / "final"
-    parts(b, body=((0, 0, 0), (1, 1, 1)))
+    parts(b, body=((0, 0, 0), (1, 1, 1.5)))
     parts(f, body=((0, 0, 0), (1, 1, 1)), lid=((0.25, 0.25, 1), (0.75, 0.75, 1.5)))
     write_glb(f / "pilot-house-untextured.glb", *join(box((0, 0, 0), (1, 1, 1)), box((0.25, 0.25, 1), (0.75, 0.75, 1.5))))
     return b, f
@@ -229,19 +235,52 @@ def test_detail_pass_adds_tris_under_the_cap_and_reports_density_without_a_pilot
     spec_of(f)
     assert tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none").returncode == 0
     overall, checks, data = result(f, "detail")
-    assert (overall, checks) == ("pass", {"detail.more_tris": ("pass", 24), "detail.cap": ("pass", 24),
+    assert (overall, checks) == ("pass", {"detail.more_tris": ("pass", 24), "detail.bbox": ("pass", [1.0, 1.0, 1.5]),
+                                          "detail.fixed_params": ("pass", []), "detail.cap": ("pass", 24),
                                           "detail.density": ("info", 3.2), "detail.vs_pilot": ("not_checked", None)})
-    assert data == {"blockout_part_tris": 12, "part_tris": 24, "tris": 24, "cap": 3000, "area_m2": 7.5,
-                    "tris_per_m2": 3.2, "cap_source": "preset tiers.standard"}
+    assert data == {"blockout_part_tris": 12, "part_tris": 24, "bbox_ratio": [1.0, 1.0, 1.0], "tris": 24, "cap": 3000,
+                    "area_m2": 7.5, "tris_per_m2": 3.2, "cap_source": "preset tiers.standard"}
 
 
 def test_detail_fails_over_the_tier_cap_and_without_new_tris(detail, tmp_path):
     b, f = detail
     spec_of(f, budget={"max_tris_total": 20})
-    parts(b, body=((0, 0, 0), (1, 1, 1)), crate=((2, 0, 0), (3, 1, 1)))
+    parts(b, body=((0, 0, 0), (1, 1, 1.5)), crate=((0, 0, 0), (1, 1, 1)))
     assert tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none").returncode == 1
     assert {k: v for k, v in result(f, "detail")[1].items() if v[0] == "fail"} == {
         "detail.more_tris": ("fail", 24), "detail.cap": ("fail", 24)}
+
+
+@pytest.mark.parametrize("top, want", [(1.52, "pass"), (1.6, "fail")])
+def test_the_detail_pass_stays_within_2_percent_of_the_blockout_bbox(detail, top, want):
+    """The approved blockout fixes the size; a lid that adds 10 cm to a 1.5 m prop changes what the owner approved."""
+    b, f = detail
+    spec_of(f)
+    parts(f, body=((0, 0, 0), (1, 1, 1)), lid=((0.25, 0.25, 1), (0.75, 0.75, top)))
+    tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none")
+    assert result(f, "detail")[1]["detail.bbox"] == (want, [1.0, 1.0, top])
+
+
+def test_a_fixed_param_the_model_changed_or_dropped_fails(detail):
+    """fixed_params come from the map and the card (door height, base size); the model may not move them."""
+    b, f = detail
+    spec_of(f)
+    parts(f, {"params": {"base_w": 4.0, "door_h": 2.0, "roof_h": 1.2}, "fixed_params": ["door_h"]},
+          body=((0, 0, 0), (1, 1, 1)), lid=((0.25, 0.25, 1), (0.75, 0.75, 1.5)))
+    assert tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none").returncode == 1
+    assert result(f, "detail")[1]["detail.fixed_params"] == ("fail", ["base_w: bỏ khỏi fixed_params", "door_h: 1.8 → 2.0"])
+
+
+def test_before_join_checks_the_parts_alone_into_its_own_file(detail):
+    """Right after a build there is no GLB yet; the early run must not leave a detail.json without the cap check."""
+    b, f = detail
+    spec_of(f)
+    (f / "pilot-house-untextured.glb").unlink()
+    parts(f, body=((0, 0, 0), (1, 1, 1)), lid=((0.25, 0.25, 1), (0.75, 0.75, 1.6)))
+    r = tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none", "--before-join")
+    assert (r.returncode, (f / "review/checks/detail.json").exists()) == (1, False)
+    assert result(f, "detail_build")[1] == {"detail.more_tris": ("pass", 24), "detail.bbox": ("fail", [1.0, 1.0, 1.6]),
+                                            "detail.fixed_params": ("pass", [])}
 
 
 def test_density_is_compared_with_the_pilot_package_of_this_runtime_d22_10(detail, tmp_path):
