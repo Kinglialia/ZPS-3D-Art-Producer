@@ -14,7 +14,8 @@ from urllib.parse import quote, unquote, urlsplit
 from . import findings
 from .contract import FIELDS
 from .loop import next_action, shown
-from .state import (FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, die, load_cfg, load_st, locked, now, outputs_of, rel,
+from .report import NAME as REPORT, used
+from .state import (DELIVER, FINISHED, IMAGE_EXT, ROOT, SKILL_DIR, all_status, die, load_cfg, load_st, locked, now, outputs_of, rel,
                     sort_key, step_of, vdir, write_atomic)
 
 BOARD_DIR = SKILL_DIR / "scripts" / "board"
@@ -42,12 +43,12 @@ def build_outputs(_cfg: dict):
 def render_dashboard(sts: list[dict]) -> str:
     active = [s for s in sts if s.get("state") not in FINISHED]
     out = [f"# Dashboard — tự sinh {now()}, đừng sửa tay", "",
-           "| Asset | Bước | State | Phiên bản | Rubric gần nhất | Deadline | Việc tiếp |",
-           "|---|---|---|---|---|---|---|"]
+           "| Asset | Bước | State | Phiên bản | Rubric gần nhất | Deadline | Việc tiếp | Thời gian đã dùng | Token đã dùng |",
+           "|---|---|---|---|---|---|---|---|---|"]
     for s in active:
         vers = " ".join(f"{k}:v{v}" for k, v in s.get("versions", {}).items()) or "-"
         out.append(f"| {s['id']} | {s.get('stage')} | {s.get('state')} | {vers} | {s.get('last_rubric') or '-'} "
-                   f"| {s.get('deadline') or '-'} | {next_action(s)} |")
+                   f"| {s.get('deadline') or '-'} | {next_action(s)} | {' | '.join(used(s))} |")
     done = [s["id"] for s in sts if s.get("state") in FINISHED]
     if done:
         out += ["", f"Done ({len(done)}): " + ", ".join(done)]
@@ -56,7 +57,8 @@ def render_dashboard(sts: list[dict]) -> str:
 
 def live_link(cfg: dict):
     """`P serve` URLs: `/p/<path under the production root>`, `/a/<path under _approved/>` (safe_file reads them back)."""
-    bases = [("p", ROOT.resolve())] + ([("a", cfg["paths"]["approved"].resolve())] if cfg["paths"]["approved"] else [])
+    bases = [("p", ROOT.resolve()), ("d", DELIVER.resolve())] + (
+        [("a", cfg["paths"]["approved"].resolve())] if cfg["paths"]["approved"] else [])
 
     def link(f: Path) -> str:
         rf = f.resolve()
@@ -153,6 +155,8 @@ def asset_view(cfg: dict, st: dict, step: str | None = None, n: int | None = Non
         "redo_steps": list(reversed(sd["inputs"])) if sd["script"] else [],
         "key": st.get("offer_key") if current and n == st.get("offer") else None,
         "ask": {"kind": ask["kind"], "price": st.get("meshy_price")} if ask else None,
+        "report": link(DELIVER / aid / REPORT) if current and st["state"] == "done" and (DELIVER / aid / REPORT).is_file()
+        else None,
     }
 
 
@@ -165,7 +169,7 @@ def board_payload(cfg: dict) -> dict:
 def safe_file(cfg: dict, url_path: str) -> Path | None:
     """`/p/<path under the production root>` or `/a/<path under _approved/>`; anything else is None."""
     key, _, rest = unquote(url_path).lstrip("/").partition("/")
-    base = {"p": ROOT, "a": cfg["paths"]["approved"]}.get(key)
+    base = {"p": ROOT, "d": DELIVER, "a": cfg["paths"]["approved"]}.get(key)
     if base is None or not rest or rest.startswith("/") or "\0" in rest or ".." in PurePosixPath(rest).parts:
         return None
     f = (base / rest).resolve()

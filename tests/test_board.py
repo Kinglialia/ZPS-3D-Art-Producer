@@ -96,7 +96,7 @@ def test_payload_of_a_not_passed_version_puts_images_first_and_findings_one_per_
             {"line": "F2 [preference] cửa — cửa hơi hẹp — rộng thêm — acceptance: cửa ≥ 1 m",
              "fields": {"viewing_condition": "front ortho", "consequence": "sai silhouette", "confidence": "high",
                         "preserve": "chiều cao tường"}}],
-        "redo_steps": [], "key": "blockout-v2-1", "ask": None,
+        "redo_steps": [], "key": "blockout-v2-1", "ask": None, "report": None,
     }
 
 
@@ -290,8 +290,9 @@ def test_a_board_click_waits_for_the_lock_so_it_never_interleaves_with_a_running
 def test_dashboard_lists_done_enabled_as_finished_like_every_other_command():
     sts = [{"id": "a", "state": "done_enabled", "stage": "blockout"}, {"id": "b", "state": "done", "stage": "assemble"}]
     out = board.render_dashboard(sts).splitlines()
-    assert (out[2:4], out[-1]) == (["| Asset | Bước | State | Phiên bản | Rubric gần nhất | Deadline | Việc tiếp |",
-                                    "|---|---|---|---|---|---|---|"], "Done (2): a, b")
+    assert (out[2:4], out[-1]) == (["| Asset | Bước | State | Phiên bản | Rubric gần nhất | Deadline | Việc tiếp "
+                                    "| Thời gian đã dùng | Token đã dùng |", "|---|---|---|---|---|---|---|---|---|"],
+                                   "Done (2): a, b")
     assert len(out) == 6
 
 
@@ -332,3 +333,30 @@ def test_duyet_2_offers_needs_fix_at_texture_or_model_and_shows_the_final_glb_d2
         "/p/assets/house-a/assemble/v1/final/review/final_lit_vs_concept.png",
         "/p/assets/house-a/assemble/v1/final/model/house-a.glb", ["texture", "model"],
         ["Trạng thái: chờ DUYỆT 2 · 2026-11-09"])
+
+
+def test_dashboard_shows_time_and_tokens_used_so_far_from_stored_numbers_only_x7():
+    """D41: no transcript is read here. A dispatch that was never ingested has no time; one ingested without tokens
+    says so instead of showing zero."""
+    done = {"at": "2026-11-10 09:00:00", "ingested": "2026-11-10 09:10:00", "duration_ms": 590000, "tokens": 50000}
+    nothing = {"at": "2026-11-10 09:11:00", "ingested": "2026-11-10 09:12:00", "tokens": None}
+    sts = [{"id": "a", "state": "fix", "stage": "blockout", "dispatches": [
+               {"step": "blockout", "v": 1, "role": "worker"} | done, {"step": "blockout", "v": 1, "role": "reviewer"} | nothing],
+            "producer_usage": {"model": {"tokens": 400, "from": "x", "to": "y", "dup": 0}}},
+           {"id": "b", "state": "todo", "stage": "blockout"},
+           {"id": "c", "state": "fix", "stage": "blockout", "dispatches": [
+               {"step": "blockout", "v": 1, "role": "worker", "at": "2026-11-10 09:00:00"}]}]
+    rows = [l.split(" | ")[-2:] for l in board.render_dashboard(sts).splitlines()[4:7]]
+    assert rows == [["10m50s", "50400 (+1 không có số) |"], ["—", "— |"], ["không có số", "không có số |"]]
+
+
+def test_a_done_asset_card_links_its_run_report_and_the_board_serves_it_x9(project):
+    st = load_st(AID)
+    save_st(st | {"state": "done", "stage": "assemble"})
+    assert view()["report"] is None
+    (project / "deliver" / AID).mkdir(parents=True)
+    (project / "deliver" / AID / "RUN-REPORT.md").write_text("# RUN-REPORT\n", encoding="utf-8")
+    assert board.asset_view(load_cfg(), load_st(AID), "assemble", 1)["report"] == f"/d/{AID}/RUN-REPORT.md"
+    assert board.safe_file(load_cfg(), f"/d/{AID}/RUN-REPORT.md").name == "RUN-REPORT.md"
+    assert board.safe_file(load_cfg(), "/d/../production/pipeline.toml") is None
+    assert board.asset_view(load_cfg(), load_st(AID), "blockout", 2)["report"] is None
