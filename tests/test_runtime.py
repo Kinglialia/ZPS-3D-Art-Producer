@@ -93,10 +93,11 @@ def test_a_dispatch_records_its_model_and_the_ingest_records_the_role_times_toke
     flow.call(loop.ingest, Namespace(id=AID, agent_id="w1", tokens=48210, duration_ms=731000))
     assert flow.st["dispatches"] == [
         {"step": "blockout", "v": 1, "role": "worker", "model": "opus", "at": "2026-11-10 09:00:00",
-         "brief": out["brief"], "deadline": "2026-11-10 10:20:00", "agent_id": "w1", "ingested": "2026-11-10 09:12:30", "tokens": 48210,
+         "brief": out["brief"], "report": out["report"], "deadline": "2026-11-10 10:20:00", "agent_id": "w1", "ingested": "2026-11-10 09:12:30", "tokens": 48210,
          "duration_ms": 731000, "usage": None, "after": "review"},
         {"step": "blockout", "v": 1, "role": "reviewer", "model": "opus", "at": "2026-11-10 09:12:31",
-         "brief": out["brief"].replace("brief-worker.md", "brief-review.md"), "scope": "full",
+         "brief": out["brief"].replace("brief-worker.md", "brief-review.md"),
+         "report": out["report"].replace("worker-out.md", "review-out.md"), "scope": "full",
          "deadline": "2026-11-10 09:32:31"}]
     lines = flow.ledger().splitlines()
     assert lines[-3].endswith(" · src · house-a · blockout v1 · giao worker (zps-3dp-step-blockout, opus) · hạn chót "
