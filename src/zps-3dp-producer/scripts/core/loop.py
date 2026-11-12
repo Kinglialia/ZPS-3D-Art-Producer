@@ -755,8 +755,20 @@ def reopen(cfg: dict, st: dict, i: int, step: dict, n: int | None, note: str):
 
 
 def redo(cfg: dict, st: dict, i: int, step: dict, n: int | None, text: str | None, marks: list[dict] = ()) -> list[str]:
+    """Returns the ids of this redo's own text and marks. A "Cần sửa" stored for this step or a later one joins this redo
+    as H findings of version n: the versions it was meant for are rebuilt anyway."""
     move(st, "redo")
     ids = findings.add_human(st["id"], step, n, text, marks) if n else []
+    pend, later = st.get("pending_redo") or {}, {s["id"] for s in cfg["steps"][i:]}
+    folded = []
+    for k in [k for k in pend if k in later]:
+        for e in pend.pop(k):
+            got = findings.add_human(st["id"], step, n, e["text"], e["marks"]) if n else []
+            if e["folder"] and got:
+                annotate.record(Path(e["folder"]), e["marks"], got[len(got) - len(e["marks"]):])
+            folded += got
+    if folded:
+        ledger(f"{st['id']} · {step['id']} v{n} · Cần sửa đang chờ gộp vào lần làm lại → {', '.join(folded)}")
     reopen(cfg, st, i, step, n, "làm lại theo feedback người dùng")
     st["reopened"] = {}
     readme = DELIVER / st["id"] / "README.md"
@@ -807,7 +819,15 @@ def apply_pending(cfg: dict, st: dict, sid: str, n: int) -> str:
 
 
 def retry(a):
+    """A "Cần sửa" stored while the step ran waits for an ingest that a stalled job never reaches: retry applies it
+    instead of giving the stalled brief again."""
     st = load_st(a.id)
+    if st["state"] in REDO_FROM and (applied := apply_pending(load_cfg(), st, st["stage"], shown(st, st["stage"]))):
+        save_st(st)
+        ledger(f"{a.id} · retry · {applied}")
+        print(f"{a.id}: retry → áp dụng Cần sửa đang chờ: {applied} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
+        dispatch_next(load_cfg(), st, CHANGE_DISPATCH)
+        return
     if st["state"] == "done_enabled":
         move(st, "resume", load_cfg())
     elif st["state"] == "waiting_human" and st.get("stalled_from"):

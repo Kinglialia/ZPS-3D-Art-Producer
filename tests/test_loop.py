@@ -1550,6 +1550,67 @@ def test_a_redo_for_a_later_step_than_the_stage_is_still_refused_and_stores_noth
     assert flow.st.get("pending_redo", {}) == {}
 
 
+def stalled_worker_with_pending_redo(f):
+    """Worker v2 runs, the user sends "Cần sửa" (stored), then the worker goes silent past the new-agent rung."""
+    import datetime as dt
+    f.work()
+    f.review(top_fix="structure: F1", findings=[finding("F1", "major", "structure")])
+    f.brief()
+    f.human("redo", "mái cao hơn")
+    old = dt.datetime.now() - dt.timedelta(minutes=40)
+    st = f.st
+    st["dispatches"][-1] |= {"at": old.strftime("%Y-%m-%d %H:%M:%S"), "redispatch_of": "2026-11-12 09:00:00"}
+    save_st(st)
+    for p in [f.v(2), *f.v(2).rglob("*")]:
+        os.utime(p, (old.timestamp(), old.timestamp()))
+
+
+def h_texts(n):
+    return [x["repair"] for i, x in findings.load(AID, "blockout", n)["findings"].items() if i.startswith("H")]
+
+
+def test_a_redo_takes_in_the_stored_redos_of_its_step_so_none_turns_the_next_version_into_an_unreviewed_fix_k06(flow):
+    """The reproduction: the stored "Cần sửa" outlived the user's redo at the stall rung, and the ingest of v3 applied
+    it, so v3 went back to a worker as v4 and no reviewer judged it."""
+    stalled_worker_with_pending_redo(flow)
+    st = flow.st
+    st["stalled_from"] = "running"
+    loop.move(st, "ask_human")
+    loop.offer(st, "blockout", 2, label=loop.UNREVIEWED, note="kẹt")
+    st["dispatches"][-1]["ended"] = {"at": "2026-11-12 10:00:00", "why": "kẹt"}
+    save_st(st)
+    flow.human("redo", "cửa rộng hơn")
+    assert (flow.st["pending_redo"], h_texts(2)) == ({}, ["cửa rộng hơn", "mái cao hơn"])
+    flow.work()
+    assert (flow.st["state"], flow.st["versions"]["blockout"]) == ("reviewing", 3)
+
+
+def test_a_stored_redo_is_applied_when_the_stall_ladder_reaches_the_human_rung_k06(flow):
+    """The stalled job never reaches an ingest, so the stored text would wait for ever."""
+    from core import watch
+    stalled_worker_with_pending_redo(flow)
+    out = flow.call(watch.stall, Namespace(id=AID, agent_id=None))
+    assert out.splitlines()[0].startswith(
+        "house-a: kẹt lần 3 (không có nhịp tim, không có file đổi từ ") and (
+        "→ áp dụng Cần sửa đang chờ: Cần sửa nhận lúc đang chạy → blockout H1 → blockout/fix" in out.splitlines()[0])
+    assert (flow.st["state"], flow.st["versions"]["blockout"], flow.st["pending_redo"]) == ("running", 3, {})
+    assert h_texts(2) == ["mái cao hơn"]
+
+
+def test_retry_applies_a_stored_redo_instead_of_giving_the_stalled_brief_again_k06(flow):
+    stalled_worker_with_pending_redo(flow)
+    st = flow.st
+    st["stalled_from"] = "running"
+    loop.move(st, "ask_human")
+    loop.offer(st, "blockout", 2, label=loop.UNREVIEWED, note="kẹt")
+    save_st(st)
+    out = flow.call(loop.retry, Namespace(id=AID))
+    assert out.splitlines()[0] == (
+        "house-a: retry → áp dụng Cần sửa đang chờ: Cần sửa nhận lúc đang chạy → blockout H1 → blockout/fix. "
+        "Tiếp: giao worker → `brief house-a`")
+    assert (flow.st["state"], flow.st["versions"]["blockout"], flow.st["pending_redo"]) == ("running", 3, {})
+
+
 def test_brief_again_while_an_agent_is_out_prints_the_stored_dispatch_and_touches_nothing_c13(flow, monkeypatch):
     """`P brief` is also how a Producer re-sends a job after a lost connection. It rehashed the approved finals, rebuilt the
     sheet, ran the texture gate (a Meshy price dry-run) and rewrote the brief file the agent was reading."""

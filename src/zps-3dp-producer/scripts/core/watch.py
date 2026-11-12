@@ -168,7 +168,7 @@ def stall(a):
     rung and logs it; the Producer only sends.
     --agent-id: the id of the stuck subagent, from its launch; on-stop also records it."""
     from .briefs import run
-    from .loop import UNREVIEWED, move, offer
+    from .loop import INGEST_DISPATCH, UNREVIEWED, apply_pending, dispatch_next, move, next_action, offer
     from .board import build_outputs
     cfg, st = load_cfg(), load_st(a.id)
     rec = job(st) or die(f"{a.id}: state={st['state']}, không có lần giao nào đang chạy")
@@ -218,9 +218,15 @@ def stall(a):
     offer(st, sid, n, label=UNREVIEWED,
           note=f"kẹt: {c['why']}; đã nudge và giao lại → hỏi người dùng; giao lại: `retry {a.id}`"
                + ("" if rec.get("stopped") else f"; agent {who} chưa dừng: dừng nó trước khi `retry`"))
+    applied = apply_pending(cfg, st, sid, n)
     save_st(st)
-    ledger(f"{head} · waiting_human")
+    ledger(f"{head} · waiting_human" + (f" · áp dụng {applied}" if applied else ""))
     build_outputs(cfg)
+    if applied:
+        print(f"{a.id}: kẹt lần 3 ({c['why']}) → áp dụng Cần sửa đang chờ: {applied} → {st['stage']}/{st['state']}"
+              + ("" if rec.get("stopped") else f"; agent {who} chưa dừng: dừng nó") + f". Tiếp: {next_action(st)}")
+        dispatch_next(cfg, st, INGEST_DISPATCH)
+        return
     print(f"{a.id}: kẹt lần 3 ({c['why']}) → waiting_human. Báo người dùng; người dùng muốn giao lại thì `retry {a.id}`")
 
 
