@@ -137,9 +137,13 @@ def test_a_correct_texture_passes_every_check_and_the_package_holds_one_unlit_me
 
 
 def test_an_albedo_written_in_linear_values_is_caught_by_the_pixel_compare_and_blocks(base, tmp_path):
+    """renders.json names this albedo by its hash, so only the pixel compare can see that the renders show other values."""
     def bad(a):
         p = a / f"texture/v1/final/albedo_{RES}.png"
         Image.fromarray(linear(np.asarray(Image.open(p).convert("RGB")))).save(p)
+        r = p.parent / "review/renders.json"
+        r.write_text(json.dumps(json.loads(r.read_text(encoding="utf-8")) | {
+            "albedo_sha256": hashlib.sha256(p.read_bytes()).hexdigest()}), encoding="utf-8")
     r = assemble(base, tmp_path, bad)
     assert (r["rc"], r["report"].splitlines()[0]) == (1, "STATUS: BLOCKED")
     c = r["compare"]
