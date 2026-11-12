@@ -40,7 +40,8 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 - Blender crash trong sandbox trên macOS. Sau khi cài và sau mỗi lần nâng cấp, người dùng chạy `python3 installer/codex_rules.py --write` của bản build, rồi khởi động lại Codex.
 - Viết lệnh Blender bằng đường dẫn tuyệt đối: `<BLENDER> -b --python <script đã cài>.py -- …` hoặc `<BLENDER> -b --python-exit-code 1 --python <script đã cài>.py -- …`. Dòng `TOOLS:` và `BLENDER:` của brief đã tuyệt đối. Biến shell hoặc đường dẫn tương đối không khớp rule.
-- `P preflight` và lệnh `command` của bước `assemble` chạy ngoài sandbox qua rule. Các lệnh khác chạy trong sandbox.
+- `P preflight`, lệnh `command` của bước `assemble` và lệnh `RUN:` của brief có cờ `--blender` chạy ngoài sandbox qua rule. Các lệnh khác chạy trong sandbox.
+- `run_tool.py` chỉ nhận Blender ghi trong `production/preflight.json`. Trên Codex nó từ chối `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py`, `self_build/assembly.py`, `self_build/param_fit.py` và `custom_mesh.py`, để rule của nó không mở lối quanh các quy tắc dưới đây. Chạy các script đó bằng lệnh riêng như trước.
 - `meshy_call.py` và `gen_image_codex.py` cần mạng. Xin người dùng duyệt từng lần chạy. Rule không bao giờ cho phép hai script này.
 - `self_build/assembly.py`, `param_fit.py` chạy `parts_lib.py` do agent viết. Rule không cho phép hai script này. Lệnh Blender của chúng (part `custom`) chạy ngoài sandbox thì xin người dùng duyệt từng lần.
 - `build_parts.py` chỉ chạy `custom_lib.py` và dựng lưới từ JSON bằng `mesh_from_json.py`; không chạy `custom_parts.py` do agent viết (D32.2). Rule cho phép script này như trước `3a4f64b`. `custom_mesh.py` chạy `custom_parts.py` do agent viết bằng Python của tool, trong sandbox; chạy trong Blender thì script tự dừng. Rule không bao giờ cho phép `custom_mesh.py`.
