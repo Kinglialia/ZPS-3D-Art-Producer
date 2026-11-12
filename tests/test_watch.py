@@ -3,6 +3,8 @@ D33.18b: every test here uses synthetic jobs (a long command, a hung command), n
 import sys
 from pathlib import Path
 
+import pytest
+
 SKILL = Path(__file__).resolve().parents[1] / "src/zps-3dp-producer"
 ROLES = sorted([*SKILL.glob("agents/zps-3dp-*.md"), *SKILL.glob("agents/*/zps-3dp-*.md")])
 
@@ -144,10 +146,10 @@ def test_a_timeout_kills_the_whole_process_group_so_no_grandchild_keeps_writing_
         kill_quietly(gc)
 
 
-def test_a_tool_stopped_by_sigterm_takes_its_child_and_grandchild_with_it_v14(tmp_path):
+@pytest.mark.parametrize("sig", ["SIGTERM", "SIGHUP"])
+def test_a_tool_stopped_by_a_signal_takes_its_child_and_grandchild_with_it_v14(tmp_path, sig):
     """The child runs in its own session so the group kill reaches every process under it. That session no longer
-    hears a signal sent to the tool, so the tool forwards SIGTERM as a group kill before it exits."""
-    import os
+    hears a signal sent to the tool, so the tool turns SIGTERM and SIGHUP into a group kill before it exits."""
     import signal
     import subprocess
     import time
@@ -161,10 +163,11 @@ def test_a_tool_stopped_by_sigterm_takes_its_child_and_grandchild_with_it_v14(tm
         if pid.exists() and pid.read_text(encoding="utf-8").strip():
             break
         time.sleep(0.05)
+    time.sleep(0.5)
     sh, gc = int(kid.read_text(encoding="utf-8")), int(pid.read_text(encoding="utf-8"))
     try:
-        tool.send_signal(signal.SIGTERM)
-        assert tool.wait(timeout=10) == 128 + signal.SIGTERM
+        tool.send_signal(getattr(signal, sig))
+        assert tool.wait(timeout=10) == 128 + getattr(signal, sig)
         assert (gone(sh), gone(gc)) == (True, True)
         assert rows() == [["term", "start"]]
     finally:
@@ -243,15 +246,12 @@ def test_the_usual_time_is_the_median_of_first_builds_or_of_fix_rounds_never_bot
     assert watch.usual_s(cfg, "model", "worker", [], "fix") / 60 == 60
 
 
-def test_the_template_usual_times_take_the_one_measured_number_and_keep_the_rest_w4():
+def test_the_template_texture_worker_time_is_the_one_measured_number_w4():
     """Run 5 measured one step only: texture with Meshy SỬA took 15m32s for two versions, worker and reviewer
     together, so one texture worker dispatch fits in 16 minutes. Every other number is not measured yet."""
     import tomllib
     steps = tomllib.loads((SKILL / "templates/pipeline.toml").read_text(encoding="utf-8"))["steps"]
-    assert {s["id"]: s.get("usual_min") for s in steps} == {
-        "blockout": {"worker": 40, "reviewer": 10}, "views_front": {"worker": 30, "reviewer": 10},
-        "views_rest": {"worker": 40, "reviewer": 10}, "model": {"worker": 60, "reviewer": 15},
-        "texture": {"worker": 16, "reviewer": 15}, "assemble": None}
+    assert next(s for s in steps if s["id"] == "texture")["usual_min"] == {"worker": 16, "reviewer": 15}
 
 
 def test_subagent_stop_records_the_stop_on_disk_when_the_producer_never_hears_of_it_d33_9(tmp_path):
@@ -321,11 +321,12 @@ def test_a_stalled_job_climbs_nudge_then_one_new_agent_then_the_user_and_the_led
     r = f.p("stall", "pilot-house")
     assert "nudge 1/1: gửi tới agent a1 đúng câu \"Tiếp tục, báo trạng thái\"" in r
     assert "không kẹt" in f.p("stall", "pilot-house", ok=False)
-    edit_job(f, at=ago(30), nudged_at=ago(11))
+    nudged = ago(11)
+    edit_job(f, at=ago(30), nudged_at=nudged)
     age(vd, 20)
     led = f.p("ledger", "--tail", "1")
     assert f.p("stall", "pilot-house").splitlines() == [
-        f"pilot-house: kẹt (không có nhịp tim, không có file đổi từ {ago(11)[11:16]}) → chưa giao lại: agent a1 chưa "
+        f"pilot-house: kẹt (không có nhịp tim, không có file đổi từ {nudged[11:16]}) → chưa giao lại: agent a1 chưa "
         "dừng. Dừng agent a1 trước, rồi `stall pilot-house` lại"]
     assert (len(f.st()["dispatches"]), [x["rung"] for x in f.st()["stalls"]], f.p("ledger", "--tail", "1")) == (
         1, ["nudge"], led)

@@ -49,8 +49,9 @@ timeout_s = 900
 
 # usual_min (D33.10, D39.3): phút thường lệ của một lần giao khi `P stats` chưa có số của bước. Hạn chót = số này (hoặc
 # trung vị các lần trước, tính riêng lần dựng đầu và vòng sửa) × watch.deadline_factor của policy.yaml. Hạn chót chỉ
-# để báo trễ, không phải kẹt. Số đo: texture worker 16 = cả bước texture Run 5 (Meshy SỬA, 15m32s cho 2 version, gồm
-# worker và reviewer), nên một lần giao worker không dài hơn; Run 4 VẼ MỚI 38m25s cho 4 version. Các số khác chưa đo.
+# để báo trễ, không phải kẹt. Số đo: texture worker 16 = cả bước texture (nguồn: Run 5, 1 asset, Meshy SỬA, 15m32s cho
+# 2 version, gồm worker và reviewer), nên một lần giao worker không dài hơn; Run 4 VẼ MỚI 38m25s cho 4 version. Tạm, đo
+# lại sau 3–5 asset khác loại. Các số khác chưa đo.
 [[steps]]
 id = "blockout"
 usual_min = { worker = 40, reviewer = 10 }

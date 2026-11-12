@@ -20,6 +20,7 @@ from pathlib import Path
 EVERY_S = 30
 LOG = "heartbeat.log"
 VERSION = re.compile(r"^v\d+$")
+STOP = (signal.SIGTERM, signal.SIGHUP)
 
 
 def vdir_of(*paths) -> Path | None:
@@ -94,21 +95,21 @@ def cpu_s(root: int) -> float | None:
 def run(cmd: list[str], *, tool: str, vd: Path | None, timeout: float | None = None, input: str | None = None,
         env: dict | None = None, cwd=None, every: float = EVERY_S) -> subprocess.CompletedProcess:
     """subprocess.run(cmd, capture_output=True, text=True, ...) with the heartbeat. Raises TimeoutExpired as it does.
-    The child runs in its own session, so a timeout, an exception or a SIGTERM kills every process under it; the new
-    session no longer gets a signal sent to this process, so SIGTERM becomes a group kill here."""
+    The child runs in its own session, so a timeout, an exception, a SIGTERM or a SIGHUP kills every process under it;
+    the new session no longer gets a signal sent to this process, so those signals become a group kill here."""
     write(vd, tool, "start")
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
     main = threading.current_thread() is threading.main_thread()
-    old = signal.signal(signal.SIGTERM, stop) if main else None
+    old = {s: signal.signal(s, stop) for s in STOP} if main else {}
     try:
         return watch(p, cmd, tool, vd, timeout, input, every)
     except BaseException:
         kill_group(p)
         raise
     finally:
-        if main:
-            signal.signal(signal.SIGTERM, old)
+        for s, h in old.items():
+            signal.signal(s, h)
 
 
 def stop(signum, _frame):
