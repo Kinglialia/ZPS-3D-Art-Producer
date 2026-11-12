@@ -245,6 +245,11 @@ def group_errors(errs: dict[str, list[tuple[str, str]]]) -> list[str]:
     return lines
 
 
+def with_extras(root: Path, ids: list[str]) -> str:
+    """G9: the ids, each followed by the optional concept image its folder holds."""
+    return ", ".join(i + (f" (+ {check_card.IMAGE_34})" if (root / i / check_card.IMAGE_34).is_file() else "") for i in ids)
+
+
 def scan_approved(cfg: dict, has_map: bool) -> dict:
     root = cfg["paths"]["approved"]
     if not root or not root.exists():
@@ -279,7 +284,7 @@ def run(a, cfg: dict):
     if not a.ids and not a.all:
         labels = {"changed": "Concept đổi sau khi bắt đầu", "bad_name": "Tên thư mục sai quy ước",
                   "loose": "File rời", "registered": "Đã đăng ký"}
-        lines = [f"Mới, đủ file ({len(g['new'])}): {', '.join(g['new'])}"] if g["new"] else []
+        lines = [f"Mới, đủ file ({len(g['new'])}): {with_extras(root, g['new'])}"] if g["new"] else []
         lines += group_errors(g["errors"])
         lines += [f"{lab} ({len(g[k])}): {', '.join(g[k])}" for k, lab in labels.items() if g[k]]
         if est := batch_line(len(g["new"]), bool((prof.get("paths") or {}).get("env_file"))):
@@ -313,7 +318,7 @@ def run(a, cfg: dict):
     created = [create_asset(cfg, aid, aid.replace("-", " ").title(),
                             check_profile.load_yaml(root / aid / check_card.CARD)["type"], a.priority, a.deadline,
                             root / aid) for aid in ids]
-    print(f"Đã đăng ký {len(ids)}: {', '.join(ids)}.")
+    print(f"Đã đăng ký {len(ids)}: {with_extras(root, ids)}.")
     for aid in ids:
         for line in measure_handoff(aid, root / aid, ASSETS / aid / COLORS_FILE) + empty_counts_warning(aid, root / aid, prof):
             print(line)

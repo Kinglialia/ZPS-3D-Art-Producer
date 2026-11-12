@@ -936,3 +936,18 @@ def test_the_colour_statistic_is_the_median_function_of_the_views_tool_loaded_wi
     im = Image.new("RGB", (10, 10), (10, 20, 30))
     im.paste((200, 0, 0), (0, 0, 10, 3))
     assert mod.median_hex(im, (0, 0, 10, 10)) == "#0A141E"
+
+
+def test_intake_lists_concept_34_after_the_id_of_an_asset_that_has_one_g9(proj):
+    d = with_handoff(proj, "01-a")
+    proj.asset("02-b")
+    png(d / "concept_34.png")
+    listing = proj.run("intake", check=True).stdout.splitlines()
+    assert listing[0] == "Mới, đủ file (2): 01-a (+ concept_34.png), 02-b"
+    done = proj.run("intake", "01-a", check=True).stdout.splitlines()
+    assert done[0] == "Đã đăng ký 1: 01-a (+ concept_34.png)."
+
+
+def test_intake_without_concept_34_lists_the_plain_id_g9(proj):
+    with_handoff(proj, "01-a")
+    assert proj.run("intake", "01-a", check=True).stdout.splitlines()[0] == "Đã đăng ký 1: 01-a."
