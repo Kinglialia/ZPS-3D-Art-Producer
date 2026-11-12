@@ -177,6 +177,26 @@ def test_a_kit_check_that_writes_no_result_is_a_qa_fail_because_finalize_only_re
                                             "ISSUES: qa GLB cuối: export_check: missing"]
 
 
+def counting_blender(tmp_path):
+    """A Blender that logs each start. `exec` keeps the real Blender as the process the timeout kills."""
+    log = tmp_path / "blender-starts.log"
+    wrapper = tmp_path / "blender_count.sh"
+    wrapper.write_text(f'#!/bin/sh\necho start >> "{log}"\nexec "{BLENDER}" "$@"\n')
+    wrapper.chmod(0o755)
+    return wrapper, log
+
+
+def test_one_blender_start_runs_the_export_the_four_kit_checks_and_the_compare_render_l13(base, tmp_path):
+    """Every Blender start costs seconds on a laptop and cannot share a hung session. The old flow started six."""
+    wrapper, log = counting_blender(tmp_path)
+    r = assemble(base, tmp_path, blender=wrapper)
+    assert (r["rc"], r["report"].splitlines()[0]) == (0, "STATUS: DONE"), r["report"]
+    assert len(log.read_text().splitlines()) == 1
+    qa = sorted(p.name for p in (r["d"] / "work/evidence/qa").glob("*.json"))
+    assert qa == ["export_check.json", "mesh_check.json", "screen_tris_check.json", "uv_check.json"]
+    assert sorted(p.name for p in (r["d"] / "work/compare").glob("*.png")) == ["unlit_34_front.png", "unlit_game.png"]
+
+
 def test_the_heartbeat_goes_to_the_assemble_version_not_to_the_approved_model_version_t17(base, tmp_path):
     """The Producer reads vN/heartbeat.log of the running step to tell a slow Blender from a hung one."""
     r = assemble(base, tmp_path)
@@ -195,3 +215,30 @@ def test_a_texture_step_without_a_game_view_is_compared_on_the_views_it_has_and_
     assert review == ["compare_34_front.png"]
     readme = (r["d"] / "final/README.md").read_text(encoding="utf-8")
     assert "- game view chưa kiểm: bước texture không render unlit_game (spec không có camera)." in readme.splitlines()
+
+
+def test_a_locked_mesh_that_blender_cannot_import_blocks_at_the_export_and_no_check_runs_l13(base, tmp_path):
+    def broken(a):
+        glb = a / f"model/v1/final/{AID}-untextured.glb"
+        glb.write_bytes(b"not a glb")
+        st = json.loads((a / "status.json").read_text(encoding="utf-8"))
+        st["locked"]["model"] = hashlib.sha256(glb.read_bytes()).hexdigest()
+        (a / "status.json").write_text(json.dumps(st), encoding="utf-8")
+    r = assemble(base, tmp_path, broken)
+    assert (r["rc"], r["report"].splitlines()[0]) == (1, "STATUS: BLOCKED")
+    assert r["report"].splitlines()[2].startswith("ISSUES: export GLB: ")
+    assert not (r["d"] / "work/evidence/qa").exists() and not (r["d"] / "work/compare").exists()
+
+
+def test_a_kit_check_that_crashes_does_not_stop_the_other_checks_or_the_compare_render_l13(base, tmp_path):
+    """The checks share one Blender session now. One bad spec value must cost one result, not the rest of the run."""
+    def bad_spec(a):
+        p = a / "model/v1/final/spec.json"
+        p.write_text(json.dumps(SPEC | {"uv": SPEC["uv"] | {"min_padding_px": "wide"}}), encoding="utf-8")
+    r = assemble(base, tmp_path, bad_spec)
+    assert r["rc"] == 1 and r["compare"]["qa"] == {
+        "mesh_check": "pass", "uv_check": "error", "export_check": "pass", "screen_tris_check": "info"}, r["report"]
+    assert sorted(r["compare"]["views"]) == ["unlit_34_front", "unlit_game"]
+    session = json.loads((r["d"] / "work/evidence/session.json").read_text(encoding="utf-8"))
+    assert session["stages"] == {"export": "ok", "mesh_check": "ok", "uv_check": "error: exit 1", "export_check": "ok",
+                                 "screen_tris_check": "ok", "compare": "ok"}

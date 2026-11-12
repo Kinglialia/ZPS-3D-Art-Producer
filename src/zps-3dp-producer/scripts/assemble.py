@@ -4,13 +4,15 @@
 Usage: assemble.py --blender <BLENDER> -- <id> <N> <profile hash>
 Reads the approved `model` and `texture` versions of status.json and writes assemble/vN/ only:
   1 sha256 of model final/<id>-untextured.glb = locked.model; albedo_<texture_res>.png is res x res.
-  2 assemble_glb.py: final/model/<id>.glb (1 mesh, 1 node, 1 material, unlit, base colour) and <id>.blend.
-  3 kit QA on a byte copy of that GLB in work/qa_input/ (the validator writes beside its input), results in
-    work/evidence/qa/: mesh_check, uv_check, export_check (expect_unlit), screen_tris_check.
-  3b kit finalize.py over work/: refuses unless every QA result for this GLB's sha256 passes and mesh_check is there.
+  2 one Blender session, assemble_qa.py (D37.4): assemble_glb.build writes final/model/<id>.glb (1 mesh, 1 node, 1 material,
+    unlit, base colour) and <id>.blend; then kit QA on a byte copy of that GLB in work/qa_input/ (the validator writes
+    beside its input), results in work/evidence/qa/: mesh_check, uv_check, export_check (expect_unlit), screen_tris_check;
+    then the GLB rendered again with the texture step's recorded cameras (unlit_34_front, unlit_game), only the views its
+    renders.json has, in work/compare/. The outcome of each stage is in work/evidence/session.json.
+  3 kit finalize.py over work/: refuses unless every QA result for this GLB's sha256 passes and mesh_check is there.
      Finalize skips a check with no result, so any of the four not pass or info, missing included, is a fail too.
-  4 the GLB rendered again with the texture step's recorded cameras (unlit_34_front, unlit_game) and compared with the
-    texture renders: mean |RGB| difference over the object ≤ COMPARE_MEAN, silhouette mismatch ≤ COMPARE_MASK.
+  4 the render compared with the texture renders: mean |RGB| difference over the object ≤ COMPARE_MEAN, silhouette
+    mismatch ≤ COMPARE_MASK. A view that renders.json lacks is not compared; the README says it was not checked (T1).
   5 package: texture/ (albedo, notes.md), review/ (model_sheet.png, the texture renders, final_lit_vs_concept.png,
     compare_<view>.png, compare.json, the texture reviewer report).
   6 README.md from the step reports: status line, method, exceptions, open work, what was not checked.
@@ -37,8 +39,6 @@ from core.state import ROOT, SKILL_DIR, load_st, now, texture_res, vdir  # noqa:
 from root_guard import require_root  # noqa: E402
 
 SCRIPTS = SKILL_DIR / "scripts"
-MODEL_TOOLS = SKILL_DIR / "agents" / "zps-3dp-step-model" / "tools"
-RENDER = SKILL_DIR / "agents" / "zps-3dp-step-texture" / "tools" / "render_texture.py"
 FINALIZE = SCRIPTS / "kit" / "tools" / "finalize.py"
 QA = ("mesh_check", "uv_check", "export_check", "screen_tris_check")
 COMPARE = ("unlit_34_front", "unlit_game")
@@ -56,7 +56,8 @@ def sha256(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-BLENDER_TIMEOUT_S = 900  # D33.3: three Blender runs stay under BASH_MAX_TIMEOUT_MS 3600000 of the settings snippet
+BLENDER_TIMEOUT_S = 1800  # D33.3: the one Blender session and finalize.py together stay under BASH_MAX_TIMEOUT_MS 3600000
+FINALIZE_TIMEOUT_S = 300
 
 
 def blender(exe: str, script: Path, vd: Path, *args) -> tuple[int, str]:
@@ -244,27 +245,31 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
     if size != (res, res):
         return [fail_point("albedo", "texture", f"work/evidence: {albedo.name} cỡ {size}", f"texture_res của thẻ là {res}",
                            "làm lại texture đúng texture_res (`redo --step texture`)", f"albedo {res}x{res}")], data
-    rc, out = blender(a.blender, SCRIPTS / "assemble_glb.py", d, "--glb", locked, "--albedo", albedo, "--name", a.id,
-                      "--out", final / "model")
     glb = final / "model" / f"{a.id}.glb"
-    if rc != 0 or not glb.is_file():
-        return [fail_point("export", "GLB", f"work/evidence: assemble_glb {out.strip().splitlines()[-1:]}",
-                           "không có GLB cuối", "đọc lỗi Blender, chạy lại (`retry`)", "có final/model/<id>.glb")], data
-    data |= json.loads([l for l in out.splitlines() if l.startswith("{")][-1])
-    spec = json.loads((mf / "spec.json").read_text(encoding="utf-8"))
     probe = work / "qa_input" / glb.name
-    probe.parent.mkdir(parents=True)
-    shutil.copy2(glb, probe)
+    spec = json.loads((mf / "spec.json").read_text(encoding="utf-8"))
     spec["export"] = {"path": f"qa_input/{glb.name}", "skip_export": True, "expect_unlit": True}
     (work / "spec.json").write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+    renders = tf / "review" / "renders.json"
+    views = recorded_views(renders)
+    data["skipped_views"] = [v for v in COMPARE if v not in views]
+    session = work / "evidence" / "session.json"
+    _, out = blender(a.blender, SCRIPTS / "assemble_qa.py", d, "--glb", locked, "--albedo", albedo, "--name", a.id,
+                      "--out", final / "model", "--probe", probe, "--spec", work / "spec.json", "--checks", ",".join(QA),
+                      "--qa-dir", work / "evidence" / "qa", "--result", session,
+                      *(["--cameras", renders, "--views", ",".join(views), "--outdir", work / "compare"] if views else []))
+    done = json.loads(session.read_text(encoding="utf-8")) if session.is_file() else {}
+    if "export" not in done or not glb.is_file():
+        return [fail_point("export", "GLB", f"work/evidence: assemble_qa {out.strip().splitlines()[-1:]}",
+                           "không có GLB cuối", "đọc lỗi Blender, chạy lại (`retry`)", "có final/model/<id>.glb")], data
+    data |= done["export"]
     qa = {}
     for q in QA:
         dst = work / "evidence" / "qa" / f"{q}.json"
-        blender(a.blender, MODEL_TOOLS / "asset_checks" / f"{q}.py", d, "--input", probe, "--spec", work / "spec.json",
-                "--out", dst)
         qa[q] = json.loads(dst.read_text(encoding="utf-8")) if dst.is_file() else {"overall": "missing", "checks": []}
     r = subprocess.run([sys.executable, str(FINALIZE), "--work", str(work), "--from", str(glb), "--out",
-                        str(work / "evidence" / "finalize.json")], capture_output=True, text=True)
+                        str(work / "evidence" / "finalize.json")], capture_output=True, text=True,
+                       timeout=FINALIZE_TIMEOUT_S)
     data["qa"] = {q: v.get("overall") for q, v in qa.items()}
     bad = [f"{q}: {o}" for q, o in data["qa"].items() if o not in ("pass", "info")]
     if r.returncode != 0 or bad:
@@ -272,12 +277,10 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
         fails.append(fail_point("qa", "GLB cuối", f"work/evidence/finalize.json: {'; '.join(bad + refused)}",
                                 "QA của kit không pass cho đúng file GLB này", "sửa theo JSON QA fail ở work/evidence/qa/",
                                 "finalize.py không từ chối"))
-    views = recorded_views(tf / "review" / "renders.json")
-    data["skipped_views"] = [v for v in COMPARE if v not in views]
-    rc, out = blender(a.blender, RENDER, d, "--glb", glb, "--cameras", tf / "review" / "renders.json", "--views",
-                      ",".join(views), "--outdir", work / "compare") if views else (0, "")
     (final / "review").mkdir(parents=True, exist_ok=True)
-    cfails, data["compare"] = compare_renders(tf, work, final, views, rc == 0, out.strip().splitlines()[-1:])
+    stage = done["stages"].get("compare")
+    cfails, data["compare"] = compare_renders(tf, work, final, views, stage == "ok",
+                                              stage or (out.strip().splitlines() or [""])[-1])
     fails += cfails
     (final / "texture").mkdir(parents=True, exist_ok=True)
     shutil.copy2(albedo, final / "texture" / albedo.name)
