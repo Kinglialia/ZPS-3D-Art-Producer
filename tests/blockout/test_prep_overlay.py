@@ -121,10 +121,12 @@ def test_the_card_goes_on_to_the_proportion_check_so_the_rerun_keeps_the_marks_g
     """gate_all.py runs check_proportion with the card; prep_overlay reruns it and writes the same file, so a rerun without
     the card would erase a failed mark."""
     f = final(tmp_path)
+    (f / "sources.json").write_text(json.dumps(HUT_SOURCES | {"marks": {"gờ giữa": "walls.top", "mép mái": "walls.top"}}),
+                                    encoding="utf-8")
     card = tmp_path / "asset-card.yaml"
     card.write_text("marks:\n- {name: gờ giữa, z_m: 1.5}\n- {name: mép mái, z_m: 2.7}\n", encoding="utf-8")
     rc, lines = prep(f, "--view", f"front={concept(tmp_path / 'front.png', 400, 370)}", "--card", str(card))
-    assert rc == 1 and lines[0].startswith("review/checks/proportion.json: proportion.mark.gờ giữa 0.6 (limit 0.37)")
+    assert rc == 1 and lines[0].startswith("review/checks/proportion.json: proportion.mark.gờ giữa 1.2 (limit 0.074)")
     assert lines[-1] == "prep_overlay fail: 1 failing"
     rc, lines = prep(f, "--view", f"front={concept(tmp_path / 'front.png', 400, 370)}")
     assert (rc, len(lines)) == (0, 1)

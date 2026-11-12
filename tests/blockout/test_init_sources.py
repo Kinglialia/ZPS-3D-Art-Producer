@@ -119,3 +119,26 @@ def test_with_a_map_the_layout_numbers_are_todo_because_only_the_layout_file_has
     assert s["files"]["layout"] == str(a / "pilot-house.layout.md") and s["camera"]["elevation_deg"] == 35
     assert inputs(a, prof, w)[1]["inputs.todo"]["value"] == [
         "character_h", "door_h", "door_h_source", "layout", "materials"]
+
+
+MARKS = [{"name": "mép mái", "z_m": 2.7}, {"name": "mặt bệ", "z_m": 0.3}]
+
+
+def test_each_card_mark_asks_the_worker_for_the_part_edge_that_makes_it_and_check_inputs_waits_for_it(tmp_path):
+    """check_proportion checks a mark on the edge the worker names; with no edge named it can only fail later."""
+    a0, _, _ = project(tmp_path / "base")
+    a, prof, w = project(tmp_path / "marks", card=card_of(a0) | {"marks": MARKS})
+    rc, line, s = init(a, prof, w)
+    assert (rc, line.endswith("; TODO: marks, materials")) == (0, True), line
+    assert {k: v.startswith("TODO") for k, v in s["marks"].items()} == {"mép mái": True, "mặt bệ": True}
+    s["materials"] = ["STONE", "TIMBER", "TEAL"]
+    s["marks"]["mép mái"] = "walls.top"
+    (w / "sources.json").write_text(json.dumps(s), encoding="utf-8")
+    assert inputs(a, prof, w)[1]["inputs.todo"]["value"] == ["marks.mặt bệ"]
+    (a / "asset-card.yaml").write_text(yaml.safe_dump(card_of(a) | {"marks": MARKS[:1]}), encoding="utf-8")
+    rc, line, again = init(a, prof, w)
+    assert (line.endswith("; nothing left to fill"), again["marks"]) == (True, {"mép mái": "walls.top"})
+
+
+def test_a_card_without_marks_writes_no_marks_map(tmp_path):
+    assert "marks" not in init(*project(tmp_path))[2]

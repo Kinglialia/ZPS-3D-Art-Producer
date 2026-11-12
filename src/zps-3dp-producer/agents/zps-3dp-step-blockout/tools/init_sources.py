@@ -8,12 +8,15 @@ Writes (has_map false):
   character_h                           the one scale_refs entry of the profile, or the one named "nhân vật"
   door_h, door_h_source                 the one scale_overrides entry of the card
   camera                                camera of the preset the profile names, or null
+  marks                                 one entry per `marks` name of the card: "<part>.top" or "<part>.bottom", the
+                                        part edge the worker builds that mark with (check_proportion.py checks it);
+                                        no key when the card has no marks
 Every field it cannot compute is the string "TODO ..." for the worker: materials (the codes the worker reads on the
 concept), door_h and door_h_source when the card has no single scale_overrides entry (measure it on the concept with
 character_h as the ruler, or write null and say why), and, when has_map is true, layout, character_h and door_h (read from
-<id>.layout.md). check_inputs.py fails while a value starts with TODO.
-An existing sources.json keeps what the worker wrote where this tool computes nothing: materials, door_h, and the
-fields of a has_map layout. What it computes is written again, so a changed card gives new numbers and new hashes.
+<id>.layout.md), and each marks entry. check_inputs.py fails while a value starts with TODO.
+An existing sources.json keeps what the worker wrote where this tool computes nothing: materials, door_h, the marks
+entries of names the card still has, and the fields of a has_map layout. What it computes is written again, so a changed card gives new numbers and new hashes.
 Prints one line: the path, then the fields still TODO. Exit 0, 2 on error.
 """
 import argparse
@@ -36,6 +39,7 @@ TODO = {"materials": "TODO: the material codes of the concept, as a list",
         "character_h": "TODO: the height of the character in metres",
         "door_h": "TODO: measure on the concept with character_h as the ruler, or null and say why",
         "door_h_source": "TODO: how door_h was measured, or why there is none"}
+MARK_TODO = "TODO: <part>.top or <part>.bottom, the part edge that makes this mark"
 
 
 def yaml_load(path):
@@ -94,6 +98,15 @@ def computed(approved, profile_path):
     return out
 
 
+def marks(approved, old):
+    """{mark name: part edge} for every `marks` entry of the card: the worker's edge, else a TODO. None without marks."""
+    card_path = os.path.join(approved, "asset-card.yaml")
+    names = [m["name"] for m in (yaml_load(card_path).get("marks") or []) if isinstance(m, dict) and "name" in m] \
+        if os.path.isfile(card_path) else []
+    return {n: old[n] if isinstance(old.get(n), str) and old[n] and not old[n].startswith("TODO") else MARK_TODO
+            for n in names} or None
+
+
 def with_todo(doc):
     """doc with a TODO string for every required field it still lacks."""
     for key, text in TODO.items():
@@ -122,6 +135,9 @@ def main():
         doc = common.read_json(out) if os.path.isfile(out) else {}
         new = computed(a.approved, a.profile)
         doc = with_todo({**doc, **{k: v for k, v in new.items() if k != "files"}, "files": {**doc.get("files", {}), **new["files"]}})
+        doc["marks"] = marks(a.approved, doc.get("marks") or {})
+        if doc["marks"] is None:
+            del doc["marks"]
         common.write_json(out, doc)
     except Exception as e:  # noqa: BLE001
         print(f"{NAME} error {e!r}")

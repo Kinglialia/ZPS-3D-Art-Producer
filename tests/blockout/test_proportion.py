@@ -8,7 +8,7 @@ import subprocess
 import pytest
 import yaml
 
-from conftest import HUT_ROWS, TOOLS, write_mask, write_build
+from conftest import HUT_ROWS, HUT_SOURCES, TOOLS, write_mask, write_build
 
 VPY = TOOLS / ".deps/venv/bin/python"
 pytestmark = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh (numpy, cv2)")
@@ -120,36 +120,70 @@ def mark(name, z_m):
     return {"name": name, "z_m": z_m}
 
 
-def test_marks_that_sit_on_a_part_edge_pass_without_any_concept_image_g5(tmp_path):
-    """The hut is 3.7 m high; its parts end at 0.3, 0.6, 2.1, 2.7 and 3.7 m. A mark must be the height of one of them."""
-    work = write_build(tmp_path / "w", rows=HUT_ROWS)
+def hut_with(edges, rows=None):
+    """sources.json of the hut with the worker's `marks` map {mark name: "<part>.top" | "<part>.bottom"}."""
+    return {"rows": rows or HUT_ROWS, "sources": {**HUT_SOURCES, "marks": edges}}
+
+
+def checked(res, name):
+    c = next(c for c in res["checks"] if c["check"] == f"proportion.mark.{name}")
+    return c["status"], c.get("value"), c.get("threshold"), c["note"]
+
+
+def test_marks_that_sit_on_the_part_edge_the_worker_named_pass_without_any_concept_image_g5(tmp_path):
+    """The hut is 3.7 m high; the walls end at 2.7 m and the base at 0.3 m."""
+    work = write_build(tmp_path / "w", **hut_with({"mép mái": "walls.top", "mặt bệ": "base.top"}))
     r, res = run_proportion(tmp_path, work, marks=[mark("mép mái", 2.7), mark("mặt bệ", 0.3)])
     assert (r.returncode, res["overall"], len(r.stdout.strip().splitlines())) == (0, "pass", 1), r.stdout
     assert statuses(res) == {"assembly.fresh": "pass", "proportion.spec": "not_checked", "proportion.mark.mép mái": "pass",
                              "proportion.mark.mặt bệ": "pass"}
 
 
-def test_a_mark_that_no_part_edge_is_near_fails_and_names_the_mark_and_the_nearest_edge_g5(tmp_path):
-    """1.5 m: the nearest edge is the door top at 2.1 m, 0.6 m away, more than 10 % of 3.7 m. This is the worker who built
-    the wall at the wrong height, or put the break in the middle of one part."""
-    work = write_build(tmp_path / "w", rows=HUT_ROWS)
-    r, res = run_proportion(tmp_path, work, marks=[mark("gờ giữa", 1.5), mark("mép mái", 2.7)])
-    assert (r.returncode, res["overall"]) == (1, "fail")
-    got = next(c for c in res["checks"] if c["check"] == "proportion.mark.gờ giữa")
-    assert (got["status"], got["value"], got["threshold"]) == ("fail", 0.6, 0.37)
-    assert "gờ giữa" in got["note"] and "door.top 2.10 m" in got["note"]
-    assert statuses(res)["proportion.mark.mép mái"] == "pass"
+def test_a_mark_is_checked_on_its_own_edge_not_on_the_nearest_edge_of_any_part_g5(tmp_path):
+    """The eave mark at 2.1 m sits on the door top, but the worker says the walls make it, and they end at 2.7 m. The
+    old rule took the nearest edge of any part within 10 % of the height, so on a house every z from 0 to 5 m passed."""
+    work = write_build(tmp_path / "w", **hut_with({"mép mái": "walls.top"}))
+    r, res = run_proportion(tmp_path, work, marks=[mark("mép mái", 2.1)])
+    assert (r.returncode, checked(res, "mép mái")) == (1, ("fail", 0.6, 0.074,
+                                                          "mốc mép mái z 2.10 m; cạnh walls.top 2.70 m"))
 
 
-def test_the_tolerance_is_ten_percent_of_the_height_but_never_less_than_five_centimetres_g5(tmp_path):
-    """A 0.2 m prop: 10 % is 2 cm, so the floor of 5 cm decides. 0.155 m is 4.5 cm from the top, 0.14 m is 6 cm."""
-    work = write_build(tmp_path / "w", rows=box_rows(1.0, 1.0, 0.2))
-    r, res = run_proportion(tmp_path, work, marks=[mark("a", 0.155), mark("b", 0.14)])
-    assert (r.returncode, statuses(res)["proportion.mark.a"], statuses(res)["proportion.mark.b"]) == (1, "pass", "fail")
+@pytest.mark.parametrize("z, status", [(2.65, "pass"), (2.6, "fail")])
+def test_the_tolerance_is_two_percent_of_the_height_g5(tmp_path, z, status):
+    """2 % of the 3.7 m hut is 7.4 cm."""
+    work = write_build(tmp_path / "w", **hut_with({"mép mái": "walls.top"}))
+    _, res = run_proportion(tmp_path, work, marks=[mark("mép mái", z)])
+    assert checked(res, "mép mái")[:3] == (status, round(2.7 - z, 3), 0.074)
+
+
+@pytest.mark.parametrize("z, status", [(0.185, "pass"), (0.17, "fail")])
+def test_the_tolerance_is_never_less_than_two_centimetres_g5(tmp_path, z, status):
+    """A 0.2 m prop: 2 % is 4 mm, so the floor of 2 cm decides."""
+    work = write_build(tmp_path / "w", rows=box_rows(1.0, 1.0, 0.2), sources={**HUT_SOURCES, "marks": {"a": "base.top"}})
+    _, res = run_proportion(tmp_path, work, marks=[mark("a", z)])
+    assert checked(res, "a")[:3] == (status, round(0.2 - z, 3), 0.02)
+
+
+@pytest.mark.parametrize("edges, note", [
+    ({}, "mốc mép mái: sources.json marks chưa khai cạnh part nào tạo mốc này"),
+    ({"mép mái": "eave.top"}, "mốc mép mái: cạnh eave.top không có part eave"),
+    ({"mép mái": "walls.middle"}, "mốc mép mái: cạnh 'walls.middle' phải là <part>.top hoặc <part>.bottom")])
+def test_a_mark_without_a_valid_edge_fails_so_the_worker_must_name_the_part_g5(tmp_path, edges, note):
+    work = write_build(tmp_path / "w", **hut_with(edges))
+    r, res = run_proportion(tmp_path, work, marks=[mark("mép mái", 2.7)])
+    assert (r.returncode, checked(res, "mép mái")) == (1, ("fail", None, None, note))
+
+
+@pytest.mark.parametrize("z", ["2.7", "cao", None])
+def test_a_mark_whose_height_is_not_a_number_is_a_card_error_in_one_line_g5(tmp_path, z):
+    work = write_build(tmp_path / "w", **hut_with({"mép mái": "walls.top"}))
+    r, res = run_proportion(tmp_path, work, marks=[mark("mép mái", z)])
+    assert (r.returncode, len(r.stdout.strip().splitlines())) == (1, 1), r.stdout + r.stderr
+    assert checked(res, "mép mái") == ("fail", None, None, f"thẻ: z_m của mốc mép mái phải là số mét, không phải {z!r}")
 
 
 def test_marks_are_checked_beside_the_view_ratios_and_a_failed_mark_is_not_hidden_by_them_g5(tmp_path):
-    work = write_build(tmp_path / "w", rows=HUT_ROWS)
+    work = write_build(tmp_path / "w", **hut_with({"gờ giữa": "walls.top"}))
     r, res = run_proportion(tmp_path, work, spec_for(tmp_path, front=(400, 370)), marks=[mark("gờ giữa", 1.5)])
     assert (r.returncode, statuses(res)["proportion.front"], statuses(res)["proportion.mark.gờ giữa"]) == (1, "pass", "fail")
 

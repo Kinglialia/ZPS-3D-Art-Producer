@@ -7,8 +7,9 @@ folder, also for a graph in <vN>/variants/<b|c>/. The concept has no scale,
 so only the ratio of the two box sides is compared: fail when (model / concept - 1) is beyond +-0.10. Other views (the
 3/4 view) are not checked. No spec, or no mask file for a view: that view is not_checked.
 --card: each `marks` entry {name, z_m} of the card (a height above the bottom of the object, in metres) must sit on the
-top or the bottom z of some part in assembly.json, within 10 % of the object height or 5 cm, whichever is larger. A mark
-that does not fails as proportion.mark.<name> and its note names the nearest part edge. Marks need no spec.
+part edge the worker names for it in sources.json `marks` {"<mark name>": "<part>.top" | "<part>.bottom"}, within 2 % of
+the object height or 2 cm, whichever is larger. A mark off its edge fails as proportion.mark.<name> with the edge and both
+heights. A mark with no edge, an edge of no part, or a z_m that is not a number fails too. Marks need no spec.
 Writes <dir>/review/checks/proportion.json. Exit 0 pass/not_checked, 1 fail, 2 error.
 """
 import os
@@ -23,7 +24,7 @@ from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/check_proportion"
 TOL = 0.10
-MARK_MIN_M = 0.05
+MARK_TOL, MARK_MIN_M = 0.02, 0.02  # provisional until the pilot
 AXES = {"front": (0, 2), "back": (0, 2), "left": (1, 2), "right": (1, 2), "top": (0, 1)}
 
 
@@ -50,27 +51,46 @@ def default_spec(work):
     return os.path.join(os.path.abspath(work), "..", "work", "spec.json")
 
 
-def mark_checks(card_path, rows):
+def edge_z(rows, edge):
+    """z of '<part>.top' or '<part>.bottom' in rows, or the reason it has none."""
+    if not isinstance(edge, str) or not edge:
+        return None, "sources.json marks chưa khai cạnh part nào tạo mốc này"
+    part, _, end = edge.rpartition(".")
+    if end not in ("top", "bottom") or not part:
+        return None, f"cạnh {edge!r} phải là <part>.top hoặc <part>.bottom"
+    own = [r for r in rows if r["name"] == part]
+    if not own:
+        return None, f"cạnh {edge} không có part {part}"
+    return (max(r["bbox_max"][2] for r in own) if end == "top" else min(r["bbox_min"][2] for r in own)), None
+
+
+def mark_checks(card_path, rows, sources):
     import yaml
     with open(card_path, encoding="utf-8") as f:
         marks = (yaml.safe_load(f) or {}).get("marks") or []
+    edges = sources.get("marks") or {}
     low = min(r["bbox_min"][2] for r in rows)
-    height = max(r["bbox_max"][2] for r in rows) - low
-    tol = max(TOL * height, MARK_MIN_M)
-    edges = [(r[key][2] - low, f"{r['name']}.{end}") for r in rows for key, end in (("bbox_min", "bottom"), ("bbox_max", "top"))]
+    tol = round(max(MARK_TOL * (max(r["bbox_max"][2] for r in rows) - low), MARK_MIN_M), 3)
     checks = []
     for m in marks:
-        z, (at, part) = float(m["z_m"]), min(edges, key=lambda e: abs(e[0] - m["z_m"]))
-        off = round(abs(at - z), 3)
-        checks.append(common.check(f"proportion.mark.{m['name']}", "pass" if off <= round(tol, 3) else "fail", value=off,
-                                   threshold=round(tol, 3),
-                                   note=f"mốc {m['name']} z {z:.2f} m; cạnh part gần nhất {part} {at:.2f} m"))
+        name, z = m["name"], m.get("z_m")
+        if not isinstance(z, (int, float)) or isinstance(z, bool):
+            checks.append(common.check(f"proportion.mark.{name}", "fail",
+                                       note=f"thẻ: z_m của mốc {name} phải là số mét, không phải {z!r}"))
+            continue
+        at, why = edge_z(rows, edges.get(name))
+        if why:
+            checks.append(common.check(f"proportion.mark.{name}", "fail", note=f"mốc {name}: {why}"))
+            continue
+        off = round(abs(at - low - z), 3)
+        checks.append(common.check(f"proportion.mark.{name}", "pass" if off <= tol else "fail", value=off, threshold=tol,
+                                   note=f"mốc {name} z {z:.2f} m; cạnh {edges[name]} {at - low:.2f} m"))
     return checks
 
 
 def run(a, graph, rows, sources):
     checks, data, overall = compare_views(a, graph, rows, sources)
-    marks = mark_checks(a.card, rows) if a.card else []
+    marks = mark_checks(a.card, rows, sources) if a.card else []
     return checks + marks, data, None if marks else overall
 
 
