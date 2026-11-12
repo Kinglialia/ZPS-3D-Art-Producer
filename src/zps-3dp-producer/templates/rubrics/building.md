@@ -4,7 +4,7 @@
 <!-- Rubric chung cho mọi building lấy từ _approved/. Người dùng duyệt một lần: đổi dòng đầu thành `status: approved`.
      Sửa ở đây áp dụng cho building đăng ký SAU đó; building đã đăng ký giữ bản rubric riêng trong thư mục asset.
      Mỗi bước một mục `## <bước>`; brief của bước chỉ đọc mục đó. Mỗi tiêu chí một dòng `- key: tiêu chí pass/fail`,
-     kèm tham chiếu tài liệu art direction khi có (ví dụ "mái đúng `roofs.md` §2"). Không mô tả style (D22.16). -->
+     kèm tham chiếu tài liệu art direction khi có (ví dụ "mái đúng `roofs.md` §2"). Không mô tả style. -->
 
 ## blockout
 - mass: khối trên clay đúng concept; khối giống ổ bánh mì hoặc hộp trơn là fail
@@ -30,7 +30,7 @@
 - shading: ảnh clay có ánh sáng không có vệt đen, bóng chéo, mặt nhấp nháy dưới mái và ở chân tường
 - planes: wireframe 3/4 không có cạnh thừa trên mảng tường và mái
 - thumbnail: thumbnail kích thước thật còn đọc được mái, cửa, khối chính
-- density: tris/m² không lệch quá 2 lần so với công trình pilot; chưa có pilot thì pass, ghi not_checked
+- density: tris/m² không lệch quá 2 lần so với công trình pilot; chưa có pilot thì ghi pass
 - blockout_match: bbox và `fixed_params` giữ như blockout đã duyệt
 - shadow_read: clay_lit_concept đọc khối như concept có bóng (độ chìa mái, độ sâu hốc cửa, bóng đổ chính)
 

@@ -1,4 +1,4 @@
-# {{PROJECT}} — Guideline cho agent · v1.4 · {{DATE}}
+# {{PROJECT}} — Guideline cho agent · v1.5 · {{DATE}}
 
 Đọc hết trước khi làm. File này nói Concept Artist phải giao gì để pipeline 3D (ZPS-3DP) nhận việc ngay lần đầu. Người dùng có thể gửi lại file này giữa chừng: luôn theo bản mới nhất.
 
@@ -52,7 +52,7 @@ Mỗi vật liệu một **mã cố định** viết hoa (`STONE`, `TIMBER`, `BR
 - **Hai vùng khác màu hoặc khác chất liệu phải là hai mã khác nhau.** Ví dụ kính đèn và khung đồng là hai mã. Gộp lại thì đo màu sai.
 - Hai vật liệu kề nhau nên khác màu rõ. Pipeline đo đường biên giữa chúng, nên hai màu quá gần thì đường biên mờ. Nếu không tránh được, ghi cặp mã đó vào ghi chú dưới bảng.
 - Mã dùng chung cho cả dự án nên lấy từ bảng mã chung, nếu dự án có. Mã mới thì báo người dùng.
-- Giữ đúng tên ba cột `Mã`, `Màu chính (hex)` và `Ô lấy màu (x, y, w, h)`. Pipeline đọc bảng theo tên cột. Các cột khác và thứ tự cột tùy ý.
+- Giữ đúng tên bốn cột `Mã`, `Tên`, `Màu chính (hex)` và `Ô lấy màu (x, y, w, h)`. Pipeline đọc bảng theo tên cột. Các cột khác và thứ tự cột tùy ý.
 - **Ô lấy màu** là `x, y, w, h` tính bằng pixel trên `concept_albedo.png`, gốc ở góc trên trái. Chọn ô nằm trọn trong một vùng phẳng của vật liệu đó, cách xa nét viền, mép và chỗ đổi sắc. Mỗi mã một ô. Pipeline đo lại màu trong ô này để so với model. Ô dính viền hoặc vùng khác thì màu chuẩn sai.
 - **Hex** là trung vị màu đo trong ô, không phải màu chọn bằng mắt. Đo bằng code, như đoạn Python này. Hex lệch số đo thì pipeline báo cảnh báo.
 
@@ -90,8 +90,8 @@ Ghi chú khác quy tắc chung: bậc cửa dùng TIMBER thay vì STONE.
 asset: 05-warehouse            # = id = tên thư mục
 type: building                 # building | prop | tree | rock (nhân vật, sinh vật: chưa hỗ trợ)
 tier: standard                 # hero | standard | background. Quyết định trần tam giác
-view: front                    # góc của concept_albedo.png: front | '34' | game_camera
-view_side: null                # bắt buộc khi có ảnh 3/4 (view '34' hoặc concept_34.png). left | right, xem 5c
+view: front                    # góc của concept_albedo.png: front | '34'
+view_side: null                # bắt buộc khi có ảnh 3/4. left | right: mặt bên của vật nằm ở nửa trái hay nửa phải ảnh 3/4 (theo ảnh), xem 5c
 texture_res: null              # tùy chọn. null = 2048. Chỉ ghi khi người dùng chốt khác
 tris_max: null                 # tùy chọn. null = theo hạng của dự án
 bevel: null                    # tùy chọn. null = theo bo cạnh chung của dự án; none | toon nếu asset này khác
@@ -122,7 +122,7 @@ real_texture_only_notes:       # có thể là []. Chi tiết dựng khối (rea
 
 Trường tùy chọn: ghi `null` hoặc bỏ dòng, đều được. Bo cạnh ghi ở trường `bevel`, **không** ghi trong ghi chú chữ, vì tool không đọc ghi chú.
 
-Quy ước hướng: vật quay mặt về phía trước (camera concept chính diện). `left` là bên trái **của chính vật**, không phải bên trái người nhìn.
+Quy ước hướng: vật quay mặt về phía trước (camera concept chính diện). Trong `hidden_sides`, `left` là bên trái **của chính vật**, không phải bên trái người nhìn. `view_side` và `light.from` thì theo ảnh (mục 5c).
 
 **Quy tắc phần khuất mặc định** (cho `hidden_sides`, nếu dự án không có quy tắc khác): biết thiết kế của mặt khuất thì ghi thiết kế. Chưa biết thì ghi "chưa biết", và pipeline áp quy tắc này rồi ghi lại. Mặt khuất trơn. Chỉ kéo dài hoa văn, gờ hoặc bộ phận đã có trên concept. Không thêm bộ phận mới. Công trình: cửa sổ chỉ khi mảng tường > 3,6 m, tối đa 1 cửa, đặt giữa, cùng mẫu cửa sổ của chính asset. Có ngoại lệ theo chức năng (ví dụ sau kệ rượu thì không có cửa sổ).
 
@@ -160,13 +160,13 @@ Ghi số lượng các thành phần lặp lại mà người xem đếm đượ
 - Asset không có thành phần lặp lại: ghi `counts: {}`.
 - Không chắc thì không ghi khóa đó, và hỏi người dùng ở bước 4 của quy trình chốt.
 
-### 5c. Các trường tùy chọn mới
+### 5c. `view_side` và các trường tùy chọn
 
-Mỗi trường giúp pipeline khỏi phải đoán. Ghi khi biết. Không biết thì bỏ trường, đừng đoán.
+Các trường này giúp pipeline khỏi phải đoán. Trường tùy chọn: ghi khi biết; không biết thì bỏ trường, đừng đoán.
 
-- **`view_side`**: ghi khi có ảnh 3/4, tức `view: '34'` hoặc có `concept_34.png`. Giá trị `left` hoặc `right`: mặt bên nào của vật hiện ra trên ảnh 3/4, theo bên của chính vật (như `hidden_sides`). Khi có ảnh 3/4, trường này bắt buộc. Pipeline cần nó để biết nhìn ảnh từ phía nào.
+- **`view_side`**: ghi khi có ảnh 3/4 (`view: '34'` hoặc `concept_34.png`). Giá trị theo ảnh, như `light.from`: `left` khi mặt bên của vật nằm ở nửa trái ảnh, `right` khi nằm ở nửa phải. Không theo bên của chính vật như `hidden_sides`. Có ảnh 3/4 thì trường này bắt buộc.
 - **`light`**: `{from, elevation_deg}` mô tả ánh sáng trong `concept_shadow.png`. `from` là `left`, `right` hoặc `front`, theo ảnh: `left` nghĩa là mặt sáng ở phía mép trái ảnh và bóng đổ về mép phải. `elevation_deg` là độ cao nguồn sáng so với mặt nằm ngang, tính bằng độ. Model dựng ánh sáng theo hướng này. Thiếu thì model agent phải đoán.
-- **`marks`**: 2–3 độ cao của những đường ngang rõ trên concept (mép trên thân, mặt bệ, mặt quầy). Mỗi mốc có `name` và `z_m`, là chiều cao tính từ đáy vật, bằng mét. Đo vị trí trên ảnh rồi đổi ra mét theo chiều cao thật của vật. Pipeline so tỉ lệ của blockout với các mốc này. Vật không có đường ngang rõ (cây, đá) thì bỏ trường.
+- **`marks`**: 2–3 độ cao của những đường ngang rõ trên concept (mép trên thân, mặt bệ, mặt quầy). Mỗi mốc có `name` và `z_m`, là chiều cao tính từ đáy vật, bằng mét. Đo vị trí trên ảnh rồi đổi ra mét theo chiều cao thật của vật. Pipeline so tỉ lệ của blockout với các mốc này. Mỗi mốc phải là một mép ngang thật của vật, và `z_m` là một số, tính bằng mét. Vật không có đường ngang rõ (cây, đá) thì bỏ trường.
 - **`bottom_visible`**: `false` trừ khi người chơi thấy mặt đáy của vật (cầu, bục lơ lửng). Khi `false`, pipeline bỏ mặt đáy khỏi model.
 - **`text_codes`**: danh sách mã vật liệu mang chữ hoặc biểu tượng thật (biển hiệu, nhãn). Pipeline kiểm texture bị lật ngược chỉ trên các mã này. Không có thì `[]`.
 
@@ -221,7 +221,7 @@ Ghi chú: TIMBER và CRATE kề nhau, cùng tông nâu. Đường biên nằm �
 3. Soạn `asset-card.yaml` từ những gì đã thảo luận.
 4. **Hỏi người dùng một lần.** Gom mọi trường còn trống hoặc chưa chắc vào một tin, mỗi trường kèm một gợi ý. Ví dụ: "`tier`: gợi ý `standard` vì là nhà phụ; `hidden_sides.right`: gợi ý tường trơn, hay để 'chưa biết'?"
 5. Viết `<id>.material.md`. Đo ô lấy màu bằng code.
-6. Tự kiểm theo mục 7.
+6. Tự kiểm theo mục 7. Mục đó chỉ gồm điều cần mắt; tên, file, cạnh ảnh và trường bắt buộc do `check_card.py` ở bước 7 kiểm.
 7. Chạy `{{CHECK_CARD}} <thư mục asset> --profile {{PROFILE}}`. Script báo lỗi thì sửa rồi chạy lại, đến khi hết lỗi. Script báo cảnh báo thì sửa nếu cảnh báo đúng, hoặc nêu lý do khi báo người dùng.
 8. Báo người dùng: đường dẫn thư mục, danh sách file, các trường người dùng đã chốt, các chỗ ghi "chưa biết".
 
@@ -233,25 +233,20 @@ Người dùng chép thư mục sang `_approved/<id>/` rồi bảo Producer nh�
 
 ## 7. Tự kiểm trước khi báo
 
-- [ ] Tên thư mục, tên file và `asset` trong thẻ cùng một `id`.
-- [ ] Đủ file bắt buộc, đúng tên (mục 3).
 - [ ] Hai ảnh trùng khung. Albedo chính diện phẳng, không có ánh sáng, bóng, AO, highlight. Ảnh 3/4 nằm trong `concept_34.png`.
-- [ ] Nền phẳng một màu, khác xa màu vật. Vật không bị cắt. Cạnh dài ≥ 1024 px.
-- [ ] Không có chi tiết thừa không truy được lý do. Không chữ giả.
+- [ ] Nền phẳng một màu, khác xa màu vật. Vật không bị cắt.
 - [ ] Mọi vùng trên concept có mã vật liệu. Hai vùng khác màu là hai mã.
 - [ ] Material Handoff có dòng `BG: #RRGGBB` đúng với màu nền ảnh. Mỗi mã có một ô nằm trọn trong một vùng phẳng của vật liệu đó. Hex là trung vị đo bằng code.
 - [ ] Hai vật liệu kề nhau khác màu rõ, hoặc có ghi chú dưới bảng.
-- [ ] Thẻ đủ trường bắt buộc, gồm `views` và `counts` (`{}` nếu không có thành phần lặp lại). `hidden_sides` đủ 4 mặt. `size_m` có giá trị nếu dự án không có map.
 - [ ] `views` chọn theo 5a. Nếu `none` thì `hidden_sides` và ghi chú viết cụ thể.
 - [ ] `counts` có cho mọi thành phần lặp lại đếm được, đúng tên khóa, khớp với concept.
-- [ ] `view_side` có khi dùng ảnh 3/4. `marks` có khi vật có đường ngang rõ.
+- [ ] `marks` có khi vật có đường ngang rõ.
 - [ ] Số props trên concept khớp với mô tả trong thẻ hoặc ghi chú.
-- [ ] `check_card.py` chạy xong, không còn lỗi.
 
 ## 8. Art direction
 
 - AD không ghi số kỹ thuật trong tài liệu style. Số kỹ thuật (tris, độ phân giải, kích thước chuẩn) nằm trong profile dự án và thẻ asset. Muốn đổi số thì đề xuất với người dùng.
-- Chỉ AD sửa `art-direction/`, và chỉ sau khi người dùng approve. AD đề xuất thay đổi kèm lý do và asset bị ảnh hưởng; chờ approve rồi mới ghi.
+- AD đề xuất thay đổi kèm lý do và asset bị ảnh hưởng; người dùng approve rồi AD mới ghi (mục 1).
 - `art-direction/README.md` là cửa vào duy nhất. Mọi agent đọc README trước, rồi chỉ mở tài liệu README chỉ định cho việc của mình.
 - README gồm hai phần, giữ đúng format vì script đọc tự động:
 

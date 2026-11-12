@@ -138,7 +138,7 @@ def test_the_check_command_is_a_numbered_step_of_the_handoff_procedure():
 
 
 def test_the_title_carries_the_version():
-    assert TEXT.splitlines()[0] == "# {{PROJECT}} — Guideline cho agent · v1.4 · {{DATE}}"
+    assert TEXT.splitlines()[0] == "# {{PROJECT}} — Guideline cho agent · v1.5 · {{DATE}}"
 
 
 def test_no_line_names_a_decision_a_spec_file_or_an_earlier_run():

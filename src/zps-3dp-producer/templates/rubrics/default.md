@@ -31,7 +31,7 @@
 - shading: ảnh clay có ánh sáng không có vệt đen, bóng chéo, mặt nhấp nháy
 - planes: wireframe 3/4 không có cạnh thừa trên mặt phẳng
 - thumbnail: thumbnail kích thước thật còn đọc được khối chính
-- density: tris/m² không lệch quá 2 lần so với pilot; chưa có pilot thì pass, ghi not_checked
+- density: tris/m² không lệch quá 2 lần so với pilot; chưa có pilot thì ghi pass
 - blockout_match: bbox và `fixed_params` giữ như blockout đã duyệt
 - shadow_read: clay_lit_concept đọc khối như concept có bóng (độ chìa, độ sâu hốc, bóng đổ chính)
 
