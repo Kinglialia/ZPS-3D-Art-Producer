@@ -132,13 +132,12 @@ Anh nói trong chat. Producer chạy script và chuyển đường dẫn cho anh
 
 ## 6. Contract
 
-### 6.1 Reviewer (D14.10, D21.1, D25.A, D25.B)
+### 6.1 Reviewer (D14.10, D21.1, D25.A, D25.B, D38)
 
 ```
 VERDICT: PASS | FIX | ESCALATE
 RUBRIC: <key>=pass|fail|unclear|not_checked; ...   (not_checked chỉ ở vòng fix)
-COUNTS: blocker=N; major=N; minor=N; preference=N; unclear=N
-TOP_FIX: <loại>: F<n>[, F<m> ...]
+TOP_FIX: <loại>[: F<n>[, F<m> ...]]    (loại lô: reviewer chỉ ghi loại, script điền bộ id)
 EVIDENCE_OPENED: <nhãn các ảnh và file đã mở>
 COMPARE: F<n>=better|same|worse; ...   (vòng sửa: so với bản gốc, cho các finding trong TOP_FIX vòng trước)
 PICK: <a|b|c>                          (chỉ khi worker nộp phương án cho lỗi param, mục 7)
@@ -151,20 +150,27 @@ PRIOR:
 - F<n>: resolved | open | regressed | superseded
 ```
 
-**Phạm vi chấm theo loại vòng** (D31.2):
-- Brief reviewer ghi `REVIEW_SCOPE: full | fix`; lần giao ghi `scope`, nên report không chép lại. `full`: lần review đầu, và bản worker báo `DONE` với mọi finding đang mở đều có trong `FIXED`. `fix`: các vòng còn lại.
+**Script tính, reviewer không ghi; contract đọc dung thứ** (D38.1, D38.2, D38.6, D38.8):
+- Script tính `COUNTS` (số finding mỗi mức) và bộ id `TOP_FIX` của loại lô. Reviewer không ghi hai trường này. Reviewer còn ghi mà lệch số của script thì `ingest` chỉ ghi cảnh báo vào ledger, không từ chối.
+- Script điền các key `RUBRIC` mà một file JSON gate đã quyết, và chỉ khi file đó có. Thiếu file thì key để reviewer chấm. Brief reviewer chỉ liệt kê key cần nhìn.
+- Reviewer nhận `vN/review/summary.json` nhỏ (khoảng 100 B mỗi part) thay cho `assembly.json` và mọi JSON gate.
+- `ingest` đọc contract dung thứ hình thức: lấy giá trị từ phần đầu (ghi chú trong ngoặc phía sau không tính), không phân biệt hoa thường, bỏ `**` và dấu backtick quanh khóa, nối dòng thụt lề, nhận `-` và `–` trong `ACCEPTED_FAIL`. Mọi kiểm về nội dung giữ nguyên.
+- Dòng không thụt lề trong `FINDINGS` hoặc `PRIOR` là lỗi contract. `ingest` nêu đúng dòng đó.
+
+**Phạm vi chấm theo loại vòng** (D31.2, sửa theo D38.3):
+- Brief reviewer ghi `REVIEW_SCOPE: full | fix`; lần giao ghi `scope`, nên report không chép lại. `full`: lần review đầu, và bản worker báo `DONE` mà `FIXED` phủ mọi finding `blocker`, `major`, `unclear` đang mở. `fix`: các vòng còn lại.
 - Vòng `fix`: reviewer chỉ chấm id trong `TOP_FIX` (kèm `COMPARE`), các vùng `preserve`, và nhìn nhanh toàn sheet để bắt lỗi mới. Mục rubric không chấm ghi `not_checked`. `ingest` từ chối `not_checked` ở vòng `full`.
-- **Chỉ PASS khi lần review gần nhất là `full`.** Vòng `fix` hết lỗi mở, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
-- **Sheet review** (D31.1): brief reviewer của `blockout`, `model`, `texture` chỉ đưa sheet của `review_sheet.py` (cạnh dài khoảng 2048 px, có nhãn) và concept. Ảnh lẻ xin qua `need_evidence`. Bước views dùng `views_sheet.py`.
-  - `P brief` dựng sheet vào `vN/review/sheet.png` (ngoài `final/`, nên hash duyệt không đổi), từ glob `sheet` của bước trong `pipeline.toml`. Vòng sửa có thêm sheet bản gốc; phương án param có `sheet-<b|c>.png`.
-  - Reviewer xin ảnh có trên đĩa (`viewing_condition: xin ảnh <nhãn ô>[ box x0,y0,x1,y1]`): script chép ảnh gốc hoặc crop vào `review/evidence-<k>/`, giao lại reviewer, không giao worker, không tính vào vòng bằng chứng của §7.6. Tối đa `[review] served_evidence` lần mỗi đợt feedback, quá thì sang vòng worker.
-- Không resume reviewer qua các vòng (D31.7): mỗi lần chấm là một reviewer mới.
+- **PASS ở vòng `fix` là cuối cùng khi `RUBRIC` không có `not_checked`.** Lý do: worker chỉ được sửa `TOP_FIX`, nên điều kiện `full` cũ gần như không đạt, và mỗi vòng sửa tốn ba reviewer. Vòng `fix` còn `not_checked`, hoặc anh vừa waive finding cuối → script giao thêm một reviewer `full` trên chính version đó, không gọi worker.
+- **Sheet review** (D31.1, D38.5): brief reviewer của `blockout`, `views`, `model`, `texture` chỉ đưa sheet của `review_sheet.py` (cạnh dài khoảng 2048 px, có nhãn) và concept. Ảnh lẻ xin qua `need_evidence`. Bước `views` cũng có glob `sheet`, cạnh `views_sheet.py` đã có.
+  - `P brief` dựng sheet vào `vN/review/sheet-<n>.png` (ngoài `final/`, nên hash duyệt không đổi), từ glob `sheet` của bước trong `pipeline.toml`. Mỗi trang tối đa 8 ô; nhiều hơn thì tách `sheet-1.png`, `sheet-2.png`. Glob bỏ `normal_*`, `unlit_*`, `lineup` và atlas. Script thêm các crop 1:1 do nó chọn: wire, thumbnail, nhóm seam xấu nhất, ranh vật liệu. Vòng sửa có thêm sheet bản gốc; phương án param có `sheet-<b|c>.png`.
+  - Reviewer xin ảnh có trên đĩa (`viewing_condition: xin ảnh <nhãn ô>[ box x0,y0,x1,y1]`): script chép ảnh gốc hoặc crop vào `review/evidence-<k>/` và resume đúng reviewer đang chấm (D38.4), không giao worker, không tính vào vòng bằng chứng của §7.6. Bước `views` nhận `box` theo tỉ lệ 0–1 của ảnh và script tự cắt. Tối đa `[review] served_evidence` lần mỗi đợt feedback, quá thì sang vòng worker.
+- **Resume reviewer chỉ trong một lượt chấm** (D38.4, sửa D31.7): bằng chứng có sẵn trên đĩa thì script resume đúng reviewer đang chấm, cùng version, và chỉ giao thêm đúng crop nó xin. Sang vòng worker khác thì reviewer là agent mới. Tính độc lập giữ nguyên.
 
 **Bộ trường finding lấy từ `issue-fields.json` của kit** (D25.A), dùng chung với AD critique. Finding của reviewer, finding `H<n>` của anh và nhận xét của AD agent cùng một format, chuyển qua lại được. `ingest` kiểm đủ trường.
 - `resolved` chỉ khi bản mới chứng minh được `acceptance`. Không thấy lỗi nữa nhưng không có bằng chứng cho `acceptance` thì vẫn `open`.
 - `superseded`: yêu cầu đã đổi (anh hoặc AD đổi, có `ack`). Không tính vào tiến bộ hay thụt lùi.
 - `preference`: khẩu vị, không chặn PASS. Ghi riêng để anh xem; nếu reviewer thấy anh phải chọn thì ESCALATE.
-- `waived` (D30.1): anh (hoặc Producer khi `test_mode: true`) chấp nhận finding là ngoại lệ bằng `P waive`. Finding đã đóng: không tính vào `COUNTS`, không cần dòng `PRIOR`, reviewer không mở lại.
+- `waived` (D30.1): anh (hoặc Producer khi `test_mode: true`) chấp nhận finding là ngoại lệ bằng `P waive`. Finding đã đóng: không tính vào số đếm của script, không cần dòng `PRIOR`, reviewer không mở lại.
 - Tên VERDICT của mình ứng với verdict của kit: PASS = `meets_checked_criteria`, FIX = `needs_revision`, `need_evidence` = `insufficient_evidence`.
 
 **Quy tắc chung của 4 reviewer** (D25.B, theo `3d-critic.md` của kit; test D1 kiểm cả 4 file có đủ):
@@ -181,7 +187,7 @@ PRIOR:
 
 - Khi anh `redo` (đợt feedback mới): finding còn mở của bản gốc được chép sang đợt mới, cộng finding của anh. Bộ đếm vòng đặt lại (D11.4).
 - Mỗi key chấm `unclear` trong `RUBRIC` phải có ít nhất một finding mức `unclear` (D22.6).
-- **Tin nhắn trả về cho Producer** chỉ gồm hai dòng `VERDICT` và `COUNTS` (D22.6). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report. **Ngoại lệ** (D27.5): lệnh ghi file report bị chặn thì reviewer trả cả report giữa dòng `--- report ---` và dòng `--- end ---` (mục 6.5).
+- **Tin nhắn trả về cho Producer** chỉ gồm dòng `VERDICT` (D22.6; `COUNTS` do script tính, D38.1). `RUBRIC`, `FINDINGS`, `PRIOR` nằm trong file report. **Ngoại lệ** (D27.5): lệnh ghi file report bị chặn thì reviewer trả cả report giữa dòng `--- report ---` và dòng `--- end ---` (mục 6.5).
 - **`COMPARE` cho id ngoài `TOP_FIX`** (D30.4): `ingest` bỏ qua và ghi cảnh báo vào ledger, không báo lỗi. Producer không sửa report; report sai contract thì giao lại cho chính agent đó.
 - **`P ingest` in luôn lệnh giao việc tiếp theo** (D27.2; D30.5: mọi lần chuyển state, gồm `feedback --action approve|redo`, `waive`, `retry`): khi kết quả ingest dẫn tới một lần giao (reviewer sau worker, worker vòng sửa sau FIX), `ingest` in thêm đúng dòng JSON mà `P brief` sẽ in. Producer giao ngay trong cùng lượt, bớt một lượt mỗi vòng.
 
@@ -198,10 +204,9 @@ PRIOR:
 
 | Bước | Loại | Kiểu sửa |
 |---|---|---|
-| `blockout`, `model` | `structure` | **Đơn**: đúng một finding mỗi vòng. Thay đổi cấu trúc cần tách riêng để biết cái nào gây lỗi mới |
+| `blockout`, `model` | `structure` | **Đơn**: một finding mỗi vòng, hoặc nhiều finding khi chúng đụng các part khác nhau (reviewer ghi part của từng finding, D39.6). Hai finding đụng cùng một part thì tách riêng để biết cái nào gây lỗi mới |
 | | `param` | **Lô**: mọi finding `param` đang mở |
-| `views_front`, `views_rest` | `regen` | **Lô**: mọi view có finding `regen`. Mỗi view độc lập |
-| `views_rest` | `regen_front` | Front sai so với bộ (D22.4). Script chạy `redo --step views_front`; các bước sau tự chạy lại |
+| `views` | `regen` | **Lô**: mọi view có finding `regen`; finding nêu view trong `region`. Mỗi view độc lập |
 | | `note_exception`, `note_texture` | Chỉ ghi chú, không gây FIX |
 | `texture` | `repaint` | **Lô**: mọi vùng có finding `repaint`. Mỗi vùng độc lập |
 | | `fix_uv_mesh` | Script chạy `redo --step model`. DUYỆT 1 lại |
@@ -209,7 +214,7 @@ PRIOR:
 | | `note` | Chỉ ghi chú, không gây FIX |
 | Mọi bước có reviewer | `need_evidence` | Vòng xin bằng chứng (mục 7) |
 
-Script kiểm `TOP_FIX` liệt kê đúng: kiểu đơn có đúng một id; kiểu lô có đủ mọi finding đang mở cùng loại.
+Script kiểm `TOP_FIX` liệt kê đúng: kiểu đơn có một id, hoặc nhiều id khi các finding đụng các part khác nhau; kiểu lô có đủ mọi finding đang mở cùng loại (script tự tính bộ id này).
 
 ### 6.2 Worker
 
@@ -217,7 +222,7 @@ Giữ như skill nền: `STATUS / OUTPUT / RUBRIC / ISSUES`. Thêm:
 - `PROFILE_HASH: <hash>`: **chép từ brief**. Script tính hash khi sinh brief (mục 10); `ingest` so với hash trong brief. Lệch → báo lỗi, không chuyển trạng thái.
 - `FIXED: F<n>, ...` (vòng sửa): finding worker cho là đã sửa. Chỉ để đối chiếu; reviewer quyết.
 - Texture Artist: `UNFIXABLE: yes|no`.
-- `ACCEPTED_FAIL: <file> — <lý do có số>` (D31.3): check fail mà worker không sửa được. Worker ghi cả vào mục NGOẠI LỆ của README. Chỉ check có tên trong danh sách `acceptable` của bước trong `pipeline.toml` mới được khai `ACCEPTED_FAIL` (mặc định: `measure.json` ở `views_front`, `views_rest`; `qa_screen_tris_check.json` ở `model`). Worker ghi vào mục `## NGOẠI LỆ` của `final/README.md`. Gate cứng (hash, schema, `export_check`, topology Meshy) không bao giờ được khai.
+- `ACCEPTED_FAIL: <file> — <lý do có số>` (D31.3): check fail mà worker không sửa được. Worker ghi cả vào mục NGOẠI LỆ của README. Chỉ check có tên trong danh sách `acceptable` của bước trong `pipeline.toml` mới được khai `ACCEPTED_FAIL` (mặc định: `measure.json` ở `views`; `qa_screen_tris_check.json` ở `model`). Worker ghi vào mục `## NGOẠI LỆ` của `final/README.md`. Gate cứng (hash, schema, `export_check`, topology Meshy) không bao giờ được khai.
 - `RESOLVED_NOTES: <mục>, ...` (D27.8): ghi chú của bước trước (TEXTURE NOTE, `note_texture`, ghi chú trong `ISSUES`) mà worker bước này đã làm. Reviewer của bước này xác nhận từng mục trong report. Chỉ mục được xác nhận mới rời khỏi "Việc còn mở" của README (mục 6.4).
 
 Worker tự ghi file report như reviewer (D27.5, mục 6.5). Lời giao việc chỉ gồm file role và brief, không gợi ý ghi file bằng shell (D30.8).
@@ -226,7 +231,17 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 
 **Kiểm đầu vào** (D22.12): chỉ script kiểm hash đầu vào, khi sinh brief và khi ingest (mục 11). `check_inputs.py` của agent chỉ kiểm file có tồn tại.
 
-**Brief bước `texture`:** script sinh brief từ các `final/` đã duyệt (`blockout` để đọc `sources.json`, `model`, `views_rest`) và file concept trong `_approved/<id>/`. Script chép mục `ISSUES` của report bước `model` đã duyệt vào brief. Không có file handoff.
+**Script lái, model chỉ quyết** (D37):
+- Mỗi chuỗi lệnh tất định là một tool của bước. Blockout: `gate_all.py`, `make_variant.py`, `init_sources.py`, `blockout_md.py`. Views: `make_prompt.py`, `pick_best`. Model: `build_model.py`, `qa_all.py`. Texture: tool viết prompt paint.
+- Worker chỉ viết phần cần phán đoán: part graph, hàm `custom`, mô tả mặt khuất, chỗ sửa, ghi chú.
+- Dựng một lần rồi gate mọi part. Model mở Blender 3 lần thay cho 8, `assemble` mở 1 lần thay cho 6.
+- File kit đóng băng không sửa. Tool mới nằm cạnh và gọi lại hàm của kit.
+- `ingest` tự chạy mọi check thuần Python của bước, không chỉ `counts`. Check chưa chạy hoặc JSON không đọc được là `error`, không tính là pass (D36.4). JSON gate bắt buộc nằm trong `outputs` của bước.
+- Thiếu một output thì `retry` resume worker cũ với dòng "thiếu output: X", không dựng lại cả bước.
+
+**Brief bước `texture`:** script sinh brief từ các `final/` đã duyệt (`blockout` để đọc `sources.json`, `model`, và `views` khi thẻ có) và file concept trong `_approved/<id>/`. Script chép mục `ISSUES` của report bước `model` đã duyệt vào brief. Không có file handoff. Brief ghi dòng `CONCEPT_COLORS:` (mục 9) ở mọi giá trị `views`, và chép các khóa profile mà worker cần thay vì bảo worker đọc cả `PROJECT-PROFILE.yaml`.
+
+**Texture đo trước, render sau** (D36.11): `renders.json` ghi sha256 của albedo. `ingest` và `assemble.py` từ chối khi albedo đã đổi sau lần render.
 
 ### 6.3 Meshy (D20.14, D21.2, D24.2, D24.3)
 
@@ -255,10 +270,10 @@ Worker không khai số lần gọi Meshy. Script tính từ file `budget-<mesh_
 
 | Lỗi | Nhận biết | Xử lý |
 |---|---|---|
-| Trước khi task được tạo (lỗi mạng, lỗi API lúc gửi) | `task.json` không có `task_id` | Wrapper hoàn lại khoản đã trừ trong file budget, rồi thử lại. Tối đa 3 lần (D8.3) |
+| Trước khi task được tạo (lỗi mạng, lỗi API lúc gửi) | `task.json` không có `task_id` | Wrapper hoàn đúng số credit đã trừ lúc gửi (số lưu lúc POST, D36.8), rồi thử lại. Tối đa 3 lần (D8.3) |
 | Sau khi task đã tạo (hết thời gian chờ, lỗi lúc tải file) | `task.json` có `task_id` | **Không tạo task mới.** Chờ tiếp đúng `task_id` đó và tải kết quả, dùng lại hàm `wait` và `download` của gen_api. Tối đa 3 lần |
 
-Sau 3 lần lỗi ở một trong hai trường hợp: `STATUS: BLOCKED`, Producer hỏi anh.
+Sau 3 lần lỗi ở một trong hai trường hợp: `STATUS: BLOCKED`, Producer hỏi anh. Khóa Meshy hết hiệu lực khi PID giữ khóa đã chết.
 
 **Các quy tắc còn lại giữ nguyên:**
 1. Texture chưa đạt: Texture Artist sửa qua các vòng review thường.
@@ -269,11 +284,11 @@ Sau 3 lần lỗi ở một trong hai trường hợp: `STATUS: BLOCKED`, Produc
 
 `assemble.py` chạy khi bước `texture` được duyệt. Không có agent, không có reviewer.
 
-1. Kiểm hash mesh khớp hash đã khóa khi duyệt `model`.
+1. Kiểm hash mesh khớp hash đã khóa khi duyệt `model`, và sha256 của albedo khớp `renders.json` (D36.11).
 2. Gắn `albedo_<texture_res>.png` vào mesh đã khóa. Xuất GLB cuối: 1 mesh, 1 node, 1 material, unlit, base color only. Lưu `.blend`.
-3. Chạy QA của kit trên GLB cuối: `mesh_check`, `uv_check`, `export_check` (với `expect_unlit: true`), `screen_tris_check`. Kết quả ghi vào `evidence/qa/` của thư mục làm việc.
+3. Chạy QA của kit trên GLB cuối: `mesh_check`, `uv_check`, `export_check` (với `expect_unlit: true`), `screen_tris_check`. Kết quả ghi vào `evidence/qa/` của thư mục làm việc. Xuất GLB, bốn QA và render so sánh chạy trong một phiên Blender (D37.4).
 3b. **Dùng `finalize.py` của kit làm cổng** (D24.4): finalize chỉ nhận kết quả QA gắn với sha256 của đúng file GLB này, và từ chối nếu thiếu `mesh_check` hoặc có kết quả fail hoặc lỗi. finalize từ chối → `assemble.py` fail.
-4. **Kiểm GLB hiển thị đúng:** render một bộ nhỏ (3/4 trước, camera game) từ chính file GLB đã xuất, so pixel với render cùng góc của bước `texture`. Lệch quá ngưỡng → fail. Lý do: bắt lỗi phát sinh khi xuất (color space, alpha, unlit) mà render trong Blender không thấy.
+4. **Kiểm GLB hiển thị đúng:** render một bộ nhỏ (3/4 trước, camera game) từ chính file GLB đã xuất, so pixel với render cùng góc của bước `texture`. Lệch quá ngưỡng → fail. Lý do: bắt lỗi phát sinh khi xuất (color space, alpha, unlit) mà render trong Blender không thấy. Chỉ so các view có trong `renders.json`; view thiếu thì README ghi "game view chưa kiểm".
 5. Ghép gói cuối: `model/`, `texture/` (chép `albedo` và `notes.md` từ `final/` của bước `texture`), `review/` (sheet DUYỆT 1, render và `final_lit_vs_concept.png` của bước `texture`, ảnh so ở điểm 4, report reviewer).
 6. Ghép `README.md` từ report các bước: dòng đầu là trạng thái và ngày; cách làm (chế độ texture, số lần gọi Meshy tính từ file budget); ngoại lệ (NGOẠI LỆ, TEXTURE NOTE, mục "Blockout tự quyết"); việc còn mở; những gì chưa kiểm (engine, camera chưa chốt, % tam giác nhỏ).
    **"Việc còn mở"** (D27.8) chỉ lấy finding còn mở trong `findings.json` của **version được duyệt** ở từng bước. Một ghi chú của bước trước rời khỏi danh sách khi worker bước sau ghi nó ở `RESOLVED_NOTES` và reviewer bước đó xác nhận (mục 6.2). Run 4: README liệt kê "3 hàng ván mặt sau" dù model đã dựng.
@@ -291,8 +306,9 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 - **Đường dự phòng:** lệnh ghi bị chặn thì agent trả cả report trong tin nhắn cuối, giữa dòng `--- report ---` và dòng `--- end ---`. Producer ghi nguyên văn tin nhắn vào file report. `ingest` chỉ đọc phần giữa hai dòng đó, kể cả khi dòng có dấu cách thừa hoặc CRLF.
 - Đường dự phòng phải hiếm. Lý do: report lưu hộ đi qua context Producer.
 - Script ghi mỗi lần dự phòng vào ledger: sự kiện `report_fallback`, kèm vai trò và bước.
+- **Report sai contract** (D36.3): `ingest` đổi tên file thành `*.rejected-<k>.md`. `P wait` và kiểm kẹt bỏ qua file đó, nên nó không giống một report đã xong.
 - Settings của project có rule allow cho lệnh ghi dưới `production/`, để bớt lần bị chặn (bản Claude: `templates/settings.snippet.json`).
-- Ngoài đường dự phòng, tin nhắn trả về vẫn chỉ gồm `VERDICT` và `COUNTS` (D22.6).
+- Ngoài đường dự phòng, tin nhắn trả về vẫn chỉ gồm `VERDICT` (D22.6).
 
 ### 6.6 Không có thời gian chết (D33)
 
@@ -314,7 +330,7 @@ Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên
 2. **Mỗi vòng:** worker sửa đúng các finding liệt kê trong `TOP_FIX`, bắt đầu từ bản brief chỉ định (bản tốt nhất).
 2b. **Brief vòng sửa kèm kết quả script** (D26.4, theo 3DCodeBench): ngoài finding của reviewer, brief liệt kê đường dẫn tới mọi file JSON gate và check **fail** của bản gốc (`gates.py`, `check_*.py`, QA của kit). Worker đọc nguyên văn lỗi của script trước, rồi mới tới nhận xét của reviewer. Lý do: phản hồi xác định từ Blender là thứ giúp vòng sửa hội tụ nhiều nhất.
 2c. **Phương án cho lỗi `param`** (D26.2, theo BlenderAlchemy): khi `TOP_FIX` loại `param`, worker dựng 2–3 phương án giá trị (ví dụ độ chìa mái 0.25 / 0.30 / 0.35 m), render cùng bộ góc review, đặt ở `vN/variants/<a|b|c>/`; phương án a nằm ở `final/`. Reviewer chọn bằng dòng `PICK`. Nếu chọn khác a, script chép phương án đó vào `final/` rồi mới ingest. Vẫn tính một vòng. Không áp cho `structure` (giữ sửa đơn) và không áp cho bước có gen ảnh (tốn lượt gen).
-2d. **Check fail trả thẳng về worker** (D31.3): worker xong mà có JSON `fail` hoặc `error` trong `final/review/{gates,checks}/` hoặc `final/review/{join,unwrap}.json` (tool model ghi hai file này ngoài `checks/`) → vòng sửa của worker luôn, không gọi reviewer. Brief kèm danh sách JSON fail. Vòng này tính vào `max_fix_rounds`. Worker khai `ACCEPTED_FAIL` hợp lệ (mục 6.2) → sang reviewer, reviewer chấm lý do đó. Ledger đếm số lần khai theo bước và theo check.
+2d. **Check fail trả thẳng về worker** (D31.3): worker xong mà có JSON `fail` hoặc `error` trong `final/review/{gates,checks}/` hoặc `final/review/{join,unwrap}.json` (tool model ghi hai file này ngoài `checks/`) → vòng sửa của worker luôn, không gọi reviewer. Brief kèm danh sách JSON fail. **Vòng này không trừ vào `max_fix_rounds`** (D39.5); có trần riêng `[review] max_direct_rounds` (mặc định 2). Bộ tên check fail y hệt vòng trả thẳng trước → `waiting_human` ngay, nêu tên check. Worker khai `ACCEPTED_FAIL` hợp lệ (mục 6.2) → sang reviewer, reviewer chấm lý do đó. Ledger đếm số lần khai theo bước và theo check.
 3. **Tiến bộ** đo trên finding có id, không đo trên tổng số đếm. Một vòng có tiến bộ khi: có ít nhất một finding `blocker` hoặc `major` cũ chuyển `resolved`, và số finding chuyển `regressed` ít hơn số `resolved`. Finding mới phát hiện không tính là thụt lùi, vì reviewer có context mới mỗi lần nên có thể thấy thêm lỗi cũ chưa ai nêu.
 4. **Dừng sớm:** từ vòng 2, nếu vòng không có tiến bộ → `waiting_human`, ghi "không tiến bộ ở vòng N" kèm danh sách finding còn mở.
 4b. **Đổi nhánh không đặt lại bộ đếm** (D25.H): ví dụ Texture Artist chuyển từ Meshy sang VẼ MỚI trong cùng đợt feedback vẫn đếm tiếp vòng cũ. Chỉ feedback `redo` của anh mới mở đợt mới.
@@ -327,8 +343,10 @@ Không bên nào chờ thông báo. Việc xong hay chưa đọc từ file trên
    - Worker không được sửa `final/` (D22.5). Script so hash `final/` trước và sau vòng; lệch → báo lỗi, bỏ kết quả vòng đó.
    - Resume worker cũ nếu còn; vòng này không tính vào `resume_rounds`.
    - Không tính vào 3 vòng. Cùng bước xin lần thứ hai trong một đợt feedback → `waiting_human` (D20.15).
-7. **Chuyển lên anh** (`waiting_human`): hết vòng 3 vẫn FIX (gửi bản tốt nhất kèm finding còn mở); dừng sớm; `ESCALATE`; `need_evidence` lần hai; Meshy (mục 6.3 điểm 5 và 6); `assemble.py` pass (DUYỆT 2). `assemble.py` fail → `blocked`.
+7. **Chuyển lên anh** (`waiting_human`): hết vòng 3 vẫn FIX (gửi bản tốt nhất kèm finding còn mở); dừng sớm; `ESCALATE`; `need_evidence` lần hai; check fail y hệt vòng trả thẳng trước (2d); kẹt lần 3 (mục 6.6); Meshy (mục 6.3 điểm 5 và 6); `assemble.py` pass (DUYỆT 2). `assemble.py` fail → `blocked`.
 8. **Cần sửa ở bước `assemble`** (D21.6, thay D20.4): không có agent và reviewer, nên khi anh bấm Cần sửa, trang duyệt hỏi sửa ở bước nào: `texture` (vẽ lại) hoặc `model` (mesh, UV). Script chạy `redo --step <bước>`; các bước sau tự chạy lại.
+9. **"Cần sửa" gửi lúc asset đang chạy** (D36.10): khi asset ở `running`, `reviewing` hoặc `evidence_running`, script lưu feedback vào `status.json` → `pending_redo[<bước>]`. Lần `ingest` kế áp dụng nó thành finding `H<n>`, trước mọi lần duyệt. Duyệt kèm vùng khoanh được ghi thành finding loại `note` và chuyển cho bước sau.
+10. **Nghi reviewer chấm sai** (D39.7): Producer không tự quyết, vì Producer không mở output. Producer chạy `P feedback … --action note` rồi hỏi anh.
 
 ## 8. Thư mục
 
