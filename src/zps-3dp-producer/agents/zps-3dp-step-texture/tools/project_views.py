@@ -5,8 +5,9 @@ Usage: python3 T/project_views.py --glb <locked GLB> --model M --views V/work/pa
 Drawn from kit project_concept.py (orthographic projection, occlusion), with the cameras of render_paint_views.py instead
 of a bbox fit to a concept, so 8 views of any angle work. The paintings are made one by one, so a texel takes one view:
   registration: each painting's object mask (its alpha, else the pixels away from its border colour) is compared with
-    its guide's alpha. IoU under LIMITS["min_iou"] or an offset (phase correlation of the two masks) over
-    LIMITS["max_shift_px"] rejects the view, so no background or neighbour material lands on the model.
+    its guide's alpha. IoU under LIMITS["min_iou"] (a pixel within LIMITS["band_px"] of the other mask counts as
+    matched, so thin parts and outlines are not penalised) or an offset (the shift of most overlap of the two masks)
+    over LIMITS["max_shift_px"] rejects the view, so no background or neighbour material lands on the model.
   seen: a view sees a texel when the face looks at the camera (cos = n . back > MIN_COS), the point is the nearest
     surface there (the view's z-buffer, tolerance DEPTH_EPS of the asset size), every pixel within EDGE_PX shows that
     surface too (so no bilinear tap reads a nearer or farther one) and it lies inside the guide alpha shrunk by ERODE_PX.
@@ -43,7 +44,7 @@ EDGE_PX = 1
 ERODE_PX = 3
 FEATHER_PX = 2
 HYST = 0.05
-LIMITS = {"min_iou": 0.9, "max_shift_px": 3}  # provisional until the pilot: the share of good paintings they reject
+LIMITS = {"min_iou": 0.9, "max_shift_px": 3, "band_px": 2}  # provisional until the pilot: the share of good paintings they reject
 
 
 class Aspect(ValueError):
@@ -106,14 +107,23 @@ def window(a, px, fn, fill):
 
 
 def registration(paint, guide_alpha):
-    """IoU of the painting's object mask with the guide alpha, and the painting's offset [dx, dy] in px."""
+    """IoU of the painting's object mask with the guide alpha, a pixel within LIMITS["band_px"] of the other mask
+    counting as matched, and the painting's offset [dx, dy] in px: the shift of most overlap, the mean of ties (a mask
+    a pixel tighter than its guide overlaps it fully at -1, 0 and +1)."""
     pm, gm = texture_complexity.object_mask(paint), guide_alpha >= 128
-    iou = float((pm & gm).sum() / max((pm | gm).sum(), 1))
-    r = np.fft.fft2(pm.astype(float)) * np.conj(np.fft.fft2(gm.astype(float)))
-    c = np.fft.ifft2(r / np.maximum(np.abs(r), 1e-9)).real
-    dy, dx = np.unravel_index(int(c.argmax()), c.shape)
-    h, w = c.shape
-    return iou, [int(dx - w if dx > w // 2 else dx), int(dy - h if dy > h // 2 else dy)]
+    band = LIMITS["band_px"]
+    miss = (pm & ~window(gm, band, np.logical_or, False)).sum() + (gm & ~window(pm, band, np.logical_or, False)).sum()
+    iou = float(1 - miss / max((pm | gm).sum(), 1))
+    h, w = pm.shape
+    r = np.fft.rfft2(pm.astype(float), (2 * h, 2 * w)) * np.conj(np.fft.rfft2(gm.astype(float), (2 * h, 2 * w)))
+    c = np.round(np.fft.irfft2(r, (2 * h, 2 * w)))
+    dy, dx = np.nonzero(c == c.max())
+    dy, dx = np.where(dy >= h, dy - 2 * h, dy), np.where(dx >= w, dx - 2 * w, dx)
+    return iou, [int(np.round(dx.mean())), int(np.round(dy.mean()))]
+
+
+def accepted(iou, off):
+    return iou >= LIMITS["min_iou"] and max(map(abs, off)) <= LIMITS["max_shift_px"]
 
 
 def bilinear(img, x, y):
@@ -208,7 +218,7 @@ def run(a):
         alpha = rgba(os.path.join(a.views, vw["guide"]))[..., 3]
         iou, off = registration(img, alpha)
         reg[name] = {"iou": round(iou, 4), "offset_px": off}
-        if iou < LIMITS["min_iou"] or max(map(abs, off)) > LIMITS["max_shift_px"]:
+        if not accepted(iou, off):
             skipped[name] = f"lệch guide: IoU {iou:.2f}, dời {off[0]},{off[1]} px"
             continue
         mask = window(alpha >= 128, ERODE_PX, np.logical_and, False)
