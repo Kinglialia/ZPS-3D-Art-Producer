@@ -21,11 +21,11 @@ Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong
 - `P preflight`: kiểm Blender (`BLENDER`, rồi Blender.app, rồi PATH), codex CLI (đã test với codex-cli 0.164.0; lệnh gen là `codex exec -s workspace-write --skip-git-repo-check`; ghi phiên bản codex-cli; `codex exec --help` thiếu flag nào skill dùng thì báo một dòng và tắt `codex_image`), `MESHY_API_KEY` trong `paths.env_file` của profile (mặc định `.env`; script không in key), và `preflight.py` của kit khi có (mặc định skill `zps-3d-artist` cạnh skill này; nơi khác: biến môi trường `PRODUCER_KIT=<đường dẫn preflight.py>`). Ghi `production/preflight.json`. Chạy một lần mỗi phiên.
 - `P approvals set <bước> <human|reviewer> --by "<nguyên văn>"`: ghi `production/policy.yaml`. `model reviewer` cần `--confirm-spend`. `P approvals set review_board <local|local+remote> --by "<nguyên văn>"`: đổi trang duyệt.
 - `P delegate <bước> <id> ... --by "<nguyên văn>"`: reviewer duyệt bước đó cho các asset này. Thứ tự: `delegate` > `approvals` > `human`.
-- `[limits]` trong `pipeline.toml`: số tiến trình cùng lúc. `run_tool.py` ghi `production/pids/blender/<id>-<pid>.pid` cho mỗi lệnh Blender và xóa file khi lệnh xong; `gen_image_codex.py` tự ghi `production/pids/codex_image/<id>-<pid>.pid` cho mỗi lần chạy. `P next` chỉ đếm PID còn sống.
+- `[limits]` trong `pipeline.toml`: số tiến trình cùng lúc. `run_tool.py` ghi `production/pids/blender/<id>-<pid>.pid` cho mỗi lệnh Blender và xóa file khi lệnh xong; `gen_image_codex.py` tự ghi `production/pids/codex_image/<id>-<pid>.pid` cho mỗi lần chạy, và `<id>-<pid>-<k>.pid` cho mỗi luồng gen thêm. `P next` chỉ đếm PID còn sống, mỗi asset một lần.
 - `run_tool.py`: một lệnh cho mọi tool của worker. Brief có dòng `RUN:` ghi mọi thứ cố định của lần giao (`--blender`, `--agent`, `--version-dir`); worker thêm `[bl] <tool> <đối số>` phía sau. Tên tool tính từ thư mục `TOOLS:`. `bl` chạy tool trong Blender (`-b --python-exit-code 1 --python <tool> -- <đối số>`); không có `bl` thì tool chạy bằng python của `.deps/venv` trong thư mục `TOOLS:`. Tool phải là file `.py` trong `scripts/` hoặc `agents/*/tools/` của skill; đường dẫn khác, kể cả qua `..` hay symlink, bị từ chối với mã thoát 2. Log vào `vN/work/logs/<tool>.log`; lệnh in đúng một dòng `<tool> <pass|fail|error> [đường dẫn]`. Mã thoát 1 khi tool thoát khác 0 hoặc khi JSON kết quả tool vừa ghi có `overall` là `fail` hay `error`. Thiếu `.deps/` thì nó chạy `setup_deps.sh` của thư mục `TOOLS:` với `BLENDER` là Blender của brief. `install.py` gộp allow rule của `run_tool.py` và `assemble.py`; `P preflight` báo khi thiếu.
-- `[codex] timeout_s` trong `pipeline.toml`: giây chờ mỗi lần gọi `codex exec` (mặc định 900, tối thiểu 300; D30.20). Brief đưa số này vào `GEN_ARGS`. Sau mỗi lần gọi, `gen_image_codex.py` kiểm từng file (có file, header PNG, đọc được, cạnh dài > 1040 px) và chỉ gen lại file hỏng hoặc thiếu.
-- `--approve-for-me` của Codex tự duyệt mọi yêu cầu quyền: không bao giờ có trong lệnh mặc định hay `GEN_ARGS` (D30.21). Chỉ khi một lần gọi bị chặn thật, người dùng chạy lại lệnh gen với `--approve-for-me "<lý do>"`; `<tên>.json` và ledger ghi lý do.
-- `codex_batch = true` ở `[[steps]]` texture: `GEN_ARGS` có `--batch`, các paint view dùng chung tham chiếu gen trong một lần gọi (D30.22). Mặc định `false`. Chỉ bật ở bước texture.
+- `[codex] timeout_s` trong `pipeline.toml`: giây chờ mỗi lần gọi `codex exec` (mặc định 900, tối thiểu 300). Brief đưa số này vào `GEN_ARGS`. Sau mỗi lần gọi, `gen_image_codex.py` kiểm từng file (có file, header PNG, đọc được, cạnh dài > 1040 px) và chỉ gen lại file hỏng hoặc thiếu.
+- `--approve-for-me` của Codex tự duyệt mọi yêu cầu quyền: không bao giờ có trong lệnh mặc định hay `GEN_ARGS`. Chỉ khi một lần gọi bị chặn thật, người dùng chạy lại lệnh gen với `--approve-for-me "<lý do>"`; `<tên>.json` và ledger ghi lý do.
+- `codex_batch = true` ở `[[steps]]` texture: `GEN_ARGS` có `--batch`, các paint view dùng chung tham chiếu gen trong một lần gọi. Mặc định `false`. Chỉ bật ở bước texture.
 - `PRODUCER_ROOT`: thư mục làm việc (mặc định `production`); gói cuối vào thư mục `deliver` cùng hậu tố (`production-codex` → `deliver-codex`). Dùng khi so A/B hai runtime.
 
 ## Project mới
@@ -39,7 +39,7 @@ Lệnh này tạo (không ghi đè file đã có):
 - Trong thư mục concept: `_approved/` và `GUIDELINE.md` đã điền tên project, đường dẫn và lệnh `check_card.py`.
 - `.env` trong `.gitignore` của project, để key Meshy không bị commit.
 
-Key Meshy nằm trong `.env` của project, dòng `MESHY_API_KEY=...`. Đường dẫn ghi ở `paths.env_file` của profile (mặc định `.env`). Chỉ nêu đường dẫn file khi nói với Producer. Không đính kèm file `.env` vào chat: nội dung file vào context và lộ mọi key trong đó (D30.13). Script tự đọc file; brief không chứa key hay đường dẫn `.env`.
+Key Meshy nằm trong `.env` của project, dòng `MESHY_API_KEY=...`. Đường dẫn ghi ở `paths.env_file` của profile (mặc định `.env`). Chỉ nêu đường dẫn file khi nói với Producer. Không đính kèm file `.env` vào chat: nội dung file vào context và lộ mọi key trong đó. Script tự đọc file; brief không chứa key hay đường dẫn `.env`.
 
 Lệnh này không tạo `production/PROJECT-PROFILE.yaml`. Skill `zps-3dp-project-setup` tạo file này cùng người dùng, theo mẫu `templates/PROJECT-PROFILE.yaml`. Chưa có profile hợp lệ thì `P intake` từ chối. Kiểm profile bằng `scripts/check_profile.py production/PROJECT-PROFILE.yaml` (cùng python của venv). Profile nêu `preset` thì file `presets/<preset>.yaml` trong bộ skill phải có.
 
@@ -71,14 +71,14 @@ v0.8.0 gộp hai bước `views_front`, `views_rest` thành một bước `views
    - Asset chưa tới bước view, hoặc thẻ có `views: none`: không đổi gì.
    - Asset đã duyệt cả hai bước cũ: front và bộ view đã duyệt gộp thành `views` v1 đã duyệt. Asset đi tiếp ở bước đang đứng.
    - Asset đang ở giữa một bước cũ, hoặc mới duyệt front: asset làm lại bước `views` từ `todo`.
-   Thư mục cũ giữ nguyên trên đĩa. Lệnh cũng đổi `rubric.md` của asset và `production/rubrics/*.md` sang một mục `## views`. Chạy lại lệnh không đổi gì thêm.
+   Thư mục cũ giữ nguyên trên đĩa. Lệnh cũng đổi `rubric.md` của asset và `production/rubrics/*.md` sang một mục `## views`. Key chỉ có ở `## views_front` chuyển sang `## views`; lệnh in tên các key đó. Chạy lại lệnh không đổi gì thêm.
 3. `policy.yaml`: khóa `views_rest` đọc thành `views`; lần ghi sau lưu tên mới. Không cần sửa tay.
 
-## Pipeline đứng im (D33)
+## Pipeline đứng im
 
 - Thấy pipeline không chạy: bấm Esc, rồi bảo Producer chạy `P next`. Asset kẹt: `P stall <id>`; asset `blocked` hoặc `waiting_human` vì kẹt: `P retry <id>`. Trạng thái nằm trong file, nên không mất gì.
 - Hook `SubagentStop` (`P on-stop`) ghi xuống đĩa mỗi lần subagent dừng, kể cả khi Producer không nhận thông báo. `install.py` gộp hook này và biến `env` Bash timeout (`BASH_DEFAULT_TIMEOUT_MS` 600000, `BASH_MAX_TIMEOUT_MS` 3600000) vào settings của project; `P preflight` báo khi thiếu.
-- Hook `Stop` (`P on-main-stop`) từ chối cho phiên chính dừng khi còn report chưa ingest hoặc còn dòng giao việc chưa giao. `install.py` gộp hook này cùng các hook trên; hook `Stop` của người dùng vẫn giữ. Bản Codex không có hook này.
+- Hook `Stop` (`P on-main-stop`) từ chối cho phiên chính dừng khi còn report chưa ingest (cả `report-script.md` của bước script), hoặc còn dòng giao việc chưa giao. `install.py` gộp hook này cùng các hook trên; hook `Stop` của người dùng vẫn giữ. Bản Codex không có hook này.
 - Ngưỡng kẹt và chế độ giao: `dispatch`, `watch` trong `policy.yaml`. Thời gian thường lệ mặc định mỗi bước: `usual_min` trong `pipeline.toml`.
 
 ## Review page
