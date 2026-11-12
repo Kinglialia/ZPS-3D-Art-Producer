@@ -26,10 +26,11 @@ HOW = "mỗi khóa: param cùng tên trong fixed_params, hoặc đúng N part c�
 
 
 def graph(slats=3, legs=4, fixed=("top_w", "top_slats")):
-    """A synthetic table: a grooved top whose slat count is the param top_slats, and `legs` parts tagged legs."""
+    """A synthetic table: a top built by an asset function whose slat count is the param top_slats, and `legs` parts
+    tagged legs."""
     return {"params": {"top_w": 1.2, "top_slats": slats}, "fixed_params": list(fixed),
-            "parts": [{"name": "top", "primitive": "custom", "fn": "grooved_box",
-                       "args": ["top_w", "top_w", "top_w", 0.01, 0.005, "top_slats"]},
+            "parts": [{"name": "top", "primitive": "custom", "fn": "slatted_top",
+                       "args": ["top_w", "top_w", "top_slats"]},
                       *({"name": f"leg_{i}", "primitive": "box", "dims": ["top_w"] * 3, "tag": "legs"}
                         for i in range(legs))]}
 

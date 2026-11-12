@@ -33,6 +33,8 @@ TAG = re.compile(r"[a-z][a-z0-9_]*")  # base, roof, or a card `counts` key (D30.
 AXIS = {"X": 0, "Y": 1, "Z": 2}
 IN_PLANE = {0: (1, 2), 1: (0, 2), 2: (0, 1)}
 MIRROR_NOTE = "write these parts explicitly (own primitive, dims and attach), not as mirror_of"
+CUSTOM_FN_NOTE = ("a custom part may call only a function of custom_lib.py or of the asset's custom_parts.py: "
+                  "write the missing function there (pure Python, math only)")
 
 
 def parent(p):
@@ -156,7 +158,9 @@ def run(graph, project=None):
                              if p.get("primitive") == "custom" and p.get("fn") not in fns],
         "schema.custom_parts": bad_project,
     }
-    checks = [common.check(k, "fail" if v else "pass", value=sorted(v)) for k, v in found.items()]
+    notes = {"schema.custom_fn": CUSTOM_FN_NOTE}
+    checks = [common.check(k, "fail" if v else "pass", value=sorted(v), note=notes.get(k) if v else None)
+              for k, v in found.items()]
     orphans, cycles, order = connected(parts)
     checks.append(common.check("schema.connected", "fail" if orphans or cycles else "pass",
                                value={"orphans": orphans, "cycles": cycles}))

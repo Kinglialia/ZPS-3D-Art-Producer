@@ -22,12 +22,26 @@ BLENDER = shutil.which("blender") or "/Applications/Blender.app/Contents/MacOS/B
 needs_venv = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh")
 needs_blender = pytest.mark.skipif(not (VPY.is_file() and os.access(BLENDER, os.X_OK)),
                                    reason="needs Blender and tools/setup_deps.sh")
-GENERIC = ["bevel_box", "grooved_box", "vault"]
+GENERIC = ["bevel_box"]
 # A gable roof: a triangular prism along X, w x d x h, centred on its bbox. 6 vertices, 5 faces.
 ROOF = ("import math\n\n\ndef ridge_roof(w, d, h):\n"
         "    x, y, z = w / 2.0, d / 2.0, h / 2.0\n"
         "    verts = [(-x, -y, -z), (x, -y, -z), (x, y, -z), (-x, y, -z), (-x, 0.0, z), (x, 0.0, z)]\n"
         "    faces = [(0, 3, 2, 1), (0, 1, 5, 4), (2, 3, 4, 5), (0, 4, 3), (1, 2, 5)]\n"
+        "    return verts, faces\n")
+# A pile of `rows` equal slabs, w x d x h in all, centred on its bbox. A count that is not a whole number is refused.
+PILE = ("def pile(w, d, h, rows):\n"
+        "    n = int(rows)\n"
+        "    if n != rows or n < 1:\n"
+        "        raise ValueError(f'rows must be a whole number >= 1, got {rows}')\n"
+        "    x, y, step = w / 2.0, d / 2.0, h / n\n"
+        "    verts, faces = [], []\n"
+        "    for k in range(n):\n"
+        "        z0, z1 = -h / 2.0 + k * step, -h / 2.0 + (k + 1) * step\n"
+        "        b = len(verts)\n"
+        "        verts += [(sx * x, sy * y, z) for z in (z0, z1) for sy in (-1, 1) for sx in (-1, 1)]\n"
+        "        faces += [(b + i, b + j, b + k2, b + l) for i, j, k2, l in ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4),\n"
+        "                                                                  (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5))]\n"
         "    return verts, faces\n")
 
 
@@ -86,10 +100,24 @@ def test_the_shared_library_holds_only_generic_functions_so_no_asset_code_ships_
 def test_schema_refuses_a_custom_part_whose_fn_is_in_neither_the_library_nor_the_asset_file(tmp_path, run_check):
     g = hut()
     part(g, "roof").update(primitive="custom", fn="my_roof", args=["wall_w", "wall_d", "roof_h"])
-    part(g, "walls").update(primitive="custom", fn="vault", args=["wall_w", "wall_d", "wall_h", 0.5, 12])
+    part(g, "walls").update(primitive="custom", fn="bevel_box", args=["wall_w", "wall_d", "wall_h", 0.05, 2, 0])
     r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
     assert (r.rc, r.check("schema.custom_fn"), r.check("schema.custom_parts")) == (
         1, {"status": "fail", "value": ["roof: my_roof"]}, {"status": "pass", "value": []})
+
+
+def test_schema_refuses_a_part_that_calls_vault_or_grooved_box_and_sends_the_worker_to_custom_parts_py(tmp_path,
+                                                                                                    run_check):
+    """vault and grooved_box left the shared library (D42.2): a graph written for them must fail the schema check and
+    say where the function goes now, so the worker writes it in the asset's custom_parts.py instead of guessing."""
+    g = hut()
+    part(g, "roof").update(primitive="custom", fn="vault", args=["wall_w", "wall_d", "roof_h", 0.6, 12])
+    part(g, "walls").update(primitive="custom", fn="grooved_box", args=["wall_w", "wall_d", "wall_h", 0.02, 0.01, 3])
+    r = run_check("check_schema", "--work", write_build(tmp_path / "w", g))
+    check = next(c for c in r.json["checks"] if c["check"] == "schema.custom_fn")
+    assert (r.rc, check["status"], check["value"]) == (1, "fail", ["roof: vault", "walls: grooved_box"])
+    assert check["note"] == ("a custom part may call only a function of custom_lib.py or of the asset's "
+                             "custom_parts.py: write the missing function there (pure Python, math only)")
 
 
 def test_schema_accepts_a_function_of_the_asset_file_without_running_it(tmp_path, run_check):
@@ -102,13 +130,13 @@ def test_schema_accepts_a_function_of_the_asset_file_without_running_it(tmp_path
 
 
 def test_schema_fails_an_asset_file_that_imports_os_or_redefines_a_library_function(tmp_path, run_check):
-    f = asset_dir(tmp_path, roof_graph(), f"import os\n{ROOF}\n\ndef vault(*a):\n    return None\n")
+    f = asset_dir(tmp_path, roof_graph(), f"import os\n{ROOF}\n\ndef bevel_box(*a):\n    return None\n")
     write_build(f, roof_graph())
     r = run_check("check_schema", "--work", f)
     assert r.check("schema.custom_parts") == {"status": "fail", "value": ["line 1: import os"]}
-    (f.parents[2] / "custom_parts.py").write_text(f"{ROOF}\n\ndef vault(*a):\n    return None\n", encoding="utf-8")
+    (f.parents[2] / "custom_parts.py").write_text(f"{ROOF}\n\ndef bevel_box(*a):\n    return None\n", encoding="utf-8")
     r = run_check("check_schema", "--work", f)
-    assert r.check("schema.custom_parts") == {"status": "fail", "value": ["redefines vault of custom_lib.py"]}
+    assert r.check("schema.custom_parts") == {"status": "fail", "value": ["redefines bevel_box of custom_lib.py"]}
 
 
 @pytest.mark.parametrize("src, error", [
@@ -170,6 +198,35 @@ def test_custom_mesh_writes_one_json_mesh_per_part_with_its_args_and_the_file_ha
         0, ["roof.json"], "ridge_roof", [3.0, 3.0, 1.0], 6, 5), line
     assert doc["source_sha256"] == hashlib.sha256(ROOF.encode()).hexdigest()
     assert line == f"[blockout/custom_mesh] 1 mesh -> {f.parent / 'work/custom_mesh'}"
+
+
+def pile_graph(courses):
+    g = roof_graph("pile")
+    g["params"]["courses"] = courses
+    part(g, "roof")["args"].append("courses")
+    return g
+
+
+@needs_venv
+@pytest.mark.parametrize("courses", [1, 3, 5])
+def test_a_count_param_reaches_the_asset_mesh_so_the_counts_gate_and_the_shape_agree(tmp_path, courses):
+    """D30.6: a card count travels as a param of the same name. The function gets it as a float and builds that many
+    slabs, 8 vertices and 6 faces each, so changing the param changes the mesh and a literal in the args could not."""
+    f = asset_dir(tmp_path, pile_graph(courses), PILE)
+    rc, line, out = meshes(f)
+    doc = out["roof.json"]
+    assert (rc, doc["args"], len(doc["verts"]), len(doc["faces"])) == (
+        0, [3.0, 3.0, 1.0, float(courses)], 8 * courses, 6 * courses), line
+
+
+@needs_venv
+def test_a_fractional_count_param_stops_custom_mesh_and_writes_no_mesh(tmp_path):
+    """A count that is not a whole number means the args are in the wrong order. The function refuses it and the
+    old mesh of a changed graph is not kept."""
+    f = asset_dir(tmp_path, pile_graph(2.5), PILE)
+    rc, line, out = meshes(f)
+    assert (rc, line, out) == (1, "[blockout/custom_mesh] fail: roof: pile failed: ValueError: rows must be a whole "
+                                  "number >= 1, got 2.5", {})
 
 
 @needs_venv
@@ -252,7 +309,7 @@ def test_build_parts_stops_on_a_custom_fn_outside_both_files_and_names_it_in_the
     r = build(f, str(VPY))
     asm = read(f / "assembly.json")
     assert (r.returncode, asm["overall"], sentinel.exists()) == (1, "error", False)
-    assert "custom fn not in custom_lib.py or custom_parts.py: my_roof; available: vault, grooved_box, bevel_box" \
+    assert "custom fn not in custom_lib.py or custom_parts.py: my_roof; available: bevel_box" \
         in asm["data"]["error"]
 
 
@@ -268,11 +325,11 @@ def test_build_parts_refuses_an_asset_file_that_fails_the_static_check(tmp_path)
 @needs_venv
 def test_build_parts_refuses_an_asset_function_named_like_a_library_function(tmp_path):
     """Either winner would build a shape its author did not expect, so a clash stops the build."""
-    f = asset_dir(tmp_path, roof_graph("vault"), f"{ROOF}\n\ndef vault(*a):\n    return None\n")
+    f = asset_dir(tmp_path, roof_graph("bevel_box"), f"{ROOF}\n\ndef bevel_box(*a):\n    return None\n")
     r = build(f, str(VPY))
     asm = read(f / "assembly.json")
     assert (r.returncode, asm["overall"]) == (1, "error")
-    assert "custom_parts.py redefines vault of custom_lib.py: give the asset function another name" in asm["data"]["error"]
+    assert "custom_parts.py redefines bevel_box of custom_lib.py: give the asset function another name" in asm["data"]["error"]
 
 
 @needs_venv
@@ -310,15 +367,15 @@ def test_build_parts_refuses_a_kit_tool_other_than_assembly_or_param_fit(tmp_pat
 @needs_blender
 def test_a_custom_part_builds_from_the_library_function_even_when_parts_lib_defines_the_same_name(tmp_path):
     g = hut()
-    part(g, "roof").update(primitive="custom", fn="vault", args=["wall_w", "wall_d", "roof_h", 0.6, 12])
+    part(g, "roof").update(primitive="custom", fn="bevel_box", args=["wall_w", "wall_d", "roof_h", 0.2, 2, 1])
     part(g, "roof").pop("dims")
     f, sentinel = graph_dir(tmp_path, g), tmp_path / "sentinel"
-    agent_lib(f, sentinel, "def vault(*a):\n    raise SystemExit('agent code')\n")
+    agent_lib(f, sentinel, "def bevel_box(*a):\n    raise SystemExit('agent code')\n")
     build(f, BLENDER, "-b", "--factory-startup", "--python")
     asm = read(f / "assembly.json")
     roof = next(p for p in asm["data"]["parts"] if p["name"] == "roof")
-    assert (asm["overall"], sentinel.exists(), asm["data"]["union"]["extents"], roof["bbox_max"]) == (
-        "pass", False, [4.0, 4.0, 3.7], [1.5, 1.5, 3.7])
+    assert (asm["overall"], sentinel.exists(), asm["data"]["union"]["extents"], roof["bbox_max"], roof["tris"]) == (
+        "pass", False, [4.0, 4.0, 3.7], [1.5, 1.5, 3.7], 20)
 
 
 @pytest.mark.blender
@@ -349,50 +406,3 @@ def test_custom_mesh_refuses_to_run_inside_blender(tmp_path):
     assert ("[blockout/custom_mesh] error: run with PY, not inside Blender; Blender builds only from the JSON meshes"
             in line, out) == (True, {}), line
 
-
-SHAPES = """
-import importlib.util, json, sys
-spec = importlib.util.spec_from_file_location("lib", sys.argv[-1]); lib = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(lib)
-def verts(bm): return sorted(tuple(round(c, 6) for c in v.co) for v in bm.verts)
-def info(bm):
-    vs = verts(bm)
-    return [len(bm.verts), sum(not e.is_manifold for e in bm.edges),
-            [round(max(v[i] for v in vs) - min(v[i] for v in vs), 6) for i in range(3)]]
-def levels(bm): return sorted({v[2] for v in verts(bm)})
-out = {"vault": info(lib.vault(2.0, 1.0, 0.6, 0.4, 12)),
-       "vault_planks_1": verts(lib.vault(2.0, 1.0, 0.6, 0.4, 12)) == verts(lib.vault(2.0, 1.0, 0.6, 0.4, 12, 1, 0.02, 0.01)),
-       "vault_planks_3": info(lib.vault(2.0, 1.0, 0.6, 0.4, 12, 3, 0.02, 0.01)),
-       "box_rows_1": info(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 1)),
-       "box_rows_3": levels(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 3)),
-       "box_pitch": levels(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 3, 0.2, 0.3)),
-       "box_open": info(lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 3))[1]}
-for k, call in (("overlap", lambda: lib.grooved_box(1.0, 0.8, 0.9, 0.2, 0.01, 6)),
-                ("old_args", lambda: lib.grooved_box(1.0, 0.8, 0.9, 0.02, 0.01, 0.25, 0.6)),
-                ("half_plank", lambda: lib.vault(2.0, 1.0, 0.6, 0.4, 12, 2.5, 0.02, 0.01))):
-    try:
-        call()
-    except ValueError as e:
-        out[k] = str(e)
-print(json.dumps(out))
-"""
-
-
-@pytest.mark.blender
-@pytest.mark.skipif(not os.access(BLENDER, os.X_OK), reason="needs Blender")
-def test_vault_and_grooved_box_take_any_number_of_strips_and_stay_closed(tmp_path):
-    """One function serves a lid of 2 boards, a roof of 5 tiles or a wall of 7 stone courses: the count is a param,
-    so the counts gate can compare it (D30.6). planks 1 must give the plain vault, or graphs without grooves change.
-    Every result is closed (0 open edges), because the gates take the union of the parts. A fractional count stops
-    the build: a graph written for the old grooved_box(w, d, h, gap, depth, z1, z2) would pass z1 as rows."""
-    script = tmp_path / "shapes.py"
-    script.write_text(SHAPES, encoding="utf-8")
-    r = subprocess.run([BLENDER, "-b", "--factory-startup", "--python", str(script), "--", str(TOOLS / "custom_lib.py")],
-                       capture_output=True, text=True)
-    out = json.loads(next(line for line in r.stdout.splitlines() if line.startswith("{")))
-    assert out == {"vault": [30, 0, [2.0, 1.0, 0.6]], "vault_planks_1": True, "vault_planks_3": [42, 0, [2.0, 1.0, 0.6]],
-                   "box_rows_1": [8, 0, [1.0, 0.8, 0.9]], "box_rows_3": [-0.45, -0.16, -0.14, 0.14, 0.16, 0.45],
-                   "box_pitch": [-0.45, -0.26, -0.24, 0.04, 0.06, 0.45], "box_open": 0,
-                   "overlap": "grooves [0.15, 0.3, 0.45, 0.6, 0.75] of gap 0.2 do not fit apart inside h 0.9",
-                   "old_args": "rows must be a whole number >= 1, got 0.25",
-                   "half_plank": "planks must be a whole number >= 1, got 2.5"}

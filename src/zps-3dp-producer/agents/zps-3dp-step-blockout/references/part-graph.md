@@ -62,8 +62,6 @@ Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material
 ## Hàm `custom` (D32)
 
 - Hàm chung trong `tools/custom_lib.py` (đọc docstring để biết tham số):
-  - `vault(w, d, h, arch_h, seg, planks=1, gap=0, depth=0, r=0, bseg=2)`: khối vòm theo X (mái vòm, nắp, đường hầm); `planks` ≥ 2 chia vòm thành dải bằng rãnh.
-  - `grooved_box(w, d, h, gap, depth, rows, z0=0, pitch=0)`: hộp có `rows - 1` rãnh ngang quanh 4 mặt (tường ván, hàng đá); `pitch` 0 chia đều.
   - `bevel_box(w, d, h, r, seg, mask)`: hộp bo các cạnh chọn theo `mask`.
 - Hàm riêng của asset (D32.2): file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Python thuần, chỉ `import math`; mỗi hàm trả `(verts, faces)`. Check danh sách trắng (`project_parts.static_errors`): chỉ phép tính, tên do file định nghĩa, `math` và vài builtin số học; không class, `with`, `open`, `exec`, `eval`, `getattr`, import khác, tên `__…__`. Tên không trùng hàm chung. Chỉ thêm hàm, không sửa hàm một version đã dùng.
 - `PY tools/custom_mesh.py --work <w>` chạy file đó ngoài Blender và ghi mỗi part một lưới JSON vào `vN/work/custom_mesh/<part>.json` (graph khác `final/`: thư mục con, ví dụ `custom_mesh/variants/b/`). JSON ghi `fn`, `args` và sha256 của file. Trong Blender, `build_parts.py` chỉ dựng lưới từ JSON bằng `tools/mesh_from_json.py`; JSON thiếu, khác `args` hoặc khác sha256 → dừng dựng, báo lệnh cần chạy. `param_fit` không chỉnh param truyền vào hàm của asset.

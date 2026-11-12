@@ -313,7 +313,7 @@ GROOVE_RES = 256
 
 
 def ring_quads(levels, w):
-    """Side quads of a box whose outline steps in by `inset` at each (z, inset) level, as kit grooved_box builds it."""
+    """Side quads of a box whose outline steps in by `inset` at each (z, inset) level, as a grooved box has them."""
     rings = [[(sx * (w / 2 - i), sy * (w / 2 - i), z) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))] for z, i in levels]
     return [(lo[k], lo[(k + 1) % 4], hi[(k + 1) % 4], hi[k]) for lo, hi in zip(rings, rings[1:]) for k in range(4)]
 
