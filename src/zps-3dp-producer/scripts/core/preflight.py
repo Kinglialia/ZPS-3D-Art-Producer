@@ -11,7 +11,7 @@ from pathlib import Path
 
 import settings_merge
 
-from .state import EDITION, ROOT, SKILL_DIR, SUFFIX, now, rel, write_atomic
+from .state import EDITION, ROOT, SKILL_DIR, SUFFIX, locked, now, rel, runtime_guard, write_atomic
 
 OUT = ROOT / "preflight.json"
 KIT_SIBLING = SKILL_DIR.parent / f"zps-3d-artist{SUFFIX}" / "tools" / "preflight.py"
@@ -69,7 +69,7 @@ def kit(path: Path) -> dict:
     if not path.is_file():
         return {"present": False, "tried": [str(path)]}
     venv = path.parent / ".deps" / "venv" / "bin" / "python"
-    tmp = ROOT / ".preflight-kit.json"
+    tmp = ROOT / f".preflight-kit.{os.getpid()}.json"
     rc, _ = run([str(venv if venv.is_file() else sys.executable), str(path), "--out", str(tmp)], 600)
     try:
         r = json.loads(tmp.read_text(encoding="utf-8"))
@@ -100,6 +100,8 @@ def settings_gap(b: dict | None) -> dict | None:
 
 
 def run_preflight(a):
+    """The probes run outside the global lock (`blender --version` may take 120 s); only the final write takes it."""
+    runtime_guard()
     ROOT.mkdir(parents=True, exist_ok=True)
     b, ef = blender(), env_file()
     codex = shutil.which("codex")
@@ -107,8 +109,10 @@ def run_preflight(a):
     k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
     feats = {"blender": b is not None, "codex_image": cli is not None and not cli["missing_flags"], "meshy": has_meshy_key(ef)}
     gap = settings_gap(b)
-    write_atomic(OUT, json.dumps({"at": now(), "features": feats, "blender": b, "codex": codex, "codex_cli": cli, "env_file": ef, "kit": k}
-                                 | ({"settings": gap} if gap else {}), ensure_ascii=False, indent=2))
+    doc = {"at": now(), "features": feats, "blender": b, "codex": codex, "codex_cli": cli, "env_file": ef, "kit": k} | (
+        {"settings": gap} if gap else {})
+    with locked(create=True):
+        write_atomic(OUT, json.dumps(doc, ensure_ascii=False, indent=2))
     on, down = [f for f, v in feats.items() if v], [f for f, v in feats.items() if not v]
     parts = ([f"bật {', '.join(on)}"] if on else []) + ([f"tắt {', '.join(down)}"] if down else [])
     if cli and cli["missing_flags"]:

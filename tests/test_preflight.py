@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -114,3 +115,48 @@ def test_next_and_brief_read_the_cached_result_and_never_rerun_the_kit(proj):
     proj.run("next")
     assert (proj.kit.parent / "calls.txt").read_text(encoding="utf-8") == "run\n"
     assert "Chưa có production/preflight.json" not in proj.run("next").stdout
+
+
+SLOW_BLENDER = """#!/bin/sh
+/usr/bin/touch "{started}"
+while [ ! -f "{release}" ]; do /bin/sleep 0.05; done
+echo 'Blender 4.2.1 LTS'
+"""
+
+
+def test_a_slow_probe_does_not_hold_the_global_lock_so_other_commands_run_meanwhile_c14(proj):
+    """The reproduction: preflight took the lock before `blender --version`, so every ingest, board click and hook waited
+    behind a probe that may last 120 s. Here `rule` needs the lock while the probe sleeps."""
+    started, release = proj.root / "probe-started", proj.root / "probe-release"
+    slow = proj.bin / "blender"
+    slow.write_text(SLOW_BLENDER.format(started=started, release=release), encoding="utf-8")
+    slow.chmod(0o755)
+    pre = subprocess.Popen([sys.executable, str(P), "preflight"], cwd=proj.root, env=proj.env, text=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        for _ in range(400):
+            if started.exists():
+                break
+            time.sleep(0.05)
+        assert started.exists()
+        other = subprocess.run([sys.executable, str(P), "rule", "xong trong lúc dò"], cwd=proj.root, env=proj.env,
+                               capture_output=True, text=True, timeout=10)
+        assert (other.returncode, other.stdout, pre.poll()) == (0, "OK: đã ghi ruling\n", None)
+    finally:
+        release.touch()
+    out, err = pre.communicate(timeout=30)
+    assert (pre.returncode, err) == (0, "")
+    assert out == "preflight: bật blender; tắt codex_image, meshy; không có kit preflight.py → production/preflight.json\n"
+    assert proj.result()["blender"] == {"path": str(slow), "version": "4.2.1"}
+
+
+def test_preflight_takes_the_lock_for_the_write_so_it_waits_for_a_running_command_c14(proj):
+    import fcntl
+    with open(proj.root / "production/.lock", "w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        pre = subprocess.Popen([sys.executable, str(P), "preflight"], cwd=proj.root, env=proj.env, text=True,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(1.5)
+        assert (pre.poll(), (proj.root / "production/preflight.json").exists()) == (None, False)
+    out, err = pre.communicate(timeout=30)
+    assert (pre.returncode, (proj.root / "production/preflight.json").is_file()) == (0, True)
