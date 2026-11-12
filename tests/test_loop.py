@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 from argparse import Namespace
 from pathlib import Path
@@ -1873,6 +1874,24 @@ def test_a_recheck_that_dies_without_a_result_json_sends_the_worker_back_with_it
     assert [Path(x).name for x in ran[0] if x.endswith(".py")] == ["run_tool.py", "gate_all.py"]
     assert ran[0][ran[0].index("--version-dir") + 1] == f"production/assets/{AID}/blockout/v1"
     assert "--skip" in ran[0] and "check_inputs" in ran[0]
+
+
+def test_the_ingest_recheck_passes_the_card_to_check_proportion_as_the_worker_did_so_a_mark_failure_still_fails(
+        flow, monkeypatch, tmp_path):
+    """The worker runs gate_all with `check_proportion=--card <card>`; the recheck without it rewrote proportion.json
+    with no mark checks, and a mark failure passed the ingest."""
+    ran = []
+    concept = tmp_path / "concepts dir/_approved" / AID
+    concept.mkdir(parents=True)
+    (concept / "asset-card.yaml").write_text("view: front\n", encoding="utf-8")
+    monkeypatch.setattr(loop, "SKILL_DIR", tools_without_venv(tmp_path, venv=True))
+    monkeypatch.setattr(loop.subprocess, "run", lambda cmd, **kw: ran.append(cmd) or subprocess.CompletedProcess(
+        cmd, 0, stdout="gate_all pass\n", stderr=""))
+    step = {"id": "blockout", "agent": "step-blockout"}
+    assert REAL_RECHECK({"concept_dir": str(concept)}, step, flow.v(1)) == ([], None)
+    args = [ran[0][i + 1] for i, x in enumerate(ran[0]) if x == "--check-args"]
+    assert args[1] == "check_proportion=" + shlex.join(["--card", str(concept / "asset-card.yaml")])
+    assert shlex.split(args[1].split("=", 1)[1]) == ["--card", str(concept / "asset-card.yaml")]
 
 
 def test_a_recheck_the_runner_refuses_is_one_line_and_not_a_failure_l15(flow, monkeypatch, tmp_path):

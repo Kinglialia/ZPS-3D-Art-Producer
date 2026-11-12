@@ -297,9 +297,12 @@ def recheck(st: dict, step: dict, d) -> tuple[list[str], str | None]:
         return [], f"ingest không kiểm lại {tool} được: thiếu venv của tool ({rel(tools)}/.deps), chạy setup_deps.sh"
     card = st.get("concept_dir")
     check_inputs = ["--approved", card, "--profile", str(ROOT / "PROJECT-PROFILE.yaml")] if card else None
+    card_yaml = Path(card) / "asset-card.yaml" if card else None
     cmd = [sys.executable, str(SKILL_DIR / "scripts" / "run_tool.py"), "--agent", agent, "--version-dir", rel(d), tool,
            "--work", rel(d / "final"), *(["--check-args", "check_inputs=" + shlex.join(check_inputs)] if card else
-                                       ["--skip", "check_inputs"])]
+                                       ["--skip", "check_inputs"]),
+           *(["--check-args", "check_proportion=" + shlex.join(["--card", str(card_yaml)])] if card_yaml and card_yaml.is_file()
+             else [])]
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=RECHECK_TIMEOUT_S)
     except subprocess.TimeoutExpired:
