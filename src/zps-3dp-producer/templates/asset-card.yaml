@@ -4,7 +4,7 @@ asset: 05-warehouse            # bắt buộc. Đúng tên thư mục
 type: building                 # bắt buộc. building | prop | tree | rock (character, creature: v1 chưa hỗ trợ)
 tier: standard                 # bắt buộc. hero | standard | background. Hạng chỉ quyết định trần tris
 view: front                    # bắt buộc. Góc vẽ concept: front | '34' | game_camera ('34' là góc 3/4, ghi trong nháy)
-view_side: null                # bắt buộc khi view: '34'. left | right: mặt bên nào của vật hiện ra trên concept 3/4. Góc khác thì null
+view_side: null                # bắt buộc khi view: '34' hoặc có concept_34.png. left | right: mặt bên nào của vật hiện ra trên ảnh 3/4. Không có ảnh 3/4 thì null
 texture_res: null              # null = 2048. Hoặc số nguyên, vd 1024
 tris_max: null                 # null = theo hạng. Hoặc số nguyên
 bevel: null                    # null = theo style.bevel của profile. none | toon: bo cạnh riêng asset này

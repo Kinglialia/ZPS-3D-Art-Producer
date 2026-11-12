@@ -91,7 +91,7 @@ asset: 05-warehouse            # = id = tên thư mục
 type: building                 # building | prop | tree | rock (nhân vật, sinh vật: chưa hỗ trợ)
 tier: standard                 # hero | standard | background. Quyết định trần tam giác
 view: front                    # góc của concept_albedo.png: front | '34' | game_camera
-view_side: null                # tùy chọn; bắt buộc khi view là '34'. left | right, xem 5c
+view_side: null                # bắt buộc khi có ảnh 3/4 (view '34' hoặc concept_34.png). left | right, xem 5c
 texture_res: null              # tùy chọn. null = 2048. Chỉ ghi khi người dùng chốt khác
 tris_max: null                 # tùy chọn. null = theo hạng của dự án
 bevel: null                    # tùy chọn. null = theo bo cạnh chung của dự án; none | toon nếu asset này khác
@@ -164,7 +164,7 @@ Ghi số lượng các thành phần lặp lại mà người xem đếm đượ
 
 Mỗi trường giúp pipeline khỏi phải đoán. Ghi khi biết. Không biết thì bỏ trường, đừng đoán.
 
-- **`view_side`**: ghi khi có ảnh 3/4, tức `view: '34'` hoặc có `concept_34.png`. Giá trị `left` hoặc `right`: mặt bên nào của vật hiện ra trên ảnh 3/4, theo bên của chính vật (như `hidden_sides`). Với `view: '34'` trường này bắt buộc. Pipeline cần nó để biết nhìn ảnh từ phía nào.
+- **`view_side`**: ghi khi có ảnh 3/4, tức `view: '34'` hoặc có `concept_34.png`. Giá trị `left` hoặc `right`: mặt bên nào của vật hiện ra trên ảnh 3/4, theo bên của chính vật (như `hidden_sides`). Khi có ảnh 3/4, trường này bắt buộc. Pipeline cần nó để biết nhìn ảnh từ phía nào.
 - **`light`**: `{from, elevation_deg}` mô tả ánh sáng trong `concept_shadow.png`. `from` là `left`, `right` hoặc `front`, theo ảnh: `left` nghĩa là mặt sáng ở phía mép trái ảnh và bóng đổ về mép phải. `elevation_deg` là độ cao nguồn sáng so với mặt nằm ngang, tính bằng độ. Model dựng ánh sáng theo hướng này. Thiếu thì model agent phải đoán.
 - **`marks`**: 2–3 độ cao của những đường ngang rõ trên concept (mép trên thân, mặt bệ, mặt quầy). Mỗi mốc có `name` và `z_m`, là chiều cao tính từ đáy vật, bằng mét. Đo vị trí trên ảnh rồi đổi ra mét theo chiều cao thật của vật. Pipeline so tỉ lệ của blockout với các mốc này. Vật không có đường ngang rõ (cây, đá) thì bỏ trường.
 - **`bottom_visible`**: `false` trừ khi người chơi thấy mặt đáy của vật (cầu, bục lơ lửng). Khi `false`, pipeline bỏ mặt đáy khỏi model.

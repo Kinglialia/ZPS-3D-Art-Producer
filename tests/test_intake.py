@@ -291,8 +291,17 @@ def test_counts_null_or_malformed_is_an_error(tmp_path, value):
 
 @pytest.mark.parametrize("view", ["34", 34])
 def test_view_34_needs_view_side_because_a_worker_cannot_tell_which_face_the_concept_shows(tmp_path, view):
-    assert messages(make_asset(tmp_path, card=mutated(view=view))) == ["thẻ: view_side thiếu (bắt buộc khi view: '34')"]
+    assert messages(make_asset(tmp_path, card=mutated(view=view))) == ["thẻ: view_side thiếu (bắt buộc khi có ảnh 3/4: view: '34' hoặc concept_34.png)"]
     assert messages(make_asset(tmp_path / "ok", card=mutated(view=view, view_side="left"))) == []
+
+
+def test_a_concept_34_image_needs_view_side_too_so_the_blockout_never_stops_to_ask_which_side_it_shows(tmp_path):
+    d = make_asset(tmp_path)
+    png(d / "concept_34.png", (1500, 1100))
+    assert messages(d) == ["thẻ: view_side thiếu (bắt buộc khi có ảnh 3/4: view: '34' hoặc concept_34.png)"]
+    ok = make_asset(tmp_path / "ok", card=mutated(view_side="right"))
+    png(ok / "concept_34.png", (1500, 1100))
+    assert messages(ok) == []
 
 
 @pytest.mark.parametrize("side", ["front", "Left", 1, True])
@@ -361,20 +370,20 @@ def test_text_codes_that_is_not_a_list_of_strings_is_an_error(tmp_path, value):
 
 
 def test_concept_34_is_an_optional_image_and_a_card_without_it_passes(tmp_path):
-    d = make_asset(tmp_path)
+    d = make_asset(tmp_path, card=mutated(view_side="left"))
     assert not (d / "concept_34.png").exists() and messages(d) == []
     png(d / "concept_34.png", (1500, 1100))
     assert messages(d) == []
 
 
 def test_concept_34_may_have_another_frame_than_albedo_because_it_shows_another_angle(tmp_path):
-    d = make_asset(tmp_path)
+    d = make_asset(tmp_path, card=mutated(view_side="left"))
     png(d / "concept_34.png", (1024, 700))
     assert messages(d) == []
 
 
 def test_concept_34_gets_the_same_image_checks_as_the_other_concept_images(tmp_path):
-    d = make_asset(tmp_path)
+    d = make_asset(tmp_path, card=mutated(view_side="left"))
     png(d / "concept_34.png", (1023, 600))
     assert messages(d) == ["ảnh concept_34.png: cạnh dài 1023 px, cần ≥ 1024 px"]
     (d / "concept_34.png").write_bytes(b"x")
@@ -382,7 +391,7 @@ def test_concept_34_gets_the_same_image_checks_as_the_other_concept_images(tmp_p
 
 
 def test_card_cli_warns_when_the_background_of_concept_34_is_not_one_flat_colour(tmp_path):
-    d = make_asset(tmp_path)
+    d = make_asset(tmp_path, card=mutated(view_side="left"))
     im = Image.new("RGB", (1024, 1024), (238, 238, 238))
     im.paste((40, 90, 160), (0, 0, 1024, 300))
     im.save(d / "concept_34.png")
@@ -939,7 +948,7 @@ def test_the_colour_statistic_is_the_median_function_of_the_views_tool_loaded_wi
 
 
 def test_intake_lists_concept_34_after_the_id_of_an_asset_that_has_one_g9(proj):
-    d = with_handoff(proj, "01-a")
+    d = with_handoff(proj, "01-a", view_side="left")
     proj.asset("02-b")
     png(d / "concept_34.png")
     listing = proj.run("intake", check=True).stdout.splitlines()

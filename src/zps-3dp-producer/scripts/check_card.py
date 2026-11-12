@@ -122,8 +122,8 @@ def check(d: Path, has_map: bool | None) -> list[tuple[str, str]]:
         bad("view", f"'{c['view']}' ({' | '.join(VIEWS)})")
     side = c.get("view_side")
     if side is None:
-        if str(c.get("view")) == "34":
-            errs.append(("card", "thẻ: view_side thiếu (bắt buộc khi view: '34')"))
+        if str(c.get("view")) == "34" or (d / IMAGE_34).is_file():
+            errs.append(("card", f"thẻ: view_side thiếu (bắt buộc khi có ảnh 3/4: view: '34' hoặc {IMAGE_34})"))
     elif not (isinstance(side, str) and side in VIEW_SIDES):
         bad("view_side", f"'{side}' ({' | '.join(VIEW_SIDES)})")
     if "views" in c and not (isinstance(c["views"], str) and c["views"] in VIEW_SETS):
