@@ -271,6 +271,7 @@ function controls(a, items, open) {
   const where = a.redo_steps.length ? $("select", {}, a.redo_steps.map(s => $("option", { value: s, textContent: `Cần sửa ở ${s}` }))) : null;
   const acts = a.ask ? [[`Gọi Meshy thêm (${a.ask.price ?? "?"} credit)`, "approve"], ["VẼ MỚI", "paint"], ["Cần sửa", "redo"],
                         ["Ghi chú", "note"]] : a.label === UNREVIEWED ? ACTIONS.filter(([, act]) => act !== "approve") : ACTIONS;
+  const purge = acts.some(([, act]) => act === "approve") ? a.purge : null;
   const send = async action => {
     const body = { id: a.id, action, text: form.value, step: action === "redo" && where ? where.value : a.step,
                    offer: a.key, regions: L.length ? L : null };
@@ -290,12 +291,12 @@ function controls(a, items, open) {
   return [
     L.length ? $("div", { className: "marks" }, $("p", { className: "muted", textContent: `Vùng khoanh (${L.length}), gửi kèm nút bấm:` }), rows) : null,
     form,
-    a.purge ? $("p", { className: "warn", textContent: a.purge }) : null,
+    purge ? $("p", { className: "warn", textContent: purge }) : null,
     $("div", { className: "row" }, where, acts.map(([t, act]) => $("button", {
-      textContent: act === "approve" && a.purge && confirming[a.id] === (a.key ?? "") ? "Bấm lần nữa để duyệt và xóa" : t,
+      textContent: act === "approve" && purge && confirming[a.id] === (a.key ?? "") ? "Bấm lần nữa để duyệt và xóa" : t,
       className: act === "approve" ? "ok" : "",
       onclick: () => {
-        if (act === "approve" && a.purge && confirming[a.id] !== (a.key ?? "")) { confirming[a.id] = a.key ?? ""; return render(last); }
+        if (act === "approve" && purge && confirming[a.id] !== (a.key ?? "")) { confirming[a.id] = a.key ?? ""; return render(last); }
         delete confirming[a.id];
         send(act);
       } }))),

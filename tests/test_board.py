@@ -433,9 +433,9 @@ const find = (tag, text) => ids.app.all().filter(e => e.tag === tag && (text ===
   const out = { warn: find("p").filter(e => e.className === "warn").map(e => e.textContent),
                 buttons: find("button").map(e => e.textContent), links: find("a").map(e => [e.textContent, e.href]) };
   const approve = () => find("button").find(e => e.className === "ok");
-  approve().onclick();
+  approve()?.onclick();
   out.after_first = { sent: sent.length, buttons: find("button").map(e => e.textContent) };
-  approve().onclick();
+  approve()?.onclick();
   out.after_second = sent.map(b => [b.action, b.id, b.offer]);
   console.log(JSON.stringify(out));
 })();
@@ -478,6 +478,13 @@ def test_a_card_without_a_deletion_approves_on_the_first_click_d40_4(tmp_path):
     out = run_board_js(tmp_path, page_card(purge=None))
     assert out["warn"] == []
     assert (out["after_first"]["sent"], out["after_second"]) == (1, [["approve", AID, "assemble-v1-1"]] * 2)
+
+
+@needs_node
+def test_a_version_nobody_reviewed_has_no_approve_button_so_the_page_shows_no_deletion_line(tmp_path):
+    """A stalled review offers only Cần sửa and Ghi chú (the script refuses the approval), so no deletion is announced."""
+    out = run_board_js(tmp_path, page_card(label="chưa chấm"))
+    assert (out["warn"], out["buttons"], out["after_second"]) == ([], ["Cần sửa", "Ghi chú"], [])
 
 
 @needs_node
