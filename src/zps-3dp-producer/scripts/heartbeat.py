@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -92,10 +93,38 @@ def cpu_s(root: int) -> float | None:
 
 def run(cmd: list[str], *, tool: str, vd: Path | None, timeout: float | None = None, input: str | None = None,
         env: dict | None = None, cwd=None, every: float = EVERY_S) -> subprocess.CompletedProcess:
-    """subprocess.run(cmd, capture_output=True, text=True, ...) with the heartbeat. Raises TimeoutExpired as it does."""
+    """subprocess.run(cmd, capture_output=True, text=True, ...) with the heartbeat. Raises TimeoutExpired as it does.
+    The child runs in its own session, so a timeout, an exception or a SIGTERM kills every process under it; the new
+    session no longer gets a signal sent to this process, so SIGTERM becomes a group kill here."""
     write(vd, tool, "start")
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
+    main = threading.current_thread() is threading.main_thread()
+    old = signal.signal(signal.SIGTERM, stop) if main else None
+    try:
+        return watch(p, cmd, tool, vd, timeout, input, every)
+    except BaseException:
+        kill_group(p)
+        raise
+    finally:
+        if main:
+            signal.signal(signal.SIGTERM, old)
+
+
+def stop(signum, _frame):
+    raise SystemExit(128 + signum)
+
+
+def kill_group(p: subprocess.Popen):
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except OSError:
+        pass
+    p.wait()
+
+
+def watch(p: subprocess.Popen, cmd: list[str], tool: str, vd: Path | None, timeout: float | None, input: str | None,
+          every: float) -> subprocess.CompletedProcess:
     bufs, size = ([], []), [0]
 
     def pump(stream, buf):
@@ -127,8 +156,7 @@ def run(cmd: list[str], *, tool: str, vd: Path | None, timeout: float | None = N
             pass
         now = time.monotonic()
         if timeout is not None and now - start > timeout:
-            p.kill()
-            p.wait()
+            kill_group(p)
             for t in threads:
                 t.join(5)
             write(vd, tool, "timeout", f"{timeout:g} s")

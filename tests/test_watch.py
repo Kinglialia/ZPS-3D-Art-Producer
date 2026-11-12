@@ -103,6 +103,75 @@ def test_a_timeout_kills_the_child_raises_as_subprocess_does_and_logs_it_d33_7(t
     assert heartbeat.vdir_of(vd / "work/meshy/call-1") == vd and heartbeat.vdir_of(tmp_path / "x/v1") is None
 
 
+def gone(pid, wait_s=5.0):
+    """True once pid no longer exists. A killed process stays a zombie until its new parent reaps it, so poll."""
+    import os
+    import time
+    end = time.monotonic() + wait_s
+    while time.monotonic() < end:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def kill_quietly(*pids):
+    import os
+    import signal
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
+def test_a_timeout_kills_the_whole_process_group_so_no_grandchild_keeps_writing_v14(tmp_path):
+    """A tool child often starts its own children (Blender, a shell around codex). A kill of the child alone left the
+    grandchild running after the timeout, still writing into vN."""
+    import pytest
+    import subprocess
+    import heartbeat
+    vd, _ = beats(tmp_path)
+    pid = tmp_path / "gc.pid"
+    with pytest.raises(subprocess.TimeoutExpired):
+        heartbeat.run(["sh", "-c", f"sleep 60 & echo $! > {pid}; wait"], tool="tree", vd=vd, timeout=1, every=0.3)
+    gc = int(pid.read_text(encoding="utf-8"))
+    try:
+        assert gone(gc)
+    finally:
+        kill_quietly(gc)
+
+
+def test_a_tool_stopped_by_sigterm_takes_its_child_and_grandchild_with_it_v14(tmp_path):
+    """The child runs in its own session so the group kill reaches every process under it. That session no longer
+    hears a signal sent to the tool, so the tool forwards SIGTERM as a group kill before it exits."""
+    import os
+    import signal
+    import subprocess
+    import time
+    vd, rows = beats(tmp_path)
+    kid, pid = tmp_path / "kid.pid", tmp_path / "gc.pid"
+    code = (f"import sys; sys.path.insert(0, {str(SKILL / 'scripts')!r}); import heartbeat, pathlib\n"
+            f"heartbeat.run(['sh', '-c', 'echo $$ > {kid}; sleep 60 & echo $! > {pid}; wait'], tool='term', "
+            f"vd=pathlib.Path({str(vd)!r}), every=0.3)\n")
+    tool = subprocess.Popen([sys.executable, "-c", code])
+    for _ in range(200):
+        if pid.exists() and pid.read_text(encoding="utf-8").strip():
+            break
+        time.sleep(0.05)
+    sh, gc = int(kid.read_text(encoding="utf-8")), int(pid.read_text(encoding="utf-8"))
+    try:
+        tool.send_signal(signal.SIGTERM)
+        assert tool.wait(timeout=10) == 128 + signal.SIGTERM
+        assert (gone(sh), gone(gc)) == (True, True)
+        assert rows() == [["term", "start"]]
+    finally:
+        kill_quietly(sh, gc)
+        tool.kill() if tool.poll() is None else None
+
+
 # ---- D33.9–18: on-stop, deadline, stall rule, P next, P wait, stats, board (synthetic jobs only) ----
 
 def project(tmp_path):
