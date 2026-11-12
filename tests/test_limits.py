@@ -66,6 +66,18 @@ def test_a_slot_is_held_by_an_open_worker_dispatch_or_a_live_process_and_one_ass
     assert n() == 1
 
 
+def test_the_threads_of_one_codex_image_run_are_one_asset_holding_one_slot(proj):
+    """gen_image_codex.py writes one pid file per thread, `<id>-<pid>-<k>.pid`; each counted as another owner, so one
+    asset with two threads filled both codex_image slots."""
+    d = proj / "production/pids/codex_image"
+    d.mkdir(parents=True)
+    for name in (f"a-hut-{os.getpid()}", f"a-hut-{os.getpid()}-1", f"a-hut-{os.getpid()}-2"):
+        (d / f"{name}.pid").write_text(str(os.getpid()), encoding="utf-8")
+    assert limits.used(load_cfg(), "codex_image", all_status()) == 1
+    (d / f"b-barn-{os.getpid()}-1.pid").write_text(str(os.getpid()), encoding="utf-8")
+    assert limits.used(load_cfg(), "codex_image", all_status()) == 2
+
+
 def test_next_offers_dispatch_only_while_a_slot_is_free_and_counts_its_own_offers(proj, capsys):
     assert next_lines(capsys) == ["[a-hut] blockout/todo → giao worker → `brief a-hut`",
                                   "[b-barn] blockout/todo → chờ slot blender"]

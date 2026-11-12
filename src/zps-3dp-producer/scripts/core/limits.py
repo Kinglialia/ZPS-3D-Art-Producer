@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 
 from . import asset_card, preflight, purge
 from .board import build_outputs
@@ -29,7 +30,8 @@ def used(cfg: dict, resource: str, sts: list[dict]) -> int:
     """C17: assets that hold a slot. An open worker dispatch of a step that uses the resource holds it from dispatch to
     ingest: a pid file lives only while a tool runs, so a worker that thinks holds none. A live pid file in
     production/pids/<resource>/ also holds it (a script step, a tool still running); its owner is the file name, less
-    the `-<pid>` that run_tool.py and assemble.py add, so a worker in Blender counts once."""
+    the `-<pid>` that run_tool.py and assemble.py add and the `-<pid>-<k>` of a gen_image_codex.py thread, so a worker
+    in Blender or in one image run counts once."""
     from .watch import job
     uses = {s["id"]: s["uses"] for s in cfg["steps"]}
     owners = {s["id"] for s in sts if not s.get("broken") and (r := job(s)) and r["role"] == "worker"
@@ -40,7 +42,7 @@ def used(cfg: dict, resource: str, sts: list[dict]) -> int:
         except (OSError, ValueError):
             continue
         if alive(pid):
-            owners.add(p.stem.removesuffix(f"-{pid}"))
+            owners.add(re.sub(rf"-{pid}(-\d+)?$", "", p.stem))
     return len(owners)
 
 

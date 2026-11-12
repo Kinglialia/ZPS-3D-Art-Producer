@@ -35,9 +35,10 @@ MARK = "feedback/texture-v1-1/final_lit_vs_concept.png"
 REJECTED = ["blockout/v1/final/BLOCKOUT.rejected-2.md", "texture/v1/review-out.rejected-1.md"]
 SHOW = ["show/pilot-house-bundle.html", "show/pilot-house-texture-v1.html", "show/pilot-house.html"]
 PUSH = ["board/push/p1/offers/p1~pilot-house.json", "board/push/p1/pilot-house_glb.json"]
-PIDS = ["pids/blender/pilot-house-4242.pid", "pids/meshy/pilot-house.pid"]
+PIDS = ["pids/blender/pilot-house-4242.pid", "pids/meshy/pilot-house.pid", "pids/codex_image/pilot-house-4242-1.pid"]
 OTHERS_KEPT = ["show/pilot-house-2.html", "show/pilot-house-2-texture-v1.html", "board/push/p1/offers/p1~pilot-house-2.json",
-               "board/push/p1/pilot-house-2_glb.json", "board/push/p1/pushes/p1.json", "pids/blender/pilot-house-2.pid"]
+               "board/push/p1/pilot-house-2_glb.json", "board/push/p1/pushes/p1.json", "pids/blender/pilot-house-2.pid",
+               "pids/codex_image/pilot-house-2-4242.pid"]
 SOURCES = ["blockout/v1/final/part_graph.json", "blockout/v1/final/parts_lib.py", "blockout/v1/final/sources.json",
            "custom_parts.py", "model/v1/final/parts_lib.py", "model/v1/final/spec.json",
            "texture/v1/final/texture_spec.json"]

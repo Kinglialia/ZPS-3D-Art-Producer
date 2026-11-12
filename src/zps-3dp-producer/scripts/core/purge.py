@@ -59,11 +59,12 @@ def big(p: Path) -> bool:
 def outside(cfg: dict, aid: str) -> list[tuple[str, int]]:
     """D40.3: what the asset left under production/ outside assets/<id>/, as (path under production/, bytes). Exact
     names only, so `a-2` never costs `a` its files: `show/` pages by step id, the board files this asset pushed, and
-    pid files of a process that is gone (`<id>-<pid>.pid` is not the `<id>-2.pid` of another asset). `pushes/*.json`
+    pid files of a process that is gone (`<id>-<pid>.pid`, `<id>-<pid>-<k>.pid` of an image thread; not the `<id>-2.pid`
+    or `<id>-2-<pid>.pid` of another asset `<id>-2`). `pushes/*.json`
     of a push names every open asset and stays."""
     steps = "|".join(re.escape(s["id"]) for s in cfg["steps"])
     page = re.compile(rf"{re.escape(aid)}(-({steps})-v\d+)?(-bundle)?\.html")
-    pid = re.compile(rf"{re.escape(aid)}(-\d+)?\.pid")
+    pid = re.compile(rf"{re.escape(aid)}(-\d+)?(-\d+)?\.pid")
     found = [f for f in sorted((ROOT / "show").glob("*.html")) if page.fullmatch(f.name)]
     for d in sorted((ROOT / "board" / "push").glob("*")):
         found += [d / f"{aid}_glb.json", d / "offers" / f"{d.name}~{aid}.json"]
@@ -71,7 +72,8 @@ def outside(cfg: dict, aid: str) -> list[tuple[str, int]]:
     siblings = {d.name for d in ASSETS.iterdir() if d.is_dir()} - {aid}
     for d in sorted((ROOT / "pids").glob("*")):
         for f in sorted(d.glob("*.pid")):
-            if pid.fullmatch(f.name) and f.stem not in siblings and not _live(f, alive):
+            m = pid.fullmatch(f.name)
+            if m and not {f.stem, aid + (m[1] or "")} & siblings and not _live(f, alive):
                 found.append(f)
     return [(f.relative_to(ROOT).as_posix(), f.lstat().st_size) for f in found if f.is_file() and not f.is_symlink()]
 
