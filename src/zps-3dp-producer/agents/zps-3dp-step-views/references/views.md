@@ -12,7 +12,7 @@ Mỗi prompt là một file `V/work/prompts/<view>-<k>.md`, chỉ chứa phần 
 
 ## 2. Prompt
 
-Không viết prompt bằng tay. `RUN make_prompt.py` điền mẫu của kit từ `guides/views.json`, `bg_color.json`, `<id>.material.md`, dòng thành phần của `blockout.md` và `V/work/sizes.json`. Lời nhắc cố định nằm trong `tools/make_prompt.py`: giữ hình và mốc cao của guide, nền phẳng, ánh sáng đều, không bóng đổ.
+Không viết prompt bằng tay. `RUN make_prompt.py` điền mẫu của kit từ `guides/views.json`, `guides/<view>_id.png`, `bg_color.json`, `<id>.material.md` và `V/work/sizes.json`. Lời nhắc cố định nằm trong `tools/make_prompt.py`: giữ hình và mốc cao của guide, nền phẳng, ánh sáng đều, không bóng đổ.
 
 - `--hidden "<mô tả>"`: chỉ cho back, left, right, top. Viết bằng tiếng Anh một câu: mặt đó trông thế nào, theo `blockout.md` (phần "Blockout tự quyết") và `hidden_sides` của thẻ. Không ghi cho front.
 - `--fix "<dòng>"`: chỉ khi gen lại. Một dòng nêu đúng một lỗi. Có thể lặp. Ví dụ "the top edge must be #A1901B ochre like image 2, not orange", "the handle is on the RIGHT half of the lid, exactly where the orange region of image 3 is".

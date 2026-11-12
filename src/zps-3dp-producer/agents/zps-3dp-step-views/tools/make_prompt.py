@@ -1,15 +1,16 @@
 """Write the image prompt of one view: the fixed words of the kit with the data of the step filled in (row L7).
 
 Usage: python3 tools/make_prompt.py --view front|back|left|right|top --ref <final with guides/ and bg_color.json>
-           --concept <_approved/<id>> --blockout <blockout final> --sizes <V/work/sizes.json>
+           --concept <_approved/<id>> --sizes <V/work/sizes.json>
            [--hidden "<what this side looks like>"] [--fix "<line>" ...] --out <V/work/prompts/<view>-<k>.md>
 Fills:
   materials   guides/views.json `materials` (code -> ID colour of the guide). Each entry is `<hex> <colour word> = <code>,
               <name>`; the colour word is the nearest of the 20 guide colours; the name is the `Tên` cell of the row with
               that code in <id>.material.md (the table whose header has `Mã` and `Tên`). A code without a row stops the run.
   background  bg_color.json `hex`.
-  props       the number of components in the component line of blockout.md: the first line after the heading that is
-              not blank and not a heading, each `<n> <word>` item counted. Fewer than 2 objects: no prop line.
+  props       the separate shapes of the view's guide (guides/<view>_id.png) minus the main object, counted as the
+              `components.<view>` check of measure.py counts them. None: no prop line. The component line of
+              blockout.md ("4 pillars, 1 door, 3 barrels") does not say which items are separate, so it is not used.
   size        sizes.json (pick_size.py) for the view, printed in the one output line.
 --hidden is the description of the hidden side, written in English; it is required for back, left, right and top and
 refused for front. Each --fix adds one rule line at the end: the exact fault of a view that is made again.
@@ -19,10 +20,15 @@ The fixed words are the kit's, except `roof edge, fascia, base and plinth`, whic
 import argparse
 import json
 import os
-import re
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "scripts"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path[:0] = [HERE, os.path.join(HERE, "lib")]
+import numpy as np  # noqa: E402
+from PIL import Image  # noqa: E402
+import measure  # noqa: E402
+import measure_views as mv  # noqa: E402
+sys.path.append(os.path.join(HERE, "..", "..", "..", "scripts"))
 from root_guard import require_root  # noqa: E402
 
 TOOL = "views/make_prompt"
@@ -102,9 +108,9 @@ def material_names(path):
 
 
 def prop_count(path):
-    lines = open(path, encoding="utf-8").read().splitlines()[1:]
-    line = next((l for l in lines if l.strip() and not l.lstrip().startswith("#")), "")
-    return sum(int(n) for n in re.findall(r"(?:^|[,;:])\s*(\d+)\s+\S", re.sub(r"^\s*(?:\d+[.)]|[-*])\s+", "", line)))
+    mask = np.array(Image.open(path).convert("RGBA"))[..., 3] > 127
+    frame = mv.to_frame(mask.astype(np.uint8) * 255, mv.bbox(mask), Image.NEAREST) > 127
+    return max(0, measure.components(frame) - 1)
 
 
 def prompt(a):
@@ -115,18 +121,18 @@ def prompt(a):
         raise ValueError(f"mã {', '.join(missing)} của guides/views.json không có dòng trong bảng của "
                          f"{os.path.basename(os.path.normpath(a.concept))}.material.md")
     image = "image 2" if a.view == "front" else "image 3"
-    n = prop_count(os.path.join(a.blockout, "blockout.md"))
+    n = prop_count(os.path.join(a.ref, "guides", f"{a.view}_id.png"))
     text = (FRONT if a.view == "front" else SIDE).format(
         view=a.view.upper(), hidden=(a.hidden or "").strip().rstrip("."), bg=read_json(os.path.join(a.ref, "bg_color.json"))["hex"],
         materials="; ".join(f"{h} {colour_word(h)} = {c}, {names[c]}" for c, h in materials.items()),
-        props=f"- {n} separate props, each where {image} shows it.\n" if n >= 2 else "")
+        props=f"- {n} separate props, each where {image} shows it.\n" if n else "")
     return text + "".join(f"- {f.strip()}\n" for f in a.fix)
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--view", required=True, choices=VIEWS)
-    for k in ("--ref", "--concept", "--blockout", "--sizes", "--out"):
+    for k in ("--ref", "--concept", "--sizes", "--out"):
         p.add_argument(k, required=True)
     p.add_argument("--hidden")
     p.add_argument("--fix", action="append", default=[])

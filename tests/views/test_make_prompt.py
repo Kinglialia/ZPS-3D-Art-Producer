@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 TOOL = Path(__file__).resolve().parents[2] / "src/zps-3dp-producer/agents/zps-3dp-step-views/tools/make_prompt.py"
 
@@ -63,27 +64,36 @@ STRICT RULES
 """
 
 
+def guide(path, shapes):
+    """A guide mask: one main object and `shapes - 1` separate props beside it (400x400, transparent background)."""
+    im = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
+    im.paste((230, 25, 75, 255), (50, 50, 250, 350))
+    for k in range(shapes - 1):
+        im.paste((60, 180, 75, 255), (270, 100 + 70 * k, 330, 150 + 70 * k))
+    im.save(path)
+
+
 @pytest.fixture
 def step(tmp_path):
-    ref, concept, blockout = tmp_path / "ref", tmp_path / "_approved/crate", tmp_path / "blockout"
+    ref, concept = tmp_path / "ref", tmp_path / "_approved/crate"
     (ref / "guides").mkdir(parents=True)
+    for view, shapes in (("front", 4), ("back", 4), ("left", 1)):
+        guide(ref / "guides" / f"{view}_id.png", shapes)
     (ref / "guides/views.json").write_text(json.dumps({"materials": {
         "STONE": "#E6194B", "TIMBER": "#3CB44B", "ROOF_TILE": "#FFE119"}}), encoding="utf-8")
     (ref / "bg_color.json").write_text(json.dumps({"hex": "#E8E8E8", "source": "pick"}), encoding="utf-8")
     concept.mkdir(parents=True)
     (concept / "crate.material.md").write_text(MATERIAL_MD, encoding="utf-8")
-    blockout.mkdir()
-    (blockout / "blockout.md").write_text("# Blockout crate v2\n\n1 thân, 2 tay nắm\n\n3. Version\n", encoding="utf-8")
     sizes = tmp_path / "work/sizes.json"
     sizes.parent.mkdir()
     sizes.write_text(json.dumps({"front": "1536x1024", "back": "1536x1024", "left": "1024x1536"}), encoding="utf-8")
 
     def run(view, *extra, out="work/prompts/x-1.md"):
         p = subprocess.run([sys.executable, str(TOOL), "--view", view, "--ref", str(ref), "--concept", str(concept),
-                            "--blockout", str(blockout), "--sizes", str(sizes), "--out", str(tmp_path / out), *extra],
+                            "--sizes", str(sizes), "--out", str(tmp_path / out), *extra],
                            capture_output=True, text=True)
         return p, tmp_path / out
-    run.dirs = {"ref": ref, "concept": concept, "blockout": blockout, "sizes": sizes}
+    run.dirs = {"ref": ref, "concept": concept, "sizes": sizes}
     return run
 
 
@@ -108,9 +118,13 @@ def test_the_size_line_is_the_size_of_that_view_from_sizes_json_so_a_tall_view_g
     assert p.stdout == f"[views/make_prompt] {out} 1024x1536\n"
 
 
-def test_the_prompt_has_no_prop_line_when_the_component_line_counts_one_object(step):
-    (step.dirs["blockout"] / "blockout.md").write_text("# Blockout rock v1\n1 tảng đá\n", encoding="utf-8")
+def test_the_prop_count_is_the_separate_shapes_of_that_views_guide_minus_the_main_object(step):
+    """The same number the components check compares with the image, so the prompt asks for what the gate will count.
+    A view whose guide is one shape gets no prop line."""
+    guide(step.dirs["ref"] / "guides/front_id.png", 2)
     p, out = step("front")
+    assert "- 1 separate props, each where image 2 shows it.\n" in out.read_text(encoding="utf-8")
+    p, out = step("left", "--hidden", "a door", out="work/prompts/left-1.md")
     text = out.read_text(encoding="utf-8")
     assert p.returncode == 0 and "separate props" not in text and "- Plain, flat, solid background" in text
 

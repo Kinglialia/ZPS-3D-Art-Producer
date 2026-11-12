@@ -127,3 +127,30 @@ def test_pick_best_with_no_other_first_image_changes_nothing_and_writes_no_line(
                         "--pick-best", str(gen)], capture_output=True, text=True)
     data = read(f / "review/checks/measure.json")["data"]
     assert (p.returncode, "picked" in data, "accepted_fail" in data) == (1, False, False)
+
+
+def test_a_regen_that_only_touches_the_image_border_is_compared_too_because_border_is_not_in_regen(tmp_path):
+    """`border` and `components` fail measure.json without putting the view in the kit's `regen` list. The first image
+    is clean; the regen is cut by the image edge. Keeping the regen would hand a failing view on."""
+    g = wall_trim_guides(tmp_path / "guides")
+    gen, f = tmp_path / "work/gen", tmp_path / "final"
+    wall_trim_gen(gen / "front-1.png", **GOOD)
+    touching = png_edge(gen / "front-2.png")
+    f.mkdir()
+    shutil.copyfile(touching, f / "front.png")
+    p = subprocess.run([sys.executable, str(TOOLS / "measure.py"), "--final", str(f), "--guides", str(g), "--views", "front",
+                        "--pick-best", str(gen)], capture_output=True, text=True)
+    data = read(f / "review/checks/measure.json")
+    assert (p.returncode, data["data"]["picked"]) == (0, {"front": "first"})
+    assert (f / "front.png").read_bytes() == (gen / "front-1.png").read_bytes()
+
+
+def png_edge(path):
+    """The wall and trim of wall_trim_gen at the same proportions, pushed against the top and left edge."""
+    from PIL import Image
+    im = Image.new("RGB", (600, 600), "#E8E8E8")
+    im.paste("#8B5A2B", (0, 0, 300, 450))
+    im.paste("#2F4F4F", (300, 0, 450, 450))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    im.save(path)
+    return path

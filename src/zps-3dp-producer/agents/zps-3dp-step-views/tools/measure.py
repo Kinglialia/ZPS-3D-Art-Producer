@@ -18,7 +18,7 @@ again never leaves a stale right that the colour match then fails.
 V15: per view, the checks border (the object touches the image border: fail), components (the count of separate shapes
 differs from the guide: fail), ring (share of the object rim near the background colour: info), light (luminance change
 across each material region, a share of its mean: info).
-L9 --pick-best <gen dir>: for a view in `regen` whose first image <gen dir>/<view>-1.png differs from <final>/<view>.png
+L9 --pick-best <gen dir>: for a view with a failing check (`regen`, border or components) whose first image <gen dir>/<view>-1.png differs from <final>/<view>.png
 (the regen), the first image is measured too, with the same options. The view keeps the image with the better measure:
 the first image wins only when it has fewer failing checks of that view (the checks named `*.<view>` with status fail),
 or the same number and a higher IoU (`views.<view>` value `iou`; no IoU counts as -1). A tie keeps the regen. When the
@@ -319,10 +319,10 @@ def accepted_lines(checks, picked):
     return "ACCEPTED_FAIL: " + text, text
 
 
-def first_images(a, rep, views):
-    """{view: first image} for the views in `regen` that were made again."""
+def first_images(a, checks, views):
+    """{view: first image} for the views with a failing check that were made again."""
     out = {}
-    for v in rep["regen"]:
+    for v in sorted({view_of(c) for c in checks if c["status"] == "fail"}):
         first, now = os.path.join(a.pick_best, f"{v}-1.png"), os.path.join(a.final, f"{v}.png")
         if (v in views and not (a.front and v == "front") and not (a.mirror_right and v == "right")
                 and os.path.isfile(first) and os.path.isfile(now) and common.file_sha256(first) != common.file_sha256(now)):
@@ -332,7 +332,8 @@ def first_images(a, rep, views):
 
 def pick_best(a, rep, extra, views):
     """L9: measure the first images, keep the better image of each view, and measure the kept set again."""
-    firsts = first_images(a, rep, views)
+    now = checks_of(rep, views, bool(a.front), extra)
+    firsts = first_images(a, now, views)
     if not firsts:
         return rep, extra, {}
     with tempfile.TemporaryDirectory() as t:
@@ -342,7 +343,7 @@ def pick_best(a, rep, extra, views):
         for v, src in firsts.items():
             shutil.copyfile(src, os.path.join(t, f"{v}.png"))
         rep_first, extra_first = measure_final(a, t, views)
-    now, first = checks_of(rep, views, bool(a.front), extra), checks_of(rep_first, views, bool(a.front), extra_first)
+    first = checks_of(rep_first, views, bool(a.front), extra_first)
     swap = [v for v in firsts if keep_first(first, now, v)]
     for v in swap:
         shutil.copyfile(firsts[v], os.path.join(a.final, f"{v}.png"))
