@@ -269,6 +269,11 @@ def test_the_codex_rule_lets_blender_run_installed_scripts_and_nothing_else_row_
     assert preview.count("prefix_rule(") == 5 and f'"{codex_project / "bin/Blender"}", "-b", "--python", [' in preview
 
 
+def test_two_codex_rule_previews_at_once_write_two_files_so_one_run_never_tests_the_other_runs_rules(codex_project, dist):
+    paths = [Path(rules(codex_project, dist).stdout.split("Preview only: ", 1)[1].splitlines()[0]) for _ in range(2)]
+    assert paths[0] != paths[1] and all(p.is_file() for p in paths)
+
+
 def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_options_so_no_tail_runs_other_code(
         codex_project, dist):
     r = rules(codex_project, dist)
