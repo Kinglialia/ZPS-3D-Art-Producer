@@ -30,7 +30,7 @@ from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/render_sides"
 BANDS = ((0.75, 1.0), (0.9, 0.6), (0.4, 0.75))
-PER_BAND = 8
+PER_BAND = 6
 SIDES = ("left", "right", "back")
 
 
