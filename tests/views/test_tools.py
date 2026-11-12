@@ -330,6 +330,32 @@ def measure(tmp_path, views="front", extra=(), guides=None):
     return rc, out + err, (read(rep) if rep.is_file() else None), f / "review/checks/measure.json"
 
 
+def test_two_materials_of_almost_one_colour_do_not_fail_detail_because_no_edge_can_be_seen_between_them_v2(tmp_path):
+    """A pixel-perfect repaint of a wall and a trim 15 RGB apart (dE 7.3, under the dE 10 an eye needs) has no edge
+    for the detail measure to find. Failing it asks the worker to regenerate a correct image."""
+    wall_trim_gen(tmp_path / "final/front.png")
+    rc, out, rep, check = measure(tmp_path)
+    front = rep["views"]["front"]
+    assert (rc, front["detail"], front["verdict"], rep["regen"]) == (0, None, "pass", [])
+    assert checks(check)["detail.front"][0] == "not_checked"
+    assert checks(check)["detail.front"][1] == {"WALL": ["TRIM"], "TRIM": ["WALL"]}
+
+
+def test_a_boundary_between_two_clearly_different_materials_in_the_wrong_place_still_fails_detail_v2(tmp_path):
+    """The V2 exception must not hide a real misplaced detail: the trim starts at a sixth of the width, not at two
+    thirds. Region medians would mix the two colours here, so the test is what keeps the rule honest."""
+    wall_trim_gen(tmp_path / "final/front.png", trim="#2F4F4F", trim_x=150)
+    rc, _, rep, check = measure(tmp_path)
+    assert (rc, rep["regen"], rep["views"]["front"]["status"]["detail"]) == (1, ["front"], "fail")
+    assert "detail.front" not in checks(check)
+
+
+def test_a_boundary_in_the_right_place_between_different_materials_passes_detail_v2(tmp_path):
+    wall_trim_gen(tmp_path / "final/front.png", trim="#2F4F4F")
+    rc, _, rep, _ = measure(tmp_path)
+    assert (rc, rep["views"]["front"]["status"]["detail"]) == (0, "pass")
+
+
 GRAIN_FROM, GRAIN_TO = (125, 95, 55), (155, 80, 30)
 
 
@@ -411,3 +437,118 @@ def solid_guides(d, views):
     return d
 
 
+def test_with_front_given_the_approved_front_is_never_listed_for_regen_but_its_mirror_partner_is_v4(tmp_path):
+    """views_rest cannot regenerate the front. A failing front/back pair means the back is the view to redo."""
+    g = solid_guides(tmp_path / "guides", ("front", "back"))
+    front = front_mismatch_gen(tmp_path / "views_front/front.png")
+    png(tmp_path / "final/back.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), BROWN)])
+    rc, _, rep, check = measure(tmp_path, "front,back", ("--front", front), guides=g)
+    assert rep["views"]["front"]["verdict"] == "fail" and rep["mirrors"][0]["status"] == "fail"
+    assert (rep["regen"], rc) == (["back"], 1)
+    assert {k: v[0] for k, v in checks(check).items() if k.startswith("views.")} == {"views.front": "info",
+                                                                                   "views.back": "fail"}
+    assert "Views to generate again: Back\n" in (tmp_path / "final/report/report.md").read_text(encoding="utf-8")
+
+
+def test_without_front_given_a_failing_front_is_still_regenerated_in_views_front_v4(tmp_path):
+    g = solid_guides(tmp_path / "guides", ("front",))
+    front_mismatch_gen(tmp_path / "final/front.png")
+    rc, _, rep, _ = measure(tmp_path, guides=g)
+    assert (rc, rep["regen"]) == (1, ["front"])
+
+
+def test_view_names_are_stripped_and_an_unknown_name_stops_with_exit_2_and_measures_nothing_v5(tmp_path):
+    g = solid_guides(tmp_path / "guides", ("front", "back"))
+    for v in ("front", "back"):
+        png(tmp_path / f"final/{v}.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), BROWN)])
+    rc, _, rep, _ = measure(tmp_path, "front, back", guides=g)
+    assert (rc, sorted(rep["views"])) == (0, ["back", "front"])
+    rc, out, rep, _ = measure(tmp_path / "x", "front,bakc", guides=g)
+    assert rc == 2 and "bakc" in out and "front, back, left, right, top" in out and rep is None
+
+
+def test_a_named_view_without_an_image_fails_even_when_a_space_follows_the_comma_v5(tmp_path):
+    g = solid_guides(tmp_path / "guides", ("front", "back"))
+    png(tmp_path / "final/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), BROWN)])
+    rc, _, _, check = measure(tmp_path, "front, back", guides=g)
+    assert (rc, checks(check)["views.back"][0]) == (1, "fail")
+
+
+def test_views_rest_takes_the_colour_reference_from_the_measured_front_and_the_concept_only_where_front_has_none_v6(
+        tmp_path):
+    """D36: front is the colour standard of the set. A material the front never shows (the roof) has no front colour, so
+    the concept colour is its reference, not the median of the views (which is the view itself, dE 0 always)."""
+    g = tmp_path / "guides"
+    g.mkdir()
+    (g / "views.json").write_text(json.dumps({"materials": {"WALL": ID_STONE, "ROOF": ID_TRIM}}), encoding="utf-8")
+    png(g / "front_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 350), ID_STONE)], mode="RGBA")
+    png(g / "back_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 200), ID_STONE), ((50, 200, 350, 350), ID_TRIM)], mode="RGBA")
+    front = png(tmp_path / "views_front/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), "#7A4F26")])
+    png(tmp_path / "final/back.png", (600, 600), "#E8E8E8", [((75, 75, 525, 300), "#7A4F26"), ((75, 300, 525, 525), "#556B2F")])
+    cc = tmp_path / "views_front/concept_colors.json"
+    cc.write_text(json.dumps({"WALL": BROWN, "ROOF": "#8B0000"}), encoding="utf-8")
+    rc, _, rep, _ = measure(tmp_path, "front,back", ("--front", front, "--concept-colors", cc), guides=g)
+    rows = {m: (r["reference"], r["reference_hex"]) for m, r in rep["colours"].items()}
+    assert rows == {"WALL": ("front view", "#7A4F26"), "ROOF": ("concept", "#8B0000")}
+    assert (rc, rep["regen"]) == (1, ["back"])
+
+
+def test_views_front_still_compares_the_front_with_the_concept_colours_v6(tmp_path):
+    cc = tmp_path / "cc.json"
+    cc.write_text(json.dumps({"WALL": "#8B0000", "TRIM": BROWN}), encoding="utf-8")
+    wall_trim_gen(tmp_path / "final/front.png", trim="#2F4F4F")
+    rc, _, rep, _ = measure(tmp_path, extra=("--concept-colors", cc))
+    assert {m: r["reference"] for m, r in rep["colours"].items()} == {"WALL": "concept", "TRIM": "concept"}
+    assert rc == 1
+
+
+def test_a_gen_that_touches_the_image_border_fails_because_the_object_is_cropped_v15(tmp_path):
+    wall_trim_gen(tmp_path / "final/front.png", margin=0)
+    rc, _, rep, check = measure(tmp_path)
+    assert (rc, checks(check)["border.front"][0]) == (1, "fail")
+    wall_trim_gen(tmp_path / "ok/final/front.png")
+    rc, _, _, check = measure(tmp_path / "ok")
+    assert (rc, checks(check)["border.front"][0]) == (0, "pass")
+
+
+def test_the_approved_front_that_touches_the_border_is_only_info_in_views_rest_v15(tmp_path):
+    front = wall_trim_gen(tmp_path / "views_front/front.png", margin=0)
+    g = wall_trim_guides(tmp_path / "guides", ("front", "back"))
+    wall_trim_gen(tmp_path / "final/back.png")
+    rc, _, rep, check = measure(tmp_path, "front,back", ("--front", front), guides=g)
+    got = {k: v[0] for k, v in checks(check).items()}
+    assert (got["border.front"], got["border.back"]) == ("info", "pass")
+
+
+def test_a_missing_prop_fails_the_component_count_against_the_guide_v15(tmp_path):
+    g = wall_trim_guides(tmp_path / "guides", prop=True)
+    wall_trim_gen(tmp_path / "final/front.png")
+    rc, _, _, check = measure(tmp_path, guides=g)
+    assert (rc, checks(check)["components.front"]) == (1, ("fail", {"guide": 2, "image": 1}))
+    wall_trim_gen(tmp_path / "ok/final/front.png", prop=True)
+    rc, _, _, check = measure(tmp_path / "ok", guides=g)
+    assert checks(check)["components.front"] == ("pass", {"guide": 2, "image": 2})
+
+
+def test_a_pale_halo_around_the_object_is_reported_as_info_never_as_fail_v15(tmp_path):
+    png(tmp_path / "final/front.png", (600, 600), "#E8E8E8", [((60, 60, 540, 540), "#D0D0D0"), ((75, 75, 525, 525), BROWN)])
+    rc, _, _, check = measure(tmp_path, guides=solid_guides(tmp_path / "guides", ("front",)))
+    status, value = checks(check)["ring.front"]
+    assert (status, value["halo_share"] > 0.5) == ("info", True)
+    wall_trim_gen(tmp_path / "ok/final/front.png")
+    assert checks(measure(tmp_path / "ok")[3])["ring.front"][1]["halo_share"] == 0.0
+
+
+def test_a_strong_light_gradient_across_a_material_is_reported_as_info_v15(tmp_path):
+    ramp = Image.new("RGB", (450, 450))
+    ramp.putdata([(40 + x * 200 // 450,) * 3 for _ in range(450) for x in range(450)])
+    flat = png(tmp_path / "flat/final/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), "#808080")])
+    shaded = tmp_path / "final/front.png"
+    png(shaded, (600, 600), "#E8E8E8")
+    im = Image.open(shaded)
+    im.paste(ramp, (75, 75))
+    im.save(shaded)
+    g = solid_guides(tmp_path / "guides", ("front",))
+    status, shaded_v = checks(measure(tmp_path, guides=g)[3])["light.front"]
+    flat_v = checks(measure(tmp_path / "flat", guides=g)[3])["light.front"][1]
+    assert (status, shaded_v["WALL"] > 0.5, flat_v["WALL"] < 0.02) == ("info", True, True)
