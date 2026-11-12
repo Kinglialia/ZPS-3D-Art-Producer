@@ -81,11 +81,16 @@ def test_only_the_failing_json_are_printed_and_the_exit_code_is_1(tmp_path):
 
 @needs_venv
 def test_gate_json_of_an_older_build_is_deleted_so_it_can_never_count(tmp_path):
+    """A pass for a part that changed would hide its new fault; a fail for a part that is gone would send the worker to
+    fix nothing. The check JSON of other tools is not touched."""
     f = final_dir(tmp_path)
     (f / "review/gates").mkdir(parents=True)
+    (f / "review/checks").mkdir()
     (f / "review/gates/ghost.json").write_text(json.dumps({"overall": "fail", "checks": []}), encoding="utf-8")
+    (f / "review/checks/elsewhere.json").write_text(json.dumps({"overall": "pass"}), encoding="utf-8")
     rc, lines, _ = gate_all(f, *SKIP_INPUTS)
-    assert (rc, lines, (f / "review/gates/ghost.json").exists()) == (0, ["gate_all pass: 6 parts, 7 checks"], False)
+    assert (rc, lines, (f / "review/gates/ghost.json").exists(), (f / "review/checks/elsewhere.json").is_file()) == (
+        0, ["gate_all pass: 6 parts, 7 checks"], False, True)
 
 
 @needs_venv

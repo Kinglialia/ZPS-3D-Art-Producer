@@ -65,17 +65,21 @@ def test_rubric_template_has_one_section_per_step_and_blockout_keys_are_the_revi
         "mass", "silhouette", "identity", "open_closed", "props", "foot", "own_decisions"]
 
 
-def test_param_variants_run_their_own_checks_so_a_picked_variant_carries_its_own_json():
-    _, body = front(WORKER)
-    assert ("gate từng part, mọi `check_*` và `check_fix.py` với `--work V/variants/<b|c>/`, render cùng bộ góc vào "
-            "`V/variants/<b|c>/review/`") in body
+FIX = AGENT / "references/fix.md"
 
 
-def test_a_variant_clears_the_gate_json_it_copied_from_variant_a_before_it_gates_its_own_parts():
-    """B3: the copy of F brings the gates of variant a. They describe other values, so they must not count."""
+def test_a_param_variant_comes_from_one_make_variant_command_so_a_picked_variant_carries_its_own_json():
+    """L2: the fix round used to list about 60 commands for two variants; the picked folder becomes final/, so each
+    variant must have its own gates, checks and renders."""
+    text = FIX.read_text(encoding="utf-8")
+    assert "RUN make_variant.py --from F --out V/variants/<b|c> --set <param>=<giá trị>" in text
+    assert "mỗi phương án giữ JSON của chính nó" in text
+    assert "RUN bl render_review.py --work V/variants/<b|c>" in text
+
+
+def test_nothing_sends_the_worker_to_clear_the_gate_json_because_gate_all_does_it_before_it_gates():
     _, body = front(WORKER)
-    line = next(l for l in body.splitlines() if l.startswith("- `param`"))
-    assert line.index("clear_gates.py --work V/variants/<b|c>/") < line.index("gate từng part")
+    assert "clear_gates" not in body + FIX.read_text(encoding="utf-8") and not (AGENT / "tools/clear_gates.py").exists()
 
 
 def test_worker_reads_blockout_md_sections_from_a_shipped_reference_with_the_summary_first():
@@ -93,7 +97,7 @@ def test_every_tool_command_goes_through_run_so_one_entry_holds_the_slot_the_log
     _, body = front(WORKER)
     assert "`RUN` = dòng `RUN:` của brief" in body
     assert re.findall(r"(?<![A-Z_])blender -b|BLENDER|\bPY\b|echo \$!|\.pid|dòng PID", body) == []
-    assert body.count("RUN bl ") == 5 and "`&`" not in body
+    assert sorted(re.findall(r"RUN bl (\w+\.py)", body)) == ["render_critic.py", "render_review.py"] and "`&`" not in body
 
 
 def test_the_rule_to_run_every_command_in_the_foreground_stays_after_the_pid_text_went():
@@ -103,39 +107,44 @@ def test_the_rule_to_run_every_command_in_the_foreground_stays_after_the_pid_tex
 
 
 @pytest.mark.parametrize("command", [
-    "RUN bl build_parts.py assembly --work F", "RUN bl build_parts.py param_fit --work F --spec V/work/spec.json",
-    "RUN bl render_critic.py --work F --mode critic", "RUN bl render_review.py --work F",
-    "RUN custom_mesh.py --work F", "RUN clear_gates.py --work F", "RUN check_layout.py --work F"])
+    "RUN init_sources.py --work F", "RUN custom_mesh.py --work F", "RUN gate_all.py --work F",
+    "RUN prep_overlay.py --work F", "RUN bl render_critic.py --work F --mode critic",
+    "RUN bl render_review.py --work F", "RUN blockout_md.py --work F",
+    "RUN build_parts.py param_fit --work F --spec V/work/spec.json"])
 def test_worker_writes_the_command_in_run_form(command):
     _, body = front(WORKER)
     assert command in body
 
 
-def test_a_graph_with_a_custom_part_fits_its_params_in_blender_because_python_has_no_bmesh():
-    """B1: param_fit builds the graph. A custom part is a bmesh, which exists only in Blender."""
+def test_a_graph_with_a_custom_part_builds_and_fits_in_the_venv_because_bevel_box_and_the_json_meshes_are_plain_arrays():
+    """L4, U2: custom parts no longer need bmesh, so no command of the worker runs a build in Blender."""
     _, body = front(WORKER)
-    assert ("Graph có part `custom`: `RUN bl build_parts.py param_fit --work F --spec V/work/spec.json`") in body
+    fix = FIX.read_text(encoding="utf-8")
+    assert "RUN build_parts.py param_fit --work F --spec V/work/spec.json" in body
+    assert "RUN bl build_parts" not in body + fix and "Graph có part `custom`: `RUN bl" not in body
 
 
-def test_the_final_gate_pass_starts_from_an_empty_gates_folder_and_gates_every_part():
-    """B3: a gate JSON of an old build counts as a result, so step 7 clears them and gates every part again."""
+def test_the_worker_builds_once_through_gate_all_with_the_input_check_arguments_and_never_with_upto():
+    """L1: the old procedure built with --upto part by part; gate_all builds the graph once and gates every part."""
     _, body = front(WORKER)
-    step7 = next(l for l in body.splitlines() if l.startswith("7. "))
-    assert step7.index("clear_gates.py") < step7.index("gate từng part") < step7.index("mọi `check_*`")
+    step4 = next(l for l in body.splitlines() if l.startswith("4. "))
+    assert "RUN gate_all.py --work F --check-args \"check_inputs=--approved" in step4
+    assert "--upto" not in body + FIX.read_text(encoding="utf-8") and "layout.complete" not in body
 
 
-def test_a_build_with_upto_cannot_pass_check_layout_and_the_worker_is_told_to_read_the_bbox_check():
-    """B2: layout.complete fails on --upto, so step 5 must not promise a pass before the full build."""
+def test_the_numbered_procedure_is_short_and_goes_sources_graph_gate_overlay_render_document():
     _, body = front(WORKER)
-    step5 = next(l for l in body.splitlines() if l.startswith("5. "))
-    assert "`layout.complete` luôn fail" in step5 and "đọc `layout.bbox`" in step5
-    assert "Cả `layout.bbox` và `layout.complete` phải pass ở lần tự kiểm cuối" in step5
+    steps = [l for l in body.split("## Quy trình", 1)[1].split("## Quy tắc", 1)[0].splitlines() if re.match(r"\d+\. ", l)]
+    tools = [re.findall(r"RUN (?:bl )?(\w+\.py)", l) for l in steps]
+    assert len(steps) == 7
+    assert [t[0] for t in tools if t] == ["init_sources.py", "custom_mesh.py", "gate_all.py", "prep_overlay.py",
+                                         "render_critic.py", "blockout_md.py"]
 
 
-def test_the_spec_json_the_worker_writes_has_no_blender_path_since_no_tool_reads_it():
+def test_the_spec_json_is_written_by_prep_overlay_and_the_worker_text_has_no_blender_path():
     _, body = front(WORKER)
-    assert '"paths"' not in body and "config.paths" not in body
-    assert '`{"concept": {"views": {"<view>": "masks/<view>.png"}}}`' in body
+    assert '"paths"' not in body and "config.paths" not in body and '"concept"' not in body
+    assert "`V/work/spec.json`" in body and "RUN prep_overlay.py --work F --view <view>=<ảnh concept>" in body
 
 
 def test_the_worker_renders_with_the_legend_tool_not_the_kit_render_views():
@@ -168,7 +177,8 @@ def test_worker_points_only_at_files_that_exist():
         assert (AGENT / "references" / ref).is_file(), ref
     tools = set(re.findall(r"RUN (?:bl )?((?:self_build/)?\w+\.py)", body)) | set(
         re.findall(r"T/((?:self_build/)?[\w.]+\.(?:py|sh))", body))
-    assert {"build_parts.py", "self_build/gates.py", "render_critic.py", "clear_gates.py", "custom_mesh.py"} <= tools
+    assert {"build_parts.py", "gate_all.py", "init_sources.py", "blockout_md.py", "prep_overlay.py", "render_critic.py",
+            "render_review.py", "custom_mesh.py"} <= tools
     for tool in tools:
         assert (AGENT / "tools" / tool).is_file(), tool
 
@@ -182,3 +192,71 @@ def test_reviewer_checks_aligned_edges_and_parts_across_a_seam_which_the_pilot_r
     text = (AGENT.parent / "zps-3dp-check-blockout.md").read_text(encoding="utf-8")
     assert "chi tiết vắt qua khe ghép (khung cửa, dầm, ống máng)" in text
     assert "bậc lồi hay lệch mép không có trên concept là fail" in text
+
+
+REFERENCES = sorted(p.name for p in (AGENT / "references").iterdir())
+TAG = re.compile(r"\bD\d+(?:\.\d+)*\b")
+
+
+def test_every_reference_is_listed_in_the_agent_file_with_the_moment_to_read_it():
+    """Q11: a worker that reads every reference spends its turns on text it does not need now."""
+    _, body = front(WORKER)
+    assert REFERENCES == ["craft.md", "fix.md", "part-graph.md"]
+    for name in REFERENCES:
+        assert re.search(rf"^- `R/{re.escape(name)}`: đọc khi ", body, re.M), name
+    assert "Không đọc ở lần dựng đầu" in body
+
+
+def test_the_fix_round_text_is_in_fix_md_and_not_in_the_agent_file_that_every_run_reads():
+    _, body = front(WORKER)
+    fix = FIX.read_text(encoding="utf-8")
+    assert "## Vòng sửa" not in body and "V/variants" not in body and "evidence-" not in body
+    assert "## `structure`" in fix and "## `param`" in fix and "## Vòng xin bằng chứng" in fix
+    assert "`V/work/edits/<Fid>/`" in fix
+
+
+def test_craft_md_keeps_only_the_image_evidence_and_the_preflight_the_worker_needs():
+    text = (AGENT / "references/craft.md").read_text(encoding="utf-8")
+    assert "**Image evidence:**" in text and "**Preflight for script builds:**" in text
+    assert "Analyze before you choose" not in text and "Normal map" not in text and "## A. Receive the task" not in text
+    source = (AGENT / "SOURCE.md").read_text(encoding="utf-8")
+    assert "technique.md" in source and "references/craft.md" in source and source.count("`references/craft.md`") == 1
+
+
+def test_a_finding_id_is_written_fid_and_f_means_only_the_final_folder():
+    """Q13: `<F>` meant both; a worker that read `edits/<F>/` could write the final folder in it."""
+    _, body = front(WORKER)
+    fix = FIX.read_text(encoding="utf-8")
+    assert "<F>" not in body + fix and "<Fid>" in fix and "`F` = `V/final/`" in body
+
+
+def test_decision_tags_are_gone_from_the_agent_file_and_its_references_except_the_two_other_tests_pin():
+    """Q11: tests/test_watch.py pins "D33.2" and "(D33.8)" in every step agent file; no other tag stays."""
+    _, body = front(WORKER)
+    assert TAG.findall(body) == ["D33.2", "D33.8"]
+    for name in REFERENCES:
+        assert TAG.findall((AGENT / "references" / name).read_text(encoding="utf-8")) == [], name
+
+
+BUILDING = ("mái", "tường", "cửa", "footprint", "tầng", "nhà", "công trình")
+
+
+def test_the_instructions_use_words_that_hold_for_a_table_a_tree_a_rock_and_a_house():
+    """Q12 (D34.4): a building word may stand inside an example, where it sits beside the other kinds, and nowhere else."""
+    _, body = front(WORKER)
+    fix = FIX.read_text(encoding="utf-8")
+    pg = (AGENT / "references/part-graph.md").read_text(encoding="utf-8")
+    example = re.compile(r"\((?:ví dụ|vd)\b[^)]*\)|(?:ví dụ|vd)[: ]+\"[^\"]+\"", re.I)
+    body_text = body.split("---", 1)[-1]
+    for text in (body_text, fix, pg):
+        left = example.sub("", text).lower()
+        assert [w for w in BUILDING if re.search(rf"(?<!\w){w}(?!\w)", left)] == []
+
+
+def test_the_count_example_names_no_removed_function_and_two_kinds_of_object_with_the_tag_rule():
+    """U3: grooved_box and vault left the library; the example is a tag on 4 table legs and a custom_parts.py function."""
+    _, body = front(WORKER)
+    pg = (AGENT / "references/part-graph.md").read_text(encoding="utf-8")
+    assert "grooved_box" not in body + pg and "vault" not in body + pg
+    line = next(l for l in body.splitlines() if l.startswith("Brief có dòng `COUNTS:`"))
+    assert "`tag: legs`" in line and "`custom_parts.py`" in line and "chân bàn" in line and "lớp đá" in line
