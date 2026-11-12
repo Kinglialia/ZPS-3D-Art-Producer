@@ -65,8 +65,8 @@ def test_pick_bg_keeps_the_kit_light_grey_when_only_the_concept_background_is_ne
 
 
 def test_profile_view_bg_wins_over_the_pick(tmp_path, stone_and_wood):
-    tool("pick_bg", "--final", tmp_path, "--concept", stone_and_wood, "--profile", profile(tmp_path, "#123456"))
-    assert {k: read(tmp_path / "bg_color.json")[k] for k in ("hex", "source")} == {"hex": "#123456", "source": "profile"}
+    tool("pick_bg", "--final", tmp_path, "--concept", stone_and_wood, "--profile", profile(tmp_path, "#1E90FF"))
+    assert {k: read(tmp_path / "bg_color.json")[k] for k in ("hex", "source")} == {"hex": "#1E90FF", "source": "profile"}
 
 
 def test_concept_colors_takes_the_paint_colour_inside_each_material_box(tmp_path, stone_and_wood):
@@ -115,8 +115,8 @@ def test_measure_reads_front_from_views_front_and_fails_a_missing_view_so_the_fi
     front = frame_gen(tmp_path / "views_front/front.png")
     rc, _, _ = tool("measure", "--final", f, "--guides", g, "--views", "front,back", "--front", front)
     assert rc == 1
-    assert {k: v[0] for k, v in checks(f / "review/checks/measure.json").items()} == {"views.front": "pass",
-                                                                                     "views.back": "fail"}
+    assert {k: v[0] for k, v in checks(f / "review/checks/measure.json").items() if k.startswith("views.")} == {
+        "views.front": "pass", "views.back": "fail"}
     frame_gen(f / "back.png")
     assert tool("measure", "--final", f, "--guides", g, "--views", "front,back", "--front", front)[0] == 0
     assert sorted(read(f / "report/report.json")["views"]) == ["back", "front"]
@@ -297,3 +297,117 @@ def test_diff_guides_ignores_a_reshuffle_of_id_colours_because_it_compares_mater
     new = house_guides(tmp_path / "new", colours=(WIN, WALL))
     tool("diff_guides", "--old", old, "--new", new, "--out", tmp_path / "diff.json")
     assert read(tmp_path / "diff.json")["data"]["changed"] == []
+
+
+ID_TRIM = "#3CB44B"
+BROWN, BROWN_15 = "#8B5A2B", "#9A5A2B"
+
+
+def wall_trim_guides(d, views=("front",), prop=False, trim_x=250):
+    """A wall (left) and a trim band (right) in a 300x300 object, optionally with one separate prop beside it."""
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "views.json").write_text(json.dumps({"materials": {"WALL": ID_STONE, "TRIM": ID_TRIM}}), encoding="utf-8")
+    for v in views:
+        rects = [((50, 50, trim_x, 350), ID_STONE), ((trim_x, 50, 350, 350), ID_TRIM)]
+        if prop:
+            rects.append(((360, 300, 390, 350), ID_STONE))
+        png(d / f"{v}_id.png", (400, 400), (0, 0, 0, 0), rects, mode="RGBA")
+    return d
+
+
+def wall_trim_gen(path, wall=BROWN, trim=BROWN_15, trim_x=375, margin=75, prop=False, bg="#E8E8E8"):
+    """600x600 repaint of wall_trim_guides: the 300 px object of the guide is 450 px here."""
+    rects = [((margin, margin, trim_x, 525), wall), ((trim_x, margin, 525, 525), trim)]
+    if prop:
+        rects.append(((540, 450, 585, 525), wall))
+    return png(path, (600, 600), bg, rects)
+
+
+def measure(tmp_path, views="front", extra=(), guides=None):
+    g, f = guides or wall_trim_guides(tmp_path / "guides"), tmp_path / "final"
+    rc, out, err = tool("measure", "--final", f, "--guides", g, "--views", views, *extra)
+    rep = f / "report/report.json"
+    return rc, out + err, (read(rep) if rep.is_file() else None), f / "review/checks/measure.json"
+
+
+GRAIN_FROM, GRAIN_TO = (125, 95, 55), (155, 80, 30)
+
+
+def grain(width, height=200):
+    """Wood paint that drifts from a muted to a saturated brown across the patch. Its median is the middle colour; the
+    `vivid` colour of its biggest cluster sits at the saturated end, dE 5.9 away."""
+    import numpy as np
+    cols = [np.round(np.add(GRAIN_FROM, np.subtract(GRAIN_TO, GRAIN_FROM) * x / (width - 1))) for x in range(width)]
+    return np.tile(np.array(cols, np.uint8)[None], (height, 1, 1))
+
+
+def test_concept_colors_is_the_median_of_the_box_not_the_vivid_colour_of_its_biggest_cluster_v3(tmp_path):
+    Image.fromarray(grain(200)).save(tmp_path / "c.png")
+    rc, _, _ = tool("concept_colors", "--final", tmp_path, "--concept", tmp_path / "c.png", "--box", "WALL=0,0,200,200")
+    assert (rc, read(tmp_path / "concept_colors.json")) == (0, {"WALL": "#8C582A"})
+
+
+def test_a_patch_compared_with_itself_gives_a_colour_distance_near_zero_v3(tmp_path):
+    """D36.5: the concept colour and the measured colour must be one statistic. With 'vivid' against the median the
+    same wood patch scored dE 5.9 (6.8 in the review), over the texture limit of 3."""
+    Image.fromarray(grain(200)).save(tmp_path / "c.png")
+    tool("concept_colors", "--final", tmp_path, "--concept", tmp_path / "c.png", "--box", "WALL=0,0,200,200")
+    g = solid_guides(tmp_path / "guides", ("front",))
+    gen = Image.new("RGB", (600, 600), "#E8E8E8")
+    gen.paste(Image.fromarray(grain(450, 450)), (75, 75))
+    (tmp_path / "final").mkdir()
+    gen.save(tmp_path / "final/front.png")
+    rc, _, rep, _ = measure(tmp_path, extra=("--concept-colors", tmp_path / "concept_colors.json"), guides=g)
+    cell = rep["colours"]["WALL"]["views"]["front"]
+    assert (rc, cell["delta_e"] < 1.0) == (0, True), cell
+
+
+def test_concept_colors_is_importable_so_intake_measures_with_the_same_function_v3(tmp_path):
+    sys.path.insert(0, str(TOOLS))
+    import concept_colors
+    assert concept_colors.median_hex(Image.fromarray(grain(200)), (0, 0, 200, 200)) == "#8C582A"
+
+
+def test_a_box_over_two_materials_fails_because_its_median_is_neither_of_them_v8(stone_and_wood, tmp_path):
+    rc, out, _ = tool("concept_colors", "--final", tmp_path, "--concept", stone_and_wood, "--box", "STONE=60,30,140,170")
+    assert (rc, (tmp_path / "concept_colors.json").exists()) == (1, False)
+    got = checks(tmp_path / "review/checks/concept_colors.json")
+    assert got["colors.STONE"][0] == "fail" and got["colors.STONE"][1]["main_share"] < 0.6
+
+
+def test_a_noisy_single_material_box_passes_the_main_cluster_limit_v8(tmp_path):
+    import random
+    rnd = random.Random(3)
+    im = Image.new("RGB", (100, 100))
+    im.putdata([tuple(max(0, min(255, c + rnd.randint(-12, 12))) for c in (139, 90, 43)) for _ in range(10000)])
+    im.save(tmp_path / "c.png")
+    rc, out, _ = tool("concept_colors", "--final", tmp_path, "--concept", tmp_path / "c.png", "--box", "WALL=0,0,100,100")
+    assert (rc, out.startswith("[views/concept_colors] 100x100 WALL=#")) == (0, True)
+
+
+def test_a_material_of_the_front_guide_without_a_box_fails_because_measure_would_take_its_colour_from_the_front_v8(
+        tmp_path, stone_and_wood):
+    f = tmp_path / "final"
+    wall_trim_guides(f / "guides")
+    rc, _, _ = tool("concept_colors", "--final", f, "--concept", stone_and_wood, "--box", "WALL=30,30,90,170")
+    got = checks(f / "review/checks/concept_colors.json")
+    assert (rc, got["colors.codes"]) == (1, ("fail", ["TRIM"]))
+    assert not (f / "concept_colors.json").exists()
+    rc, _, _ = tool("concept_colors", "--final", f, "--concept", stone_and_wood, "--box", "WALL=30,30,90,170",
+                    "--box", "TRIM=110,30,170,170")
+    assert rc == 0
+
+
+def front_mismatch_gen(path):
+    """A front 30% taller than the guide: its aspect fails, and so does its mirror against back."""
+    return png(path, (600, 600), "#E8E8E8", [((75, 30, 525, 570), BROWN)])
+
+
+def solid_guides(d, views):
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "views.json").write_text(json.dumps({"materials": {"WALL": ID_STONE}}), encoding="utf-8")
+    for v in views:
+        png(d / f"{v}_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 350), ID_STONE)], mode="RGBA")
+    return d
+
+
