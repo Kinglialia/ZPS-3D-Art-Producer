@@ -283,6 +283,29 @@ def recheck(st: dict, step: dict, d) -> tuple[list[str], str | None]:
     return (line[2:] if p.returncode and line[1:2] == ["error"] else []), None
 
 
+RENDER_FRESH = "render_fresh.json"
+
+
+def render_fresh(d: Path):
+    """T2: the albedo changed after its renders were made, so a reviewer would grade old pictures. renders.json names the
+    albedo and its sha256; checks/render_fresh.json fails when the file now differs. No hash in renders.json (older
+    versions): no file."""
+    out = d / "final" / "review" / "checks" / RENDER_FRESH
+    out.unlink(missing_ok=True)
+    try:
+        r = json.loads((d / "final" / "review" / "renders.json").read_text(encoding="utf-8"))
+        want, name = r["albedo_sha256"], PurePosixPath(r["albedo"]).name
+        got = hashlib.sha256((d / "final" / name).read_bytes()).hexdigest()
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+    ok = got == want
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"overall": "pass" if ok else "fail", "checks": [{
+        "check": "render.fresh", "status": "pass" if ok else "fail",
+        "note": None if ok else f"render lại: {name} đã đổi sau lần render (chạy lại render_texture.py)"}]},
+        ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def checks_failed(cfg, st, step, d, n, c) -> bool:
     """D31.3, D39.5: a failed gate or check JSON the worker did not validly accept goes straight back to the worker, no
     reviewer. A direct round does not count toward max_fix_rounds; [review] max_direct_rounds caps them, and the same
@@ -293,6 +316,8 @@ def checks_failed(cfg, st, step, d, n, c) -> bool:
         write(d / "final", card)
     if step["gate"] == "checks_human":
         return False
+    if step["id"] == texture.STEP:
+        render_fresh(d)
     extra, skipped = recheck(st, step, d)
     if skipped:
         ledger(f"{st['id']} · {step['id']} v{n} · {skipped}")
