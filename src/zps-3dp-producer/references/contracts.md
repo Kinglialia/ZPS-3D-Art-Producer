@@ -13,6 +13,7 @@ production/                     # trong project Claude Code; chỉ script và su
   PROJECT-PROFILE.yaml          # Project Setup viết; brief từ chối khi sai
   policy.yaml                   # ai duyệt; chỉ P approvals / P delegate ghi
   preflight.json                # P preflight ghi; P next, P brief đọc
+  hash-cache.json               # tree_hash nhớ theo thư mục: {<thư mục>|<skip>: {sig (đường dẫn, mtime_ns, cỡ của từng file), hash}}; script ghi, xóa được, mất thì tính lại
   pids/<tài nguyên>/<id>.pid    # worker ghi PID tiến trình Blender; gen_image_codex.py ghi <id>-<pid>.pid mỗi lần chạy; P next đếm PID còn sống
   rubrics/<type>.md             # rubric chung theo loại; dòng đầu status: draft|approved
   ledger.md                     # append-only: `- <giờ> · <runtime> · <sự kiện>` + RULING
@@ -51,6 +52,7 @@ production/                     # trong project Claude Code; chỉ script và su
 - `offer`, `label`: version đưa người dùng duyệt và nhãn ("chưa đạt" khi chưa qua).
 - `offer_key`, `offers`: khóa của lần đưa duyệt đang chờ (`<step>-vN-<số lần đưa>`) và bộ đếm. Trang gửi khóa nó đã hiện; khóa khác khóa hiện tại thì script bỏ qua quyết định (và ghi chú có khoanh).
 - `decisions["<step> vN"]`: quyết định Duyệt / Cần sửa đã nhận, kèm `offer`; quyết định sau cho cùng version bị bỏ qua, trừ Cần sửa cho bản đã duyệt khi lệnh không nêu khóa. Quyết định nêu đúng khóa đã có quyết định luôn bị bỏ qua, dù tới từ trang local hay remote. Script xóa khóa này mỗi lần đưa vN cho người dùng duyệt, nên một lần đưa nhận một quyết định.
+- `pending_redo[<bước>]`: danh sách Cần sửa gửi lúc asset `running`, `reviewing` hoặc `evidence_running`: `{text, at, offer, marks[], folder}`. Lần `ingest` kế áp dụng mọi mục thành finding `H<n>` trên version vừa ingest rồi đưa asset vào vòng sửa; reviewer PASS ở lần ingest đó không duyệt bước. Bước sau bước đang chạy bị từ chối như cũ.
 - `worker_agent_id`: subagent worker để resume vòng sửa. Mở lại một bước khác bước đang chạy thì xóa, vì worker cũ có context của bước khác.
 - `reopened[<loại>]`: số lần reviewer mở lại bước trước bằng loại `TOP_FIX` đó (`regen_front`, `fix_uv_mesh`) trong đợt feedback. Cùng loại lần thứ hai → `waiting_human`; loại khác không tính. `redo` của người dùng xóa hết.
 - `prior[<bước>]`: bản đã duyệt của bước sau khi một bước trước nó làm lại. Brief lần dựng đầu của bước đó trỏ tới bản này để giữ phần không đổi. Duyệt bước đó thì xóa.
@@ -188,11 +190,11 @@ Bản gốc của vN là `status.json` → `fix_base` (brief worker vòng sửa 
 
 ## Vùng khoanh (review-board.md §4)
 
-Trang gửi `regions`: `[{n, image, shape, coords, note}]`. `n` = 1, 2, 3…; `image` = tên ảnh trên thẻ (vd `review/game_cam.png`, `concept/concept_albedo.png`), không phải đường dẫn; `shape` = `circle` | `rect` | `free`; `coords` theo ảnh gốc, tỉ lệ 0–1: `circle`, `rect` là khung `[x0, y0, x1, y1]`, `free` là `[[x, y], …]` (2–500 điểm); `note` tối đa 500 ký tự; tối đa 50 vùng. Script vẽ vùng lên ảnh gốc, lưu `feedback/<step>-vN-<k>/` (`<step> vN` = thẻ người dùng thấy) với `regions.json` (thêm `id` = `H<n>`, null khi vùng chưa thành finding). Mỗi vùng thành `H<n>` (`major`) ở version nhận quyết định, có thêm `mark: {png, n}`; brief worker và reviewer vòng sau liệt kê `<png>: 1 (H2) <note>; …`. Asset không chờ người dùng (và không phải `redo`): chỉ lưu thư mục, không thành finding. Duyệt ở bước không có reviewer (`assemble`) đóng các `H` đang mở của version đó.
+Trang gửi `regions`: `[{n, image, shape, coords, note}]`. `n` = 1, 2, 3…; `image` = tên ảnh trên thẻ (vd `review/game_cam.png`, `concept/concept_albedo.png`), không phải đường dẫn; `shape` = `circle` | `rect` | `free`; `coords` theo ảnh gốc, tỉ lệ 0–1: `circle`, `rect` là khung `[x0, y0, x1, y1]`, `free` là `[[x, y], …]` (2–500 điểm); `note` tối đa 500 ký tự; tối đa 50 vùng. Script vẽ vùng lên ảnh gốc, lưu `feedback/<step>-vN-<k>/` (`<step> vN` = thẻ người dùng thấy) với `regions.json` (thêm `id` = `H<n>`, null khi vùng chưa thành finding). Mỗi vùng thành `H<n>` (`major`) ở version nhận quyết định (Duyệt kèm vùng: `minor`, loại `note*` đầu tiên của bước, bước không có thì `note`, để brief bước sau liệt kê), có thêm `mark: {png, n}`; brief worker và reviewer vòng sau liệt kê `<png>: 1 (H2) <note>; …`. Asset không chờ người dùng (và không phải `redo`): chỉ lưu thư mục, không thành finding. Duyệt ở bước không có reviewer (`assemble`) đóng các `H` đang mở của version đó.
 
 ## Trang claude.ai (`P board`)
 
-Dữ liệu (ArtifactData), mỗi lần đẩy chỉ tạo dòng mới: `offers/<push>~<id>` (payload thẻ, ảnh là đường dẫn tải lên, `glb_json`), `pushes/<push>` (`at`, `project`, `open`: id → dòng `offers`), `files/<push>` (`{đường dẫn: id asset}`, Producer ghi từ kết quả tải lên). Trang ghi `feedback/<id tự sinh>`: `{aid, key, action, text, step, regions, at}`. `P board pull` đọc `<out_dir>/feedback/*.json` (có hoặc không có khóa `data`), áp mỗi dòng một lần theo `at` qua đúng hàm của `P feedback`, nhớ id đã kéo trong `board/remote.json`.
+Dữ liệu (ArtifactData), mỗi lần đẩy chỉ tạo dòng mới: `offers/<push>~<id>` (payload thẻ, ảnh là đường dẫn tải lên, `glb_json`), `pushes/<push>` (`at`, `project`, `open`: id → dòng `offers`), `files/<push>` (`{đường dẫn: id asset}`, Producer ghi từ kết quả tải lên). Trang ghi `feedback/<id tự sinh>`: `{aid, key, action, text, step, regions, at}`. `P board pull` đọc `<out_dir>/feedback/*.json` (có hoặc không có khóa `data`), áp mỗi dòng một lần theo `at` qua đúng hàm của `P feedback`, nhớ id đã kéo trong `board/remote.json`. Dòng chỉ được đánh dấu đã kéo khi `act()` áp dụng hoặc bỏ qua vì cũ, hoặc khi dòng sai dạng; dòng bị `act()` từ chối ở lại, in một dòng tên dòng và lỗi, và được thử lại ở lần kéo sau.
 
 ## Nguồn tham khảo của thiết kế
 
