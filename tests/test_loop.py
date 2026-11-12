@@ -915,11 +915,14 @@ def test_no_worker_or_reviewer_brief_tells_the_agent_to_write_its_report_through
 
 
 
+TEMPLATE_ACCEPTABLE = 'acceptable = ["proportion.json", "base.json", "gates/*.json#gate5.health"]\n'
+
+
 def acceptable(root, *names):
     p = root / "production/pipeline.toml"
-    p.write_text(p.read_text(encoding="utf-8").replace('top_fix = ["structure", "param"]\n',
-                                                       f'top_fix = ["structure", "param"]\nacceptable = {list(names)!r}\n'.replace(
-                                                           "'", '"'), 1), encoding="utf-8")
+    text = p.read_text(encoding="utf-8")
+    assert TEMPLATE_ACCEPTABLE in text
+    p.write_text(text.replace(TEMPLATE_ACCEPTABLE, f"acceptable = {json.dumps(list(names))}\n", 1), encoding="utf-8")
 
 
 def test_a_failed_check_goes_straight_back_to_the_worker_without_a_reviewer_and_is_not_a_fix_round_d31_3_w7(flow):
@@ -1048,6 +1051,51 @@ def test_the_first_review_after_two_direct_returns_is_not_stopped_for_no_progres
     assert flow.review(counts=counts(major=1), findings=[finding("F1", "major", "structure")]).splitlines()[0] == (
         "house-a: review FIX (major=1) → blockout/fix. Tiếp: giao worker → `brief house-a`")
     assert flow.st["fix_round"] == 1
+
+
+def gate_json(flow, part, failing=()):
+    """A kit gate result of one part, as gates.py writes it: one entry per gate, the failing ones named."""
+    checks = [{"check": c, "status": "fail" if c in failing else "pass"} for c in ("gate2.contact", "gate5.health")]
+    write_json(flow.v(1) / f"final/review/gates/{part}.json", {"overall": "fail" if failing else "pass", "checks": checks})
+
+
+def accept(flow, claim, why="hai part chạm nhau dọc một cạnh, 1 cạnh mở"):
+    out = flow.brief()
+    (flow.v(1) / "final/README.md").write_text(f"## NGOẠI LỆ\n- {claim} — {why}\n", encoding="utf-8")
+    flow.work(out=out, extra=f"ACCEPTED_FAIL: {claim} — {why}\n")
+    return flow.st
+
+
+def test_the_template_lets_a_blockout_worker_accept_a_proportion_check_that_has_no_other_exit_c19(flow):
+    """A false proportion fail (a concept mask the camera cannot match) had no exit: the worker looped to the cap."""
+    out = flow.brief()
+    assert "(chỉ proportion.json, base.json, gates/*.json#gate5.health)" in flow.text(out)
+    (flow.v(1) / "final/README.md").write_text("## NGOẠI LỆ\n- proportion.json — front lệch 12% do mái chìa 0.4 m\n", encoding="utf-8")
+    flow.work(out=out, checks={"proportion.json": "fail"},
+              extra="ACCEPTED_FAIL: proportion.json — front lệch 12% do mái chìa 0.4 m\n")
+    assert (flow.st["state"], flow.st["accepted_fail"]) == ("reviewing", {"blockout": {"proportion.json": 1}})
+
+
+def test_a_gate_json_whose_only_failing_check_is_gate5_health_can_be_accepted_c19(flow):
+    gate_json(flow, "roof", failing=["gate5.health"])
+    st = accept(flow, "roof.json")
+    assert (st["state"], st["accepted_fail"]) == ("reviewing", {"blockout": {"roof.json": 1}})
+
+
+def test_a_gate_json_with_another_failing_gate_beside_gate5_health_is_still_refused_c19(flow):
+    """gate2.contact says a part floats: accepting it hides a real structure fault behind the edge-contact exception."""
+    gate_json(flow, "roof", failing=["gate5.health", "gate2.contact"])
+    accept(flow, "roof.json")
+    assert flow.st["state"] == "running"
+    assert f"{AID} · blockout v1 · ACCEPTED_FAIL từ chối · roof.json: không có trong acceptable của bước blockout" in flow.ledger()
+
+
+def test_a_name_in_the_acceptable_list_does_not_cover_the_gate_json_of_a_part_that_has_the_same_name_c19(flow):
+    """A part called `base` is the norm; its gates/base.json is not the base-margin check checks/base.json."""
+    gate_json(flow, "base", failing=["gate2.contact"])
+    accept(flow, "base.json")
+    assert flow.st["state"] == "running"
+    assert f"{AID} · blockout v1 · ACCEPTED_FAIL từ chối · base.json: không có trong acceptable của bước blockout" in flow.ledger()
 
 
 def test_a_hard_gate_in_the_acceptable_list_of_pipeline_toml_is_refused_at_load_d31_3(flow):

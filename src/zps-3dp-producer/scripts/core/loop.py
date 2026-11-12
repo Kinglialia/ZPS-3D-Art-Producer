@@ -1,6 +1,7 @@
 """Ingest state machine (docs/producer.md §3, §4, §7, §8): rounds, early stop, need_evidence, redo, gates, approve."""
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import re
@@ -230,6 +231,30 @@ def readme_exceptions(d) -> str:
     return m.group(1) if m else ""
 
 
+def failing_checks(path: str) -> list[str]:
+    try:
+        r = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [c.get("check", "") for c in (r.get("checks") or []) if isinstance(c, dict) and c.get("status") in ("fail", "error")]
+
+
+def acceptable_hit(step: dict, hit: str) -> bool:
+    """A name of `acceptable` covers a file of that name outside gates/, because the gate JSON of a part is named after
+    the part and `base` is a part. `<glob>#<check>,...` covers a file whose path from final/review/ matches the glob and
+    whose every failing check is listed."""
+    p = PurePosixPath(hit)
+    for entry in step["acceptable"]:
+        glob, _, only = entry.partition("#")
+        if only:
+            failing = failing_checks(hit)
+            if failing and set(failing) <= set(only.split(",")) and fnmatch.fnmatchcase("/".join(p.parts[-2:]), glob):
+                return True
+        elif p.name == entry and p.parent.name != "gates":
+            return True
+    return False
+
+
 def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -> tuple[dict, list[str]]:
     """D31.3: which failed JSON the worker may leave failed. Returns ({failed path: (name, why)}, refusals)."""
     from .briefs import unreadable
@@ -243,7 +268,7 @@ def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -
             refused.append(f"{name}: gate cứng, không bao giờ được ACCEPTED_FAIL")
         elif unreadable(Path(hit)):
             refused.append(f"{name}: JSON không đọc được, không có kết quả để chấp nhận")
-        elif name not in step["acceptable"]:
+        elif not acceptable_hit(step, hit):
             refused.append(f"{name}: không có trong acceptable của bước {step['id']}")
         elif not re.search(r"\d", why):
             refused.append(f"{name}: lý do phải có số")
