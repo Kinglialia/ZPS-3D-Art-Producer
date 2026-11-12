@@ -179,6 +179,9 @@ def offer_notice(cfg: dict, st: dict) -> str | None:
     try:
         if hold(st):
             return None
+    except ProducerError:
+        return None
+    try:
         return notice(plan(cfg, st))
     except (ProducerError, OSError):
         return notice(None)
@@ -249,10 +252,14 @@ def execute(cfg: dict, st: dict, source: str, by: str | None, zp: str | None, p:
 
 def on_approve(cfg: dict, st: dict, zip_path: str | None, report_ok: bool) -> str:
     """D40.1: the user's DUYỆT 2 deletes here, after deliver/<id>/ and the run report exist. Whatever keeps the files
-    comes back as one line that names the way to delete later. The approval is already saved and stays."""
+    comes back as one line that names the way to delete later, a broken policy.yaml included. The approval is already
+    saved and stays; D29.5 checks the asset again here before it deletes."""
     aid = st["id"]
     later = f"Xóa sau: `purge {aid} --by \"<nguyên văn>\"`."
-    why = hold(st, report_ok)
+    try:
+        why = hold(st, report_ok) or (("blocked", w) if (w := blocked(st)) else None)
+    except ProducerError as ex:
+        why = ("policy", str(ex))
     st.pop("keep_files", None)
     st.pop("purge_hold", None)
     if why:

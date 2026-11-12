@@ -236,6 +236,44 @@ def test_a_report_that_could_not_be_written_stops_the_purge_and_says_why_d40_1(p
     assert tree(proj) == before
 
 
+def test_a_broken_policy_file_keeps_the_approval_and_the_files_and_says_so_d29_5(proj):
+    """The approval is saved before the purge decides; a policy that cannot be read must not turn it into an error."""
+    (proj / "production/policy.yaml").write_text("purge: [\n", encoding="utf-8")
+    before, before_others = tree(proj), others(proj)
+    out = approve(proj).splitlines()
+    assert out[0] == "pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong"
+    assert out[1].startswith("Giữ file, không xóa: production/policy.yaml sai cú pháp YAML") and "Xóa sau:" in out[1]
+    assert json.loads((proj / A / "status.json").read_text(encoding="utf-8"))["state"] == "done"
+    assert (tree(proj), others(proj)) == (before, before_others)
+
+
+def test_the_check_before_the_delete_still_stops_an_asset_without_its_delivered_package_d29_5(proj, monkeypatch):
+    """D29.5: the approve path checks again that the package is delivered; no package, no delete."""
+    monkeypatch.chdir(proj)
+    from core import loop, purge
+    monkeypatch.setattr(purge, "DELIVER", proj / "nowhere")
+    before = tree(proj)
+    ok, text = loop.act(AID, "approve", "đạt")
+    assert ok and text.splitlines()[1].startswith("Giữ file, không xóa: không có ")
+    assert tree(proj) == before
+
+
+def test_the_remote_row_carries_the_deletion_line_and_the_purge_removes_the_files_it_pushed_d40_4(proj):
+    """remote.html spreads each pushed row into the payload that board.js renders, so the row decides what the remote
+    page shows. The push layout the purge deletes from is the one `board prepare` writes."""
+    p(proj, "approvals", "set", "review_board", "local+remote", "--by", "cả điện thoại")
+    push = json.loads(p(proj, "board", "prepare", "--url", "https://claude.ai/artifact/x"))["push"]
+    d = proj / "production/board/push" / push
+    pushed = [d / "offers" / f"{push}~{AID}.json", d / f"{AID}_glb.json"]
+    assert all(f.is_file() for f in pushed)
+    row = json.loads(pushed[0].read_text(encoding="utf-8"))
+    n = len(DELETED + REJECTED + SHOW + PUSH + PIDS) + 1
+    assert row["purge"].startswith(f"Sẽ xóa {n} file, ") and row["purge"].endswith("; sau lệnh này không `redo` được.")
+    approve(proj)
+    assert not any(f.exists() for f in pushed)
+    assert (d / "pushes" / f"{push}.json").is_file()
+
+
 def test_ab_folders_keep_every_file_until_the_pair_is_judged_and_then_next_only_reminds_d29_11(proj):
     """Producer decision 2026-11-10: the blind pair board must never show one side purged. With no hook left, the
     purge after the pair result is the user's `P purge`; `P next` reminds before and after."""
