@@ -586,7 +586,7 @@ def approve(cfg: dict, st: dict, step: dict, n: int, by: str):
     st["approved"][sid] = n
     st.setdefault("approved_at", {})[sid] = now()
     from .report import record_producer
-    record_producer(st, sid)
+    record_producer(st, sid, cfg["steps"])
     st.setdefault("approved_hash", {})[sid] = hashes.tree_hash(vdir(st["id"], sid, n) / "final")
     if step["lock"]:
         p = vdir(st["id"], sid, n) / step["lock"].format(id=st["id"])

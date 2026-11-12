@@ -22,6 +22,7 @@ PRODUCER_WHY = {stats.NOT_SUPPORTED: "bản Codex chưa đọc được transcri
 NO_MESSAGE = "transcript của Producer không có message trong khoảng của bước"
 NO_CODEX_COUNT = "chưa có bản ghi số lần gọi Codex (gen_image_codex.py chỉ ghi model)"
 NOT_INGESTED = "lần giao chưa ingest"
+OVERLAP_NO_TRANSCRIPT = "hai asset chạy cùng lúc và không còn transcript để tính mỗi message một lần"
 
 
 @dataclass
@@ -158,40 +159,46 @@ def stamp_of(t: dt.datetime) -> str:
     return t.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def stored_windows(sts: list[dict]) -> list[tuple[dt.datetime, dt.datetime]]:
-    return [(at(w["from"]), at(w["to"])) for s in sts for w in (s.get("producer_usage") or {}).values()
-            if isinstance(w, dict) and isinstance(w.get("tokens"), int)]
-
-
-def record_producer(st: dict, sid: str):
-    """X2: when a step is approved, the Producer's own tokens in its window go into status.json, so they outlive the
-    transcript. `dup` is the share already inside the stored window of another asset, so a batch counts it once."""
+def window_of(st: dict, steps: list[dict], sid: str) -> tuple[dt.datetime, dt.datetime | None] | None:
+    """The window of a step that ran: first worker dispatch to approval (`stats.window`). A script step has no
+    dispatch, so its window starts at the latest earlier approval, when its brief went out."""
     mine = [x for x in st.get("dispatches") or [] if x["step"] == sid]
-    if not mine:
-        return
-    start, end = stats.window(st, sid, mine)
+    if mine:
+        return stats.window(st, sid, mine)
+    ids = [s["id"] for s in steps]
+    step = next((s for s in steps if s["id"] == sid), None)
+    if not (step and step.get("script") and (st.get("versions") or {}).get(sid)):
+        return None
+    done, approved = st.get("approved_at") or {}, st.get("approved") or {}
+    prior = [at(done[p]) for p in ids[:ids.index(sid)] if p in approved and p in done]
+    if not prior:
+        return None
+    start = max(prior)
+    end = at(done[sid]) if sid in approved and sid in done else None
+    return start, (max(end, start) if end else None)
+
+
+def record_producer(st: dict, sid: str, steps: list[dict]):
+    """X2: when a step is approved, the Producer's own tokens in its window go into status.json, so they outlive the
+    transcript."""
+    start, end = window_of(st, steps, sid) or (None, None)
     if end is None:
         return
-    usage = stats.producer_usage()
-    got = window_tokens(usage, start, end)
-    if isinstance(got, str):
-        st.setdefault("producer_usage", {})[sid] = got
-        return
-    other = stored_windows(others_of(st))
-    dup = sum(n for t, n in usage if start <= t <= end and any(a <= t <= b for a, b in other))
-    st.setdefault("producer_usage", {})[sid] = {"tokens": got, "from": stamp_of(start), "to": stamp_of(end), "dup": dup}
+    got = window_tokens(stats.producer_usage(), start, end)
+    st.setdefault("producer_usage", {})[sid] = got if isinstance(got, str) else {
+        "tokens": got, "from": stamp_of(start), "to": stamp_of(end)}
 
 
-def windows(st: dict) -> list[tuple[dt.datetime, dt.datetime]]:
+def windows(st: dict, steps: list[dict]) -> list[tuple[dt.datetime, dt.datetime]]:
     out = []
-    for sid in dict.fromkeys(x["step"] for x in st.get("dispatches") or []):
-        start, end = stats.window(st, sid, [x for x in st["dispatches"] if x["step"] == sid])
-        out.append((start, end or dt.datetime.now()))
+    for s in steps:
+        if w := window_of(st, steps, s["id"]):
+            out.append((w[0], w[1] or dt.datetime.now()))
     return out
 
 
-def overlapping(start: dt.datetime, end: dt.datetime, others: list[dict]) -> tuple:
-    return tuple(o["id"] for o in others if any(a < end and start < b for a, b in windows(o)))
+def overlapping(start: dt.datetime, end: dt.datetime, others: list[dict], steps: list[dict]) -> tuple:
+    return tuple(o["id"] for o in others if any(a < end and start < b for a, b in windows(o, steps)))
 
 
 class Lazy:
@@ -214,13 +221,13 @@ def budget_credits(aid: str, sid: str) -> list[float | None]:
     return out or [0.0]
 
 
-def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others: list[dict]) -> Row | None:
+def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others: list[dict], steps: list[dict]) -> Row | None:
     sid = step["id"]
     mine = [x for x in disp if x["step"] == sid]
-    if not mine:
+    if not (win := window_of(st, steps, sid)):
         return None
     worker, rev = [x for x in mine if x["role"] == "worker"], [x for x in mine if x["role"] == "reviewer"]
-    start, end = stats.window(st, sid, mine)
+    start, end = win
     r = Row(sid, models=(tuple(dict.fromkeys(x.get("model") or SESSION for x in worker)),
                          tuple(dict.fromkeys(x.get("model") or SESSION for x in rev))))
     r.span, r.opened = (Metric((end - start).total_seconds(), 1), 0) if end else (Metric(), 1)
@@ -237,9 +244,9 @@ def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others:
         r.tp = Metric(got, 1) if isinstance(got, int) else Metric(miss=1)
         if isinstance(got, str):
             note(r, got, "Token Producer")
-    r.shared = overlapping(start, end or dt.datetime.now(), others)
+    r.shared = overlapping(start, end or dt.datetime.now(), others, steps)
     r.versions = (st.get("versions") or {}).get(sid, 0)
-    r.rounds = max(sum(1 for x in worker if not x.get("redispatch_of")) - 1, 0)
+    r.rounds = max(r.versions - 1, 0)
     r.calls = len(mine)
     r.stalls = sum(1 for x in st.get("stalls") or [] if x["step"] == sid)
     if "codex_image" in step["uses"]:
@@ -257,7 +264,7 @@ def asset_rows(st: dict, cfg: dict, others: list[dict], usage) -> list[Row]:
     if RUNTIME != "codex":
         disp = stats.reread(disp)
     waits = stats.waits(disp)
-    return [r for s in cfg["steps"] if (r := step_row(s, st, disp, waits, usage, others))]
+    return [r for s in cfg["steps"] if (r := step_row(s, st, disp, waits, usage, others, cfg["steps"]))]
 
 
 def total_of(label: str, rows: list[Row]) -> Row:
@@ -295,7 +302,7 @@ def batch(sts: list[dict], cfg: dict | None = None, usage=None) -> list[str]:
         return ["chưa asset nào được giao việc"]
     total = total_of("Tổng lô", per)
     total.shared = ()
-    total.tp, why = batch_producer(sts, get)
+    total.tp, why = batch_producer(sts, cfg["steps"], get, any(r.shared for r in per))
     if why:
         note(total, why, "Token Producer")
     shared = [f"{r.label}: {', '.join(r.shared)}" for r in per if r.shared]
@@ -303,16 +310,17 @@ def batch(sts: list[dict], cfg: dict | None = None, usage=None) -> list[str]:
                                         + ". Tổng lô tính mỗi message một lần."] if shared else [])
 
 
-def batch_producer(sts: list[dict], usage) -> tuple[Metric, str | None]:
-    """Each Producer message once. Stored numbers when every step has them, else the transcript."""
-    steps = [(s, sid) for s in sts for sid in dict.fromkeys(x["step"] for x in s["dispatches"])]
-    puts = [(s.get("producer_usage") or {}).get(sid) if sid in (s.get("approved") or {}) else None for s, sid in steps]
-    if puts and all(isinstance(p, dict) for p in puts):
-        return Metric(sum(p["tokens"] - p.get("dup", 0) for p in puts), 1), None
+def batch_producer(sts: list[dict], steps: list[dict], usage, overlap: bool) -> tuple[Metric, str | None]:
+    """Each Producer message once. Stored numbers add up exactly only when no two assets overlap; otherwise the
+    transcript says which messages fall in any window, and without it the total has no number."""
+    stored = [(s.get("producer_usage") or {}).get(sid) if sid in (s.get("approved") or {}) else None
+              for s in sts for sid in (x["id"] for x in steps if window_of(s, steps, x["id"]))]
+    if not overlap and stored and all(isinstance(p, dict) for p in stored):
+        return Metric(sum(p["tokens"] for p in stored), 1), None
     u = usage()
     if isinstance(u, str):
-        return Metric(miss=1), PRODUCER_WHY[u]
-    ws = [w for s in sts for w in windows(s)]
+        return Metric(miss=1), OVERLAP_NO_TRANSCRIPT if overlap else PRODUCER_WHY[u]
+    ws = [w for s in sts for w in windows(s, steps)]
     ns = [n for t, n in u if any(a <= t <= b for a, b in ws)]
     return (Metric(sum(ns), 1), None) if ns else (Metric(miss=1), NO_MESSAGE)
 
@@ -357,4 +365,4 @@ def run(a):
         return
     lines = table(st)
     print("\n".join(lines))
-    print(f"OK: {rel(write(st, lines))}")
+    print(f"OK: {rel(write(st, lines))}" if st["state"] == "done" else f"{a.id}: chưa done, chưa ghi {NAME}")

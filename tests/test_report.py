@@ -48,7 +48,7 @@ A1 = asset(
     offer_log=[{"key": "k", "step": "blockout", "v": 2, "why": "duyệt", "at": "2026-11-10 09:31",
                 "decision": "approve", "decided": "2026-11-10 09:45"}],
     stalls=[{"step": "blockout", "v": 1, "role": "worker", "at": "2026-11-10 09:05:00", "why": "x", "rung": "nudge"}],
-    producer_usage={"blockout": {"tokens": 1500, "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00", "dup": 0}})
+    producer_usage={"blockout": {"tokens": 1500, "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00"}})
 A2 = asset("a2", [d("texture", "worker", "2026-11-10 10:10:00")])
 LIVE = [(t("2026-11-10 09:30:00"), 99999), (t("2026-11-10 10:05:00"), 700), (t("2026-11-10 10:31:00"), 300)]
 
@@ -117,10 +117,8 @@ def test_approval_stores_the_producer_tokens_so_deleting_the_transcript_keeps_th
     st = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"})
     producer_messages(monkeypatch, [(t("2026-11-10 08:59:59"), 5), (t("2026-11-10 09:05:00"), 1000),
                                     (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:46:00"), 7)])
-    monkeypatch.setattr(report, "all_status", lambda: [])
-    report.record_producer(st, "blockout")
-    assert st["producer_usage"]["blockout"] == {"tokens": 1500, "from": "2026-11-10 09:00:00",
-                                                "to": "2026-11-10 09:45:00", "dup": 0}
+    report.record_producer(st, "blockout", CFG["steps"])
+    assert st["producer_usage"]["blockout"] == {"tokens": 1500, "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00"}
     producer_messages(monkeypatch, "không có số")
     row = report.table(st, CFG, [], "không có số")[2]
     assert row.split(" | ")[8] == "1500"
@@ -129,45 +127,40 @@ def test_approval_stores_the_producer_tokens_so_deleting_the_transcript_keeps_th
 def test_a_step_without_a_producer_transcript_stores_the_reason_not_a_zero(monkeypatch):
     st = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"})
     producer_messages(monkeypatch, "không có số")
-    report.record_producer(st, "blockout")
+    report.record_producer(st, "blockout", CFG["steps"])
     assert st["producer_usage"] == {"blockout": "không thấy transcript của phiên Producer"}
     producer_messages(monkeypatch, [(t("2026-11-10 13:00:00"), 5)])
-    report.record_producer(st, "blockout")
+    report.record_producer(st, "blockout", CFG["steps"])
     assert st["producer_usage"] == {"blockout": "transcript của Producer không có message trong khoảng của bước"}
 
 
-def test_a_script_step_has_no_dispatch_so_it_stores_nothing(monkeypatch):
-    st = asset("a1", A1["dispatches"][:4], approved={"assemble": 1}, approved_at={"assemble": "2026-11-10 11:00"})
-    producer_messages(monkeypatch, [(t("2026-11-10 10:59:00"), 5)])
-    report.record_producer(st, "assemble")
-    assert "producer_usage" not in st
+SCRIPT = {"steps": [*CFG["steps"][:2], {"id": "assemble", "uses": ["blender"], "script": "assemble.py"}]}
 
 
-def test_two_assets_at_once_store_the_shared_messages_once_and_the_batch_total_adds_them_up_x6(monkeypatch, meshy20):
-    """a1 ran 09:00-09:45, a2 09:30-10:00. The 09:40 message of 500 tokens sits in both windows. a2 is approved
-    second, so its `dup` is that message and the batch total counts it once, with no transcript to read."""
-    a1 = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"},
-               versions={"blockout": 2})
-    a2 = asset("a2", [d("blockout", "worker", "2026-11-10 09:30:00", "2026-11-10 09:55:00", "review", tokens=10,
-                        usage={})], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 10:00"})
-    msgs = [(t("2026-11-10 09:05:00"), 1000), (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:50:00"), 70)]
-    producer_messages(monkeypatch, msgs)
-    monkeypatch.setattr(report, "all_status", lambda: [])
-    report.record_producer(a1, "blockout")
-    monkeypatch.setattr(report, "all_status", lambda: [a1])
-    report.record_producer(a2, "blockout")
-    assert (a1["producer_usage"]["blockout"]["tokens"], a2["producer_usage"]["blockout"]["tokens"],
-            a2["producer_usage"]["blockout"]["dup"]) == (1500, 570, 500)
-    producer_messages(monkeypatch, "không có số")
-    out = report.batch([a1, a2], CFG, "không có số")
-    assert out == [
-        "| Asset | " + HEAD.split(" | ", 1)[1], SEP,
-        "| a1 | 45m00s | 18m50s | 6m00s | 2m30s | — | 80000 | 35000 | 1500* | 2 | 1 | 4 | — | — | 0 | opus / sonnet |",
-        "| a2 | 30m00s | 25m00s | — | — | — | 10 | — | 570* | 0 | 0 | 1 | — | — | 0 | model của phiên |",
-        "| Tổng lô | 75m00s | 43m50s | 6m00s | 2m30s | — | 80010 | 35000 | 1570 | 2 | 1 | 5 | — | — | 0 "
-        "| opus, model của phiên / sonnet |",
-        "",
-        "* Token Producer tính chung: a1: a2; a2: a1. Tổng lô tính mỗi message một lần."]
+def finished():
+    """texture approved 11:00, then the assemble script: its brief goes out at 11:00, the owner decides at 11:20."""
+    return asset(
+        "a1", [d("texture", "worker", "2026-11-10 10:00:00", "2026-11-10 10:50:00", "review", tokens=100, usage={})],
+        approved={"texture": 1, "assemble": 3}, approved_at={"texture": "2026-11-10 11:00", "assemble": "2026-11-10 11:20"},
+        versions={"texture": 1, "assemble": 3},
+        offer_log=[{"key": "k", "step": "assemble", "v": 3, "why": "duyệt", "at": "2026-11-10 11:10",
+                    "decision": "approve", "decided": "2026-11-10 11:20"}])
+
+
+def test_a_script_step_gets_a_row_from_the_previous_approval_to_its_own_with_the_owner_wait_x4(monkeypatch, meshy20):
+    """DUYỆT 2 is a step the owner waits on and the Producer works on, so the table shows it. A script has no
+    dispatch: its window starts when the step before it was approved."""
+    st = finished()
+    producer_messages(monkeypatch, [(t("2026-11-10 11:05:00"), 800), (t("2026-11-10 11:30:00"), 9)])
+    report.record_producer(st, "assemble", SCRIPT["steps"])
+    assert st["producer_usage"]["assemble"] == {"tokens": 800, "from": "2026-11-10 11:00:00", "to": "2026-11-10 11:20:00"}
+    rows = report.table(st, SCRIPT, [], "không có số")
+    assert rows[3] == "| assemble | 20m00s | — | — | — | 10m00s | — | — | 800 | 3 | 2 | 0 | — | — | 0 | — |"
+
+
+def test_a_script_step_that_never_ran_has_no_row(monkeypatch):
+    st = finished() | {"versions": {"texture": 1}, "approved": {"texture": 1}}
+    assert not any(r.startswith("| assemble") for r in report.table(st, SCRIPT, [], "không có số"))
 
 
 def test_a_batch_total_reads_each_producer_message_once_when_not_every_step_is_stored_x6(meshy20):
@@ -179,10 +172,46 @@ def test_a_batch_total_reads_each_producer_message_once_when_not_every_step_is_s
     assert cells == {"a1": "2500*", "a2": "300*", "Tổng lô": "2500"}
 
 
-def test_a_batch_without_numbers_for_overlapping_assets_says_why_instead_of_adding_twice(meshy20):
+def test_a_batch_total_stays_right_after_a_redo_because_it_reads_the_transcript_not_a_stored_share_x6(meshy20):
+    """a1 ran 09:00-09:45 and a2 09:30-10:00. The owner sends a1's blockout back and a1 is approved again at 10:30,
+    so its window now holds a2's whole window and a 10:20 message. A share saved at the first approval would be
+    stale; the transcript says each of the four messages once: 1610."""
+    a1 = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 10:30"},
+               versions={"blockout": 2}, producer_usage={"blockout": {"tokens": 1610, "from": "2026-11-10 09:00:00",
+                                                                      "to": "2026-11-10 10:30:00"}})
+    a2 = asset("a2", [d("blockout", "worker", "2026-11-10 09:30:00", "2026-11-10 09:55:00", "review", tokens=10,
+                        usage={})], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 10:00"},
+               versions={"blockout": 1}, producer_usage={"blockout": {"tokens": 570, "from": "2026-11-10 09:30:00",
+                                                                      "to": "2026-11-10 10:00:00"}})
+    msgs = [(t("2026-11-10 09:05:00"), 1000), (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:50:00"), 70),
+            (t("2026-11-10 10:20:00"), 40)]
+    out = report.batch([a1, a2], CFG, msgs)
+    assert out == [
+        "| Asset | " + HEAD.split(" | ", 1)[1], SEP,
+        "| a1 | 90m00s | 18m50s | 6m00s | 2m30s | — | 80000 | 35000 | 1610* | 2 | 1 | 4 | — | — | 0 | opus / sonnet |",
+        "| a2 | 30m00s | 25m00s | — | — | — | 10 | — | 570* | 1 | 0 | 1 | — | — | 0 | model của phiên |",
+        "| Tổng lô | 120m00s | 43m50s | 6m00s | 2m30s | — | 80010 | 35000 | 1610 | 3 | 1 | 5 | — | — | 0 "
+        "| opus, model của phiên / sonnet |",
+        "",
+        "* Token Producer tính chung: a1: a2; a2: a1. Tổng lô tính mỗi message một lần."]
+
+
+def test_stored_numbers_add_up_in_a_batch_only_when_no_two_assets_overlap_x6(meshy20):
+    a1 = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"},
+               versions={"blockout": 2}, producer_usage={"blockout": {"tokens": 1500, "from": "x", "to": "y"}})
+    a3 = asset("a3", [d("blockout", "worker", "2026-11-10 12:00:00", "2026-11-10 12:10:00", "review", tokens=10,
+                        usage={})], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 12:30"},
+               versions={"blockout": 1}, producer_usage={"blockout": {"tokens": 70, "from": "x", "to": "y"}})
+    out = report.batch([a1, a3], CFG, "không có số")
+    assert out[4].split(" | ")[8] == "1570"
+    assert not any(l.startswith("*") for l in out)
+
+
+def test_a_batch_of_overlapping_assets_without_a_transcript_says_why_instead_of_adding_twice_x6(meshy20):
     out = report.batch([A1, A2], CFG, "không có số")
     assert out[4].split(" | ")[8] == "không có số"
-    assert "không có số (Token Producer): không thấy transcript của phiên Producer." in out
+    assert ("không có số (Token Producer): hai asset chạy cùng lúc và không còn transcript để tính mỗi message "
+            "một lần.") in out
 
 
 def utc_now():
@@ -243,8 +272,9 @@ def test_duyet_2_writes_the_report_to_deliver_and_prints_the_table_after_the_app
     lines = out.splitlines()
     assert lines[0] == "pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong"
     table = lines[lines.index(HEAD):]
-    assert [l.split(" | ")[0] for l in table[2:8]] == [
-        "| blockout", "| views_front", "| views_rest", "| model", "| texture", "| Tổng"]
+    assert [l.split(" | ")[0] for l in table[2:9]] == [
+        "| blockout", "| views_front", "| views_rest", "| model", "| texture", "| assemble", "| Tổng"]
+    assert table[7].split(" | ")[2:5] == ["—", "—", "—"]
     text = (root / "deliver" / AID / "RUN-REPORT.md").read_text(encoding="utf-8")
     assert "\n".join(table) in text
 
@@ -262,3 +292,15 @@ def test_p_report_prints_one_asset_and_rewrites_the_file_and_without_an_id_print
     batch = f.p("report").splitlines()
     assert batch[0].startswith("| Asset | Thời gian bước") and batch[2].startswith("| pilot-house |")
     assert batch[3].startswith("| Tổng lô |")
+
+
+def test_p_report_before_the_asset_is_done_prints_but_creates_no_deliver_folder(tmp_path):
+    """`deliver/<id>/` means delivered to the purge check and to the PILOT line of a brief."""
+    f = Flow(tmp_path)
+    pilot_project(tmp_path)
+    f.p("intake", AID)
+    f.p("ready", AID)
+    f.work("b1")
+    out = f.p("report", AID)
+    assert out.splitlines()[-1] == "pilot-house: chưa done, chưa ghi RUN-REPORT.md"
+    assert not (tmp_path / "deliver").exists()
