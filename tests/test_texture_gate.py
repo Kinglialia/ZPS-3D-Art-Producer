@@ -109,11 +109,12 @@ def test_answering_call_to_the_mesh_question_gives_the_new_mesh_one_call(tmp_pat
     f.human("approve m2", "đạt", "--action", "approve")
     f.brief("gate")
     new = next(n for n, b in budgets(tmp_path).items() if b["used_credits"] == 0)
-    assert f.p("meshy", AID, "call", "--by", "gọi đi") == (
-        f"pilot-house: mesh_changed: thêm 1 lần gọi Meshy (10 credit), {new} max_credits=10 → texture/todo. "
-        "Tiếp: giao worker → `brief pilot-house`\n")
+    head, line = f.p("meshy", AID, "call", "--by", "gọi đi").splitlines()
+    assert head == (f"pilot-house: mesh_changed: thêm 1 lần gọi Meshy (10 credit), {new} max_credits=10 → texture/todo. "
+                    "Tiếp: giao worker → `brief pilot-house`")
+    assert json.loads(line)["brief"] == f"production/assets/{AID}/texture/v2/brief-worker.md"
     assert budgets(tmp_path)[new] == {"max_credits": 10, "used_credits": 0}
-    assert f.p("meshy", AID, "paint", ok=False) == "LỖI: pilot-house: không có câu hỏi Meshy đang chờ (state=todo)\n"
+    assert f.p("meshy", AID, "paint", ok=False) == "LỖI: pilot-house: không có câu hỏi Meshy đang chờ (state=running)\n"
 
 
 def test_approve_answers_the_mesh_question_although_the_old_texture_version_had_a_decision(tmp_path):

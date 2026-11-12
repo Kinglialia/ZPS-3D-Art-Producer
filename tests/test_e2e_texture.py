@@ -241,10 +241,11 @@ def test_a_texture_redo_cannot_answer_the_mesh_question(flow):
 
 def test_choosing_paint_starts_a_texture_build_that_must_not_call_meshy(flow):
     h2 = flow["h2"]
-    assert flow["paint"]["out"] == (f"pilot-house: mesh_changed: VẼ MỚI, không gọi Meshy cho mesh {h2} → texture/todo. "
-                                    "Tiếp: giao worker → `brief pilot-house`\n")
+    head, line = flow["paint"]["out"].splitlines()
+    assert head == (f"pilot-house: mesh_changed: VẼ MỚI, không gọi Meshy cho mesh {h2} → texture/todo. "
+                    "Tiếp: giao worker → `brief pilot-house`")
     t = flow["t4 brief"]
-    assert t["out"]["brief"] == f"{A}/texture/v4/brief-worker.md"
+    assert t["out"]["brief"] == json.loads(line)["brief"] == f"{A}/texture/v4/brief-worker.md"
     assert "MODE: VẼ MỚI (người dùng chọn cho mesh này: không gọi Meshy)" in lines(t["text"])
     assert not any(l.startswith("MESHY") for l in lines(t["text"]))
 

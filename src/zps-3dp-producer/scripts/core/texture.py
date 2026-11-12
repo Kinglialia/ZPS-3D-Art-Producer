@@ -218,15 +218,16 @@ def resolve(st: dict, choice: str, by: str) -> str:
 
 def answer(a):
     from .board import build_outputs
-    from .loop import next_action
+    from .loop import CHANGE_DISPATCH, dispatch_next, next_action
     from .state import load_cfg
     st = load_st(a.id)
     if not st.get("ask") or st["state"] != "waiting_human":
         die(f"{a.id}: không có câu hỏi Meshy đang chờ (state={st['state']})")
     what = resolve(st, a.choice, f"người dùng: {a.by}" if a.by else "người dùng")
     save_st(st)
-    build_outputs(load_cfg())
     print(f"{a.id}: {what} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
+    dispatch_next(load_cfg(), st, CHANGE_DISPATCH)
+    build_outputs(load_cfg())
 
 
 def stats(_a):
