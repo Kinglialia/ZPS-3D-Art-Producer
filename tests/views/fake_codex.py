@@ -12,6 +12,7 @@ generated_images/<that id>/ (default folder: sess, and no session line).
 Each mode applies to every OUTPUT_PATH of the prompt. An --image file that does not exist exits 1, as codex does.
 Logs each call to FAKE_CODEX_LOG with the parsed image list and the output names.
 FAKE_CODEX_MODEL set: prints the `codex exec` header with that `model:` line on stderr.
+FAKE_CODEX_DELAY=<output name or *>:<s>: the call sleeps s seconds before it makes that file (every file with *).
 `codex --version` prints FAKE_CODEX_VERSION (default codex-cli 0.164.0). `codex exec --help` prints the option lines of
 the real codex-cli 0.164.0 help, without the flags in FAKE_CODEX_HELP_DROP (comma-separated). Neither call is logged."""
 import io
@@ -65,13 +66,14 @@ def main():
     calls = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()] if log.exists() else []
     pid_base = Path(os.environ["FAKE_CODEX_PID_FILE"])
     own = sorted(pid_base.parent.glob(f"{pid_base.stem}-{os.getppid()}.pid"))
+    holds = sorted(p.name for p in pid_base.parent.glob(f"{pid_base.stem}-{os.getppid()}*.pid"))
     images = image_args(sys.argv[2:])
     jobs = list(zip(re.findall(r"^OUTPUT_PATH: (.+)$", prompt, re.M), re.findall(r"^RESULT_PATH: (.+)$", prompt, re.M)))
     entry = {"argv": sys.argv[1:], "prompt": prompt, "ppid": os.getppid(), "images": images,
              "outs": [Path(o).name for o, _ in jobs],
              "api_keys": sorted(k for k in os.environ if k.endswith("_API_KEY")),
              "pid_file": own[0].read_text(encoding="utf-8").strip() if own else None,
-             "pid_name": own[0].name if own else None}
+             "pid_name": own[0].name if own else None, "pid_names": holds}
     with log.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
     if missing := [i for i in images if not Path(i).is_file()]:
@@ -109,6 +111,9 @@ def make(out: Path, result: Path, w: int, h: int, mode: str, n_calls: int, befor
     """One OUTPUT_PATH of the call. before = earlier calls that asked for this file. break_once:<name> and
     miss_once:<name> cut off or skip that file on its first call only."""
     from PIL import Image
+    name, _, secs = os.environ.get("FAKE_CODEX_DELAY", "").rpartition(":")
+    if name in (out.name, "*"):
+        time.sleep(float(secs))
     if (mode.startswith("fail:") and n_calls < int(mode[5:])) or mode == f"fail_for:{out.name}":
         result.write_text(json.dumps({"path": None, "width": 0, "height": 0,
                                       "error": os.environ.get("FAKE_CODEX_ERROR", "internal error")}))

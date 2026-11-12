@@ -18,6 +18,12 @@ An image that Pillow reads but is not PNG (a JPEG saved under a .png name) is co
 D36.12: a quota, rate-limit or billing error stops the whole run after that one call. A policy or safety error is tried
 once more. Any other error is tried up to 3 times.
 The pid file is written as <stem>-<pid><suffix>, so concurrent gens of one asset each hold a slot.
+Without --batch the jobs of one run go in parallel: one thread, and one pid file <stem>-<pid>-<k><suffix> (k from 1; the
+first thread keeps the name above), per free slot, where free = `[limits] codex_image` of pipeline.toml minus the live pid
+files of other runs in the folder of --pid-file, and at least 1. Without that limit a run uses one thread. Each thread takes
+the next job, and a failed job goes back to the end of the queue, so the retry of one file never waits for the others. A
+quota error stops every job that has not started; a call in flight is kept. While two calls of one run overlap, the
+CODEX_HOME fallback without a session id is off, because the one new image may be the other call's.
 Several --prompt/--out pairs (same order) share the --image list. D30.20: after each call every expected file is
 checked on its own (exists, PNG header, Pillow reads it, long side); only the files that failed are made again.
 3 failed tries of one file: that file fails, and the script exits 1 at the end (D8.3). Writes <dir/name>.json and prints
@@ -44,12 +50,16 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
+import tomllib
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import heartbeat
 
-from root_guard import require_root
+from root_guard import MARK, require_root
 
 TRIES = 3
 MIN_LONG = 1041
@@ -132,21 +142,37 @@ def error_kind(err: str) -> str | None:
     return "quota" if QUOTA.search(err) else "policy" if POLICY.search(err) else None
 
 
-def runs_alive(pid_file: Path, own: Path) -> bool:
-    """True when another process holds a live pid file in the folder of --pid-file."""
+def live_runs(pid_file: Path) -> int:
+    """Live pid files in the folder of --pid-file that another process holds (core.limits.used counts them as slots)."""
+    n = 0
     for f in pid_file.parent.glob(f"*{pid_file.suffix}"):
-        if f == own:
-            continue
         try:
             pid = int(f.read_text(encoding="utf-8").strip())
-            if pid > 0:
+            if pid > 0 and pid != os.getpid():
                 os.kill(pid, 0)
-                return True
+                n += 1
         except PermissionError:
-            return True
+            n += 1
         except (OSError, ValueError):
             pass
-    return False
+    return n
+
+
+def runs_alive(pid_file: Path) -> bool:
+    return live_runs(pid_file) > 0
+
+
+def free_slots(pid_file: Path) -> int:
+    """Threads for one run: the free codex_image slots, at least 1. No limit in pipeline.toml: 1."""
+    try:
+        limit = int(tomllib.loads(Path(MARK).read_text(encoding="utf-8"))["limits"]["codex_image"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return 1
+    return max(1, limit - live_runs(pid_file))
+
+
+def own_pid_file(pid_file: Path, k: int) -> Path:
+    return pid_file.with_name(f"{pid_file.stem}-{os.getpid()}{f'-{k}' if k else ''}{pid_file.suffix}")
 
 
 def convert_to_png(path: Path) -> bool:
@@ -204,7 +230,10 @@ def call(a, jobs: list[dict]):
     cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(jobs[0]["out"].parent),
            "-s", "workspace-write", "--skip-git-repo-check", *(["--approve-for-me"] if a.approve_for_me else []),
            *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
-    start, busy = time.time() - 1, runs_alive(a.pid_file, a.own_pid_file)
+    start, busy = time.time() - 1, runs_alive(a.pid_file)
+    with a.lock:
+        a.open_calls, a.calls_started = a.open_calls + 1, a.calls_started + 1
+        mark, overlap = a.calls_started, a.open_calls > 1
     try:
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY") or k in CODEX_KEYS}
         p = heartbeat.run(cmd, tool="codex exec", vd=heartbeat.vdir_of(*(j["out"] for j in jobs)), input=prompt,
@@ -212,16 +241,20 @@ def call(a, jobs: list[dict]):
         stderr = p.stderr
     except subprocess.TimeoutExpired as ex:
         p, stderr = None, ex.stderr if isinstance(ex.stderr, str) else ""
+    finally:
+        with a.lock:
+            a.open_calls -= 1
+            overlap = overlap or a.calls_started != mark
     if m := actual_model(stderr):
         a.actual = m
-    return p, start, {"stderr": stderr, "busy": busy}
+    return p, start, {"stderr": stderr, "busy": busy or overlap}
 
 
 def fallback_image(a, ctx: dict, start: float) -> Path | None:
     """D36.9: the one new image of this call's session folder. With no session id, any folder, but only while no other
     codex_image run is alive (before the call or now), because the image could be that run's."""
     sid = session_id(ctx["stderr"])
-    if sid is None and (ctx["busy"] or runs_alive(a.pid_file, a.own_pid_file)):
+    if sid is None and (ctx["busy"] or runs_alive(a.pid_file)):
         return None
     return found[0] if len(found := new_images(start, sid)) == 1 else None
 
@@ -258,36 +291,66 @@ def check(a, j: dict, p, start: float, ctx: dict, alone: bool) -> tuple[str | No
     return None, fallback, size
 
 
+def attempt(a, group: list[dict]):
+    """One Codex call for the jobs of `group`, then the check of each file. A quota error sets a.stop."""
+    if time.monotonic() - a.t0 + a.timeout > a.wall_s:
+        for j in group:
+            j["rec"]["errors"].append(f"hết thời gian tổng {a.wall_s} s (D33.3): không gọi thêm")
+            j["rec"]["attempts"] = TRIES
+        return
+    p, start, ctx = call(a, group)
+    for j in group:
+        rec = j["rec"]
+        rec["attempts"] += 1
+        err, rec["fallback"], rec["size"] = check(a, j, p, start, ctx, len(group) == 1)
+        if err is None:
+            rec["status"] = "ok"
+            continue
+        rec["errors"].append(err)
+        kind = error_kind(err)
+        rec["limit"] = min(rec["limit"], {"quota": 1, "policy": POLICY_TRIES}.get(kind, TRIES))
+        if kind == "quota":
+            a.stop.set()
+
+
+def retry(j: dict) -> bool:
+    return j["rec"]["status"] != "ok" and j["rec"]["attempts"] < j["rec"]["limit"]
+
+
 def run_jobs(a, jobs: list[dict]):
-    """Each round calls Codex once per pending job, or once for all of them with --batch. After a call every job file is
-    checked on its own, and only the jobs that failed go to the next round, up to the `limit` of each: TRIES, or fewer
-    after a quota or policy error (D36.12). A quota error ends the run: the quota is shared by every file."""
-    pending, t0, quota = list(jobs), time.monotonic(), False
-    while pending and not quota:
-        for group in [pending] if a.batch else [[j] for j in pending]:
-            if quota:
-                for j in group:
-                    j["rec"]["errors"].append("không gọi: codex hết quota ở file khác")
-                continue
-            if time.monotonic() - t0 + a.timeout > a.wall_s:
-                for j in group:
-                    j["rec"]["errors"].append(f"hết thời gian tổng {a.wall_s} s (D33.3): không gọi thêm")
-                    j["rec"]["attempts"] = TRIES
-                continue
-            p, start, ctx = call(a, group)
-            for j in group:
-                rec = j["rec"]
-                rec["attempts"] += 1
-                err, rec["fallback"], rec["size"] = check(a, j, p, start, ctx, len(group) == 1)
-                if err is None:
-                    rec["status"] = "ok"
-                    continue
-                rec["errors"].append(err)
-                kind = error_kind(err)
-                rec["limit"] = min(rec["limit"], {"quota": 1, "policy": POLICY_TRIES}.get(kind, TRIES))
-                quota = quota or kind == "quota"
-        pending = [j for j in pending if j["rec"]["status"] != "ok" and j["rec"]["attempts"] < j["rec"]["limit"]
-                   and not quota]
+    """After a call every job file is checked on its own, and only the jobs that failed are tried again, up to the
+    `limit` of each: TRIES, or fewer after a quota or policy error (D36.12). A quota error ends the run: the quota is
+    shared by every file. With --batch one call asks for every pending job. Without it each thread of a.pid_files
+    takes one job at a time, and a job that failed goes to the end of the queue."""
+    a.t0, a.stop, a.lock, a.open_calls, a.calls_started = time.monotonic(), threading.Event(), threading.Lock(), 0, 0
+    if a.batch:
+        pending = list(jobs)
+        while pending and not a.stop.is_set():
+            attempt(a, pending)
+            pending = [j for j in pending if retry(j) and not a.stop.is_set()]
+        return
+    queue = deque(jobs)
+
+    def thread(k: int):
+        try:
+            while True:
+                with a.lock:
+                    if a.stop.is_set() or not queue:
+                        return
+                    job = queue.popleft()
+                attempt(a, [job])
+                if retry(job):
+                    with a.lock:
+                        queue.append(job)
+        finally:
+            a.pid_files[k].unlink(missing_ok=True)
+
+    with ThreadPoolExecutor(len(a.pid_files)) as pool:
+        for f in [pool.submit(thread, k) for k in range(len(a.pid_files))]:
+            f.result()
+    for j in queue:
+        if not j["rec"]["attempts"]:
+            j["rec"]["errors"].append("không gọi: codex hết quota ở file khác")
 
 
 def main():
@@ -311,7 +374,6 @@ def main():
     if a.batch and len({o.resolve().parent for o in a.out}) > 1:
         ap.error("--batch cần mọi --out trong cùng một thư mục: codex exec -C chỉ mở một thư mục")
     a.actual, jobs = None, []
-    a.own_pid_file = a.pid_file.with_name(f"{a.pid_file.stem}-{os.getpid()}{a.pid_file.suffix}")
     for prompt, out in zip(a.prompt, a.out):
         out = out.resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -327,13 +389,15 @@ def main():
             j["rec"]["errors"].append("không thấy codex trên PATH")
     else:
         cli = cli_version()
-        pid_file = a.own_pid_file
-        pid_file.parent.mkdir(parents=True, exist_ok=True)
-        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+        a.pid_files = [own_pid_file(a.pid_file, k) for k in range(1 if a.batch else min(len(jobs), free_slots(a.pid_file)))]
+        a.pid_file.parent.mkdir(parents=True, exist_ok=True)
+        for f in a.pid_files:
+            f.write_text(str(os.getpid()), encoding="utf-8")
         try:
             run_jobs(a, jobs)
         finally:
-            pid_file.unlink(missing_ok=True)
+            for f in a.pid_files:
+                f.unlink(missing_ok=True)
         for j in jobs:
             j["rec"]["model_actual"], j["rec"]["codex_cli"] = a.actual or NO_NUMBER, cli
     failed = False

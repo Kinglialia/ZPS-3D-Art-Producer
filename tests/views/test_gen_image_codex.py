@@ -1,4 +1,5 @@
 """gen_image_codex.py (D8.3, D15.1, D18) against a fake `codex` on PATH: the real one costs Codex usage."""
+import contextlib
 import json
 import os
 import shutil
@@ -529,3 +530,121 @@ def test_only_text_from_codex_is_classified_so_a_429_s_timeout_is_not_a_quota_er
         "hết thời gian chờ 429 s", "hết thời gian tổng 429 s (D33.3): không gọi thêm", "codex: rate limit reached",
         "không có file ảnh (codex exit 1: Quota exceeded)", "file ảnh hỏng", "codex: content policy")] == [
         None, None, "quota", "quota", None, "policy"]
+
+
+PARALLEL_SECS = 3
+
+
+@contextlib.contextmanager
+def other_runs(count):
+    """`count` live processes, each as the pid file of another run in the codex_image folder."""
+    procs = [subprocess.Popen(["sleep", "60"]) for _ in range(count)]
+    try:
+        yield procs
+    finally:
+        for h in procs:
+            h.kill()
+            h.wait()
+
+
+def gen_slots(tmp_path, names, limit=2, mode="ok", delay=None, holders=(), keys=None, extra=()):
+    """A run of the script in a project root whose pipeline.toml allows `limit` codex_image slots; each of `holders`
+    is a live process with a pid file of another run. Returns the process, the logged calls, the records, the seconds,
+    and the pid file name the brief would give."""
+    root = tmp_path / "production"
+    (root / "pids/codex_image").mkdir(parents=True)
+    (root / "pipeline.toml").write_text(f"[limits]\ncodex_image = {limit}\n" if limit else "", encoding="utf-8")
+    for h in holders:
+        (root / "pids/codex_image" / f"other-{h.pid}.pid").write_text(str(h.pid), encoding="utf-8")
+    ref = tmp_path / "ref.png"
+    Image.new("RGB", (64, 64)).save(ref)
+    pairs, outs = [], {}
+    for n in names:
+        (tmp_path / f"{n}.md").write_text(f"Paint the {n} view.\n", encoding="utf-8")
+        outs[n] = root / f"assets/hut/views/v1/work/gen/{n}.png"
+        outs[n].parent.mkdir(parents=True, exist_ok=True)
+        pairs += ["--prompt", str(tmp_path / f"{n}.md"), "--out", str(outs[n])]
+    log, pid = tmp_path / "calls.jsonl", root / "pids/codex_image/hut.pid"
+    env = {**os.environ, "FAKE_CODEX_MODE": mode, "FAKE_CODEX_LOG": str(log), "FAKE_CODEX_PID_FILE": str(pid),
+           "CODEX_HOME": str(tmp_path / "codex-home"), "PATH": fake_codex.install(tmp_path / "bin"),
+           **({"FAKE_CODEX_DELAY": delay} if delay else {}), **(keys or {})}
+    env.pop("PRODUCER_ROOT", None)
+    t0 = time.monotonic()
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(pid),
+                        f"--image={ref}", *pairs, *extra], capture_output=True, text=True, env=env, cwd=tmp_path)
+    secs = time.monotonic() - t0
+    calls = [json.loads(l) for l in log.read_text().splitlines()] if log.exists() else []
+    recs = {n: json.loads(o.with_suffix(".json").read_text()) for n, o in outs.items()}
+    return p, calls, recs, secs, pid
+
+
+def test_two_jobs_with_two_free_slots_finish_in_about_the_time_of_one_call_so_the_step_does_not_wait_n_times(tmp_path):
+    """The views of one step are independent images. Run one after another, a 4-view step costs 4 call times; with the
+    free codex_image slots it costs about one. The pid files show that each call holds its own slot."""
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, delay=f"*:{PARALLEL_SECS}")
+    print(f"L8 two jobs, two free slots: {secs:.2f} s for {PARALLEL_SECS} s calls")
+    assert p.returncode == 0, p.stdout
+    assert secs < 1.6 * PARALLEL_SECS, secs
+    assert sorted(c["outs"][0] for c in calls) == ["back.png", "left.png"]
+    assert {len(c["pid_names"]) for c in calls} == {2}
+    assert {n: r["status"] for n, r in recs.items()} == {"back": "ok", "left": "ok"}
+    assert list(pid.parent.glob("*.pid")) == []
+
+
+def test_with_one_free_slot_two_jobs_run_one_after_the_other_because_the_other_slot_belongs_to_another_run(tmp_path):
+    with other_runs(1) as holders:
+        p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, delay=f"*:{PARALLEL_SECS}",
+                                              holders=holders)
+        print(f"L8 two jobs, one free slot: {secs:.2f} s for {PARALLEL_SECS} s calls")
+        assert [f.name for f in pid.parent.glob("*.pid")] == [f"other-{holders[0].pid}.pid"]
+    assert p.returncode == 0, p.stdout
+    assert secs > 1.8 * PARALLEL_SECS, secs
+    assert {len(c["pid_names"]) for c in calls} == {1}
+
+
+def test_with_no_slot_free_the_run_still_makes_one_call_at_a_time_because_it_needs_at_least_one(tmp_path):
+    with other_runs(2) as holders:
+        p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, holders=holders)
+    assert (p.returncode, [c["outs"] for c in calls]) == (0, [["back.png"], ["left.png"]])
+
+
+def test_without_a_codex_image_limit_in_pipeline_toml_the_jobs_run_one_after_the_other(tmp_path):
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=None, delay=f"*:{PARALLEL_SECS}")
+    assert (p.returncode, [c["outs"] for c in calls]) == (0, [["back.png"], ["left.png"]])
+    assert secs > 1.8 * PARALLEL_SECS, secs
+
+
+def test_a_quota_error_in_one_thread_stops_the_job_that_has_not_started_but_not_the_call_in_flight(tmp_path):
+    """The quota is shared by every file: a third job must not pay for a refusal that is already known. The call that
+    already runs holds a paid image, so it is kept."""
+    p, calls, recs, secs, pid = gen_slots(
+        tmp_path, ["front", "left", "back"], limit=2, mode="fail_for:front.png", delay="left.png:2",
+        keys={"FAKE_CODEX_ERROR": "quota exceeded"})
+    assert p.returncode == 1
+    assert sorted(c["outs"][0] for c in calls) == ["front.png", "left.png"]
+    assert {n: (r["status"], r["attempts"]) for n, r in recs.items()} == {
+        "front": ("fail", 1), "left": ("ok", 1), "back": ("fail", 0)}
+    assert recs["back"]["errors"] == ["không gọi: codex hết quota ở file khác"]
+    assert list(pid.parent.glob("*.pid")) == []
+
+
+def test_each_thread_keeps_the_retry_of_its_own_file_so_one_broken_image_is_made_again_alone(tmp_path):
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, mode="break_once:left.png")
+    assert p.returncode == 0, p.stdout
+    assert sorted(c["outs"][0] for c in calls) == ["back.png", "left.png", "left.png"]
+    assert {n: (r["attempts"], r["errors"]) for n, r in recs.items()} == {"back": (1, []), "left": (2, ["file ảnh hỏng"])}
+
+
+def test_the_total_cap_still_applies_to_calls_in_threads(tmp_path):
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, mode="slow:60",
+                                          extra=("--timeout", "1", "--wall-s", "2"))
+    assert (p.returncode, len(calls)) == (1, 2)
+    assert {r["errors"][-1] for r in recs.values()} == {"hết thời gian tổng 2 s (D33.3): không gọi thêm"}
+
+
+def test_an_image_under_codex_home_is_never_taken_while_another_call_of_the_same_run_is_open(tmp_path):
+    """No session id and two calls at once: the one new image may belong to the other call, so neither job takes it."""
+    p, calls, recs, secs, pid = gen_slots(tmp_path, ["back", "left"], limit=2, mode="home", delay="*:1")
+    assert p.returncode == 1
+    assert {n: (r["status"], r["fallback"], r["errors"][0]) for n, r in recs.items()} == {
+        n: ("fail", False, "không có file ảnh") for n in ("back", "left")}
