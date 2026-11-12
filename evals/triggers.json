@@ -11,7 +11,10 @@
         {"query": "tiếp tục", "should_trigger": true, "kind": "edge", "why": "Argued: the project CLAUDE.md line points every asset request at the Producer"},
         {"query": "ZPS - 3D Artist dựng model cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit skill zps-3d-artist named by its display name"},
         {"query": "vẽ concept 3 view cho cái đèn", "should_trigger": false, "kind": "negative", "why": "Concept art: kit zps-concept-artist"},
-        {"query": "ZPS Texture Artist vẽ texture cho cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-texture-artist named"}
+        {"query": "ZPS Texture Artist vẽ texture cho cái thùng", "should_trigger": false, "kind": "negative", "why": "Kit zps-texture-artist named"},
+        {"query": "dựng nhanh cho tôi cái ly này trong Blender, không cần qua pipeline", "should_trigger": false, "kind": "negative", "why": "One-off art outside the pipeline: kit zps-3d-artist is the fit"},
+        {"query": "/zps-3d-artist giảm mặt con ngựa này xuống 2000 tris", "should_trigger": false, "kind": "negative", "why": "Kit skill zps-3d-artist called directly by its slash name"},
+        {"query": "vẽ cho tôi một cái icon thanh kiếm để thử, không thuộc asset nào", "should_trigger": false, "kind": "negative", "why": "One-off art with no asset in _approved: kit zps-2d-artist"}
       ]
     },
     "zps-3dp-project-setup": {

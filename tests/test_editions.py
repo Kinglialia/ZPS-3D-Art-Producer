@@ -155,6 +155,19 @@ def cli(py, script, cwd, *args):
     return subprocess.run([py, str(script), *args], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout
 
 
+def test_the_producer_description_excludes_one_off_art_and_direct_kit_calls_and_the_eval_has_negatives_for_both_d39_11():
+    """Without the exclusion the Producer wins every 3D request in a project that has _approved concepts, also the ones
+    a kit skill should take. The live trigger eval is not run here."""
+    text = (build.SRC / "zps-3dp-producer/SKILL.md").read_text(encoding="utf-8")
+    desc = build.frontmatter(text)["description"]
+    assert len(desc) <= build.DESC_MAX and "\n" not in desc
+    assert desc.endswith("Không dùng cho việc art lẻ ngoài pipeline hay khi gọi thẳng skill của kit.")
+    cases = json.loads(build.EVALS.read_text(encoding="utf-8"))["targets"]["zps-3dp-producer"]["cases"]
+    one_off = [c for c in cases if not c["should_trigger"] and "One-off art" in c["why"]]
+    direct = [c for c in cases if not c["should_trigger"] and (c["query"].startswith("/zps-") or "named" in c["why"])]
+    assert len(one_off) >= 2 and len(direct) >= 1 and len([c for c in cases if not c["should_trigger"]]) >= 6
+
+
 def test_the_built_codex_producer_dispatches_suffixed_agents_by_file_and_ledgers_the_session_model(dist, tmp_path):
     p = tree(dist, "codex") / "skills/zps-3dp-producer-codex/scripts/producer.py"
     cli(sys.executable, p, tmp_path, "init", "--project", "Pilot", "--concepts", "concepts")
