@@ -239,6 +239,13 @@ def test_a_texture_redo_cannot_answer_the_mesh_question(flow):
         "`meshy pilot-house paint` = VẼ MỚI\n")
 
 
+def test_a_texture_build_after_a_model_redo_reads_only_the_notes_of_the_old_texture(flow):
+    """The mesh and UV changed, so "keep what has unchanged inputs" could only mean copying an albedo that no longer fits."""
+    got = [l.split(". ", 1)[1] for l in flow["t4 brief"]["text"].splitlines() if ". Bản đã duyệt trước" in l]
+    assert got == [f"Bản đã duyệt trước của bước này là v3; mesh hoặc UV đã đổi: chỉ đọc `{A}/texture/v3/work/notes.md` "
+                   "của bản đó, không chép albedo cũ."]
+
+
 def test_choosing_paint_starts_a_texture_build_that_must_not_call_meshy(flow):
     h2 = flow["h2"]
     head, line = flow["paint"]["out"].splitlines()

@@ -249,7 +249,12 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
                          f"`{rel(findings.path(aid, prev, v))}` (`note_texture`: TEXTURE NOTE, `note_exception`: NGOẠI LỆ).")
             notes += [f"{prev} v{v} {i}" for i in ids]
             k += 1
-    if not fix and (pv := (st.get("prior") or {}).get(step["id"])):
+    pv = None if fix else (st.get("prior") or {}).get(step["id"])
+    if pv and step["id"] == texture.STEP:
+        lines.append(f"{k}. Bản đã duyệt trước của bước này là v{pv}; mesh hoặc UV đã đổi: chỉ đọc "
+                     f"`{rel(vdir(aid, step['id'], pv) / 'work' / 'notes.md')}` của bản đó, không chép albedo cũ.")
+        k += 1
+    elif pv:
         lines.append(f"{k}. Bản đã duyệt trước của bước này (dựng từ đầu vào cũ): `{rel(vdir(aid, step['id'], pv) / 'final')}/`. "
                      "Giữ phần có đầu vào không đổi, theo file agent.")
         k += 1
