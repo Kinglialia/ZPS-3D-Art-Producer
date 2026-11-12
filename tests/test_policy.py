@@ -8,7 +8,8 @@ from core import policy
 from core.state import ProducerError
 
 TEMPLATE = {"approvals": {"blockout": "human", "views_rest": "human", "model": "human"}, "review_board": "local",
-            "delegations": [], "test_mode": False, "disk_warn_gb": 20, "texture_default": "meshy",
+            "delegations": [], "test_mode": False, "disk_warn_gb": 20, "purge": "on_approve", "purge_zip": None,
+            "texture_default": "meshy",
             "dispatch": "foreground", "watch": {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}}
 
 
@@ -142,3 +143,34 @@ def test_texture_default_takes_only_meshy_or_paint_and_its_origin_survives_a_rew
     head = (prod / "policy.yaml").read_text(encoding="utf-8").splitlines()[1]
     assert head.startswith("# texture_default meshy của template: Run 5, 1 asset") and "đo lại sau 3–5 asset" in head
     assert policy.texture_default(policy.load()) == "meshy"
+
+
+def test_purge_takes_on_approve_or_off_and_a_policy_older_than_the_key_still_purges_d40_5(prod, capsys):
+    """The default must delete: a project whose policy.yaml has no `purge` key keeps the behaviour the owner chose."""
+    (prod / "policy.yaml").write_text("test_mode: false\n", encoding="utf-8")
+    assert policy.purge_mode(policy.load()) == "on_approve"
+    setp("purge", "off", by="giữ hết file")
+    assert (capsys.readouterr().out, policy.load()["purge"]) == ("OK: approvals purge=off\n", "off")
+    assert policy.purge_mode(policy.load()) == "off"
+    with pytest.raises(ProducerError) as e:
+        setp("purge", "never")
+    assert str(e.value) == "purge phải là on_approve|off"
+    (prod / "policy.yaml").write_text("purge: maybe\n", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        policy.load()
+    assert str(e.value) == "production/policy.yaml: purge: phải là on_approve|off"
+
+
+def test_purge_zip_is_a_folder_the_user_sets_and_clears_through_the_same_writer_d40_5(prod, capsys):
+    assert policy.purge_zip(policy.load()) is None
+    setp("purge_zip", "~/zips", by="nén trước khi xóa")
+    assert (capsys.readouterr().out, policy.purge_zip(policy.load())) == ("OK: approvals purge_zip=~/zips\n", "~/zips")
+    setp("purge_zip", "none")
+    assert policy.purge_zip(policy.load()) is None
+    with pytest.raises(ProducerError) as e:
+        setp("purge_zip", "  ")
+    assert str(e.value) == "purge_zip: tên thư mục, hoặc `none` để bỏ"
+    (prod / "policy.yaml").write_text("purge_zip: 5\n", encoding="utf-8")
+    with pytest.raises(ProducerError) as e:
+        policy.load()
+    assert str(e.value) == "production/policy.yaml: purge_zip: phải là tên thư mục, hoặc bỏ trống"

@@ -10,6 +10,7 @@ BY = {"human": "người dùng", "producer": "Producer (test_mode)", "policy": "
 DISK_WARN_GB = 20
 TEXTURE_DEFAULTS = ("meshy", "paint")
 DISPATCH = ("foreground", "background")
+PURGE = ("on_approve", "off")
 WATCH = ("stall_min", "deadline_factor", "max_nudges")
 HEAD = ("# production/policy.yaml — chỉ script ghi (P approvals set, P delegate)\n"
         "# texture_default meshy của template: Run 5, 1 asset (Meshy SỬA 15m32s / 2 version; VẼ MỚI Run 4 38m25s / 4 version); tạm, đo lại sau 3–5 asset khác loại (D34.2)\n")
@@ -41,6 +42,11 @@ def check(pol: dict) -> list[str]:
             errs.append(f"watch.{k}: khóa không hợp lệ ({'|'.join(WATCH)})")
         elif isinstance(v, bool) or not isinstance(v, int | float) or v < (0 if k == "max_nudges" else 0.01):
             errs.append(f"watch.{k}: phải là số {'≥ 0' if k == 'max_nudges' else '> 0'}")
+    if pol.get("purge", "on_approve") not in PURGE:
+        errs.append(f"purge: phải là {'|'.join(PURGE)}")
+    z = pol.get("purge_zip")
+    if z is not None and (not isinstance(z, str) or not z.strip()):
+        errs.append("purge_zip: phải là tên thư mục, hoặc bỏ trống")
     w = pol.get("disk_warn_gb", DISK_WARN_GB)
     if isinstance(w, bool) or not isinstance(w, int | float) or w <= 0:
         errs.append("disk_warn_gb: phải là số GB lớn hơn 0")
@@ -82,6 +88,15 @@ def dispatch(pol: dict) -> str:
     return pol.get("dispatch") or "foreground"
 
 
+def purge_mode(pol: dict) -> str:
+    """D40.5: a policy.yaml older than the key purges at DUYỆT 2."""
+    return pol.get("purge") or "on_approve"
+
+
+def purge_zip(pol: dict) -> str | None:
+    return pol.get("purge_zip") or None
+
+
 def save(pol: dict):
     import yaml
     write_atomic(path(), HEAD + yaml.safe_dump(pol, allow_unicode=True, sort_keys=False))
@@ -103,8 +118,8 @@ def guard(step: str, who: str, confirm_spend: bool):
 
 
 def set_approval(a):
-    """`set review_board local|local+remote` and `set test_mode true|false` too: Project Setup and the user write the
-    whole policy through this one writer."""
+    """`set review_board local|local+remote`, `set test_mode true|false`, `set purge on_approve|off` and `set purge_zip
+    <folder>|none` too: Project Setup and the user write the whole policy through this one writer."""
     pol = load()
     if a.step == "review_board":
         a.who in BOARDS or die(f"review_board phải là {'|'.join(BOARDS)}")
@@ -112,6 +127,12 @@ def set_approval(a):
     elif a.step == "dispatch":
         a.who in DISPATCH or die(f"dispatch phải là {'|'.join(DISPATCH)}")
         pol["dispatch"] = a.who
+    elif a.step == "purge":
+        a.who in PURGE or die(f"purge phải là {'|'.join(PURGE)}")
+        pol["purge"] = a.who
+    elif a.step == "purge_zip":
+        a.who.strip() or die("purge_zip: tên thư mục, hoặc `none` để bỏ")
+        pol["purge_zip"] = None if a.who == "none" else a.who
     elif a.step == "test_mode":
         a.who in ("true", "false") or die("test_mode phải là true|false")
         pol["test_mode"] = a.who == "true"

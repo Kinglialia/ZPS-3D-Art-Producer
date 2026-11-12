@@ -7,6 +7,8 @@ review_board: local
 delegations: []
 test_mode: false
 disk_warn_gb: 20
+purge: on_approve                # on_approve | off: khi người dùng DUYỆT 2, xóa file trung gian ngay (D40)
+purge_zip: null                  # thư mục: nén file sắp xóa vào <thư mục>/<id>.zip trước khi xóa
 texture_default: meshy           # meshy | paint: chế độ texture của `texture-mode auto` (D30.11). Nguồn: Run 5, 1 asset (Meshy SỬA 15m32s / 2 version; VẼ MỚI Run 4 38m25s / 4 version); tạm, đo lại sau 3–5 asset khác loại (D34.2)
 # D33.12–14: foreground = giao subagent chế độ thường (pilot); background = giao chạy nền và một `P wait` (lô).
 dispatch: foreground
