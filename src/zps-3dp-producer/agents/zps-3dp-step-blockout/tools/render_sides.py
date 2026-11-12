@@ -4,15 +4,15 @@ Usage: blender -b --python tools/render_sides.py -- --work <dir> [--outdir <dir>
 Reads <dir>/assembled.glb, part_graph.json (material of each part) and assembly.json (the part files).
   mat_left.png, mat_right.png, mat_back.png   and mat_top.png with --top (the card says views: full_top)
 Cameras are the ones of render_views.py (VIEW_DIRS, same framing). Flat light, no outline, no anti-aliasing: a part is one
-colour all over, so a code reads as one colour. The colour of a code is a hue taken from the sha256 of the code, at fixed
-saturation and value. When two codes of the asset land less than a tenth of the hue circle apart, the later code in sorted
-order moves on by the golden ratio until it is clear of the earlier ones: the same asset always gives the same colours, and
-two codes of one asset never look alike. A legend in black (a swatch and the code) sits in the right margin.
+colour all over, so a code reads as one colour. The codes of the asset, sorted, take evenly spaced hues. Over PER_BAND codes
+they split into two or three BANDS of saturation and value, interleaved round the hue circle, so neighbours differ in
+lightness too: up to 24 codes no two colours are under dE2000 9.5 apart. The same codes always give the same colours. A
+legend in black (a swatch and the code) sits in the right margin.
 render_review.py calls render() in its own Blender session, so the review render makes these files too.
 Writes <outdir>/sides.json (result JSON; data.sides[label] = {model_px: [w, h], codes: {code: "#rrggbb"}}). Exit 0, 1 on error.
 """
 import colorsys
-import hashlib
+import math
 import os
 import sys
 
@@ -29,27 +29,17 @@ sys.path.append(os.path.join(HERE, "..", "..", "..", "scripts"))
 from root_guard import require_root  # noqa: E402
 
 TOOL = "blockout/render_sides"
-SATURATION, VALUE = 0.65, 0.9
-GOLDEN = 0.6180339887
+BANDS = ((0.75, 1.0), (0.9, 0.6), (0.4, 0.75))
+PER_BAND = 8
 SIDES = ("left", "right", "back")
 
 
-def hue(code):
-    return int(hashlib.sha256(code.encode("utf-8")).hexdigest()[:8], 16) / 0xFFFFFFFF
-
-
 def colours(codes):
-    """{code: (r, g, b)} in 0..1 sRGB for the codes of one asset. See the module text for the collision rule."""
+    """{code: (r, g, b)} in 0..1 sRGB for the codes of one asset. See the module text."""
     codes = sorted(set(codes))
-    gap, placed = min(0.1, 0.8 / max(len(codes), 1)), {}
-    for code in codes:
-        h = hue(code)
-        for _ in range(64):
-            if all(min(abs(h - x), 1 - abs(h - x)) >= gap for x in placed.values()):
-                break
-            h = (h + GOLDEN) % 1
-        placed[code] = h
-    return {c: colorsys.hsv_to_rgb(h, SATURATION, VALUE) for c, h in placed.items()}
+    bands = min(len(BANDS), max(1, math.ceil(len(codes) / PER_BAND)))
+    hues = math.ceil(len(codes) / bands)
+    return {c: colorsys.hsv_to_rgb((k // bands + k % bands / bands) / hues, *BANDS[k % bands]) for k, c in enumerate(codes)}
 
 
 def hex_of(rgb):

@@ -27,21 +27,44 @@ def colours_in(codes, seed="0"):
     return json.loads(r.stdout)
 
 
-@needs_venv
-def test_a_code_gets_the_same_colour_in_every_process_because_the_hue_is_a_sha256_and_not_hash(tmp_path):
-    assert colours_in(["BARK", "LEAF"], "1") == colours_in(["BARK", "LEAF"], "2")
-    assert colours_in(["BARK", "LEAF"]) == {"BARK": "#50B0E6", "LEAF": "#E6C650"}
+def colour_sets(code_sets):
+    code = ("import sys, json; sys.path[:0] = [sys.argv[1] + '/lib', sys.argv[1] + '/self_build', sys.argv[1]]; "
+            "import render_sides as RS; print(json.dumps([{c: RS.hex_of(v) for c, v in RS.colours(s).items()} "
+            "for s in json.loads(sys.argv[2])]))")
+    r = subprocess.run([str(VPY), "-c", code, str(TOOLS), json.dumps(code_sets)], capture_output=True, text=True,
+                       check=True)
+    return json.loads(r.stdout)
+
+
+def lab_of(hexes):
+    import numpy as np
+    sys.path.insert(0, str(TOOLS.parents[1] / "zps-3dp-step-texture/tools/lib"))
+    import tex
+    return tex, tex.lab(np.array([[int(h[i:i + 2], 16) for i in (1, 3, 5)] for h in hexes], float))
 
 
 @needs_venv
-def test_two_codes_whose_hash_hues_nearly_agree_are_moved_apart_so_the_owner_can_tell_them_apart():
-    """STONE and TIMBER hash to hues 0.82 and 0.79: the same purple. The later code in sorted order moves on."""
-    got = colours_in(["STONE", "TIMBER", "TEAL"])
-    assert got["STONE"] == "#DA50E6" and got["TEAL"] == "#E6505F" and got["TIMBER"] != "#BA50E6"
-    import colorsys
-    hues = sorted(colorsys.rgb_to_hsv(*(int(v[i:i + 2], 16) / 255 for i in (1, 3, 5)))[0] for v in got.values())
-    gaps = [b - a for a, b in zip(hues, hues[1:] + [hues[0] + 1])]
-    assert min(gaps) >= 0.1
+def test_a_code_gets_the_same_colour_in_every_process_and_in_any_order(tmp_path):
+    assert colours_in(["BARK", "LEAF"], "1") == colours_in(["LEAF", "BARK", "LEAF"], "2")
+    assert colours_in(["BARK", "LEAF"]) == {"BARK": "#FF4040", "LEAF": "#40FFFF"}
+
+
+@needs_venv
+def test_every_pair_of_codes_of_an_asset_differs_clearly_for_up_to_24_codes():
+    """The owner approves the side layout on these images. With hash hues 24 % of 8-code assets had two codes under
+    8 degrees apart (worst 0.2): two materials in one colour. Here no pair is under dE2000 9.5, nor near the grey
+    background."""
+    import random
+    import string
+    import numpy as np
+    rng = random.Random(3)
+    sets = [["".join(rng.choice(string.ascii_uppercase) for _ in range(rng.randint(3, 8))) for _ in range(n)]
+            for n in range(2, 25) for _ in range(3)]
+    for codes, got in zip(sets, colour_sets(sets)):
+        tex, lab = lab_of(list(got.values()))
+        d = tex.de2000(lab[:, None], lab[None]) + 100 * np.eye(len(lab))
+        assert (len(set(got.values())), round(float(d.min()), 1) >= 9.5) == (len(set(codes)), True), (codes, d.min())
+        assert tex.de2000(lab, tex.lab(np.array(BG, float))).min() >= 20
 
 
 def sides(tmp_path, *extra, size=400):
