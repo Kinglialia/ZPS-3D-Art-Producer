@@ -8,13 +8,16 @@ The script starts itself on the python of scripts/.deps/venv.
   --version-dir  production/assets/<id>/<step>/vN. Logs go to vN/work/logs/, the heartbeat to vN/heartbeat.log.
   --agent NAME   the agent of the step. A relative <tool> is resolved against agents/NAME/tools, the `TOOLS:` line of the
                  brief. A plain tool runs on the python of agents/NAME/tools/.deps/venv. Without it the base is scripts/.
-  --blender EXE  only in the brief of a step that uses Blender. It must be the Blender of production/preflight.json.
+  --blender EXE  only in the brief of a step that uses Blender. It must equal the Blender in production/preflight.json.
+                 That guards a mistyped path; a worker who edits that file can still change it.
                  agents/NAME/tools/setup_deps.sh gets it as $BLENDER when agents/NAME/tools/.deps is missing.
   bl             run the tool in Blender: EXE -b --python-exit-code 1 --python <tool> -- <tool args>. It holds the slot file
                  production/pids/blender/<id>-<pid>.pid (the file limits.used counts) while Blender runs.
                  Without it: <python> <tool> <tool args>.
   <tool>         a .py file in scripts/ or agents/*/tools/ of the skill, by absolute path or relative to --agent.
                  Any other path, also through `..` or a symlink, exits 2 and runs nothing.
+                 In the Codex edition (runtime.json) only agents/*/tools/ run here, and CODEX_DIRECT never does: the Codex
+                 rule runs this script outside the sandbox, so it must not reach producer.py or agent-written code.
 
 Prints one line: `<tool> <pass|fail|error> [path ...]`. fail: a result JSON written during this run has `overall` fail or
 error, or `pass` false (core.briefs.failed_checks), and the paths are those JSON. error: the tool exited non-zero and
@@ -84,8 +87,8 @@ def tool_file(raw: str, tools: Path, skill: Path) -> Path:
     root = next((r for r in roots(skill) if real.is_relative_to(r)), None)
     if root is None or real.suffix != ".py" or not real.is_file() or NOT_IN_DEPS & set(real.relative_to(root).parts):
         raise Refused(f"refused {raw}: not a .py file in scripts/ or agents/*/tools/ of the skill")
-    if is_codex(skill) and any(real.as_posix().endswith("/" + x) for x in CODEX_DIRECT):
-        raise Refused(f"refused {raw}: this tool runs only through its own command in the Codex edition")
+    if is_codex(skill) and (root.name == "scripts" or any(real.as_posix().endswith("/" + x) for x in CODEX_DIRECT)):
+        raise Refused(f"refused {raw}: in the Codex edition only agents/*/tools/ run here, except CODEX_DIRECT")
     return real
 
 

@@ -184,17 +184,21 @@ def test_r0_refuses_a_flag_value_that_would_make_the_open_rule_run_something_els
     assert (codes, marker.exists(), (elsewhere / "work").exists()) == ([2, 2, 2, 2], False, False)
 
 
-def test_r0_refuses_the_network_and_agent_code_scripts_in_the_codex_edition_only(rt):
-    """The Codex rule for run_tool.py lets Blender run outside the sandbox. Those scripts never match a Codex rule."""
-    marker = rt.base / "ran-meshy"
+def test_r0_in_the_codex_edition_run_tool_refuses_scripts_and_agent_code_because_its_rule_runs_outside_the_sandbox(rt):
+    """The Codex rule for run_tool.py runs Blender outside the sandbox. producer.py, the paid scripts and the tools that
+    run code the agent wrote must never reach that path. The Claude edition has no such rule and runs them."""
+    marker = rt.base / "ran-direct"
     rt.tool("meshy_call.py", TOUCH.format(marker=marker), in_dir=rt.scripts)
+    rt.tool("producer.py", TOUCH.format(marker=marker), in_dir=rt.scripts)
     rt.tool("self_build/assembly.py", TOUCH.format(marker=marker))
-    args = ("../../../scripts/meshy_call.py", "self_build/assembly.py")
-    assert [rt.run(a)[0] for a in args] == [0, 0]
+    rt.tool("check_inputs.py", TOUCH.format(marker=marker))
+    direct = ("../../../scripts/meshy_call.py", "../../../scripts/producer.py", "self_build/assembly.py")
+    assert [rt.run(a)[0] for a in direct] == [0, 0, 0]
     marker.unlink()
     (rt.skill / "runtime.json").write_text(json.dumps({"runtime": "codex", "suffix": "-codex"}), encoding="utf-8")
-    assert [rt.run(a)[0] for a in args] == [2, 2]
+    assert [rt.run(a)[0] for a in direct] == [2, 2, 2]
     assert not marker.exists()
+    assert (rt.run("check_inputs.py")[:2], marker.exists()) == ((0, "check_inputs pass\n"), True)
 
 
 def test_r0_codex_direct_list_is_the_list_the_codex_rule_keeps_outside_every_allow():
