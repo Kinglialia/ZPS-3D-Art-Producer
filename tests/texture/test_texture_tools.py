@@ -278,9 +278,10 @@ def slab(lo, hi):
     return [tuple(c[i] for i in q) for q in glbkit.FACES.values()]
 
 
-def quads_model(d, parts, margin=0.1):
+def quads_model(d, parts, margin=0.1, uv_rects=None):
     """A model final/ of parts {name: (material, quads)}, each quad its own square UV island inside a grid cell,
-    `margin` of the cell left empty on each side; reach of a groove = 16 px / px_per_m = 0.044 m."""
+    `margin` of the cell left empty on each side, or the UV rectangle (u0, v0, u1, v1) of `uv_rects` in quad order;
+    reach of a groove = 16 px / px_per_m = 0.044 m."""
     cols = int(np.ceil(np.sqrt(sum(len(q) for _, q in parts.values()))))
     v, uv, f, part_f = [], [], [], {}
     for name, (_, quads) in parts.items():
@@ -289,8 +290,9 @@ def quads_model(d, parts, margin=0.1):
             k, base = len(f) // 2, len(v)
             c, r = k % cols, k // cols
             v += q
-            uv += [((c + margin + (1 - 2 * margin) * du) / cols, (r + margin + (1 - 2 * margin) * dv) / cols)
-                   for du, dv in ((0, 0), (1, 0), (1, 1), (0, 1))]
+            u0, v0, u1, v1 = uv_rects[k] if uv_rects else ((c + margin) / cols, (r + margin) / cols,
+                                                           (c + 1 - margin) / cols, (r + 1 - margin) / cols)
+            uv += [(u0 + (u1 - u0) * du, v0 + (v1 - v0) * dv) for du, dv in ((0, 0), (1, 0), (1, 1), (0, 1))]
             tris = [(base, base + 1, base + 2), (base, base + 2, base + 3)]
             f += tris
             part_f[name] += tris
@@ -620,6 +622,42 @@ def test_tone_fix_still_lifts_baked_ao_beside_an_inked_groove(tmp_path):
     fixed, rec = tone_fix_run(gm, tmp_path, tmp_path / "ao.png", GROOVE_RES, "--no-seams")
     c, _ = measure_groove(gm, tmp_path, fixed)
     assert rec["codes"]["TIMBER"]["lifted_texels"] > 0 and c["light.shaded_share.TIMBER"][0] == "pass", c
+
+
+def test_line_art_in_the_recess_of_one_side_does_not_count_in_the_side_means(tmp_path):
+    """A window recess on one wall: the concept's ink there pulled that side's mean 10 L* down, side_spread_L failed
+    and tone_fix brightened all the paint of that side."""
+    gm = grooved_model(tmp_path / "model")
+    img, _ = groove_texture(gm, tmp_path)
+    tm = texels_at(gm, GROOVE_RES)
+    keep = ink_of(gm) & (tm.nrm[..., 0] < 0.7)
+    img = np.where(keep[..., None], tex.load_rgb(base_fill_at(gm, tmp_path)), img)
+    tex.save_rgb(img, tmp_path / "one_side.png")
+    c, data = measure_groove(gm, tmp_path, img)
+    assert c["light.side_spread_L.TIMBER"][0] == "pass", c["light.side_spread_L.TIMBER"]
+    _, rec = tone_fix_run(gm, tmp_path, tmp_path / "one_side.png", GROOVE_RES, "--no-seams")
+    assert "+X" not in rec["codes"]["TIMBER"]["moved"], rec
+
+
+TRIM_UV = [(0.05, 0.05, 0.95, 0.2), (0.05, 0.25, 0.95, 0.4), (0.05, 0.45, 0.95, 0.6), (0.05, 0.65, 0.95, 0.8),
+           (0.05, 0.85, 0.08, 0.88), (0.15, 0.85, 0.18, 0.88)]
+
+
+def test_the_few_texels_on_the_end_faces_of_a_trim_do_not_count_as_a_side(tmp_path):
+    """A 2 m trim: its two end faces hold about 50 texels each, 0.1 % of the code. Edge bleed there is no side tone,
+    and it failed side_spread_L and moved the paint of the ends."""
+    gm = quads_model(tmp_path / "model", {"trim": ("TIMBER", slab((-1, -0.05, 0), (1, 0.05, 0.1)))}, uv_rects=TRIM_UV)
+    tm = texels_at(gm, GROOVE_RES)
+    ends = tm.inside & (np.abs(tm.nrm[..., 0]) > 0.7)
+    assert 30 < ends.sum() / 2 < 80
+    lab = tex.lab(tex.load_rgb(base_fill_at(gm, tmp_path)))
+    lab[..., 0] -= np.where(ends, 25, 0)
+    img = np.where(tm.inside[..., None], tex.lab_to_rgb(lab), 0)
+    tex.save_rgb(img, tmp_path / "trim.png")
+    c, _ = measure_groove(gm, tmp_path, img)
+    assert c["light.side_spread_L.TIMBER"] == ("pass", 0.0), c
+    _, rec = tone_fix_run(gm, tmp_path, tmp_path / "trim.png", GROOVE_RES, "--no-seams")
+    assert rec["codes"]["TIMBER"]["moved"] == {}, rec
 
 
 def notes(r):

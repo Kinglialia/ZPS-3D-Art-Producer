@@ -4,7 +4,8 @@ Usage: python3 T/tone_fix.py --glb <locked GLB> --model M --albedo A --profile <
        [--concept-colors concept_colors.json] [--padding 16] [--no-seams]
 Per material code:
   sides   in CIE L*: the four side groups (+X -X +Y -Y by normal) move by one offset each to their area-weighted mean
-          L*, when they differ from it by more than SIDE_TOL; top faces move to that mean + style.top_vs_side_L.
+          L*, when they differ from it by more than SIDE_TOL; top faces move to that mean + style.top_vs_side_L. The
+          means are tex_measure.side_means: groove texels left out, a side with too few texels neither counts nor moves.
   shade   in CIE L*: where the low-pass L* (window LOWPASS_FRAC of the atlas) sits more than SHADE_TOL below the group's
           target, it is lifted to target - SHADE_TOL: baked AO under an eave goes, the texel's difference to its
           low-pass (grain, wear) is kept. Groove faces (tex.groove_texels, the same mask as tex_measure) are not
@@ -38,7 +39,6 @@ AB_MAX = 12.0  # a wrong concept box must not repaint a whole material
 L_MAX = 12.0
 AB_TOL = 1.0
 LOWPASS_FRAC = 1 / 64
-SIDES = ("+X", "-X", "+Y", "-Y")
 
 
 def groups(tm, codes):
@@ -55,10 +55,10 @@ def fix(img, tm, codes, top_l, r, groove, concept=None):
     log = {}
     for c in sorted(set(codes)):
         mc = tm.inside & (code == c)
-        means = {s: float(L[mc & (side == s)].mean()) for s in SIDES if (mc & (side == s)).any()}
+        means = tex_measure.side_means(L, mc, side, groove)
         if not means:
             continue
-        sizes = {s: int((mc & (side == s)).sum()) for s in means}
+        sizes = {s: int((mc & ~groove & (side == s)).sum()) for s in means}
         target = sum(means[s] * sizes[s] for s in means) / sum(sizes.values())
         log[c] = {"target_L": round(target, 2), "moved": {}}
         for s, m in means.items():
@@ -69,7 +69,7 @@ def fix(img, tm, codes, top_l, r, groove, concept=None):
         if top.any() and abs((t := target + top_l) - L[top].mean()) > SIDE_TOL:
             log[c]["moved"]["top"] = round(t - float(L[top].mean()), 2)
             L[top] += t - L[top].mean()
-        paint = [float(L[mc & ~groove & (side == s)].mean()) for s in SIDES if (mc & ~groove & (side == s)).any()]
+        paint = list(tex_measure.side_means(L, mc, side, groove).values())
         ref = float(np.mean(paint)) if paint else target
         for s in (*means, "top"):
             m = mc & (side == s) & ~groove

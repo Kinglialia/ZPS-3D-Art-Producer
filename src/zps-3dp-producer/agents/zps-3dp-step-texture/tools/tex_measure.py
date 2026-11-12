@@ -5,7 +5,8 @@ Usage: python3 T/tex_measure.py --final F --glb <locked GLB> --model M --albedo 
        --concept-colors <CONCEPT_COLORS path of the brief> --profile <profile> --pilot <PILOT line of the brief, or none>
        [--card C/asset-card.yaml]
 Per material code (CIE L*; the colour check is dE2000, the seam check dE76):
-  1 light     light.side_spread_L.<c>: max - min of the four side means <= side_spread_L
+  1 light     light.side_spread_L.<c>: max - min of the four side means <= side_spread_L. A side mean leaves out groove
+                texels; a side under 2 % of the code's texels or under 200 texels has none (side_means)
               light.top_vs_side_L.<c>: |top - side - style.top_vs_side_L| <= top_tol_L
               light.shaded_share.<c>: share of texels whose L* and low-pass L* are both shade_L below the side mean
                 <= shaded_share (a bright texel beside a dark island of the atlas is not shaded). Texels and side
@@ -54,6 +55,19 @@ LIMITS = {"side_spread_L": 3.0, "top_tol_L": 3.0, "shade_L": 8.0, "shaded_share"
           "seam_p90": 4.0, "unpainted": 0.001, "padding_empty": 0.01, "groove_occluded": 0.55}
 SIDES = ("+X", "-X", "+Y", "-Y")
 UNPAINTED_BELOW = 8
+SIDE_MIN_SHARE, SIDE_MIN_TEXELS = 0.02, 200  # provisional until the pilot
+
+
+def side_means(L, mc, side, groove):
+    """Mean L* of each of the four sides of the code mc, groove texels left out. A side under SIDE_MIN_SHARE of the
+    code's texels or under SIDE_MIN_TEXELS has no mean: the end faces of a trim hold edge bleed, not a side tone."""
+    least = max(SIDE_MIN_SHARE * mc.sum(), SIDE_MIN_TEXELS)
+    out = {}
+    for s in SIDES:
+        m = mc & ~groove & (side == s)
+        if m.sum() >= least:
+            out[s] = float(L[m].mean())
+    return out
 
 
 def limits(prof):
@@ -112,7 +126,7 @@ def measure(a, lim, top_l):
     r = max(1, res // 64)
     for c in sorted(set(codes) - {id_map.UNKNOWN}):
         mc = tm.inside & (code == c)
-        sides = {s: float(lab[mc & (side == s), 0].mean()) for s in SIDES if (mc & (side == s)).any()}
+        sides = side_means(lab[..., 0], mc, side, groove)
         row = data["codes"][c] = {"side_L": {s: round(v, 2) for s, v in sides.items()}}
         if sides:
             row["groove_share"] = round(float(groove[mc & np.isin(side, SIDES)].mean()), 4)
@@ -127,7 +141,7 @@ def measure(a, lim, top_l):
                                         "fail", round(d, 2), top_l))
             m = mc & ~groove & np.isin(side, SIDES)
             low = tex.blur(lab[..., 0], m, r)
-            ref = [lab[m & (side == s), 0].mean() for s in SIDES if (m & (side == s)).any()]
+            ref = list(sides.values())
             dark = float(np.mean(ref)) - lim["shade_L"] if ref else 0.0
             share = float(((low[m] < dark) & (lab[m, 0] < dark)).mean()) if ref else 0.0
             checks.append(tex.check(f"light.shaded_share.{c}", "pass" if share <= lim["shaded_share"] else "fail",
