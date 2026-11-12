@@ -100,9 +100,11 @@ def run(cmd: list[str], *, tool: str, vd: Path | None, timeout: float | None = N
     write(vd, tool, "start")
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd, start_new_session=True)
-    main = threading.current_thread() is threading.main_thread()
-    old = {s: signal.signal(s, stop) for s in STOP} if main else {}
+    old = {}
     try:
+        if threading.current_thread() is threading.main_thread():
+            for s in STOP:
+                old[s] = signal.signal(s, stop)
         return watch(p, cmd, tool, vd, timeout, input, every)
     except BaseException:
         kill_group(p)
