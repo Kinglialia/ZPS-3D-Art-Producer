@@ -13,7 +13,7 @@ COPIED = re.findall(r"^\| `([^`]+)` \| `([^`]+)` \| `([0-9a-f]{64})` \|$", TEXT,
 DRAWN = re.findall(r"^\| `([^`]+)` \| `([^`]+)` \| `([0-9a-f]{64})` \| [^|]+ \|$", TEXT, re.M)
 OWN = {"setup_deps.sh", "tex.py", "check_inputs.py", "texture_complexity.py", "id_map.py", "check_meshy.py",
        "base_fill.py", "render_texture.py", "render_paint_views.py", "project_views.py", "seam_fix.py", "crop_edit.py",
-       "tone_fix.py", "tex_measure.py"}
+       "tone_fix.py", "tex_measure.py", "make_paint_prompts.py"}
 
 
 def sha(p):
