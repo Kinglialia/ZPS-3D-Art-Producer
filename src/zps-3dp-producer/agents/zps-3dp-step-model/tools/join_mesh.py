@@ -14,7 +14,10 @@ Reads F/spec.json (asset id), F/assembly.json (part order) and F/parts/<part>.gl
   spec.json bottom_visible: true (default false) leaves the ground out.
 - join.removed_faces_seen fails when a deleted face is the first hit of a 200 x 200 orthographic ray grid along the
   6 axes (not from below unless bottom_visible) or from 45 deg above on the 4 diagonals.
-- Split the vertices of every edge sharper than 20 deg; every face smooth-shaded.
+- Every face smooth-shaded. Parts share no vertex, so every edge between two parts is already split. Inside a part,
+  split the vertices of every edge sharper than 20 deg, or 60 deg in a round part: a cylinder, a bevel_box, or a
+  custom part with "round": true in F/part_graph.json (a mirror_of part follows its source). 60 deg keeps an
+  8-segment side (45 deg) and the steps of a 1-2 segment bevel (30-45 deg) smooth and splits caps and corners (90).
 - Origin at the bottom centre of the whole asset.
 Saves F/<id>.blend (object, mesh and material named <id>, no UV yet: unwrap.py next).
 Writes F/review/join.json. Exit 0, 1 on error.
@@ -35,6 +38,8 @@ from root_guard import require_root  # noqa: E402
 
 TOOL = "model/join_mesh"
 SHARP_DEG = 20.0
+ROUND_DEG = 60.0
+ROUND_FNS = ("bevel_box",)
 WELD_M = 1e-6
 N_DIRS = 64
 EDGE_M = 0.015
@@ -47,14 +52,27 @@ GROUND_DROP = 1e-4
 def part_arrays(final):
     import graph as G
     rows = common.read_json(os.path.join(final, "assembly.json"))["data"]["parts"]
-    vs, fs, off = [], [], 0
-    for r in rows:
+    vs, fs, ids, off = [], [], [], 0
+    for i, r in enumerate(rows):
         v, t, _ = G.load_glb(os.path.join(final, "parts", f"{r['name']}.glb"))
         _, first, inv = np.unique(np.round(v / WELD_M).astype(np.int64), axis=0, return_index=True, return_inverse=True)
         vs.append(v[first])
         fs.append(inv.reshape(-1)[t] + off)
+        ids.append(np.full(len(t), i))
         off += len(first)
-    return [r["name"] for r in rows], np.concatenate(vs), np.concatenate(fs)
+    return [r["name"] for r in rows], np.concatenate(vs), np.concatenate(fs), np.concatenate(ids)
+
+
+def round_parts(final):
+    """Names of the parts whose edges up to ROUND_DEG stay smooth."""
+    import graph as G
+    parts = {p["name"]: p for p in G.expand_parts(common.read_json(os.path.join(final, "part_graph.json")))}
+
+    def source(p):
+        att = p.get("attach") or {}
+        return source(parts[att["of"]]) if att.get("type") == "mirror_of" else p
+    return {n for n, p in parts.items() if p.get("primitive") == "cylinder" or p.get("fn") in ROUND_FNS
+            or source(p).get("round") is True}
 
 
 def samples(t):
@@ -127,7 +145,8 @@ def run(final):
     from mathutils.bvhtree import BVHTree
     spec = common.read_json(os.path.join(final, "spec.json"))
     aid, bottom = spec["asset"], bool(spec.get("bottom_visible", False))
-    names, v, f = part_arrays(final)
+    names, v, f, part = part_arrays(final)
+    soft = round_parts(final)
     optbpy.reset_scene()
     tree = BVHTree.FromPolygons(v.tolist(), f.tolist(), all_triangles=True)
     gv, gf = ground(v)
@@ -135,7 +154,7 @@ def run(final):
                                                         np.concatenate([f, gf + len(v)]).tolist(), all_triangles=True)
     interior = hidden(v, f, occluder)
     shown = seen(v, f, interior, tree, bottom)
-    f = f[~interior]
+    f, part = f[~interior], part[~interior]
     lo, hi = v[np.unique(f)].min(0), v[np.unique(f)].max(0)
     offset = np.array([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]])
     me = bpy.data.meshes.new(aid)
@@ -143,7 +162,13 @@ def run(final):
     bm = bmesh.new()
     bm.from_mesh(me)
     bmesh.ops.delete(bm, geom=[x for x in bm.verts if not x.link_faces], context="VERTS")
-    sharp = [e for e in bm.edges if len(e.link_faces) == 2 and e.calc_face_angle(0) > math.radians(SHARP_DEG)]
+    bm.faces.index_update()
+    limit = np.radians([ROUND_DEG if n in soft else SHARP_DEG for n in names])[part]
+    sharp = [e for e in bm.edges if len(e.link_faces) == 2
+             and e.calc_face_angle(0) > limit[e.link_faces[0].index]]
+    per_part = {n: 0 for n in names}
+    for e in sharp:
+        per_part[names[part[e.link_faces[0].index]]] += 1
     bmesh.ops.split_edges(bm, edges=sharp)
     for fc in bm.faces:
         fc.smooth = True
@@ -161,9 +186,9 @@ def run(final):
               common.check("join.hidden_faces_removed", "info", int(interior.sum())),
               common.check("join.removed_faces_seen", "fail" if shown else "pass", len(shown), 0),
               common.check("join.bottom_visible", "info", bottom),
-              common.check("join.sharp_edges_split", "info", len(sharp), SHARP_DEG),
+              common.check("join.sharp_edges_split", "info", len(sharp), {"deg": SHARP_DEG, "round_deg": ROUND_DEG}),
               common.check("join.origin_offset_m", "info", [common.r(x, 4) for x in offset])]
-    return checks, {"parts": names, "tris": len(f), "blend": blend}
+    return checks, {"parts": names, "round_parts": sorted(soft), "sharp_edges": per_part, "tris": len(f), "blend": blend}
 
 
 def main():

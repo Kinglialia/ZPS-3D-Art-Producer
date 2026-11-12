@@ -413,3 +413,20 @@ def test_a_mesh_without_uv_fails_uv_present(tmp_path):
     write_glb(f / "pilot-house-untextured.glb", *box((0, 0, 0), (1, 1, 1)))
     assert tool("check_uv_edge", "--final", f).returncode == 1
     assert result(f, "uv_edge")[1] == {"uv.present": ("fail", None)}
+
+
+def test_round_parts_are_cylinders_bevel_boxes_and_custom_parts_marked_round_with_their_mirrors(tmp_path):
+    """join_mesh keeps edges up to 60 deg smooth only in these parts; a box or an unmarked custom part keeps 20 deg,
+    so its corners stay crisp. The kit copies only shape fields to a mirror, so the mark comes from the source."""
+    def part(name, **kw):
+        return {"name": name, "attach": {"type": "on_top", "to": "base"}, **kw}
+    graph = {"params": {}, "parts": [
+        {"name": "base", "primitive": "box", "attach": None}, part("post", primitive="cylinder"),
+        part("chest", primitive="custom", fn="bevel_box"), part("knob", primitive="custom", fn="knob", round=True),
+        {"name": "knob_r", "attach": {"type": "mirror_of", "of": "knob", "plane": "X"}},
+        part("crate", primitive="custom", fn="crate"),
+        {"name": "crate_r", "attach": {"type": "mirror_of", "of": "crate", "plane": "X"}}]}
+    (tmp_path / "part_graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    sys.path.insert(0, str(TOOLS))
+    import join_mesh
+    assert join_mesh.round_parts(tmp_path) == {"post", "chest", "knob", "knob_r"}

@@ -26,6 +26,19 @@ EAVE = {"name": "eave", "primitive": "box", "dims": ["eave_w", "eave_d", "eave_h
         "attach": {"type": "center_on_face", "to": "walls", "face": "-Y", "offset_uv": [0.0, 1.0]}}
 INLAY = {"name": "inlay", "primitive": "box", "dims": ["inlay_s", "inlay_s", "inlay_h"], "material": "STONE", "role": "marker",
          "attach": {"type": "inset_into", "to": "base", "face": "+Z", "offset_uv": [0.0, -0.875], "depth": "inlay_h"}}
+ROUND = {"schema": "blockout-1", "version": "v01", "units": "m", "up": "+Z", "front": "-Y",
+         "params": {"base_w": 2.0, "base_d": 1.0, "base_h": 0.2, "post_r": 0.2, "post_h": 0.8, "chest_w": 0.6,
+                    "chest_d": 0.5, "chest_h": 0.4, "bevel_r": 0.05},
+         "fixed_params": ["base_w"],
+         "parts": [{"name": "base", "primitive": "box", "dims": ["base_w", "base_d", "base_h"], "attach": None,
+                    "material": "STONE", "role": "mass"},
+                   {"name": "post", "primitive": "cylinder", "dims": ["post_r", "post_h"], "segments": 8,
+                    "attach": {"type": "on_top", "to": "base", "offset_uv": [-0.5, 0.0]}, "material": "STONE",
+                    "role": "mass"},
+                   {"name": "chest", "primitive": "custom", "fn": "bevel_box",
+                    "args": ["chest_w", "chest_d", "chest_h", "bevel_r", 2, 15],
+                    "attach": {"type": "on_top", "to": "base", "offset_uv": [0.5, 0.0]}, "material": "STONE",
+                    "role": "mass"}]}
 pytestmark = [pytest.mark.blender,
               pytest.mark.skipif(not (VPY.is_file() and os.access(BLENDER, os.X_OK)),
                                  reason="needs Blender and the model tools/setup_deps.sh")]
@@ -61,6 +74,16 @@ def build(d: Path, extra=(), **params):
     assert rc == 0, out
 
 
+def build_in_blender(d: Path, graph: dict):
+    """A graph with a shared custom function (bevel_box needs bmesh), built the way the worker does."""
+    d.mkdir(parents=True)
+    (d / "part_graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    (d / "sources.json").write_text(json.dumps(SOURCES), encoding="utf-8")
+    rc, out = sh(BLENDER, "-b", "--factory-startup", "--python-exit-code", "1", "--python",
+                 TOOLS / "../../zps-3dp-step-blockout/tools/build_parts.py", "--", "assembly", "--work", d)
+    assert rc == 0, out
+
+
 def model(final: Path, blockout: Path, **spec):
     rc, out = sh(VPY, TOOLS / "make_spec.py", "--final", final, "--blockout", blockout,
                  "--card", PILOT / "_approved/pilot-house/asset-card.yaml", "--profile", PILOT / "PROJECT-PROFILE.yaml",
@@ -76,7 +99,9 @@ def model(final: Path, blockout: Path, **spec):
 def built(tmp_path_factory):
     t = tmp_path_factory.mktemp("model")
     b, f, g, wb, w = t / "blockout", t / "final", t / "inlay", t / "wide_blockout", t / "wide"
-    e, under, flip = t / "eave", t / "bottom_visible", t / "inside_out"
+    e, under, flip, rnd = t / "eave", t / "bottom_visible", t / "inside_out", t / "round"
+    build_in_blender(rnd, ROUND)
+    model(rnd, rnd)
     build(b)
     build(f, [STEP])
     build(g, [INLAY])
@@ -104,7 +129,7 @@ def built(tmp_path_factory):
     blender("self_build/render_views.py", "--work", f, "--mode", "critic", "--outdir", f / "review/renders")
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
-    return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "inside_out": flip, "rc": rc}
+    return {"final": f, "inlay": g, "wide": w, "eave": e, "bottom_visible": under, "inside_out": flip, "round": rnd, "rc": rc}
 
 
 def inside_out(glb: Path):
@@ -167,6 +192,14 @@ def test_a_part_built_inside_out_vanishes_in_the_join_unseen_so_check_mesh_fails
                                                                                      (0.0, -1.8))) == (("pass", 0), [0.3])
     assert (built["rc"]["inside_out"], checks(d / "review/checks/mesh_build.json")[1]) == (
         1, {"mesh.part_winding": ("fail", ["step"])})
+
+
+def test_a_round_part_keeps_its_side_and_its_bevel_smooth_and_splits_only_caps_and_corners(built):
+    """With one 20 deg limit an 8-segment cylinder (45 deg sides) and a 2-segment bevel (30 deg steps) came out faceted:
+    16 and 24 split edges. Now the cylinder splits only its top rim (8) and the bevel_box only its top edges (12).
+    The base box keeps its 8 hard edges (bottom ones are boundary after the ground removes the underside)."""
+    data = read(built["round"] / "review/join.json")["data"]
+    assert (data["round_parts"], data["sharp_edges"]) == (["chest", "post"], {"base": 8, "post": 8, "chest": 12})
 
 
 def test_join_keeps_the_10_cm_base_top_rim_around_3_8_m_walls_on_a_4_m_base(built):
