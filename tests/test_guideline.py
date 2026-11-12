@@ -115,6 +115,18 @@ def test_a_handoff_example_has_the_background_as_one_line_the_intake_reads(i):
     assert not re.search(r"^Nền ảnh concept:", HANDOFFS[i], re.M)
 
 
+def test_the_measuring_snippet_prints_the_median_colour_that_intake_measures_in_the_same_box(tmp_path, monkeypatch, capsys):
+    """A hex the agent measures with the snippet must match what intake finds, or every handoff gets a warning."""
+    im = Image.new("RGB", (SIZE, SIZE), (238, 238, 238))
+    im.paste((90, 64, 48), (400, 100, 500, 200))
+    im.paste((250, 250, 250), (400, 100, 500, 130))
+    im.save(tmp_path / "concept_albedo.png")
+    monkeypatch.chdir(tmp_path)
+    x, y, w, h = 400, 100, 100, 100
+    exec(fenced("python")[0], {"x": x, "y": y, "w": w, "h": h})
+    assert capsys.readouterr().out.strip() == intake.colors_tool().median_hex(im, (x, y, x + w, y + h)) == "#5A4030"
+
+
 def test_the_template_keeps_every_placeholder_that_init_fills_and_no_other():
     filled = set(re.findall(r"\{\{(\w+)\}\}", inspect.getsource(intake.init)))
     assert filled == {"PROJECT", "CONCEPTS", "DATE", "CHECK_CARD", "PROFILE"}

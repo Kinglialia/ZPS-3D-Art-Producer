@@ -64,7 +64,6 @@ print("#%02X%02X%02X" % tuple(int(v) for v in np.median(px, axis=0)))
 ```
 
 - **Nền ảnh** là một dòng riêng, đúng dạng `BG: #RRGGBB`, nằm trên bảng. Pipeline đọc dòng này bằng máy.
-- Mã không thấy trên concept (chỉ nằm ở mặt khuất): để trống ô, ghi lý do ở ghi chú, hex theo ý thiết kế.
 
 Mẫu:
 
@@ -166,7 +165,7 @@ Ghi số lượng các thành phần lặp lại mà người xem đếm đượ
 Mỗi trường giúp pipeline khỏi phải đoán. Ghi khi biết. Không biết thì bỏ trường, đừng đoán.
 
 - **`view_side`**: ghi khi có ảnh 3/4, tức `view: '34'` hoặc có `concept_34.png`. Giá trị `left` hoặc `right`: mặt bên nào của vật hiện ra trên ảnh 3/4, theo bên của chính vật (như `hidden_sides`). Với `view: '34'` trường này bắt buộc. Pipeline cần nó để biết nhìn ảnh từ phía nào.
-- **`light`**: `{from, elevation_deg}` mô tả ánh sáng trong `concept_shadow.png`. `from` là `left`, `right` hoặc `front`: phía ảnh mà ánh sáng đến, nhìn từ camera của concept. `elevation_deg` là độ cao nguồn sáng so với mặt nằm ngang, tính bằng độ. Model dựng ánh sáng theo hướng này. Thiếu thì model agent phải đoán.
+- **`light`**: `{from, elevation_deg}` mô tả ánh sáng trong `concept_shadow.png`. `from` là `left`, `right` hoặc `front`, theo ảnh: `left` nghĩa là mặt sáng ở phía mép trái ảnh và bóng đổ về mép phải. `elevation_deg` là độ cao nguồn sáng so với mặt nằm ngang, tính bằng độ. Model dựng ánh sáng theo hướng này. Thiếu thì model agent phải đoán.
 - **`marks`**: 2–3 độ cao của những đường ngang rõ trên concept (mép trên thân, mặt bệ, mặt quầy). Mỗi mốc có `name` và `z_m`, là chiều cao tính từ đáy vật, bằng mét. Đo vị trí trên ảnh rồi đổi ra mét theo chiều cao thật của vật. Pipeline so tỉ lệ của blockout với các mốc này. Vật không có đường ngang rõ (cây, đá) thì bỏ trường.
 - **`bottom_visible`**: `false` trừ khi người chơi thấy mặt đáy của vật (cầu, bục lơ lửng). Khi `false`, pipeline bỏ mặt đáy khỏi model.
 - **`text_codes`**: danh sách mã vật liệu mang chữ hoặc biểu tượng thật (biển hiệu, nhãn). Pipeline kiểm texture bị lật ngược chỉ trên các mã này. Không có thì `[]`.
