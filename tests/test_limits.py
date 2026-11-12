@@ -6,7 +6,7 @@ import pytest
 
 from shared import write_profile
 from core import briefs, intake, limits
-from core.state import load_cfg, load_st, save_st
+from core.state import all_status, load_cfg, load_st, save_st
 
 
 def dead_pid() -> int:
@@ -40,25 +40,73 @@ def next_lines(capsys):
     return [l for l in capsys.readouterr().out.splitlines() if l.startswith("[")]
 
 
-def test_slots_count_live_pid_files_only_so_a_crashed_blender_job_frees_its_slot(proj):
+def test_a_slot_is_held_by_every_open_worker_dispatch_of_a_step_that_uses_the_resource_c17(proj):
+    """C17: a pid file lives only while a tool runs, so counting live pid files when the Producer dispatches capped
+    nothing: a worker that thinks holds none, and the next worker went out. A slot is now held from a worker's dispatch
+    to its ingest. A reviewer, an ingested worker and a pid file hold none."""
     pid_file(proj, "x-live", os.getpid())
-    pid_file(proj, "y-dead", dead_pid())
-    (proj / "production/pids/blender/z-junk.pid").write_text("not a pid", encoding="utf-8")
-    assert (limits.used("blender"), limits.used("meshy")) == (1, 0)
+    assert (limits.used(load_cfg(), "blender", all_status()), limits.used(load_cfg(), "meshy", all_status())) == (
+        0, 0)
+    briefs.run(Namespace(id="a-hut"))
+    assert limits.used(load_cfg(), "blender", all_status()) == 1
+    st = load_st("a-hut")
+    st["dispatches"][-1]["ingested"] = st["dispatches"][-1]["at"]
+    st["state"] = "review"
+    save_st(st)
+    assert limits.used(load_cfg(), "blender", all_status()) == 0
 
 
 def test_next_offers_dispatch_only_while_a_slot_is_free_and_counts_its_own_offers(proj, capsys):
     assert next_lines(capsys) == ["[a-hut] blockout/todo → giao worker → `brief a-hut`",
                                   "[b-barn] blockout/todo → chờ slot blender"]
     pid_file(proj, "x-live", os.getpid())
-    assert next_lines(capsys)[0] == "[a-hut] blockout/todo → chờ slot blender"
+    assert next_lines(capsys)[0] == "[a-hut] blockout/todo → giao worker → `brief a-hut`"
 
 
-def test_a_running_asset_without_a_blender_process_holds_no_slot(proj, capsys):
+def test_a_running_worker_holds_its_slot_while_it_thinks_without_a_blender_process_c17(proj, capsys):
     briefs.run(Namespace(id="a-hut"))
     pid_file(proj, "a-hut", dead_pid())
     assert next_lines(capsys) == ["[a-hut] blockout/running → đang chờ subagent (mất kết nối thì `brief a-hut` để giao lại)",
-                                  "[b-barn] blockout/todo → giao worker → `brief b-barn`"]
+                                  "[b-barn] blockout/todo → chờ slot blender"]
+
+
+def test_an_ingest_holds_back_the_next_worker_while_another_asset_holds_the_slot_c17(proj, capsys, monkeypatch):
+    """dispatch_next and `P next` read one rule, so the ingest never prints a dispatch `P next` would refuse."""
+    from core import loop
+    briefs.run(Namespace(id="a-hut"))
+    st = load_st("b-barn")
+    st["state"] = "fix"
+    capsys.readouterr()
+    loop.dispatch_next(load_cfg(), st)
+    assert capsys.readouterr().out == ""
+    st = load_st("a-hut")
+    st["dispatches"][-1]["ingested"] = st["dispatches"][-1]["at"]
+    st["state"] = "review"
+    save_st(st)
+    sent = []
+    monkeypatch.setattr(briefs, "run", lambda a: sent.append(a.id))
+    loop.dispatch_next(load_cfg(), load_st("b-barn") | {"state": "fix"})
+    assert sent == ["b-barn"]
+
+
+def test_wait_wakes_when_an_asset_can_go_out_now_and_names_it_c17(proj):
+    """P wait woke only on a report, a stall or no running job: an asset in review sat still while another ran."""
+    from core import watch
+    briefs.run(Namespace(id="a-hut"))
+    w = {"stall_min": 10, "deadline_factor": 2, "max_nudges": 1}
+    assert watch.wake(w) == []
+    st = load_st("b-barn")
+    st["state"] = "review"
+    save_st(st)
+    assert watch.wake(w) == ["b-barn: giao được ngay (blockout/review) → `brief b-barn`"]
+    st["state"] = "fix"
+    save_st(st)
+    assert watch.wake(w) == []
+    st = load_st("a-hut")
+    st["dispatches"][-1]["ingested"] = st["dispatches"][-1]["at"]
+    st["state"] = "waiting_human"
+    save_st(st)
+    assert watch.wake(w) == ["không có việc nào đang chạy → `next`", "b-barn: giao được ngay (blockout/fix) → `brief b-barn`"]
 
 
 def test_worker_brief_tells_the_worker_where_to_write_the_blender_pid(proj, capsys):

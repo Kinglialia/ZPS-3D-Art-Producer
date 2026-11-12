@@ -533,9 +533,10 @@ def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
     if st["state"] not in states or st["state"] in FINISHED:
         return
     from .briefs import run
-    from .limits import used
+    from .limits import full, slots
+    from .state import all_status
     _, step = step_of(cfg, st["stage"])
-    if st["state"] != "review" and any(cfg["limits"][r] - used(r) <= 0 for r in step["uses"] if r in cfg["limits"]):
+    if st["state"] != "review" and full(step, slots(cfg, all_status())):
         return
     try:
         run(Namespace(id=st["id"]))

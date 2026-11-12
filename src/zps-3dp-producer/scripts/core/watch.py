@@ -214,19 +214,20 @@ def running() -> list[tuple[dict, dict]]:
 
 
 def wake(w: dict) -> list[str]:
-    """What ends a `P wait`: a report on disk, a stall (no beat and no file change, stop without report), or nothing
-    running."""
+    """What ends a `P wait`: a report on disk, a stall (no beat and no file change, stop without report), nothing
+    running, or an asset `P next` would dispatch now (C17)."""
+    from . import preflight
+    from .limits import ready
     jobs = running()
-    if not jobs:
-        return ["không có việc nào đang chạy → `next`"]
-    out = []
+    out = [] if jobs else ["không có việc nào đang chạy → `next`"]
     for st, rec in jobs:
         rep = report_of(rec)
         if rep is not None and rep.exists():
             out.append(f"{st['id']}: có báo cáo {rel(rep)} → `ingest {st['id']}`")
         elif (c := check(st, rec, w))["stalled"]:
             out.append(f"{st['id']}: kẹt ({c['why']}) → `stall {st['id']}`")
-    return out
+    return out + [f"{s['id']}: giao được ngay ({s['stage']}/{s['state']}) → `brief {s['id']}`"
+                  for s in ready(load_cfg(), all_status(), preflight.load())]
 
 
 def alive(pid: int) -> bool:

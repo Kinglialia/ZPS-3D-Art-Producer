@@ -25,15 +25,44 @@ def alive(pid: int) -> bool:
     return True
 
 
-def used(resource: str) -> int:
-    """D21.9: a slot is a live process in production/pids/<resource>/*.pid, not an asset in state `running`."""
-    n = 0
-    for p in (ROOT / "pids" / resource).glob("*.pid"):
-        try:
-            n += alive(int(p.read_text(encoding="utf-8").strip()))
-        except (OSError, ValueError):
-            pass
-    return n
+def used(cfg: dict, resource: str, sts: list[dict]) -> int:
+    """C17: a slot is held by every open worker dispatch of a step that uses the resource, from its dispatch to its
+    ingest. A pid file lives only while a tool runs, so counting them when the Producer dispatches capped nothing."""
+    from .watch import job
+    uses = {s["id"]: s["uses"] for s in cfg["steps"]}
+    return sum(1 for s in sts if not s.get("broken") and (r := job(s)) and r["role"] == "worker"
+               and resource in uses.get(r["step"], ()))
+
+
+def slots(cfg: dict, sts: list[dict]) -> dict[str, int]:
+    return {r: lim - used(cfg, r, sts) for r, lim in cfg["limits"].items()}
+
+
+def full(step: dict, free: dict[str, int]) -> list[str]:
+    return [r for r in step["uses"] if r in free and free[r] <= 0]
+
+
+def gate(step: dict, pf, free: dict[str, int]) -> str | None:
+    """Why a worker of this step cannot go out now, else None; a None takes its slots, so one `P next` offers no more
+    workers than the slots hold."""
+    if off := preflight.off(step, pf):
+        return f"không giao: tắt {', '.join(off)} (preflight)"
+    if busy := full(step, free):
+        return f"chờ slot {', '.join(busy)}"
+    for r in step["uses"]:
+        if r in free:
+            free[r] -= 1
+    return None
+
+
+def ready(cfg: dict, sts: list[dict], pf) -> list[dict]:
+    """C17: the assets `P next` offers to dispatch now: a reviewer always, a worker when its gate is open."""
+    steps, free, out = {s["id"]: s for s in cfg["steps"]}, slots(cfg, sts), []
+    for s in sorted(sts, key=sort_key):
+        step = steps.get(s.get("stage"))
+        if step and not s.get("broken") and (s["state"] == "review" or s["state"] in DISPATCH and not gate(step, pf, free)):
+            out.append(s)
+    return out
 
 
 def show_next(a):
@@ -64,7 +93,7 @@ def show_next(a):
     except ProducerError:  # a broken policy.yaml never hides the asset list; the purge line above names the error
         wt = policy.template()["watch"]
     steps = {s["id"]: s for s in cfg["steps"]}
-    free = {r: lim - used(r) for r, lim in cfg["limits"].items()}
+    free = slots(cfg, sts)
     for s in sts:
         ids = [x["id"] for x in asset_card.steps(cfg, s)] if s.get("state") == "done_enabled" else []
         i = ids.index(s["stage"]) if s.get("stage") in ids else -1
@@ -72,15 +101,8 @@ def show_next(a):
             print(f"[{s['id']}] {s['stage']}/done_enabled → bước {ids[i + 1]} đã bật → `retry {s['id']}`")
     for s in active:
         act, step = next_action(s), steps.get(s.get("stage"))
-        if step and s.get("state") in DISPATCH:
-            if off := preflight.off(step, pf):
-                act = f"không giao: tắt {', '.join(off)} (preflight)"
-            elif full := [r for r in step["uses"] if r in free and free[r] <= 0]:
-                act = f"chờ slot {', '.join(full)}"
-            else:
-                for r in step["uses"]:
-                    if r in free:
-                        free[r] -= 1
+        if step and s.get("state") in DISPATCH and (held := gate(step, pf, free)):
+            act = held
         w = warnings_for(cfg, s)
         flag = f"  ⚠ {'; '.join(w)} → hỏi người dùng làm lại hay giữ, rồi `ack {s['id']}`" if w else ""
         print(f"[{s['id']}] {s.get('stage')}/{s.get('state')} → {act}{flag}")
