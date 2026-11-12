@@ -376,7 +376,7 @@ def test_a_review_step_without_a_reviewer_fails_at_config_load_instead_of_a_dead
 
 
 BUILD_PARTS = ("base", "walls", "roof_f", "roof_b", "door")
-CHECKS = ("inputs", "schema", "materials", "layout", "base", "support", "markers")
+CHECKS = ("inputs", "schema", "materials", "layout", "base", "support", "markers", "proportion")
 needs_tools = pytest.mark.skipif(not VPY.is_file(), reason="needs tools/setup_deps.sh")
 
 
