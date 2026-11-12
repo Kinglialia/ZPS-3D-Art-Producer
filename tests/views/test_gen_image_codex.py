@@ -648,3 +648,41 @@ def test_an_image_under_codex_home_is_never_taken_while_another_call_of_the_same
     assert p.returncode == 1
     assert {n: (r["status"], r["fallback"], r["errors"][0]) for n, r in recs.items()} == {
         n: ("fail", False, "không có file ảnh") for n in ("back", "left")}
+
+
+def test_an_image_and_a_size_after_a_prompt_serve_that_job_only_so_one_run_paints_views_with_different_guides(gen):
+    """The views of one step share the concept and the front but each has its own guide and, for a tall side, its own
+    size. Without per-job values the worker would need one run per view and lose the parallel calls."""
+    guides = {n: gen.tmp / f"{n}_guide.png" for n in ("back", "left")}
+    for g in guides.values():
+        Image.new("RGB", (64, 64)).save(g)
+    for n in guides:
+        (gen.tmp / f"{n}.md").write_text(f"Paint the {n} view.\n", encoding="utf-8")
+    env = {**os.environ, "FAKE_CODEX_LOG": str(gen.tmp / "own.jsonl"), "FAKE_CODEX_PID_FILE": str(gen.pid),
+           "CODEX_HOME": str(gen.tmp / "codex-home"), "PATH": fake_codex.install(gen.tmp / "bin")}
+    pairs = []
+    for n, size in (("back", "1536x1024"), ("left", "1024x1536")):
+        pairs += ["--prompt", str(gen.tmp / f"{n}.md"), f"--image={guides[n]}", "--out", str(gen.out.with_name(f"{n}.png")),
+                  "--size", size]
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid),
+                        f"--image={gen.refs[0]}", *pairs], capture_output=True, text=True, env=env)
+    calls = {c["outs"][0]: c for c in map(json.loads, (gen.tmp / "own.jsonl").read_text().splitlines())}
+    assert p.returncode == 0, p.stdout
+    assert {n: c["images"] for n, c in calls.items()} == {
+        "back.png": [str(gen.refs[0]), str(guides["back"])], "left.png": [str(gen.refs[0]), str(guides["left"])]}
+    assert ["\nSIZE: 1536x1024\n" in calls["back.png"]["prompt"], "\nSIZE: 1024x1536\n" in calls["left.png"]["prompt"]] == [True, True]
+    with Image.open(gen.out.with_name("left.png")) as im:
+        assert im.size == (1024, 1536)
+
+
+def test_with_batch_every_image_goes_to_the_one_call_wherever_it_stands_on_the_command_line(gen):
+    (gen.tmp / "a.md").write_text("x", encoding="utf-8")
+    (gen.tmp / "b.md").write_text("y", encoding="utf-8")
+    env = {**os.environ, "FAKE_CODEX_LOG": str(gen.tmp / "b.jsonl"), "FAKE_CODEX_PID_FILE": str(gen.pid),
+           "CODEX_HOME": str(gen.tmp / "codex-home"), "PATH": fake_codex.install(gen.tmp / "bin")}
+    p = subprocess.run([sys.executable, str(GEN), "--model", "m", "--reasoning", "low", "--pid-file", str(gen.pid), "--batch",
+                        "--prompt", str(gen.tmp / "a.md"), f"--image={gen.refs[0]}", "--out", str(gen.out.with_name("a.png")),
+                        "--prompt", str(gen.tmp / "b.md"), f"--image={gen.refs[1]}", "--out", str(gen.out.with_name("b.png"))],
+                       capture_output=True, text=True, env=env)
+    calls = [json.loads(l) for l in (gen.tmp / "b.jsonl").read_text().splitlines()]
+    assert (p.returncode, [c["images"] for c in calls]) == (0, [[str(r) for r in gen.refs]])

@@ -24,7 +24,10 @@ files of other runs in the folder of --pid-file, and at least 1. Without that li
 the next job, and a failed job goes back to the end of the queue, so the retry of one file never waits for the others. A
 quota error stops every job that has not started; a call in flight is kept. While two calls of one run overlap, the
 CODEX_HOME fallback without a session id is off, because the one new image may be the other call's.
-Several --prompt/--out pairs (same order) share the --image list. D30.20: after each call every expected file is
+Several --prompt/--out pairs go in the same order. An --image or --size before the first --prompt serves every job; one
+after a --prompt, before the next, serves that job only (its images come after the shared ones, its size replaces the
+shared one), so one run can paint views with different guides and sizes. With --batch the position does not count: every
+image is attached to the one call. D30.20: after each call every expected file is
 checked on its own (exists, PNG header, Pillow reads it, long side); only the files that failed are made again.
 3 failed tries of one file: that file fails, and the script exits 1 at the end (D8.3). Writes <dir/name>.json and prints
 one line per file. D30.22: --batch (the brief adds it when the step has `codex_batch = true`) asks for every pending file
@@ -220,16 +223,32 @@ def record_models(out: Path, requested: str, actual: str, cli: str, approve: str
         print(f"[gen_image_codex] không ghi được model vào status.json/ledger: {ex}", file=sys.stderr)
 
 
+class Placed(argparse.Action):
+    """Collect (number of --prompt seen so far, value): 0 means before the first --prompt."""
+    def __call__(self, parser, ns, value, option_string=None):
+        getattr(ns, self.dest).append((len(ns.prompt), value))
+
+
+class Prompt(argparse.Action):
+    def __call__(self, parser, ns, value, option_string=None):
+        ns.prompt.append(Path(value))
+
+
+def placed_for(placed: list, k: int, batch: bool) -> list:
+    """The values that serve job k (counted from 1): the shared ones, then its own; with --batch, all of them."""
+    return [v for n, v in placed if batch or n in (0, k)]
+
+
 def call(a, jobs: list[dict]):
     for j in jobs:
         for p in (j["out"], j["result"]):
             p.unlink(missing_ok=True)
-    prompt = FRAME.format(out=jobs[0]["out"], result=jobs[0]["result"], size=a.size, request=jobs[0]["request"]) \
-        if len(jobs) == 1 else BATCH_FRAME.format(size=a.size, jobs="\n".join(
+    prompt = FRAME.format(out=jobs[0]["out"], result=jobs[0]["result"], size=jobs[0]["size"], request=jobs[0]["request"]) \
+        if len(jobs) == 1 else BATCH_FRAME.format(size=jobs[0]["size"], jobs="\n".join(
             JOB.format(k=k, out=j["out"], result=j["result"], request=j["request"]) for k, j in enumerate(jobs, 1)))
     cmd = ["codex", "exec", "-m", a.model, "-c", f"model_reasoning_effort={a.reasoning}", "-C", str(jobs[0]["out"].parent),
            "-s", "workspace-write", "--skip-git-repo-check", *(["--approve-for-me"] if a.approve_for_me else []),
-           *[f"--image={Path(i).resolve()}" for i in a.image], "-"]
+           *[f"--image={Path(i).resolve()}" for i in jobs[0]["images"]], "-"]
     start, busy = time.time() - 1, runs_alive(a.pid_file)
     with a.lock:
         a.open_calls, a.calls_started = a.open_calls + 1, a.calls_started + 1
@@ -358,10 +377,10 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--reasoning", required=True)
     ap.add_argument("--pid-file", required=True, type=Path)
-    ap.add_argument("--prompt", required=True, type=Path, action="append")
-    ap.add_argument("--image", action="append", default=[])
+    ap.add_argument("--prompt", required=True, action=Prompt, default=[])
+    ap.add_argument("--image", action=Placed, default=[])
     ap.add_argument("--out", required=True, type=Path, action="append")
-    ap.add_argument("--size", default="1536x1024")
+    ap.add_argument("--size", action=Placed, default=[])
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--wall-s", type=int, default=3300)
     ap.add_argument("--batch", action="store_true")
@@ -374,14 +393,16 @@ def main():
     if a.batch and len({o.resolve().parent for o in a.out}) > 1:
         ap.error("--batch cần mọi --out trong cùng một thư mục: codex exec -C chỉ mở một thư mục")
     a.actual, jobs = None, []
-    for prompt, out in zip(a.prompt, a.out):
+    for k, (prompt, out) in enumerate(zip(a.prompt, a.out), 1):
         out = out.resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
-        jobs.append({"out": out, "result": out.with_name(out.stem + ".result.json"),
+        images = placed_for(a.image, k, a.batch)
+        jobs.append({"out": out, "result": out.with_name(out.stem + ".result.json"), "images": images,
+                     "size": (placed_for(a.size, k, a.batch) or ["1536x1024"])[-1],
                      "request": prompt.read_text(encoding="utf-8").strip(),
                      "rec": {"status": "fail", "attempts": 0, "model": a.model, "model_requested": a.model,
                              "model_actual": NO_NUMBER, "codex_cli": NO_NUMBER, "reasoning": a.reasoning,
-                             "prompt": str(prompt), "images": a.image, "approve_for_me": a.approve_for_me, "batch": a.batch,
+                             "prompt": str(prompt), "images": images, "approve_for_me": a.approve_for_me, "batch": a.batch,
                              "size": None, "fallback": False, "converted": False, "session": None, "limit": TRIES,
                              "errors": []}})
     if shutil.which("codex") is None:
