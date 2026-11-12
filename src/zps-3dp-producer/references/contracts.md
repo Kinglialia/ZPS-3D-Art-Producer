@@ -169,6 +169,7 @@ PRIOR:                               đúng mọi finding đang mở của bản
 - `PRIOR` có đúng các id đang mở (`open`, `regressed`) của bản gốc. Id mới không trùng id cũ.
 - `REVIEW_SCOPE` (D31.2) nằm trong brief reviewer và trong `scope` của lần giao; report không chép lại. `full`: lần review đầu, và bản worker báo `DONE` với mọi finding `blocker`, `major`, `unclear` đang mở đều có trong `FIXED` (`minor`, `preference` còn mở không tính). `fix`: các vòng còn lại.
 - `not_checked` trong `RUBRIC`: nhận ở vòng `fix`, từ chối ở vòng `full`.
+- `RUBRIC` có mọi key của mục `## <bước>` trong `rubric.md` của asset. Thiếu key là lỗi contract, nêu tên key. Key script đã điền từ JSON thì được bỏ.
 - `COMPARE` đủ id trong `TOP_FIX` của bản gốc; `resolved` cần `better`; `worse` cần `regressed`. Id ngoài `TOP_FIX`: bỏ qua và ghi cảnh báo vào ledger, không báo lỗi (D30.4).
 - `RESOLVED_NOTES`, `RESOLVED_CONFIRMED`: mỗi mục dạng `<bước> vN F<k>`. `RESOLVED_CONFIRMED` chỉ gồm mục có trong `RESOLVED_NOTES` của report worker cùng version (D27.8).
 - `COUNTS`: script tính từ finding đang mở sau khi áp `PRIOR`. Report còn ghi `COUNTS` mà lệch hoặc thiếu mức thì ledger ghi cảnh báo, không từ chối.
