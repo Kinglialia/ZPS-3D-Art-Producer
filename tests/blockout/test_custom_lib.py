@@ -274,6 +274,24 @@ def test_custom_mesh_refuses_a_mesh_that_is_not_closed_and_names_the_part_and_th
     assert f"used {used}" in line
 
 
+CUBE_COPIES = ("def box(w, d, h):\n"
+               "    x, y, z = w / 2.0, d / 2.0, h / 2.0\n"
+               "    quads = [((-x, -y, -z), (x, -y, -z), (x, y, -z), (-x, y, -z)), ((-x, -y, z), (-x, y, z), (x, y, z), (x, -y, z)),\n"
+               "             ((-x, -y, -z), (-x, -y, z), (x, -y, z), (x, -y, -z)), ((x, -y, -z), (x, -y, z), (x, y, z), (x, y, -z)),\n"
+               "             ((x, y, -z), (x, y, z), (-x, y, z), (-x, y, -z)), ((-x, y, -z), (-x, y, z), (-x, -y, z), (-x, -y, -z))]\n"
+               "    verts = [v for q in quads for v in q]\n"
+               "    return verts, [(4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3) for i in range(6)]\n")
+
+
+@needs_venv
+def test_a_box_whose_faces_each_carry_their_own_copies_of_the_corners_is_refused_with_the_reason(tmp_path):
+    """The mesh looks closed to the eye, but its 24 vertices share no edge, so the build would see six loose quads."""
+    f = asset_dir(tmp_path, roof_graph("box"), CUBE_COPIES)
+    rc, line, out = meshes(f)
+    assert (rc, out) == (1, {})
+    assert "faces must share vertex indexes, not copies of a vertex" in line
+
+
 @needs_venv
 def test_custom_mesh_still_accepts_a_pile_of_closed_shells_that_share_no_vertex(tmp_path):
     f = asset_dir(tmp_path, pile_graph(3), PILE)

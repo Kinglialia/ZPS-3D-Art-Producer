@@ -41,7 +41,7 @@ def errors(verts, faces):
     if loose:
         (a, b), n = next(iter(loose.items()))
         return [f"not closed: {len(loose)} edges are not shared by exactly 2 faces (first: vertices {a}-{b} "
-                f"used {n} time{'s' if n != 1 else ''})"]
+                f"used {n} time{'s' if n != 1 else ''}); faces must share vertex indexes, not copies of a vertex"]
     return errs
 
 
