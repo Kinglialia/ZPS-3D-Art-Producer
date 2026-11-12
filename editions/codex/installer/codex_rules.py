@@ -6,10 +6,12 @@ installer/codex_rules.py (v0.10.4). The rule allows only these literal commands:
   <Blender> -b --python <installed Producer script>.py -- ...
   <Blender> -b --python-exit-code 1 --python <installed Producer script>.py -- ...
   <Producer venv python> <scripts/assemble.py> --blender <Blender> -- ...   (it starts Blender itself)
+  <scripts/run_tool.py> --blender <Blender> ...                             (the RUN line of a brief; it starts Blender)
   <Producer venv python> <scripts/producer.py> preflight                    (it starts Blender and the kit preflight)
 A Codex rule matches only the start of a command, so each rule ends where the program stops reading options: Blender
 gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and preflight has no
-options. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Scripts that run code the agent
+options, and run_tool.py takes only the Blender of the preflight and refuses the NETWORK_SCRIPTS and AGENT_CODE
+tools itself. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Scripts that run code the agent
 wrote (AGENT_CODE: graph.py loads <work>/parts_lib.py, custom_mesh.py runs custom_parts.py) never match either. Any other command still runs in the sandbox
 or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
 
@@ -78,6 +80,8 @@ def render(blender: str, allowed: list[str], venv_py: Path | None, prod: Path) -
     out = [MARK, ""]
     for prefix in (["-b", "--python"], ["-b", "--python-exit-code", "1", "--python"]):
         out.append(rule([blender, *prefix, allowed, "--"], why))
+    out.append(rule([str(prod / "scripts/run_tool.py"), "--blender", blender],
+                    "ZPS-3DP Producer: run_tool.py runs a worker's tool and starts Blender itself, so it must run outside the sandbox."))
     if venv_py:
         out.append(rule([str(venv_py), [str(prod / s) for s in SPAWNERS], "--blender", blender, "--"],
                         "ZPS-3DP Producer: assemble.py starts Blender itself, so it must run outside the sandbox."))
@@ -101,6 +105,11 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
     cases += [([blender, "-b", "--python", n, "--", "generate"], None) for n in scripts(root, network=True)]
     cases += [([blender, "-b", "--python", n, "--", "--work", "w"], None) for n in agent_code(root)]
     cases.append((["codex", "exec", "-s", "workspace-write", "--skip-git-repo-check", "-"], None))
+    run_tool = str(prod / "scripts/run_tool.py")
+    cases += [([run_tool, "--blender", blender, "--agent", "zps-3dp-step-model-codex", "--version-dir", "v", "bl", "join_mesh.py"],
+               "allow"),
+              ([run_tool, "--blender", "/tmp/evil.sh", "--agent", "zps-3dp-step-model-codex"], None),
+              ([run_tool, "--agent", "zps-3dp-step-model-codex", "--version-dir", "v", "x.py"], None)]
     if venv_py:
         py, spawner = str(venv_py), str(prod / SPAWNERS[0])
         cases += [([py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"], "allow"),

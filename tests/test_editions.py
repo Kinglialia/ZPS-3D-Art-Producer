@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -252,7 +253,7 @@ def test_the_codex_rule_lets_blender_run_installed_scripts_and_nothing_else_row_
     assert not (codex_project / "rules").exists(), "preview mode must not write the rules file"
     preview = Path(r.stdout.split("Preview only: ", 1)[1].splitlines()[0]).read_text(encoding="utf-8")
     assert [n for n in ("meshy_call.py", "gen_image_codex.py", "gen_api.py") if n in preview] == []
-    assert preview.count("prefix_rule(") == 4 and f'"{codex_project / "bin/Blender"}", "-b", "--python", [' in preview
+    assert preview.count("prefix_rule(") == 5 and f'"{codex_project / "bin/Blender"}", "-b", "--python", [' in preview
 
 
 def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_options_so_no_tail_runs_other_code(
@@ -306,6 +307,25 @@ def test_the_codex_rule_never_lets_blender_run_a_script_that_loads_agent_written
         "zps-3dp-step-model-codex/tools/self_build/gates.py": "allow",
         "zps-3dp-step-blockout-codex/tools/build_parts.py": "allow",
         "zps-3dp-step-blockout-codex/tools/custom_mesh.py": None}
+
+
+def test_the_codex_rule_lets_run_tool_start_only_the_blender_of_the_rule_so_the_run_line_runs_outside_the_sandbox(
+        codex_project, dist):
+    r = rules(codex_project, dist)
+    assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
+    preview = r.stdout.split("Preview only: ", 1)[1].splitlines()[0]
+    blender = str(codex_project / "bin/Blender")
+    run_tool = str(codex_project / ".agents/skills/zps-3dp-producer-codex/scripts/run_tool.py")
+
+    def decision(*cmd):
+        out = subprocess.run([str(codex_project / "bin/codex"), "execpolicy", "check", "--rules", preview, "--", *cmd],
+                             capture_output=True, text=True).stdout
+        return json.loads(out or "{}").get("decision")
+    tail = ["--agent", "zps-3dp-step-model-codex", "--version-dir", "v", "bl", "join_mesh.py", "--final", "F"]
+    assert [decision(*c) for c in (
+        [run_tool, "--blender", blender, *tail],
+        [run_tool, "--blender", "/tmp/evil.sh", *tail],
+        [run_tool, "--agent", "zps-3dp-step-model-codex", "--version-dir", "v", "x.py"])] == ["allow", None, None]
 
 
 def test_the_codex_rule_never_allows_the_codex_exec_image_call_because_each_one_spends_the_users_codex_usage(
@@ -385,7 +405,9 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
     sk, bl = tmp_path.resolve() / ".claude/skills/zps-3dp-producer", tmp_path / "bin/Blender"
     p = ".claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py"
     assert json.loads(s.read_text(encoding="utf-8")) == {
-        "permissions": {"allow": ["Bash(git status:*)", f"Bash({p}:*)", f"Bash({bl}:*)",
+        "permissions": {"allow": ["Bash(git status:*)", f"Bash({p}:*)",
+                                  f"Bash({sk}/scripts/run_tool.py:*)",
+                                  f"Bash({sk}/scripts/.deps/venv/bin/python {sk}/scripts/assemble.py:*)", f"Bash({bl}:*)",
                                   f"Bash({sk}/agents/zps-3dp-step-texture/tools/.deps/venv/bin/python "
                                   f"{sk}/scripts/meshy_call.py:*)",
                                   "Bash(codex exec:*)", "Edit(/production/**)", "Edit(/production-*/**)"],
@@ -421,6 +443,21 @@ def test_the_meshy_and_blender_rules_match_the_command_lines_a_texture_brief_giv
     assert f"Bash({tools[0].removeprefix('TOOLS: ')}/.deps/venv/bin/python {meshy}:*)" in allow
 
 
+def test_the_run_tool_rule_is_the_start_of_the_run_line_a_brief_gives_the_worker(dist, tmp_path):
+    """A rule is a command prefix: the RUN line must begin with the run_tool.py path of the rule."""
+    assert install(dist, tmp_path).returncode == 0
+    sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
+    out = subprocess.run([sys.executable, "-c", (
+        "import json, sys; sys.path.insert(0, sys.argv[1]); from core import briefs;"
+        "print(json.dumps(briefs.tools_line({'id': 'a'}, {'id': 'blockout', 'agent': 'step-blockout', 'uses': ['blender']},"
+        " None, None, n=1)))"), str(sk / "scripts")], env=os.environ | {"PRODUCER_ROOT": str(tmp_path / "production")},
+        capture_output=True, text=True, check=True)
+    run = [l for l in json.loads(out.stdout) if l.startswith("RUN: ")][0]
+    allow = json.loads((tmp_path / ".claude/settings.json").read_text(encoding="utf-8"))["permissions"]["allow"]
+    tool = f"{sk}/scripts/run_tool.py"
+    assert (f"Bash({tool}:*)" in allow, shlex.split(run.removeprefix("RUN: "))[0], os.access(tool, os.X_OK)) == (True, tool, True)
+
+
 def test_dry_run_prints_the_diff_and_an_unparsable_settings_file_is_never_touched(dist, tmp_path):
     r = install(dist, tmp_path, "--dry-run")
     assert (r.returncode, (tmp_path / ".claude/settings.json").exists()) == (0, False)
@@ -451,9 +488,13 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
         assert r.returncode == 0, r.stderr
         return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
     out, gap = preflight()
-    assert (".claude/settings.json thiếu 6 allow rule, hook SessionStart, hook SubagentStop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
+    assert (".claude/settings.json thiếu 8 allow rule, hook SessionStart, hook SubagentStop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
             "(Bash timeout, D33.4) → chạy lại install.py của bản cài") in out
-    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (6, ["SessionStart", "SubagentStop"])
+    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (8, ["SessionStart", "SubagentStop"])
+    sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
+    assert [r for r in gap["missing"]["allow"] if "run_tool" in r or "assemble.py" in r] == [
+        f"Bash({sk}/scripts/run_tool.py:*)",
+        f"Bash({sk}/scripts/.deps/venv/bin/python {sk}/scripts/assemble.py:*)"]
     s.write_text(merged, encoding="utf-8")
     out, gap = preflight()
     assert ("thiếu" in out, gap["missing"]) == (False, {"allow": [], "hooks": {}, "env": {}})
