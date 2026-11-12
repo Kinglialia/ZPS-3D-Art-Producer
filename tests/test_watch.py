@@ -366,6 +366,58 @@ def test_the_user_rung_names_the_agent_that_may_still_run_so_retry_never_adds_a_
     assert f.st()["note"].endswith("; agent b2 chưa dừng: dừng nó trước khi `retry`")
 
 
+def stop_asked(f, vd):
+    """Nudged, still silent: the ladder asks the Producer to stop the agent and records when it asked."""
+    edit_job(f, agent_id="a1", at=ago(40))
+    age(vd, 30)
+    assert "nudge 1/1" in f.p("stall", "pilot-house")
+    edit_job(f, nudged_at=ago(11))
+    age(vd, 30)
+    assert "→ chưa giao lại: agent a1 chưa dừng" in f.p("stall", "pilot-house")
+    return f.st()["dispatches"][-1]["stop_asked_at"]
+
+
+def test_without_a_stop_record_the_ladder_goes_on_once_the_agent_stayed_silent_a_stall_min_after_the_stop_was_asked(
+        tmp_path):
+    """The Codex edition has no SubagentStop hook, and on Claude the hook can die waiting on the lock: without a stop
+    record the ladder stayed at rung 1 for ever. A silent stall_min after the ask is the stop record."""
+    f, out, j = project(tmp_path)
+    vd = (tmp_path / out["report"]).parent
+    stop_asked(f, vd)
+    assert "không kẹt" in f.p("stall", "pilot-house", ok=False)
+    edit_job(f, stop_asked_at=ago(11))
+    age(vd, 30)
+    new = j.loads(f.p("stall", "pilot-house").strip().splitlines()[-1])
+    assert (new["resume"], new["brief"], len(f.st()["dispatches"])) == (None, out["brief"], 2)
+    edit_job(f, at=ago(30))
+    age(vd, 30)
+    assert "waiting_human" in f.p("stall", "pilot-house")
+    assert [x["rung"] for x in f.st()["stalls"]] == ["nudge", "redispatch", "human"]
+
+
+def test_a_file_change_after_the_stop_was_asked_proves_the_agent_alive_and_the_ladder_asks_again_d39_4(tmp_path):
+    f, out, _ = project(tmp_path)
+    vd = (tmp_path / out["report"]).parent
+    stop_asked(f, vd)
+    edit_job(f, stop_asked_at=ago(25))
+    age(vd, 20)
+    assert "→ chưa giao lại: agent a1 chưa dừng" in f.p("stall", "pilot-house")
+    assert len(f.st()["dispatches"]) == 1 and f.st()["dispatches"][0]["stop_asked_at"] > ago(1)
+
+
+def test_the_codex_runtime_has_no_stop_hook_so_the_ladder_never_waits_for_a_stop_record(tmp_path, monkeypatch):
+    monkeypatch.setenv("PRODUCER_RUNTIME", "codex")
+    f, out, j = project(tmp_path)
+    vd = (tmp_path / out["report"]).parent
+    edit_job(f, agent_id="a1", at=ago(40))
+    age(vd, 30)
+    assert "nudge 1/1" in f.p("stall", "pilot-house")
+    edit_job(f, nudged_at=ago(11))
+    age(vd, 30)
+    assert j.loads(f.p("stall", "pilot-house").strip().splitlines()[-1])["resume"] is None
+    assert len(f.st()["dispatches"]) == 2
+
+
 def test_a_job_is_stalled_only_when_vn_has_no_heartbeat_and_no_file_change_for_stall_min_d39_3(tmp_path):
     """The Run 5 rule (D33.11) is gone: a deadline alone flagged a slow job with a beat one minute old, and the ladder
     then sent a second agent on the same vN. Now: a worker that hangs, while a tool runs or while it thinks, writes no

@@ -14,7 +14,7 @@ from pathlib import Path
 import heartbeat
 
 from . import policy
-from .state import ROOT, all_status, die, ledger, load_cfg, load_st, rel, save_st, stamp, step_of, vdir
+from .state import ROOT, RUNTIME, all_status, die, ledger, load_cfg, load_st, rel, save_st, stamp, step_of, vdir
 
 ROLE_OF = {"running": "worker", "evidence_running": "worker", "reviewing": "reviewer"}
 REPORT = {"brief-worker.md": "worker-out.md", "brief-review.md": "review-out.md"}
@@ -111,30 +111,36 @@ def touched(vd: Path) -> dt.datetime | None:
 def check(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> dict:
     """D39.3: stalled = vN has had no heartbeat and no file change for stall_min, or the subagent stopped without its
     report (SubagentStop). A reviewer writes no file before its report, so its silence counts only past its deadline. A
-    deadline alone is not a stall: `late`. After a nudge or a new dispatch the next rung waits stall_min again."""
+    deadline alone is not a stall: `late`. After a nudge, an ask to stop the agent or a new dispatch the next rung waits
+    stall_min again. `life`: the newest heartbeat or file change."""
     now = now or dt.datetime.now()
     start = at(rec["at"])
     vd = vdir(st["id"], rec["step"], rec["v"])
     hb = heartbeat.last(vd)
     beat = hb if hb and hb[0] >= start else None
+    t = touched(vd)
+    life = max([x for x in (beat and beat[0], t) if x], default=None)
     signs = [(start, "mới giao"), *([(beat[0], "còn nhịp tim")] if beat else []),
-             *([(t, "còn file đổi")] if (t := touched(vd)) else []),
+             *([(t, "còn file đổi")] if t else []),
              *([(at(rec["nudged_at"]), "vừa nudge")] if rec.get("nudged_at") else [])]
     since, sign = max(signs, key=lambda x: x[0])
     quiet = (now - since).total_seconds() > w["stall_min"] * 60
     late = bool(rec.get("deadline")) and now > at(rec["deadline"])
-    grace = rec.get("nudged_at") and (now - at(rec["nudged_at"])).total_seconds() < w["stall_min"] * 60
+    grace = {k: rec.get(k) and (now - at(rec[k])).total_seconds() < w["stall_min"] * 60
+             for k in ("nudged_at", "stop_asked_at")}
     rep = report_of(rec)
     why = None
     if rep is not None and rep.exists():
         why = None
-    elif grace:
+    elif grace["nudged_at"]:
         why = None
     elif rec.get("stopped") == "no_report":
         why = "subagent dừng, không có report"
+    elif grace["stop_asked_at"]:
+        why = None
     elif quiet and (rec["role"] != "reviewer" or late or not rec.get("deadline")):
         why = f"không có nhịp tim, không có file đổi từ {since:%H:%M}"
-    return {"stalled": why is not None, "why": why, "beat": beat, "ran_s": (now - start).total_seconds(),
+    return {"stalled": why is not None, "why": why, "beat": beat, "life": life, "ran_s": (now - start).total_seconds(),
             "quiet_s": (now - since).total_seconds(), "late": f"quá hạn chót, {sign}" if late and why is None else None}
 
 
@@ -157,8 +163,9 @@ def stalled(st: dict) -> bool:
 def stall(a):
     """D33.11 `P stall <id>`: the next rung of the one stall rule. Nudge (max_nudges times, needs the agent id), then one
     new agent with the same brief, then waiting_human with an offer labelled "chưa chấm". The new agent goes out only
-    once SubagentStop recorded that the old one stopped (D39.4); until then the rung changes nothing and says so. The
-    script picks the rung and logs it; the Producer only sends.
+    once the old one stopped (D39.4): SubagentStop recorded it, or a stall_min passed with no heartbeat and no file change
+    since this rung asked to stop it. The Codex runtime has no SubagentStop hook and does not wait. The script picks the
+    rung and logs it; the Producer only sends.
     --agent-id: the id of the stuck subagent, from its launch; on-stop also records it."""
     from .briefs import run
     from .loop import UNREVIEWED, move, offer
@@ -184,7 +191,11 @@ def stall(a):
               f"{rec['agent_id']} đúng câu \"{NUDGE}\"")
         return
     who = rec.get("agent_id") or "chưa rõ id"
-    if not rec.get("redispatch_of") and not rec.get("stopped"):
+    asked = rec.get("stop_asked_at")
+    alive_since = asked and c["life"] and c["life"] > at(asked)
+    if not (rec.get("redispatch_of") or rec.get("stopped") or RUNTIME == "codex" or asked and not alive_since):
+        rec["stop_asked_at"] = stamp()
+        save_st(st)
         print(f"{a.id}: kẹt ({c['why']}) → chưa giao lại: agent {who} chưa dừng. Dừng agent {who} trước, rồi "
               f"`stall {a.id}` lại")
         return
