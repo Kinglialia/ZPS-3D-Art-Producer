@@ -125,7 +125,7 @@ def test_an_agent_description_without_the_fixed_sentence_first_fails_the_build_d
 def test_a_bare_references_path_fails_because_a_flat_agent_install_cannot_resolve_it(src_copy, tmp_path, capsys):
     f = src_copy / "zps-3dp-producer/agents/zps-3dp-step-texture/zps-3dp-step-texture.md"
     edit(f, "`R/texture.md` mục 1", "`references/texture.md` mục 1")
-    edit(f, "`PY T/id_map.py --final F", "`PY T/idmap.py --final F")
+    edit(f, "`RUN id_map.py --final F", "`RUN T/idmap.py --final F")
     assert failed(capsys, tmp_path, "claude") == [
         "zps-3dp-step-texture: bare `references/` path breaks in a flat agent install",
         "zps-3dp-step-texture: missing T/idmap.py"]
