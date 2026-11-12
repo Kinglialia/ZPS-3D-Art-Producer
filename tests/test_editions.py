@@ -441,6 +441,8 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
                                   f"Bash({sk}/scripts/.deps/venv/bin/python {sk}/scripts/assemble.py:*)", f"Bash({bl}:*)",
                                   f"Bash({sk}/agents/zps-3dp-step-texture/tools/.deps/venv/bin/python "
                                   f"{sk}/scripts/meshy_call.py:*)",
+                                  *(f"Bash({sk}/agents/zps-3dp-step-{s}/tools/.deps/venv/bin/python "
+                                    f"{sk}/scripts/gen_image_codex.py:*)" for s in ("views", "texture")),
                                   "Bash(codex exec:*)", "Edit(/production/**)", "Edit(/production-*/**)"],
                         "deny": ["Bash(rm -rf:*)"]},
         "model": "opus", "env": {"BASH_DEFAULT_TIMEOUT_MS": "600000", "BASH_MAX_TIMEOUT_MS": "3600000"},
@@ -473,6 +475,22 @@ def test_the_meshy_and_blender_rules_match_the_command_lines_a_texture_brief_giv
     tools, meshy = json.loads(out.stdout)
     allow = json.loads((tmp_path / ".claude/settings.json").read_text(encoding="utf-8"))["permissions"]["allow"]
     assert f"Bash({tools[0].removeprefix('TOOLS: ')}/.deps/venv/bin/python {meshy}:*)" in allow
+
+
+def test_the_image_rules_match_the_gen_command_of_the_views_and_texture_workers_so_a_background_worker_never_waits(
+        dist, tmp_path):
+    """Without a rule a background worker sat on a permission prompt nobody saw. The worker runs `PY "<GEN_IMAGE>"`
+    with PY under its TOOLS line. Each call still spends the user's Codex quota; the Codex edition keeps no rule."""
+    assert install(dist, tmp_path).returncode == 0
+    sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
+    out = subprocess.run([sys.executable, "-c", (
+        "import json, sys; sys.path.insert(0, sys.argv[1]); from core import briefs;"
+        "print(json.dumps([briefs.tools_line({'id': 'a'}, {'agent': a, 'uses': []}, None, None)[0]"
+        " for a in ('step-views', 'step-texture')]))"), str(sk / "scripts")],
+        env=os.environ | {"PRODUCER_ROOT": str(tmp_path / "production")}, capture_output=True, text=True, check=True)
+    allow = json.loads((tmp_path / ".claude/settings.json").read_text(encoding="utf-8"))["permissions"]["allow"]
+    for tools in json.loads(out.stdout):
+        assert f"Bash({tools.removeprefix('TOOLS: ')}/.deps/venv/bin/python {sk}/scripts/gen_image_codex.py:*)" in allow
 
 
 def test_the_run_tool_rule_is_the_start_of_the_run_line_a_brief_gives_the_worker(dist, tmp_path):
@@ -520,9 +538,9 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
         assert r.returncode == 0, r.stderr
         return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
     out, gap = preflight()
-    assert (".claude/settings.json thiếu 8 allow rule, hook SessionStart, hook SubagentStop, hook Stop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
+    assert (".claude/settings.json thiếu 10 allow rule, hook SessionStart, hook SubagentStop, hook Stop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
             "(Bash timeout, D33.4) → chạy lại install.py của bản cài") in out
-    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (8, ["SessionStart", "SubagentStop", "Stop"])
+    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (10, ["SessionStart", "SubagentStop", "Stop"])
     sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
     assert [r for r in gap["missing"]["allow"] if "run_tool" in r or "assemble.py" in r] == [
         f"Bash({sk}/scripts/run_tool.py:*)",

@@ -33,6 +33,8 @@
       "Bash(<SKILL>/scripts/.deps/venv/bin/python <SKILL>/scripts/assemble.py:*)",
       "Bash(<BLENDER>:*)",
       "Bash(<SKILL>/agents/zps-3dp-step-texture/tools/.deps/venv/bin/python <SKILL>/scripts/meshy_call.py:*)",
+      "Bash(<SKILL>/agents/zps-3dp-step-views/tools/.deps/venv/bin/python <SKILL>/scripts/gen_image_codex.py:*)",
+      "Bash(<SKILL>/agents/zps-3dp-step-texture/tools/.deps/venv/bin/python <SKILL>/scripts/gen_image_codex.py:*)",
       "Bash(codex exec:*)",
       "Edit(/production/**)",
       "Edit(/production-*/**)"
