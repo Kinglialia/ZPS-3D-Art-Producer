@@ -7,7 +7,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 - Codex không có file agent riêng. Gọi `spawn_agent` với đúng nội dung sau:
   > Vai của bạn nằm trong `<agent_file>`: đọc file đó trước tiên. Rồi đọc `<brief>`: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 - `agent_file` là khóa của `P brief`. Dòng `tools:` trong file agent không áp dụng trên Codex.
-- Dừng agent: Producer không dừng được sub-agent; chỉ người dùng dừng được. `P stall` không chờ ghi nhận dừng trên Codex: lần `stall` sau bậc nudge giao ngay cho agent mới.
+- Dừng agent: bản Codex có tool đóng sub-agent thì dùng tool đó với id của agent; không có thì chỉ người dùng dừng được. `P stall` không chờ ghi nhận dừng trên Codex: lần `stall` sau bậc nudge giao ngay cho agent mới.
 - Sub-agent dùng chung quyền mạng và sandbox của phiên gốc. `production/` và `production-*/` nằm trong thư mục project, nên sandbox `workspace-write` cho ghi report ở đó mà không cần thêm writable root.
 
 ## Resume

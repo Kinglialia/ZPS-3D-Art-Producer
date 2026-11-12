@@ -9,7 +9,7 @@
 1. Chép `part_graph.json`, `sources.json` và `blockout.md` của `<bản gốc>/final/` vào `F`. Không chép `parts_lib.py`: lần dựng ghi lại file đó.
 2. Đọc trước các file JSON gate và check **fail** của bản gốc (`<bản gốc>/final/review/**`). Rồi mới tới finding.
 3. Sửa theo đúng thứ tự brief nêu:
-   - JSON fail (vòng trả thẳng): sửa graph cho JSON đó pass, rồi gate (bước 3 của mục `structure`). Không chạy `check_fix`.
+   - JSON fail (vòng trả thẳng): sửa graph cho JSON đó pass, rồi gate (bước 3 của mục `structure`). JSON fail không có id finding, nên không chạy `check_fix` cho nó.
    - `H<n>`: mỗi id một lần sửa theo mục `structure`, theo nguyên văn yêu cầu trong `acceptance`.
    - `TOP_FIX`: theo mục cùng tên loại.
 

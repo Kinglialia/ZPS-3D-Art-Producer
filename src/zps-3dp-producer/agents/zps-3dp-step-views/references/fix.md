@@ -6,7 +6,7 @@
 
 Chép `<bản gốc>/final/` vào `F`, trừ `review/`. Đọc trước JSON fail mà brief liệt kê, rồi tới finding. Sửa theo đúng thứ tự brief nêu:
 
-- JSON fail (vòng trả thẳng): gen lại view fail như bước 7 và 10 của file agent.
+- JSON fail (vòng trả thẳng): `measure.json` fail thì gen lại view fail như bước 7 và 10 của file agent. JSON khác: sửa cho JSON đó pass, không gen lại.
 - `H<n>` (feedback của người dùng): gen lại view mà yêu cầu nêu, như `regen`, với `--fix` theo nguyên văn yêu cầu trong `acceptance`.
 - `regen`: gen lại mọi view có tên ở đầu `region` của các finding trong `TOP_FIX`, trong một lệnh gen. Prompt dùng `--fix` cho `repair` và `--fix` cho `preserve`. Giữ nguyên view khác.
 - Thẻ có `symmetric.left_right: true`: finding nêu `right` thì gen lại `left`, rồi lật như bước 9; không gen `right`.

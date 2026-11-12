@@ -108,6 +108,7 @@ def test_a_reviewer_file_holds_no_line_that_the_brief_states_or_the_script_decid
 
 
 def test_the_brief_that_replaces_those_lines_states_them(flow):  # noqa: F811
+    from core import findings
     from test_loop import fix_v1
     fix_v1(flow)
     out = flow.work()
@@ -117,7 +118,9 @@ def test_the_brief_that_replaces_those_lines_states_them(flow):  # noqa: F811
                    "  region: … | viewing_condition: … | evidence: <nhãn trong EVIDENCE_OPENED> …",
                    "  consequence: … | confidence: high|medium|low", "  repair: … | preserve: … | acceptance: …",
                    "preference không chặn PASS", "rubric mâu thuẫn brief → ESCALATE",
-                   "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó",
+                   # The script fills every open finding of a batch kind with a priority in BATCH_PRIO; the old
+                   # reviewer line said every open `param` finding. P29 left the rule in the brief only.
+                   f"loại lô chỉ ghi loại, script điền mọi finding {'/'.join(findings.BATCH_PRIO)} đang mở của loại đó",
                    "structure 1 id mỗi part, region `<part>: …`", "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK):
         assert stated in rv, stated
 
@@ -131,13 +134,6 @@ def test_a_reviewer_file_has_one_image_rule_that_covers_sheet_pages_and_crops_q1
     assert "xin ảnh <nhãn ô> box x0,y0,x1,y1" in text and "…_crop" in text
 
 
-def test_the_brief_names_the_priorities_the_script_fills_for_a_batch_kind_q10():
-    """The script fills every open finding of the kind with a priority in BATCH_PRIO; `preference` and `unclear` are not
-    filled. The old line said every open `param` finding; the rule now lives in the brief only (P29)."""
-    from core import briefs, findings
-    import inspect
-    assert findings.BATCH_PRIO == ("blocker", "major", "minor")
-    assert "script điền mọi finding blocker/major/minor đang mở của loại đó" in inspect.getsource(briefs.review_brief)
 
 
 @pytest.mark.parametrize("step", TRIMMED)
@@ -178,3 +174,15 @@ def test_the_rubric_templates_say_four_to_eight_criteria_because_two_steps_have_
 def test_the_param_rule_tells_the_reviewer_that_a_variant_sheet_can_have_further_pages_q5(step):
     """The model sheet has 12 tiles, so sheet-b.png comes with sheet-b-2.png; the brief names only sheet-<b|c>.png."""
     assert "`sheet-<b|c>-2.png`" in reviewer(step)
+
+
+@pytest.mark.parametrize("step", ["blockout", "model", "views", "texture"])
+def test_each_worker_reads_fix_md_on_the_line_every_fix_type_brief_has_and_fix_md_covers_json_and_user_findings_p2(step):
+    """The brief writes "Bản gốc:" in every fix-type brief, but TOP_FIX only after a reviewer FIX. A worker that waited
+    for TOP_FIX rebuilt a direct round or a redo with only H findings from nothing."""
+    agent = AGENTS / f"zps-3dp-step-{step}"
+    line = next(l for l in (agent / f"zps-3dp-step-{step}.md").read_text(encoding="utf-8").splitlines()
+                if l.startswith("- `R/fix.md`:"))
+    fix = (agent / "references/fix.md").read_text(encoding="utf-8")
+    assert "dòng `Bản gốc:`" in line and "`TOP_FIX`" not in line
+    assert "JSON fail (vòng trả thẳng)" in fix and "`H<n>`" in fix and "thứ tự brief nêu" in fix

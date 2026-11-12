@@ -235,6 +235,7 @@ Người dùng chép thư mục sang `_approved/<id>/` rồi bảo Producer nh�
 
 - [ ] Hai ảnh trùng khung. Albedo chính diện phẳng, không có ánh sáng, bóng, AO, highlight. Ảnh 3/4 nằm trong `concept_34.png`.
 - [ ] Nền phẳng một màu, khác xa màu vật. Vật không bị cắt.
+- [ ] Không có chi tiết thừa không truy được lý do. Không chữ giả.
 - [ ] Mọi vùng trên concept có mã vật liệu. Hai vùng khác màu là hai mã.
 - [ ] Material Handoff có dòng `BG: #RRGGBB` đúng với màu nền ảnh. Mỗi mã có một ô nằm trọn trong một vùng phẳng của vật liệu đó. Hex là trung vị đo bằng code.
 - [ ] Hai vật liệu kề nhau khác màu rõ, hoặc có ghi chú dưới bảng.
