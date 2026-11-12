@@ -734,3 +734,83 @@ def test_one_batch_call_for_four_images_counts_one_call(tmp_path):
 def test_a_try_the_wall_time_cap_stops_before_it_starts_is_no_call_although_the_record_says_three_attempts(tmp_path):
     p, calls, recs, secs, pid = gen_slots(tmp_path, ["back"], mode="slow:60", extra=["--timeout", "1", "--wall-s", "2"])
     assert (p.returncode, recs["back"]["attempts"], len(calls), codex_calls(tmp_path)) == (1, 3, 1, 1)
+
+
+@pytest.fixture
+def direct(tmp_path):
+    """The Codex edition: the worker calls its own image tool and saves the file; the script only checks it."""
+    path = fake_codex.install(tmp_path / "bin")
+    for name in ("front", "back"):
+        (tmp_path / f"{name}.md").write_text(REQUEST + "\n", encoding="utf-8")
+    gen_dir = tmp_path / "work/gen"
+    gen_dir.mkdir(parents=True)
+    log = tmp_path / "calls.jsonl"
+
+    def run(names=("front",), extra=()):
+        env = {**os.environ, "FAKE_CODEX_LOG": str(log), "CODEX_HOME": str(tmp_path / "codex-home"), "PATH": path}
+        pairs = [x for n in names for x in ("--prompt", str(tmp_path / f"{n}.md"), "--out", str(gen_dir / f"{n}-1.png"))]
+        p = subprocess.run([sys.executable, str(GEN), "--direct", *pairs, *extra], capture_output=True, text=True, env=env)
+        recs = {n: json.loads(f.read_text()) for n in names if (f := gen_dir / f"{n}-1.json").exists()}
+        execs = [l for l in log.read_text().splitlines() if json.loads(l)["argv"][:1] == ["exec"]] if log.exists() else []
+        return {"rc": p.returncode, "out": p.stdout, "err": p.stderr, "execs": execs, "records": recs}
+    run.dir = gen_dir
+    return run
+
+
+def paint(path, size=(1536, 1024), fmt="PNG"):
+    Image.new("RGB", size, (9, 8, 7)).save(path, fmt)
+
+
+def test_direct_mode_accepts_the_image_the_worker_saved_and_never_starts_codex_exec(direct):
+    paint(direct.dir / "front-1.png")
+    r = direct()
+    assert (r["rc"], r["execs"]) == (0, []), r["out"] + r["err"]
+    assert r["out"] == f"[gen_image_codex] ok 1536x1024 lần 1 -> {direct.dir / 'front-1.png'}\n"
+    rec = r["records"]["front"]
+    assert (rec["status"], rec["attempts"], rec["direct"], rec["size"]) == ("ok", 1, True, [1536, 1024])
+
+
+def test_direct_mode_asks_for_the_missing_file_again_with_exit_3_and_stops_with_exit_1_after_three_tries(direct):
+    out = direct.dir / "front-1.png"
+    first, second, third = direct(), direct(), direct()
+    assert (first["rc"], second["rc"], third["rc"]) == (3, 3, 1)
+    assert first["out"] == f"[gen_image_codex] gen lại lần 2/3: không có file ảnh -> {out}\n"
+    assert third["out"] == f"[gen_image_codex] fail 3/3: không có file ảnh -> {out.with_suffix('.json')}\n"
+    assert third["records"]["front"]["errors"] == ["không có file ảnh"] * 3
+
+
+def test_direct_mode_removes_an_image_that_is_too_small_so_the_next_try_cannot_pass_with_the_old_file(direct):
+    paint(direct.dir / "front-1.png", size=(1024, 768))
+    r = direct()
+    assert (r["rc"], (direct.dir / "front-1.png").exists()) == (3, False)
+    assert "cạnh dài cần > 1040 px" in r["out"]
+
+
+def test_direct_mode_converts_a_jpeg_saved_under_a_png_name(direct):
+    paint(direct.dir / "front-1.png", fmt="JPEG")
+    r = direct()
+    assert (r["rc"], r["records"]["front"]["converted"]) == (0, True)
+    assert (direct.dir / "front-1.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_direct_mode_stops_at_once_when_the_worker_reports_a_quota_error_of_the_image_tool(direct):
+    r = direct(extra=["--tool-error", "usage limit reached, try again later"])
+    assert r["rc"] == 1
+    assert "fail 1/1: tool: usage limit reached" in r["out"]
+
+
+def test_direct_mode_checks_only_the_failed_file_again_and_keeps_the_count_of_a_file_that_passed(direct):
+    paint(direct.dir / "front-1.png")
+    first = direct(names=("front", "back"))
+    assert first["rc"] == 3
+    assert first["out"].splitlines()[0].startswith("[gen_image_codex] ok 1536x1024 lần 1")
+    paint(direct.dir / "back-1.png")
+    second = direct(names=("front", "back"))
+    assert second["rc"] == 0
+    assert (second["records"]["front"]["attempts"], second["records"]["back"]["attempts"]) == (1, 2)
+
+
+def test_without_direct_the_model_is_still_required_so_the_claude_edition_cannot_run_a_check_only_gen(direct):
+    p = subprocess.run([sys.executable, str(GEN), "--prompt", str(direct.dir.parents[1] / "front.md"),
+                        "--out", str(direct.dir / "front-1.png")], capture_output=True, text=True)
+    assert p.returncode == 2 and "--model" in p.stderr

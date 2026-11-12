@@ -7,6 +7,7 @@
   "agents_root": ".claude/agents",
   "models": {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"},
   "agent_file": false,
+  "image_gen": "codex_exec",
   "openai_yaml": false,
   "exclude": []
 }

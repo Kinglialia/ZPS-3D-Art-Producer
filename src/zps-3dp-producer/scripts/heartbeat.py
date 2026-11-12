@@ -22,6 +22,7 @@ LOG = "heartbeat.log"
 VERSION = re.compile(r"^v\d+$")
 STOP = (signal.SIGTERM, signal.SIGHUP)
 CODEX_EXEC = "codex exec"
+IMAGE_TOOL = "image tool"
 _LIVE: set[subprocess.Popen] = set()
 _LIVE_LOCK = threading.RLock()
 _stopped: list[int] = []

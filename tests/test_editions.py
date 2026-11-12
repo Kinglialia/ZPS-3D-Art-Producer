@@ -41,7 +41,8 @@ def test_the_codex_edition_suffixes_every_skill_and_agent_and_carries_its_runtim
         ["zps-3dp-producer-codex", "zps-3dp-project-setup-codex"], [a + "-codex" for a in AGENTS], ".agents/skills", None)
     prod = tree(dist, "codex") / "skills/zps-3dp-producer-codex"
     assert json.loads((prod / "runtime.json").read_text(encoding="utf-8")) == {
-        "runtime": "codex", "suffix": "-codex", "models": {"opus": None, "sonnet": None, "haiku": None}, "agent_file": True}
+        "runtime": "codex", "suffix": "-codex", "models": {"opus": None, "sonnet": None, "haiku": None}, "agent_file": True,
+        "image_gen": "direct"}
     assert (prod / "agents/zps-3dp-step-model-codex/zps-3dp-step-model-codex.md").is_file()
     assert (prod / "references/runtime.md").read_text(encoding="utf-8").startswith("# Runtime: Codex")
     assert not (prod / "templates/settings.snippet.json").exists()

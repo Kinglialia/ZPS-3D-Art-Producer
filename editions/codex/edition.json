@@ -7,6 +7,7 @@
   "agents_root": null,
   "models": {"opus": null, "sonnet": null, "haiku": null},
   "agent_file": true,
+  "image_gen": "direct",
   "openai_yaml": true,
   "exclude": ["templates/settings.snippet.json"]
 }

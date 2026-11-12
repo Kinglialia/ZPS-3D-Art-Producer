@@ -73,7 +73,7 @@ def build(edition: str, version: str, out: Path) -> bool:
         (prod / rel).unlink()
     shutil.copy(ED / edition / "adapter.md", prod / "references" / "runtime.md")
     (prod / "runtime.json").write_text(json.dumps({"runtime": edition, "suffix": suffix, "models": cfg["models"],
-                                                   "agent_file": cfg["agent_file"]}, indent=2) + "\n", encoding="utf-8")
+                                                   "agent_file": cfg["agent_file"], "image_gen": cfg["image_gen"]}, indent=2) + "\n", encoding="utf-8")
     for n, f in src_agents.items():
         p = prod / f.relative_to(SRC / PRODUCER)
         if p.parent.name == n:
