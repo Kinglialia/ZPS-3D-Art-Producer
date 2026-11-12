@@ -1,7 +1,7 @@
 # Spec — Producer (v2)
 
 Tên kỹ thuật: `zps-3dp-producer`. Tên hiển thị: ZPS-3DP · Producer.
-v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D26). v0.7.0: 2026-11-10 (D28–D31, D35). v0.7.1: 2026-11-11 (D32–D34; `views` đổi số từ D32 thành D35, bảng đối chiếu ở đầu `docs/decisions.md`). Quyết định nền: `docs/decisions.md` (D14, D21–D35 và các quyết định trước còn hiệu lực).
+v1 duyệt: 2026-11-08. v2: 2026-11-09 (D21–D26). v0.7.0: 2026-11-10 (D28–D31, D35). v0.7.1: 2026-11-11 (D32–D34; `views` đổi số từ D32 thành D35, bảng đối chiếu ở đầu `docs/decisions.md`). v0.8.0: 2026-11-12 (D36–D45, review source 2026-11-11). Quyết định nền: `docs/decisions.md` (D14, D21–D45 và các quyết định trước còn hiệu lực).
 
 **Nền:** skill `producer` anh đã làm (`producer-skill.zip`: `SKILL.md`, `scripts/producer.py`, `references/`, `templates/`). Spec này giữ cơ chế của skill đó và ghi những chỗ thay đổi.
 
@@ -33,18 +33,17 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 | Ruling | Quyết định Producer tự đưa ra được ghi bằng `P rule "<id>: <quyết định> — <lý do> — <cái giá nếu sai>"` |
 | Cảnh báo đổi nguồn | Concept, thẻ, profile hoặc art direction đổi sau khi asset bắt đầu → cảnh báo ⚠, hỏi anh làm lại hay giữ (mục 11, D21.5) |
 | Trang duyệt local | `P serve` (127.0.0.1:8765): nút Duyệt / Cần sửa / Ghi chú, xem GLB xoay được |
-| Hook và lệnh phụ | SessionStart chạy `P next --session`; `dashboard`, `validate`, `archive`. **[Sửa theo D29]** ~~`cleanup`~~ → `keep`, `purge`, `disk` (mục 8) |
+| Hook và lệnh phụ | SessionStart chạy `P next --session`; `dashboard`, `validate`, `archive`. **[Sửa theo D29]** ~~`cleanup`~~ → `keep`, `purge`, `disk` (mục 8); `report` (D41, mục 16) |
 
-## 3. Pipeline 6 bước (`pipeline.toml`, D14.2)
+## 3. Pipeline 5 bước (`pipeline.toml`, D14.2, D44.3)
 
 | # | `id` | Worker | Kiểm | Gate |
 |---|---|---|---|---|
 | 1 | `blockout` | `zps-3dp-step-blockout` | `zps-3dp-check-blockout` | `review_human` |
-| 2 | `views_front` | `zps-3dp-step-views` | `zps-3dp-check-views` (chỉ front) | `review` |
-| 3 | `views_rest` | `zps-3dp-step-views` | `zps-3dp-check-views` (cả bộ) | `review_human` |
-| 4 | `model` | `zps-3dp-step-model` | `zps-3dp-check-clay` | `review_human` (DUYỆT 1) |
-| 5 | `texture` | `zps-3dp-step-texture` | `zps-3dp-check-texture` | `review` |
-| 6 | `assemble` | Script `assemble.py`, không có agent (D22.11) | Kiểm trong chính script (mục 6.4) | `checks_human` (DUYỆT 2) |
+| 2 | `views` | `zps-3dp-step-views` | `zps-3dp-check-views` | `review_human` |
+| 3 | `model` | `zps-3dp-step-model` | `zps-3dp-check-clay` | `review_human` (DUYỆT 1) |
+| 4 | `texture` | `zps-3dp-step-texture` | `zps-3dp-check-texture` | `review` |
+| 5 | `assemble` | Script `assemble.py`, không có agent (D22.11) | Kiểm trong chính script (mục 6.4) | `checks_human` (DUYỆT 2) |
 
 **Ba loại gate:**
 
@@ -56,9 +55,16 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 
 - **Producer sắp xếp reviewer** qua script. Worker không gọi reviewer, không gọi agent khác.
 - Bỏ `final_human_gate`, vì `assemble` đã có gate người duyệt (D14.3).
-- Model của từng bước có agent theo D16: pilot dùng Opus cho mọi bước; sau pilot hạ từng bước theo bảng D16.2.
+- **Model của từng bước** (D16, D45): `pipeline.toml` có `model`, `escalate_model` và `reviewer_model` cho từng bước. `[review] reviewer_model` là giá trị mặc định khi bước không khai. Pilot 1 của v0.8.0 chạy Opus hết. Pilot 2 hạ bốn vai theo bảng D45.3, rồi anh duyệt ngay sau. Không đổi code và đổi model trong cùng một pilot, vì không tách được nguyên nhân.
 - `assemble` không có agent (D22.11): mọi việc của bước này là việc xác định. Texture đã được check-texture chấm trên model ở bước `texture`.
 - Mỗi bước khai báo loại `TOP_FIX` được phép và kiểu sửa (mục 6).
+
+**Bước `views`** (D44):
+- Một worker, một reviewer, một lần anh duyệt. Trong bước: worker gen front, script đo front, và chỉ khi front pass thì worker gen các mặt còn lại, song song theo slot `codex_image` còn trống. Front sai thì sửa trong chính bước này, không mở lại bước khác.
+- Thẻ có `views: none` thì bỏ bước `views`. Ảnh vẽ bằng Codex chỉ chạy khi `views` khác `none` (D44.2).
+- Cổng blockout có thêm ảnh mặt bên tô theo mã vật liệu: `mat_left.png`, `mat_right.png`, `mat_back.png`, và `mat_top.png` khi `views: full_top`. Script render các ảnh này, không gọi Codex. Anh duyệt bố cục các mặt cùng lúc duyệt blockout (D44.1).
+- `concept_colors.json` không thuộc bước `views`. Nó đến từ intake (mục 9, D43.1) và bước `texture` dùng nó ở mọi giá trị `views` (D44.4).
+- Project đang chạy v0.7.1 có asset ở `views_front` hoặc `views_rest`: script ánh xạ sang `views` khi nâng cấp, hoặc `P validate` từ chối và nêu cách làm lại.
 
 **Tên agent và chặn gọi nhầm** (D23.2, thay phần tên agent của D6.5):
 - Agent của Producer đặt tên theo **bước pipeline**, không theo vai trò: worker `zps-3dp-step-<bước>`, reviewer `zps-3dp-check-<bước>`. Tên hiển thị `3DP Step · <Bước>`, `3DP Check · <Bước>`. Lý do: kit có `zps-concept-views`, `zps-3d-artist`, `zps-texture-artist`; tên theo vai trò làm Claude chọn nhầm khi anh gọi skill của kit.
@@ -75,23 +81,25 @@ Producer **không** mở ảnh, JSON, log hay file dự án (D6). Producer **kh�
 # production/policy.yaml — chỉ script ghi
 approvals:
   blockout:   human    # human | reviewer
-  views_rest: human
+  views:      human
   model:      human    # đổi sang reviewer cần --confirm-spend
   # assemble: luôn human, không có khóa
 review_board: local    # local | local+remote
 delegations: []        # ghi bởi P delegate
 test_mode: false       # true: cho phép P waive --by producer (D30.1)
 disk_warn_gb: 20       # P next cảnh báo khi production/ vượt ngưỡng này (D29)
+purge: on_approve      # on_approve | off: xóa ngay khi DUYỆT 2 (D40.5)
+# purge_zip: <thư mục> # tùy chọn: nén phần sắp xóa vào đây trước khi xóa
 texture_default: meshy # chế độ của `auto` khi có key và budget (D30.11, D34.2); tạm, nguồn Run 5 (một asset), đo lại sau 3–5 asset khác loại
 dispatch: foreground   # foreground | background (D33.12–14)
 watch:                 # số của dự án (D33.11, D33.18)
-  stall_min: 10        # phút không có nhịp tim mới → kẹt
+  stall_min: 10        # phút không có nhịp tim và không có file đổi → kẹt (D39.3)
   deadline_factor: 2   # hạn chót = thời gian thường lệ của bước × hệ số này
   max_nudges: 1
 ```
 
 - Project Setup hỏi anh các giá trị này lúc khởi tạo, ghi file. Gợi ý: pilot để `human` hết.
-- Khóa hợp lệ: `blockout`, `views_rest`, `model`. Script từ chối khóa khác. `views_front` và `texture` chỉ do reviewer duyệt. `assemble` luôn do anh duyệt.
+- Khóa hợp lệ: `blockout`, `views`, `model`. Script từ chối khóa khác. `texture` chỉ do reviewer duyệt. `assemble` luôn do anh duyệt.
 - `reviewer`: reviewer PASS (không còn finding `blocker`, `major`, `unclear` đang mở) thì script tự duyệt, ghi ledger "reviewer duyệt theo chính sách dự án".
 - **Đổi chính sách:** anh nói trong chat. Producer chạy `P approvals set <bước> <human|reviewer> --by "<nguyên văn>"`. Có hiệu lực ngay, không cần phiên mới, không bật cảnh báo.
 - **`model: reviewer` cần `--confirm-spend`** (D21.8). Bước ngay sau `model` gọi Meshy (tốn credit) trên mesh vừa khóa. Không có cờ này, script từ chối và in lý do để Producer hỏi lại anh.
@@ -99,6 +107,7 @@ watch:                 # số của dự án (D33.11, D33.18)
 - Mọi lần duyệt ghi **ai duyệt** (anh, chính sách, ủy quyền). Anh bấm Cần sửa được bất cứ lúc nào.
 - **`test_mode`** (D30.1): chỉ khi `true` thì `P waive --by producer` chạy. Dự án thật để `false`.
 - **`disk_warn_gb`** (D29): ngưỡng dung lượng của `production/`, tính bằng GB.
+- **`purge`, `purge_zip`** (D40.5): `purge: on_approve` (mặc định) xóa ngay trong lệnh duyệt DUYỆT 2; `off` không xóa. `purge_zip` nén trước khi xóa. Mục 8.
 - **`texture_default`** (D34.2): chế độ texture mặc định nằm ở đây, không viết cứng trong code.
 - **`dispatch`, `watch`** (D33): chế độ giao việc và ngưỡng kẹt. Mục 6.6.
 
@@ -112,12 +121,14 @@ Anh nói trong chat. Producer chạy script và chuyển đường dẫn cho anh
 | "Cho anh xem <asset>" | `P show <id>` | Một file HTML: concept, sheet duyệt, render, GLB, tóm tắt report các bước |
 | "Xem <bước> v<N> của <asset>" | `P show <id> --step <bước> --version <N>` | HTML của đúng version đó |
 | "Duyệt cả lô" | `P serve` | Trang duyệt local |
+| "Tốn bao nhiêu thời gian và token?" | `P report [<id>]` | Bảng thời gian và token của một asset, hoặc của cả lô khi không có id (mục 16) |
 
 - Producer đưa file cho anh bằng tool gửi file của runtime (Claude Code: `SendUserFile`). Nội dung không vào context Producer.
 - `P show --bundle`: nhúng ảnh (thu cạnh dài về tối đa 1024 px; crop dưới 2 MB giữ nguyên; file trên 25 MB bị từ chối) và GLB nhỏ vào một file HTML, để xem trên điện thoại. Khi anh dùng Remote Control, Producer tự thêm `--bundle`.
 - Câu hỏi "vì sao …?": trả lời bằng dòng lý do và danh sách finding có id trên trang duyệt. Không gọi thêm agent (D22.17).
 - `P show`, `--bundle`, `P serve` và `P ab board` dùng chung một renderer, là file JavaScript của Review Board (D22.15). `P show` là trang board của một asset xuất thành file tĩnh.
 - Duyệt bằng nút, khoanh vùng, xem toàn màn hình và zoom: Review Board (`docs/review-board.md`, D19).
+- Thẻ blockout trên trang duyệt (local và remote) hiện các ảnh `mat_*` (D44.1). Thẻ asset `done` có link tới `RUN-REPORT.md` (D41).
 
 ## 6. Contract
 
@@ -356,11 +367,13 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 ## 9. Nhận việc (intake)
 
 - Giữ cách của skill nền: chỉ đăng ký khi anh bảo; `P intake` liệt kê theo nhóm; `--all`, `--priority`.
-- **Kiểm:** `asset-card.yaml` hợp lệ (`check_card.py`: trường bắt buộc, giá trị hợp lệ, `type` có rubric); đủ file bắt buộc (albedo, có bóng, thẻ, material handoff); profile hợp lệ (`check_profile.py`).
+- **Kiểm:** `asset-card.yaml` hợp lệ (`check_card.py`: trường bắt buộc, giá trị hợp lệ, `type` có rubric); đủ file bắt buộc (albedo, có bóng, thẻ, material handoff); `concept_34.png` là file thêm, tùy chọn (D43.9); profile hợp lệ (`check_profile.py`).
 - **Concept brief = `asset-card.yaml`** (D22.3). Phần khuất (`hidden_sides`), đối xứng (`symmetric`), ghi chú real/texture_only (`real_texture_only_notes`) nằm trong thẻ. Không có file brief riêng. Khi spec agent nói "concept brief", nghĩa là thẻ này.
 - **MAP-LAYOUT:** nếu profile có `has_map: true`, intake bắt buộc có `<id>.layout.md`. Nếu `has_map: false`, thẻ bắt buộc có `size_m: {w, d, h}` (mét); `check_card.py` kiểm trường này. Blockout lấy W×D×H từ `size_m` (D20.9).
-- **`views`** (D35): `none | back | full | full_top`. Quyết định bước views gen những ảnh nào; `none` bỏ bước views. Giá trị lạ → `check_card.py` fail.
-- **`counts`** (D30.6, D32.5, D34.3): tùy chọn, giá trị số nguyên ≥ 0; giá trị sai → `check_card.py` fail. Danh sách khóa là `counts_keys` của profile dự án (khóa và nghĩa); khóa ngoài danh sách → `check_card.py` cảnh báo. Gate blockout và model so số của thẻ với param cùng tên trong `fixed_params`, hoặc với số part có `tag: <khóa>`. Lệch → gate fail. Skill không viết cứng khóa nào.
+- **`views`** (D35, D43.6): `none | back | full | full_top`. Trường bắt buộc, không còn giá trị mặc định. Quyết định bước `views` gen những ảnh nào; `none` bỏ bước `views`. Giá trị lạ hoặc thiếu → `check_card.py` fail. Luật chọn (D44.2): `none` cho prop, cây, đá và vật đối xứng; khác `none` khi một mặt khuất có thiết kế riêng.
+- **`counts`** (D30.6, D32.5, D34.3, D43.5): trường bắt buộc; `{}` hợp lệ khi asset không có thành phần lặp lại, và intake cảnh báo khi `counts` rỗng. Giá trị là số nguyên ≥ 0; giá trị sai → `check_card.py` fail. Danh sách khóa là `counts_keys` của profile dự án (khóa và nghĩa); khóa ngoài danh sách → `check_card.py` cảnh báo. Gate blockout và model so số của thẻ với param cùng tên trong `fixed_params`, hoặc với số part có `tag: <khóa>`. Lệch → gate fail. Không part nào dùng param đếm của một khóa → gate fail. Skill không viết cứng khóa nào.
+- **Trường thẻ thêm ở D43**: `view_side: left | right`, bắt buộc khi `view: '34'`. `light: {from: left | right | front, elevation_deg}`, tùy chọn; thiếu thì worker đoán và ghi vào mục tự quyết. `marks: [{name, z_m}]`, tùy chọn, 2 đến 3 mốc cao thấy rõ trên concept; có thì `check_proportion.py` so với blockout. `bottom_visible: false` (mặc định) và `text_codes: []` (mã vật liệu có chữ). `check_card.py` kiểm kiểu của các trường này khi có. Brief blockout ghi `VIEW_SIDE:`; brief model ghi `LIGHT:` khi thẻ có.
+- **Màu concept** (D43.1, D43.2): Material Handoff có cột "Ô lấy màu" (`x, y, w, h` pixel trên `concept_albedo.png`) và một dòng `BG: #RRGGBB`. `P intake` đo trung vị trong ô và ghi `assets/<id>/concept_colors.json`. Intake cảnh báo khi hex lệch số đo quá dE 6, khi ô nằm ngoài ảnh, và khi một mã không có ô. Brief ghi dòng `CONCEPT_COLORS:` trỏ tới file này. Asset cũ không có cột: worker chọn ô như trước và brief nói rõ.
 - Thiếu hoặc sai → không đăng ký. Producer báo anh theo nhóm lỗi.
 - Loại asset lấy từ `type` trong thẻ (`building`, `prop`, `tree`, `rock`). Loại `character`, `creature`: báo v1 chưa hỗ trợ (D9).
 - **Ước lượng và báo giá theo lô** (D25.I): `P intake` in ước lượng thời gian và credit cho lô, dùng `estimate.py` của kit (dữ liệu của chính project trong `<project>/.zps-art/estimates.jsonl`; dưới 3 bản ghi thì dùng mặc định của kit). Tổng credit Meshy dự kiến của cả lô được đưa anh duyệt một lần. Mỗi asset xong, script ghi `estimate.py log` (phương pháp, số phút, credit, tris).
@@ -376,6 +389,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 | Tài liệu style | `art-direction/` (AD giữ, tag `steps:`), như skill nền. **Chỉ** ở đây (D22.16) |
 | Tiêu chí chấm chung của bước | Trong file agent reviewer |
 | Tiêu chí chấm riêng theo loại asset | `production/rubrics/<loại>.md`, chia mục theo bước. Anh duyệt một lần (`status: approved`). Chỉ chứa tiêu chí pass/fail kèm tham chiếu tới tài liệu AD (ví dụ "mái đúng `roofs.md` §2"), không mô tả style (D22.16) |
+| Màu của concept theo mã vật liệu | `assets/<id>/concept_colors.json`, do intake đo (mục 9, D43.1) |
 | Số hình học sau khi blockout được duyệt | `sources.json` của blockout là nguồn duy nhất cho các bước sau (D22.13). Profile và thẻ chỉ còn dùng cho thông số không phải hình học (`texture_res`, ngưỡng pixel, `detail_examples`) |
 
 - **Thứ tự ưu tiên khi các nguồn mâu thuẫn** (D25.G, theo `art-operation.md` của kit): (1) quyết định hoặc feedback mới nhất của anh, brief của asset; (2) art direction đã duyệt; (3) spec, profile, thẻ asset, `sources.json`; (4) tài liệu của agent và reference của kit cho đúng loại việc; (5) quy tắc chung và mặc định. Agent gặp mâu thuẫn còn ảnh hưởng tới kết quả thì ghi cả hai nguồn và lựa chọn đã dùng vào báo cáo, không chọn âm thầm.
@@ -388,7 +402,7 @@ deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
 Mỗi version ghi trong `status.json` các đầu vào đã dùng. Script là tầng duy nhất kiểm các hash này, khi sinh brief và khi ingest (D22.12):
 
 ```json
-"inputs": {"blockout": "<hash final đã duyệt>", "views_rest": "<hash>", "model": "<hash mesh>",
+"inputs": {"blockout": "<hash final đã duyệt>", "views": "<hash>", "model": "<hash mesh>",
            "card": "<hash asset-card.yaml>", "concept": "<hash các file _approved/<id>/>",
            "profile": "<hash profile>", "art_direction": "<ngày thay đổi gần nhất>"}
 ```
@@ -419,13 +433,14 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 2. Danh sách file bắt buộc trong `_approved/<id>/`, đúng tên file. Tên file trong `_approved/` giờ là quy ước bắt buộc, thay cho "tên tự do" của skill nền.
 3. Cách làm lúc chốt: Concept Artist soạn thẻ từ những gì đã thảo luận, hỏi anh một lần các trường còn trống kèm gợi ý, viết material handoff, chạy `check_card.py`, rồi báo anh. Anh chép thư mục đã đủ vào `_approved/`.
 4. AD: viết tài liệu style có tag `steps:`. Không ghi số kỹ thuật; muốn đổi số thì đề xuất với anh.
+5. **Một nguồn guideline** (D43.10): `templates/GUIDELINE.md` trong repo, v1.4, gộp nội dung v1.3. Có luật chọn `views` (D44.2) và một ví dụ thẻ cho loại vật khác công trình. Concept Artist ưu tiên ảnh chính diện phẳng cho `concept_albedo.png`; ảnh 3/4 là file thêm `concept_34.png` (D43.9). Chạy `check_card.py` là bước bắt buộc.
 
 `check_card.py` đi kèm GUIDELINE, để Concept Artist tự kiểm.
 
 ## 14. Khởi tạo và phiên mới (D13)
 
 1. Anh gọi Producer. Producer chạy `check_profile.py`.
-1b. **`P preflight`** (D25.C): kiểm môi trường một lần mỗi phiên, gọi `preflight.py` của kit và kiểm thêm codex CLI (phiên bản `codex --version` và mọi flag skill dùng trong `codex exec --help`, D30.19; thiếu flag thì tắt `codex_image`), `gen_api.py keys` (Meshy), bản Blender. Kết quả ghi `production/preflight.json` gồm bảng tính năng bật/tắt. Bước nào cần tính năng đang tắt thì `P next` báo ngay và không giao việc bước đó. Chạy lại khi đổi tool hoặc cấu hình, không chạy lại cho từng asset.
+1b. **`P preflight`** (D25.C): kiểm môi trường một lần mỗi phiên, gọi `preflight.py` của kit và kiểm thêm codex CLI (phiên bản `codex --version` và mọi flag skill dùng trong `codex exec --help`, D30.19; thiếu flag thì tắt `codex_image`), `gen_api.py keys` (Meshy), bản Blender. Báo thêm khi `settings.json` thiếu allow rule cho `run_tool.py` hoặc `assemble.py` (D36.1). Kết quả ghi `production/preflight.json` gồm bảng tính năng bật/tắt. Bước nào cần tính năng đang tắt thì `P next` báo ngay và không giao việc bước đó. Chạy lại khi đổi tool hoặc cấu hình, không chạy lại cho từng asset.
 2. Thiếu profile → nạp skill Project Setup, làm cùng anh (gồm cả `policy.yaml`).
 3. Xong → **Producer nhắc anh gõ lệnh xóa context và mở phiên mới**, đúng câu lệnh của runtime (Claude Code: `/clear`; Codex: `/new`).
 4. Producer cũng nhắc mở phiên mới sau khi cập nhật nội dung profile, và khi context đã dài sau một lô.
@@ -527,6 +542,7 @@ Kết quả so sánh gộp runtime và model đi kèm (Claude dùng Opus/Sonnet,
 | Tên `zps-3dp-producer`, adapter, đường dẫn | `SKILL.md`, `setup.md`, `adapters/` | — |
 | v0.7.0 (D28.1, D29, D30, D31, D35): thứ tự và test của từng đơn vị | `docs/intents/v0.7.0-plan.md` | — |
 | v0.7.1 (D32, D33, D34, D30.16–22): thứ tự, phân loại và test của từng đơn vị | `docs/intents/v0.7.1-plan.md` | — |
+| v0.8.0 (D36–D45): thứ tự, phân loại và test của từng đơn vị | `docs/intents/v0.8.0-plan.md`, `docs/intents/v0.8.0-tickets.md` | — |
 
 ## 18. Thứ tự code (D22.18)
 
@@ -536,7 +552,7 @@ Code theo lát dọc. Mỗi giai đoạn chạy được trên asset pilot rồi
 |---|---|---|
 | 0 | Sửa tài liệu: concept brief = thẻ asset, `out-of-scope-changes.md`, mẫu rubric chỉ có tiêu chí và tham chiếu AD | — |
 | 1 | Lõi `producer.py` (state, finding theo version, vòng sửa, policy, limits, kiểm hash) + `blockout` + `check-blockout` + trang duyệt local tối thiểu | Reviewer ghi đủ `PRIOR`; vòng sửa theo finding hội tụ; model và resume theo từng lần giao trên Claude Code |
-| 2 | `views_front`, `views_rest`, `gen_image_codex.py`, `regen_front` | Ảnh view đúng guide; front không bị chấm lại |
+| 2 | Bước `views` (D44), `gen_image_codex.py` | Ảnh view đúng guide; front đo xong rồi mới gen các mặt còn lại |
 | 3 | `model`, `check-clay`, khóa mesh | Detail pass, UV, DUYỆT 1 |
 | 4 | `texture` (budget Meshy theo hash mesh), `assemble.py` | Meshy giữ UV; GLB hiển thị khớp render của bước `texture` |
 | 5 | Review Board đầy đủ: khoanh vùng, trang remote, `P show`, quyết định không ghi trùng | Trên điện thoại và trang local |
