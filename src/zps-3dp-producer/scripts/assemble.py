@@ -59,10 +59,10 @@ def sha256(p: Path) -> str:
 BLENDER_TIMEOUT_S = 900  # D33.3: three Blender runs stay under BASH_MAX_TIMEOUT_MS 3600000 of the settings snippet
 
 
-def blender(exe: str, script: Path, *args) -> tuple[int, str]:
+def blender(exe: str, script: Path, vd: Path, *args) -> tuple[int, str]:
     try:
         r = heartbeat.run([exe, "-b", "--factory-startup", "--python-exit-code", "1", "--python", str(script), "--",
-                           *map(str, args)], tool=f"blender {script.stem}", vd=heartbeat.vdir_of(*args),
+                           *map(str, args)], tool=f"blender {script.stem}", vd=vd,
                           timeout=BLENDER_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         return 1, f"Blender quá {BLENDER_TIMEOUT_S} s: {script.name}"
@@ -214,7 +214,7 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
     if size != (res, res):
         return [fail_point("albedo", "texture", f"work/evidence: {albedo.name} cỡ {size}", f"texture_res của thẻ là {res}",
                            "làm lại texture đúng texture_res (`redo --step texture`)", f"albedo {res}x{res}")], data
-    rc, out = blender(a.blender, SCRIPTS / "assemble_glb.py", "--glb", locked, "--albedo", albedo, "--name", a.id,
+    rc, out = blender(a.blender, SCRIPTS / "assemble_glb.py", d, "--glb", locked, "--albedo", albedo, "--name", a.id,
                       "--out", final / "model")
     glb = final / "model" / f"{a.id}.glb"
     if rc != 0 or not glb.is_file():
@@ -230,7 +230,7 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
     qa = {}
     for q in QA:
         dst = work / "evidence" / "qa" / f"{q}.json"
-        blender(a.blender, MODEL_TOOLS / "asset_checks" / f"{q}.py", "--input", probe, "--spec", work / "spec.json",
+        blender(a.blender, MODEL_TOOLS / "asset_checks" / f"{q}.py", d, "--input", probe, "--spec", work / "spec.json",
                 "--out", dst)
         qa[q] = json.loads(dst.read_text(encoding="utf-8")) if dst.is_file() else {"overall": "missing", "checks": []}
     r = subprocess.run([sys.executable, str(FINALIZE), "--work", str(work), "--from", str(glb), "--out",
@@ -242,7 +242,7 @@ def run(a, d: Path) -> tuple[list[dict], dict]:
         fails.append(fail_point("qa", "GLB cuối", f"work/evidence/finalize.json: {'; '.join(bad + refused)}",
                                 "QA của kit không pass cho đúng file GLB này", "sửa theo JSON QA fail ở work/evidence/qa/",
                                 "finalize.py không từ chối"))
-    rc, out = blender(a.blender, RENDER, "--glb", glb, "--cameras", tf / "review" / "renders.json", "--views",
+    rc, out = blender(a.blender, RENDER, d, "--glb", glb, "--cameras", tf / "review" / "renders.json", "--views",
                       ",".join(COMPARE), "--outdir", work / "compare")
     data["compare"] = {}
     (final / "review").mkdir(parents=True, exist_ok=True)

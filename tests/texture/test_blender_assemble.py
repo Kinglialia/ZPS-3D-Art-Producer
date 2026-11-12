@@ -57,9 +57,7 @@ def sh(*args):
     return r.returncode, r.stdout + r.stderr
 
 
-@pytest.fixture(scope="module")
-def base(tmp_path_factory):
-    t = tmp_path_factory.mktemp("assemble")
+def build_base(t, spec):
     concept = t / "concepts/_approved" / AID
     concept.mkdir(parents=True)
     (concept / "asset-card.yaml").write_text(f"asset: {AID}\ntexture_res: {RES}\n", encoding="utf-8")
@@ -68,7 +66,7 @@ def base(tmp_path_factory):
     mf, tf = a / "model/v1/final", a / "texture/v1/final"
     (mf / "review").mkdir(parents=True)
     glb = glbkit.write(mf / f"{AID}-untextured.glb", *glbkit.box())
-    (mf / "spec.json").write_text(json.dumps(SPEC), encoding="utf-8")
+    (mf / "spec.json").write_text(json.dumps(spec), encoding="utf-8")
     Image.new("RGB", (32, 32), (9, 9, 9)).save(mf / "review/model_sheet.png")
     tf.mkdir(parents=True)
     Image.fromarray(albedo()).save(tf / f"albedo_{RES}.png")
@@ -84,6 +82,16 @@ def base(tmp_path_factory):
     (a / "status.json").write_text(json.dumps(st), encoding="utf-8")
     (t / "production/pipeline.toml").touch()
     return t
+
+
+@pytest.fixture(scope="module")
+def base(tmp_path_factory):
+    return build_base(tmp_path_factory.mktemp("assemble"), SPEC)
+
+
+@pytest.fixture(scope="module")
+def base_without_camera(tmp_path_factory):
+    return build_base(tmp_path_factory.mktemp("assemble_no_camera"), {k: v for k, v in SPEC.items() if k != "camera"})
 
 
 def assemble(base, tmp_path, edit=None, blender=BLENDER):
@@ -158,11 +166,20 @@ def test_a_failing_kit_qa_makes_finalize_refuse_and_assemble_block(base, tmp_pat
 
 
 def test_a_kit_check_that_writes_no_result_is_a_qa_fail_because_finalize_only_requires_mesh_check(base, tmp_path):
-    crash = tmp_path / "blender_crash_export_check.sh"
-    crash.write_text(f'#!/bin/sh\ncase "$*" in *export_check.py*) exit 1;; esac\nexec "{BLENDER}" "$@"\n')
+    crash = tmp_path / "blender_drops_export_check.sh"
+    crash.write_text(f'#!/bin/sh\n"{BLENDER}" "$@"\nrc=$?\nrm -f production/assets/{AID}/assemble/v1/work/evidence/qa/export_check.json\n'
+                     'exit $rc\n')
     crash.chmod(0o755)
     r = assemble(base, tmp_path, blender=crash)
     assert (r["rc"], r["compare"]["qa"]) == (1, {"mesh_check": "pass", "uv_check": "pass", "export_check": "missing",
                                                   "screen_tris_check": "info"})
     assert r["report"].splitlines()[:3] == ["STATUS: BLOCKED", "OUTPUT: production/assets/box/assemble/v1/final/",
                                             "ISSUES: qa GLB cuối: export_check: missing"]
+
+
+def test_the_heartbeat_goes_to_the_assemble_version_not_to_the_approved_model_version_t17(base, tmp_path):
+    """The Producer reads vN/heartbeat.log of the running step to tell a slow Blender from a hung one."""
+    r = assemble(base, tmp_path)
+    log = (r["d"] / "heartbeat.log").read_text(encoding="utf-8").splitlines()
+    assert [row.split(" · ")[2] for row in log][0::2] == ["start"] * (len(log) // 2) and log[-1].split(" · ")[2] == "done"
+    assert not (r["d"].parents[1] / "model/v1/heartbeat.log").exists()
