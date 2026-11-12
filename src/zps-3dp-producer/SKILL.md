@@ -75,6 +75,8 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 
 **Bước view gọi Codex** (`views`): chỉ chạy khi thẻ có `views` khác `none`. Mặt bên tô theo mã vật liệu (`mat_*`) đã có ở cổng blockout. Mỗi ảnh tốn lượt Codex của người dùng. Ghi chú blocked có lỗi `gen_image_codex` (3 lần lỗi kỹ thuật) thì hỏi người dùng cách xử lý; không tự đổi sang tool ảnh khác (D15.2). Ghi lựa chọn bằng `P rule`, rồi `P retry <id>`.
 
+**Project của v0.7.1:** `P next` nêu `migrate <id>` cho asset còn bước view cũ: chạy đúng lệnh đó. Lệnh lỗi vì `pipeline.toml` còn bước cũ: làm theo dòng lỗi (`references/setup.md`, mục Nâng cấp từ v0.7.1).
+
 **Bước model** (DUYỆT 1): duyệt `model` thì script khóa sha256 của `<id>-untextured.glb` (`locked` trong status.json). Từ đó không ai sửa mesh hay UV. Người dùng muốn sửa: `P feedback <id> "<nguyên văn>" --action redo --step model`. Reviewer texture trả `fix_uv_mesh` thì script tự mở lại `model`; lần thứ hai trong một đợt feedback thì hỏi người dùng.
 
 **Bước texture** (Meshy tốn credit của người dùng): script kiểm key Meshy và mở budget theo hash mesh trước khi giao; worker chỉ gọi Meshy qua `meshy_call.py`. Không đọc, in hay chép `.env`. Ba trường hợp `waiting_human` cần người dùng trả lời, không tự quyết:

@@ -7,7 +7,7 @@ Cần Python 3.11+ (dùng tomllib).
 Lệnh chính:  init · preflight · intake · new · ready · next · brief · ingest · retry · stall · wait · on-stop · ack
              feedback · waive · meshy
              texture-mode · approvals · delegate · rule · ledger · stats · report · dashboard · serve · show · board · validate
-             keep · purge · disk · archive · texture-stats · ab · compare
+             keep · purge · disk · archive · texture-stats · ab · compare · migrate
 Xem `producer.py <lệnh> -h` để biết tham số.
 """
 from __future__ import annotations
@@ -210,6 +210,11 @@ def cmd_disk(a):
     disk(a)
 
 
+def cmd_migrate(a):
+    from core.state import migrate
+    migrate(a)
+
+
 def cmd_archive(a):
     from core.state import archive
     archive(a)
@@ -308,6 +313,8 @@ def main(argv: list[str] | None = None):
     x.add_argument("id"); x.add_argument("--by", required=True, help="nguyên văn lời người dùng")
     x.add_argument("--zip", help="nén phần sẽ xóa vào file zip này trước")
     sub.add_parser("disk", help="dung lượng production/ theo asset, bước, loại file (D29.10)")
+    sub.add_parser("migrate", help="asset của v0.7.1: bước views_front, views_rest thành bước views (references/setup.md)"
+                   ).add_argument("id")
     x = sub.add_parser("archive", help="chuyển asset đã xong vào archive/")
     x.add_argument("id"); x.add_argument("--force", action="store_true")
     a = p.parse_args(argv)

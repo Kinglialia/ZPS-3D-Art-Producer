@@ -51,6 +51,10 @@ STATES = {"draft", "todo", "running", "review", "reviewing", "fix", "evidence", 
           "blocked", "done", "done_enabled"}
 FINISHED = ("done", "done_enabled")
 DEFAULT_TEXTURE_RES = 2048
+OLD_VIEWS = ("views_front", "views_rest")  # the two view steps of v0.7.1 (D44.3); `migrate` makes them `views`
+VIEWS = "views"
+STEP_MAPS = ("versions", "approved", "approved_hash", "approved_at", "rejected", "locked", "inputs", "prior",
+             "accepted_fail", "pending_redo", "waive_pending")
 
 
 class ProducerError(Exception):
@@ -126,6 +130,11 @@ def load_cfg() -> dict:
         die(f"{p} sai cú pháp TOML: {ex}")
     steps = cfg.get("steps") or die("pipeline.toml chưa có [[steps]]")
     ids = [s.get("id") or die("mỗi [[steps]] cần id") for s in steps]
+    if old := [x for x in ids if x in OLD_VIEWS]:
+        die(f"{rel(p)} của v0.7.1 có bước {', '.join(old)}: thay hai khối [[steps]] đó bằng khối `{VIEWS}` của "
+            f"{SKILL_DIR.name}/templates/pipeline.toml, đổi hai id đó thành `{VIEWS}` trong inputs, review_inputs của "
+            "model và texture, rồi chạy `migrate <id>` cho mỗi asset mà `next` nêu (references/setup.md, mục Nâng cấp "
+            "từ v0.7.1)")
     if len(set(ids)) != len(ids):
         die("step id bị trùng trong pipeline.toml")
     for i, s in enumerate(steps):
@@ -209,12 +218,29 @@ def adir(aid: str) -> Path:
     return d
 
 
-def load_st(aid: str) -> dict:
+def read_st(aid: str) -> dict:
     p = adir(aid) / "status.json"
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError as ex:
         die(f"{p} hỏng: {ex}")
+
+
+def load_st(aid: str) -> dict:
+    st = read_st(aid)
+    if legacy(st):
+        die(legacy_line(aid))
+    return st
+
+
+def legacy(st: dict) -> bool:
+    """D44.3: a status.json of v0.7.1 that still names one of its two view steps."""
+    return st.get("stage") in OLD_VIEWS or any(k in (st.get(f) or {}) for f in ("versions", "approved", "prior")
+                                               for k in OLD_VIEWS)
+
+
+def legacy_line(aid: str) -> str:
+    return f"{aid}: status.json của v0.7.1 còn bước {'/'.join(OLD_VIEWS)} → chạy `migrate {aid}`"
 
 
 def save_st(st: dict):
@@ -228,9 +254,12 @@ def all_status() -> list[dict]:
     out = []
     for p in sorted(ASSETS.glob("*/status.json")):
         try:
-            out.append(json.loads(p.read_text(encoding="utf-8")))
+            st = json.loads(p.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             out.append({"id": p.parent.name, "state": "blocked", "note": "status.json hỏng", "stage": "?", "broken": True})
+            continue
+        out.append({"id": p.parent.name, "stage": st.get("stage"), "state": st.get("state"), "versions": {},
+                    "note": legacy_line(p.parent.name), "broken": True, "legacy": True} if legacy(st) else st)
     return out
 
 
@@ -290,6 +319,9 @@ def validate(_a):
     need = {"id", "title", "stage", "state", "versions", "approved", "fix_round"}
     for st in all_status():
         aid = st.get("id", "?")
+        if st.get("legacy"):
+            problems.append(st["note"])
+            continue
         miss = need - st.keys()
         if miss:
             problems.append(f"{aid}: status.json thiếu {sorted(miss)}")
@@ -331,3 +363,123 @@ def validate(_a):
     print("\n".join(problems) or "OK: không có lỗi")
     if problems:
         sys.exit(1)
+
+
+def views_rubric(text: str) -> str:
+    """D44.3: `## views_front` goes (its keys are in the set section); `## views_rest` becomes `## views`."""
+    out, skip = [], False
+    for line in text.splitlines(keepends=True):
+        if line.startswith("## "):
+            skip = line.strip() == f"## {OLD_VIEWS[0]}"
+            line = f"## {VIEWS}\n" if line.strip() == f"## {OLD_VIEWS[1]}" else line
+        if not skip:
+            out.append(line)
+    return "".join(out)
+
+
+def merge_readme(front: Path, merged: Path):
+    """The NGOẠI LỆ lines of the front README join the NGOẠI LỆ section of the set README, where "không có" goes."""
+    from assemble import section
+    extra = [x for x in section(front, "NGOẠI LỆ") if x.strip().lower() not in ("không có", "none")]
+    if not extra or not merged.is_file():
+        return
+    out, on, done = [], False, False
+    for line in merged.read_text(encoding="utf-8").splitlines():
+        if line.lstrip().startswith("#"):
+            on = "ngoại lệ" in line.lower() and not done
+            out += [line, *(extra if on else [])]
+            done = done or on
+        elif not (on and line.strip().lower() == "không có"):
+            out.append(line)
+    merged.write_text("\n".join(out if done else [*out, "## NGOẠI LỆ", *extra]) + "\n", encoding="utf-8")
+
+
+def merge_pair(aid: str, fv: int, rv: int) -> Path:
+    """The final of the front, then the final of the set over it, as `views` v1. The set findings keep their ids; the
+    open findings of the front join with new ids. Later notes that confirmed a set finding name the new version."""
+    from . import findings
+    d = vdir(aid, VIEWS, 1)
+    if d.exists():
+        shutil.rmtree(d)
+    for sid, v in zip(OLD_VIEWS, (fv, rv)):
+        shutil.copytree(vdir(aid, sid, v) / "final", d / "final", dirs_exist_ok=True)
+    merge_readme(vdir(aid, OLD_VIEWS[0], fv) / "final" / "README.md", d / "final" / "README.md")
+    doc = findings.load(aid, OLD_VIEWS[1], rv) or {"next_id": 1, "findings": {}}
+    doc = doc | {"version": 1, "base": None, "top_fix": None, "pick": None, "findings": dict(doc["findings"])}
+    for i, f in findings.open_of(findings.load(aid, OLD_VIEWS[0], fv)).items():
+        doc["findings"][f"F{doc['next_id']}"] = f | {"evidence": f"{OLD_VIEWS[0]} v{fv} {i}: {f.get('evidence', '')}"}
+        doc["next_id"] += 1
+    findings.save(aid, VIEWS, doc)
+    old = f"{OLD_VIEWS[1]} v{rv} "
+    for p in (ASSETS / aid).glob("*/v*/findings.json"):
+        other = json.loads(p.read_text(encoding="utf-8"))
+        notes = other.get("resolved_notes") or []
+        if p.parts[-3] not in (*OLD_VIEWS, VIEWS) and any(n.startswith(old) for n in notes):
+            other["resolved_notes"] = [f"{VIEWS} v1 " + n.removeprefix(old) if n.startswith(old) else n for n in notes]
+            write_atomic(p, json.dumps(other, ensure_ascii=False, indent=1))
+    return d
+
+
+def migrate(a):
+    """D44.3 `P migrate <id>` (references/setup.md, Nâng cấp từ v0.7.1). The old folders stay on disk. (a) status.json
+    names no old view step: nothing. (b) both old steps approved, or both kept as `prior`: the pair becomes `views` v1,
+    approved (or prior) as the pair was. (c) otherwise: the view work restarts as `views` at todo. The history keeps its
+    rows under `views`; decisions keep their old keys. rubric.md and the project rubrics get one `## views` section."""
+    from . import findings, hashes
+    from .loop import fresh, next_action, reopened_of
+    aid, cfg = a.id, load_cfg()
+    st = read_st(aid)
+    rubrics = [ASSETS / aid / "rubric.md", *sorted((ROOT / "rubrics").glob("*.md"))]
+    changed = [r for r in rubrics if r.is_file() and (t := r.read_text(encoding="utf-8")) != views_rubric(t)]
+    for r in changed:
+        r.write_text(views_rubric(r.read_text(encoding="utf-8")), encoding="utf-8")
+    tail = f"; rubric.md có mục ## {VIEWS}" if rubrics[0] in changed else ""
+    if not legacy(st):
+        if changed:
+            ledger(f"{aid} · migrate · rubric: {', '.join(rel(r) for r in changed)}")
+        print(f"{aid}: không có bước view cũ, không đổi gì{tail}")
+        return
+    pair = next((k for k in ("approved", "prior") if all(s in (st.get(k) or {}) for s in OLD_VIEWS)), None)
+    old_stage, old_state = st.get("stage"), st.get("state")
+    if pair:
+        fv, rv = (st[pair][s] for s in OLD_VIEWS)
+        d = merge_pair(aid, fv, rv)
+        built = (st.get("inputs") or {}).get(OLD_VIEWS[0], {}).get(f"v{fv}")
+        at = (st.get("approved_at") or {}).get(OLD_VIEWS[1])
+    for k in STEP_MAPS:
+        if isinstance(st.get(k), dict):
+            st[k] = {s: v for s, v in st[k].items() if s not in OLD_VIEWS}
+    st["stale"] = {k: v for k, v in (st.get("stale") or {}).items() if k.split()[0] not in OLD_VIEWS}
+    st["reopened"] = {k: v for k, v in reopened_of(st).items() if k in findings.REOPEN}
+    for k in ("dispatches", "offer_log", "stalls"):
+        for x in st.get(k) or []:
+            if x.get("step") in OLD_VIEWS:
+                x["step"] = VIEWS
+                if k == "dispatches" and "ingested" not in x and "ended" not in x:
+                    x["ended"] = stamp()
+    if pair:
+        st.setdefault("versions", {})[VIEWS] = 1
+        st.setdefault(pair, {})[VIEWS] = 1
+        if pair == "approved":
+            st.setdefault("approved_hash", {})[VIEWS] = hashes.tree_hash(d / "final")
+            st.setdefault("rejected", {})[VIEWS] = []
+            st.setdefault("approved_at", {})[VIEWS] = at or now()
+            if built:
+                st.setdefault("inputs", {})[VIEWS] = {"v1": built}
+        what = (f"{OLD_VIEWS[0]} v{fv} + {OLD_VIEWS[1]} v{rv} → {VIEWS} v1 "
+                f"({'đã duyệt' if pair == 'approved' else 'bản đã duyệt trước'}), thư mục cũ giữ nguyên{tail}")
+    else:
+        what = f"bỏ bước view cũ khỏi status.json, thư mục cũ giữ nguyên{tail}"
+    if old_stage in OLD_VIEWS and pair == "approved":
+        st["stage"] = VIEWS
+    elif old_stage in OLD_VIEWS:
+        st |= fresh() | {"stage": VIEWS, "state": "todo", "worker_agent_id": None, "review_scope": None,
+                         "dispatch_out": None}
+        for k in ("ask", "stalled_from", "blocked_from", "accepted"):
+            st.pop(k, None)
+        what = (f"{old_stage} {old_state} của v0.7.1 làm lại thành bước {VIEWS}, thư mục cũ giữ nguyên{tail} → "
+                f"{VIEWS}/todo")
+    hashes.refresh_stale(cfg, st)
+    save_st(st)
+    ledger(f"{aid} · migrate · {what}")
+    print(f"{aid}: {what}. Tiếp: {next_action(st)}")

@@ -62,6 +62,17 @@ Mọi thay đổi workflow nằm ở `production/pipeline.toml`:
 
 Script đọc lại pipeline mỗi lệnh, nên asset đang chạy theo pipeline mới ngay. Đổi `id` của bước mà asset đang đứng ở đó thì `validate` báo lỗi: sửa `stage` trong status.json của asset đó.
 
+## Nâng cấp từ v0.7.1
+
+v0.8.0 gộp hai bước `views_front`, `views_rest` thành một bước `views`. Project tạo bằng v0.7.1 cần ba việc:
+1. `production/pipeline.toml`: thay hai khối `[[steps]]` cũ bằng khối `views` của `templates/pipeline.toml`. Đổi hai id cũ thành `views` trong `inputs`, `review_inputs` của `model` và `texture`. Chưa sửa thì mọi lệnh dừng với một dòng nêu việc này.
+2. `P next` và `P validate` in `migrate <id>` cho mỗi asset có status.json còn bước cũ. Mọi lệnh khác trên asset đó dừng với cùng dòng. Chạy `P migrate <id>`:
+   - Asset chưa tới bước view, hoặc thẻ có `views: none`: không đổi gì.
+   - Asset đã duyệt cả hai bước cũ: front và bộ view đã duyệt gộp thành `views` v1 đã duyệt. Asset đi tiếp ở bước đang đứng.
+   - Asset đang ở giữa một bước cũ, hoặc mới duyệt front: asset làm lại bước `views` từ `todo`.
+   Thư mục cũ giữ nguyên trên đĩa. Lệnh cũng đổi `rubric.md` của asset và `production/rubrics/*.md` sang một mục `## views`. Chạy lại lệnh không đổi gì thêm.
+3. `policy.yaml`: khóa `views_rest` đọc thành `views`; lần ghi sau lưu tên mới. Không cần sửa tay.
+
 ## Pipeline đứng im (D33)
 
 - Thấy pipeline không chạy: bấm Esc, rồi bảo Producer chạy `P next`. Asset kẹt: `P stall <id>`; asset `blocked` hoặc `waiting_human` vì kẹt: `P retry <id>`. Trạng thái nằm trong file, nên không mất gì.

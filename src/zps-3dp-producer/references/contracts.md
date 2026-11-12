@@ -110,6 +110,7 @@ Script đọc các dòng `- \`file.md\` — ... — steps: a, b` trong phần tr
 | done_enabled | xong mọi bước đang bật; bước sau `enabled = false` | `redo` → fix · `retry` → todo của bước sau, khi bước đó đã bật |
 | done | xong | `archive` |
 
+status.json của v0.7.1 còn bước `views_front` hoặc `views_rest`: mọi lệnh trên asset đó dừng với một dòng; `P next`, `P validate` nêu `migrate <id>` (`references/setup.md`, mục Nâng cấp từ v0.7.1).
 Brief `texture` ở todo/fix có thể đổi state trước khi tạo version: thiếu key → blocked; mesh đổi → waiting_human với `ask`.
 `waive <id> F<n>` (D30.1) chạy ở mọi state và không tự đổi state, trừ khi finding đó là finding chặn cuối cùng của bản `fix_base` (fix), bản đang đưa duyệt (waiting_human) hoặc bản xin bằng chứng (evidence): khi đó → review, `rereview` = version đó (reviewer `full` trên chính version đó, base là findings của chính nó, không có `COMPARE`). Ở reviewing: ghi `waive_pending`, áp dụng khi ingest report đó; FIX mà không còn finding chặn sau khi áp dụng → như PASS, và ở vòng `fix` vẫn có thêm reviewer `full`, vì reviewer chưa chấm PASS. Mọi lần chuyển state in dòng JSON giao việc tiếp theo (D30.5).
 FIX lần thứ `max_fix_rounds + 1` chuyển sang waiting_human. Vòng trả thẳng của D31.3 không tính vào `max_fix_rounds`: nó có trần riêng `[review] max_direct_rounds` (mặc định 2), và bộ tên check fail y hệt vòng trả thẳng trước chuyển sang waiting_human ngay. Một version không còn check fail đặt lại hai bộ đếm đó. `redo` của người dùng đặt lại bộ đếm vòng sửa và huỷ duyệt của bước đó cùng các bước sau.

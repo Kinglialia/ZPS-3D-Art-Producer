@@ -118,6 +118,8 @@ def current_v(st: dict, sid: str) -> int | None:
 
 def next_action(st: dict) -> str:
     aid, s = st["id"], st.get("state")
+    if st.get("legacy"):
+        return st["note"]
     if s == "draft":
         return f"chờ người dùng duyệt brief + rubric → `ready {aid}`"
     if s in ("todo", "fix"):
