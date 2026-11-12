@@ -310,6 +310,7 @@ def test_diff_guides_ignores_a_reshuffle_of_id_colours_because_it_compares_mater
 
 ID_TRIM = "#3CB44B"
 BROWN, BROWN_15 = "#8B5A2B", "#9A5A2B"
+SLATE = "#2F4F4F"
 
 
 def wall_trim_guides(d, views=("front",), prop=False, trim_x=250):
@@ -342,8 +343,10 @@ def measure(tmp_path, views="front", extra=(), guides=None):
 def test_two_materials_of_almost_one_colour_do_not_fail_detail_because_no_edge_can_be_seen_between_them_v2(tmp_path):
     """A pixel-perfect repaint of a wall and a trim 15 RGB apart (dE 7.3, under the dE 10 an eye needs) has no edge
     for the detail measure to find. Failing it asks the worker to regenerate a correct image."""
+    cc = tmp_path / "cc.json"
+    cc.write_text(json.dumps({"WALL": BROWN, "TRIM": BROWN_15}), encoding="utf-8")
     wall_trim_gen(tmp_path / "final/front.png")
-    rc, out, rep, check = measure(tmp_path)
+    rc, out, rep, check = measure(tmp_path, extra=("--concept-colors", cc))
     front = rep["views"]["front"]
     assert (rc, front["detail"], front["verdict"], rep["regen"]) == (0, None, "pass", [])
     assert checks(check)["detail.front"][0] == "not_checked"
@@ -377,8 +380,29 @@ def test_a_material_beside_two_blind_neighbours_lists_both_of_them_v2(tmp_path):
                                                        ((50, 250, 350, 350), "#4363D8")], mode="RGBA")
     png(tmp_path / "final/front.png", (600, 600), "#E8E8E8", [((75, 75, 525, 225), BROWN), ((75, 225, 525, 375), BROWN_15),
                                                            ((75, 375, 525, 525), "#9A5A3B")])
-    rc, _, _, check = measure(tmp_path, guides=g)
+    cc = tmp_path / "cc.json"
+    cc.write_text(json.dumps({"A": BROWN, "B": BROWN_15, "C": "#9A5A3B"}), encoding="utf-8")
+    rc, _, _, check = measure(tmp_path, guides=g, extra=("--concept-colors", cc))
     assert checks(check)["detail.front"][1] == {"A": ["B"], "B": ["A", "C"], "C": ["B"]}
+
+
+def test_a_door_only_the_back_guide_has_painted_in_the_wall_colour_fails_detail(tmp_path):
+    """The concept shows no door, so it has no reference colour. Unknown is not 'alike': a back view that paints the
+    door in the wall colour has lost the door, and the blind rule used to pass it with score 100."""
+    g = tmp_path / "guides"
+    g.mkdir()
+    (g / "views.json").write_text(json.dumps({"materials": {"WALL": ID_STONE, "DOOR": ID_TRIM}}), encoding="utf-8")
+    png(g / "front_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 350), ID_STONE)], mode="RGBA")
+    png(g / "back_id.png", (400, 400), (0, 0, 0, 0), [((50, 50, 350, 350), ID_STONE), ((160, 200, 240, 350), ID_TRIM)],
+        mode="RGBA")
+    cc = tmp_path / "cc.json"
+    cc.write_text(json.dumps({"WALL": BROWN}), encoding="utf-8")
+    for v in ("front", "back"):
+        png(tmp_path / f"final/{v}.png", (600, 600), "#E8E8E8", [((75, 75, 525, 525), BROWN)])
+    measure(tmp_path, extra=("--concept-colors", cc), guides=g)
+    rc, _, rep, check = measure(tmp_path, "front,back", ("--front", "--concept-colors", cc), guides=g)
+    assert (rc, rep["regen"], rep["views"]["back"]["status"]["detail"]) == (1, ["back"], "fail")
+    assert "detail.back" not in checks(check)
 
 
 def test_a_boundary_in_the_right_place_between_different_materials_passes_detail_v2(tmp_path):
@@ -564,10 +588,10 @@ def test_pick_size_gives_a_wide_view_and_a_square_view_the_landscape_size_v9(tmp
 
 
 def test_a_gen_that_touches_the_image_border_fails_because_the_object_is_cropped_v15(tmp_path):
-    wall_trim_gen(tmp_path / "final/front.png", margin=0)
+    wall_trim_gen(tmp_path / "final/front.png", margin=0, trim=SLATE)
     rc, _, rep, check = measure(tmp_path)
     assert (rc, checks(check)["border.front"][0]) == (1, "fail")
-    wall_trim_gen(tmp_path / "ok/final/front.png")
+    wall_trim_gen(tmp_path / "ok/final/front.png", trim=SLATE)
     rc, _, _, check = measure(tmp_path / "ok")
     assert (rc, checks(check)["border.front"][0]) == (0, "pass")
 
@@ -584,16 +608,16 @@ def test_a_front_that_touches_the_border_is_only_info_when_the_set_is_measured_a
 def test_the_set_measure_keeps_the_fail_of_the_front_own_measure_so_the_worker_must_accept_it_d44_3(tmp_path):
     """One step writes one measure.json: the set measure must not turn a front that failed its own measure into a pass,
     or an accepted front fail never reaches the reviewer."""
-    wall_trim_gen(tmp_path / "final/front.png", margin=0)
+    wall_trim_gen(tmp_path / "final/front.png", margin=0, trim=SLATE)
     g = wall_trim_guides(tmp_path / "guides", ("front", "back"))
     rc, _, _, check = measure(tmp_path, "front", guides=g)
     assert (rc, checks(check)["border.front"][0]) == (1, "fail")
-    wall_trim_gen(tmp_path / "final/back.png")
+    wall_trim_gen(tmp_path / "final/back.png", trim=SLATE)
     rc, _, rep, check = measure(tmp_path, "front,back", ("--front",), guides=g)
     got = {k: v[0] for k, v in checks(check).items()}
     assert (rc, got["border.front"], got["border.back"], rep["regen"]) == (1, "fail", "pass", [])
-    wall_trim_gen(tmp_path / "ok/final/front.png")
-    wall_trim_gen(tmp_path / "ok/final/back.png")
+    wall_trim_gen(tmp_path / "ok/final/front.png", trim=SLATE)
+    wall_trim_gen(tmp_path / "ok/final/back.png", trim=SLATE)
     assert measure(tmp_path / "ok", "front", guides=g)[0] == 0
     assert measure(tmp_path / "ok", "front,back", ("--front",), guides=g)[0] == 0
 

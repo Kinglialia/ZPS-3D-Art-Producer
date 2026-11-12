@@ -7,8 +7,8 @@ closed gap between columns counts as object. Here every pixel near the backgroun
 Images: <final>/<view>.png, the front and the side views in one folder.
 Without --concept-colors, the kit compares each material with the front view (the colour standard).
 --views: names are stripped; an unknown name stops the run with exit 2 and measures nothing (V5).
-V2: a boundary between two materials whose colours in the image are under dE 10 apart is not checked for `detail`:
-no edge can be seen there. It is listed in the check `detail.<view>` (not_checked).
+V2: a boundary between two materials whose colours in the image are under dE 10 apart, and whose reference colours
+(concept or front) are both known and under dE 10 apart, is not checked for `detail`: no edge can be seen there. It is listed in the check `detail.<view>` (not_checked).
 --front (V4): front.png already has its own measure (a run with --views front), so the set is measured against it: the
 front is never in `regen` and its new checks are at most `info`; if the front/back mirror pair fails, back is queued
 instead. The front's own checks are kept: the front checks of the measure.json already in <final>/review/checks/ replace
@@ -73,14 +73,15 @@ def pair_edges(label, pairs):
 REFERENCE = {}
 
 
-def apart_in_reference(a, b):
-    """The colours meant for two materials (concept, or the approved front) differ: their border must be visible."""
-    return a in REFERENCE and b in REFERENCE and mv.delta_e(mv.hex_rgb(REFERENCE[a]), mv.hex_rgb(REFERENCE[b])) >= BLIND_DE
+def alike_in_reference(a, b):
+    """The colours meant for two materials (concept, or the approved front) are both known and alike. An unknown
+    colour is not alike: the border of a material the concept does not show is measured."""
+    return a in REFERENCE and b in REFERENCE and mv.delta_e(mv.hex_rgb(REFERENCE[a]), mv.hex_rgb(REFERENCE[b])) < BLIND_DE
 
 
 def blind_pairs(blk, gen, mat_names):
     """V2: material pairs that touch in the guide and cannot be told apart in the image: 9 pixels in 10 of their two
-    regions together are under dE 10 from the median of both, and the colours meant for them (REFERENCE) are not apart.
+    regions together are under dE 10 from the median of both, and the colours meant for them (REFERENCE) are alike.
     Judging by the colour of each region alone would call a misplaced border 'blind', because a shifted region holds
     both colours."""
     if gen["bb"] is None:
@@ -95,7 +96,7 @@ def blind_pairs(blk, gen, mat_names):
             px = gr[core[i] | core[j]]
             if core[i].sum() >= 40 and core[j].sum() >= 40 and pair_edges(bl, [(i, j)]).any():
                 px, med = px[::max(1, len(px) // 1500)], np.median(px, 0)
-                if np.percentile([mv.delta_e(p, med) for p in px], 90) < BLIND_DE and not apart_in_reference(
+                if np.percentile([mv.delta_e(p, med) for p in px], 90) < BLIND_DE and alike_in_reference(
                         mat_names[i], mat_names[j]):
                     pairs.append((i, j))
     return pairs
