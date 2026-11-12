@@ -1,5 +1,6 @@
 """Drive the real CLI with fake agents through all six steps. The model step writes a real GLB (the box of glbkit), so
 the Meshy wrapper and its fake HTTP layer see a valid mesh; the texture worker calls meshy_call.py for real."""
+import hashlib
 import json
 import os
 import re
@@ -9,7 +10,7 @@ import sys
 from pathlib import Path
 
 import glbkit
-from shared import finding, fixed_line, pilot_project, report, run
+from shared import PILOT, finding, fixed_line, pilot_project, report, run
 
 AID = "pilot-house"
 A = f"production/assets/{AID}"
@@ -28,6 +29,55 @@ OUTPUTS = {
     "assemble": ("README.md", f"model/{AID}.glb", f"model/{AID}.blend", "texture/albedo_2048.png", "texture/notes.md",
                  "review/compare.json"),
 }
+
+
+RESULTS = {
+    "blockout": tuple(f"review/checks/{k}.json" for k in ("inputs", "schema", "materials", "layout", "base", "markers",
+                                                          "support", "proportion")),
+    "views_front": ("review/checks/measure.json",),
+    "views_rest": ("review/checks/measure.json", "review/checks/package.json"),
+    "model": ("review/join.json", "review/unwrap.json", *(f"review/checks/{k}.json" for k in (
+        "detail", "mesh", "uv_edge", "qa_mesh_check", "qa_uv_check", "qa_export_check", "qa_screen_tris_check"))),
+    "texture": ("review/checks/inputs.json",),
+}
+RESULT_DIRS = ("review/checks/", "review/gates/")
+
+
+def put(final: Path, o: str, text: str):
+    """One output of a fake worker. A result JSON (D36.4) is a valid pass: failed_checks reads every one of them."""
+    p = final / o
+    p.parent.mkdir(parents=True, exist_ok=True)
+    result = o.startswith(RESULT_DIRS) or o in ("review/join.json", "review/unwrap.json")
+    p.write_text(json.dumps({"tool": "fake", "overall": "pass", "checks": []}) if result else text, encoding="utf-8")
+
+
+def put_all(final: Path, step: str, outputs, name: str, tag: str = "", files: bool = True):
+    for o in (*outputs, *RESULTS.get(step, ())):
+        put(final, o, f"{o} {name}{tag}\n")
+    if step == "blockout" and final.name == "final":
+        blockout_files(final, name, tag, files=files)
+
+
+def blockout_files(final: Path, name: str, tag: str = "", roof_h: float | None = None, files: bool = True):
+    """The files of a blockout that pass gate_all.py: the pilot graph and the sources.json init_sources.py writes for the
+    pilot card. Ingest runs gate_all for real (L15), so the placeholder text of the other steps would fail check_schema.
+    roof_h 1.3 makes the built height 8 % over the card (layout.bbox fails)."""
+    g = json.loads((PILOT / "part_graph.json").read_text(encoding="utf-8"))
+    if roof_h:
+        g["params"]["roof_h"] = roof_h
+    (final / "part_graph.json").write_text(json.dumps(g), encoding="utf-8")
+    d = Path(final).parents[5] / "concepts/_approved" / AID
+    card, mat = d / "asset-card.yaml", d / f"{AID}.material.md"
+    sha = lambda f: hashlib.sha256(f.read_bytes()).hexdigest()  # noqa: E731
+    (final / "sources.json").write_text(json.dumps({
+        "files": {"layout": str(card), "layout_sha256": sha(card), "material": str(mat), "material_sha256": sha(mat)}
+        if files else {"layout": "", "layout_sha256": "x", "material": "", "material_sha256": "x"},
+        "layout": {"w": 4, "d": 4, "h": 3.7, "includes_base": True, "source": "asset-card.yaml size_m"},
+        "character_h": 1.6, "door_h": 1.8, "door_h_source": "asset-card.yaml scale_overrides cửa height_m",
+        "materials": ["STONE", "TIMBER", "TEAL"], "camera": {"azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40}}),
+        encoding="utf-8")
+    for o in ("parts_lib.py", "assembled.glb", "blockout.md"):
+        (final / o).write_text(f"{o} {name}{tag}\n", encoding="utf-8")
 
 
 def counts(blocker=0, major=0):
@@ -65,9 +115,7 @@ class Flow:
         return out
 
     def outputs(self, vd: Path, step: str, name: str, mesh_size=(1.0, 1.0, 1.0)):
-        for o in OUTPUTS[step]:
-            (vd / "final" / o).parent.mkdir(parents=True, exist_ok=True)
-            (vd / "final" / o).write_text(f"{o} {name}\n", encoding="utf-8")
+        put_all(vd / "final", step, OUTPUTS[step], name)
         if step == "model":
             glbkit.write(vd / "final" / f"{AID}-untextured.glb", *glbkit.box(mesh_size))
         if step == "texture":

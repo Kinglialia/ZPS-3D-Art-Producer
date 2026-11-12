@@ -36,7 +36,7 @@ def test_the_model_worker_is_asked_which_notes_it_did_and_its_reviewer_confirms_
             "- Ghi chú bước trước worker ghi đã làm (RESOLVED_NOTES): views_rest v1 F1; region, acceptance trong "
             f"`{A}/views_rest/v1/findings.json`." in rows) == (True, True)
     assert max(len(f.cp[k]["text"].replace(str(tmp_path.resolve()), "").encode()) for k in ("m1 brief", "m1 review brief")
-               ) < 4096
+               ) < 4352
     rep = tmp_path / out["report"]
     body = dict(verdict="PASS", counts=counts(), top_fix=None, evidence="lit_34_front.png")
     rep.write_text(report(**body, extra="RESOLVED_CONFIRMED: views_rest v1 F2\n"), encoding="utf-8")

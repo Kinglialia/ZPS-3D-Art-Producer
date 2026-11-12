@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from flowkit import put_all
 from shared import P, finding, fixed_line, model_only, pilot_project, report, run
 
 AID = "pilot-house"
@@ -71,15 +72,12 @@ class Flow:
         vd = (self.root / out["report"]).parent
         step = self.st()["stage"]
         for sub, tag in (("final", "a"), *((f"variants/{x}", x) for x in variants)):
-            for o in OUTPUTS[step]:
-                (vd / sub / o).parent.mkdir(parents=True, exist_ok=True)
-                (vd / sub / o).write_text(f"{o} {name} phương án {tag}\n", encoding="utf-8")
+            put_all(vd / sub, step, OUTPUTS[step], name, f" phương án {tag}")
             if step in SHEET_RENDERS:
                 for r in SHEET_RENDERS[step]:
                     (vd / sub / r).parent.mkdir(parents=True, exist_ok=True)
                     Image.new("RGB", (64, 48), (120, 80, 40)).save(vd / sub / r)
         if failing:
-            (vd / "final/review/checks").mkdir(parents=True)
             (vd / "final/review/checks/qa_screen_tris_check.json").write_text(json.dumps({
                 "tool": "asset_checks/screen_tris_check", "overall": "fail"}), encoding="utf-8")
             (vd / "final/review/checks/detail.json").write_text(json.dumps({"overall": "pass"}), encoding="utf-8")
@@ -207,7 +205,9 @@ def test_the_required_outputs_carry_the_asset_id_so_a_missing_mesh_blocks_ingest
     req = [l for l in flow["m1 brief"]["text"].splitlines() if l.startswith("- Bắt buộc có")]
     assert req == [f"- Bắt buộc có (tính từ `{A}/model/v1/`): `final/pilot-house-untextured.glb`, `final/pilot-house.blend`, "
                    "`final/part_graph.json`, `final/parts_lib.py`, `final/spec.json`, `final/model.md`, "
-                   "`final/review/model_sheet.png`, `final/review/renders/renders.json`."]
+                   "`final/review/model_sheet.png`, `final/review/renders/renders.json`, `final/review/{join,unwrap}.json`, "
+                   "`final/review/checks/{detail,mesh,uv_edge,qa_mesh_check,qa_uv_check,qa_export_check,"
+                   "qa_screen_tris_check}.json`."]
     assert flow["m1 worker"]["out"].splitlines()[0] == (
         "pilot-house: worker DONE → model/review. Tiếp: giao reviewer → `brief pilot-house`")
 

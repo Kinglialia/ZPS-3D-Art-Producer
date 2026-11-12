@@ -64,8 +64,17 @@ def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra:
 REVIEW_RESULTS = ("join.json", "unwrap.json")  # model tools write these to final/review/, not to checks/
 
 
+def unreadable(p: Path) -> bool:
+    try:
+        json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    return False
+
+
 def failed_checks(vd) -> list[str]:
-    """D26.4: kit result JSON in final/review/{gates,checks}/ and REVIEW_RESULTS whose overall is fail or error."""
+    """D26.4, D36.4: kit result JSON in final/review/{gates,checks}/ and REVIEW_RESULTS whose overall is fail or error.
+    A file that does not parse is an error: a tool killed in the middle of its write must not read as a pass."""
     out = []
     rv = vd / "final" / "review"
     for p in sorted([p for sub in ("gates", "checks") for p in (rv / sub).glob("*.json")]
@@ -73,10 +82,23 @@ def failed_checks(vd) -> list[str]:
         try:
             r = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            out.append(rel(p))
             continue
         if isinstance(r, dict) and (r.get("overall") in ("fail", "error") or r.get("pass") is False):
             out.append(rel(p))
     return out
+
+
+def brace(paths: list[str]) -> list[str]:
+    """The result JSON of one folder under final/review/ as `final/review/checks/{a,b}.json`: the list of required files
+    stays short enough for the brief."""
+    groups: dict[str, list[str]] = {}
+    for o in paths:
+        d, _, f = o.rpartition("/")
+        if d.startswith("final/review") and f.endswith(".json"):
+            groups.setdefault(d, []).append(f[:-5])
+    out = [o for o in paths if not (o.endswith(".json") and len(groups.get(o.rpartition("/")[0], ())) > 1)]
+    return out + [f"{d}/{{{','.join(fs)}}}.json" for d, fs in groups.items() if len(fs) > 1]
 
 
 def concept_files(st, step, review: bool = False) -> list[str]:
@@ -275,7 +297,7 @@ def worker_brief(cfg, st, step, n, fix: bool, ph: str, pf: dict | None, preset: 
     if cfg["preview"]["spec"]:
         lines.append(f"- Preview: {cfg['preview']['spec']}")
     if step["outputs"]:
-        req = ", ".join(f"`{o}`" for o in outputs_of(step, st))
+        req = ", ".join(f"`{o}`" for o in brace(outputs_of(step, st)))
         lines.append(f"- Bắt buộc có (tính từ `{rel(d)}/`): {req}.")
     if step.get("external_command"):
         cmd = step["external_command"].format(

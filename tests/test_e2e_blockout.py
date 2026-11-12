@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from flowkit import put_all
 from shared import P, PILOT, PROFILE_HASH, blockout_only, finding, pilot_project, report, run
 
 AGENT = P.parents[1] / "agents/zps-3dp-step-blockout"
@@ -71,11 +72,8 @@ class Pilot:
         out, text = self.cp[f"{name} brief"]["out"], self.cp[f"{name} brief"]["text"]
         vd = (self.root / out["report"]).parent
         for sub, tag in (("final", "a"), *((f"variants/{x}", x) for x in variants)):
-            (vd / sub).mkdir(parents=True, exist_ok=True)
-            for o in OUTPUTS:
-                (vd / sub / o).write_text(f"{o} {name} phương án {tag}\n", encoding="utf-8")
+            put_all(vd / sub, "blockout", OUTPUTS, name, f" phương án {tag}")
         if failing:
-            (vd / "final/review/checks").mkdir(parents=True)
             (vd / "final/review/checks/layout.json").write_text(json.dumps({
                 "tool": "blockout/check_layout", "overall": "fail",
                 "checks": [{"check": "layout.bbox", "status": "fail"}]}), encoding="utf-8")

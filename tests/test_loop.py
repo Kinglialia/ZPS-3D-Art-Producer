@@ -11,6 +11,7 @@ from core.state import ProducerError, load_cfg, load_st, save_st
 
 AID = "house-a"
 OUTPUTS = ["part_graph.json", "parts_lib.py", "assembled.glb", "sources.json", "blockout.md"]
+RESULTS = ["inputs", "schema", "materials", "layout", "base", "markers", "support", "proportion"]
 ZERO = {"blocker": 0, "major": 0, "minor": 0, "preference": 0, "unclear": 0}
 
 
@@ -35,16 +36,20 @@ class Flow:
     def text(self, out):
         return (self.root / out["brief"]).read_text(encoding="utf-8")
 
-    def work(self, status="DONE", out=None, extra="", checks=None, fixed=""):
-        """checks: {name: overall} of result JSON the worker leaves in final/review/checks/. fixed: the FIXED line; a DONE
+    def work(self, status="DONE", out=None, extra="", checks=None, fixed="", raw=None):
+        """checks: {name: overall} of result JSON the worker leaves in final/review/checks/. raw: {name: text} written as
+        is, for a file that does not parse. fixed: the FIXED line; a DONE
         that names every open finding gets a `full` review (D31.2)."""
         out = out or self.brief()
         rep = self.root / out["report"]
         if rep.parent.name.startswith("v"):
             for o in OUTPUTS:
                 (rep.parent / "final" / o).write_text("x", encoding="utf-8")
-            for name, overall in (checks or {}).items():
+            (rep.parent / "final/review/checks").mkdir(parents=True, exist_ok=True)
+            for name, overall in ({f"{k}.json": "pass" for k in RESULTS} | (checks or {})).items():
                 write_json(rep.parent / "final/review/checks" / name, {"overall": overall})
+            for name, text in (raw or {}).items():
+                (rep.parent / "final/review/checks" / name).write_text(text, encoding="utf-8")
         rep.write_text(f"STATUS: {status}\nPROFILE_HASH: {brief_hash(self.text(out))}\n"
                        + (f"FIXED: {fixed}\n" if fixed else "") + extra, encoding="utf-8")
         return self.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
@@ -160,6 +165,12 @@ def test_round_1_without_progress_continues_but_round_2_without_progress_stops_a
         "chờ người dùng: không tiến bộ ở vòng 2; còn mở: F1, F2 (review page)\n")
     assert pick(flow.st) == {"state": "waiting_human", "fix_round": 2, "fix_base": 2, "offer": 3, "label": "chưa đạt",
                              "note": "không tiến bộ ở vòng 2; còn mở: F1, F2"}
+
+
+def write_results(final: Path):
+    """The result JSON a correct worker leaves in final/review/checks/ (pipeline.toml outputs, D36.4)."""
+    for k in RESULTS:
+        write_json(final / f"review/checks/{k}.json", {"overall": "pass"})
 
 
 def write_json(p: Path, d: dict):
@@ -405,6 +416,12 @@ PICKED = dict(verdict="PASS", top_fix=None, counts=counts(), rubric="massing=pas
               prior=["- F1: resolved | evidence: clay_front"])
 
 
+def variant_results(b: Path):
+    """make_variant.py leaves the result JSON of its chain in the variant, so the variant that is picked carries them."""
+    for k in RESULTS:
+        write_json(b / f"review/checks/{k}.json", {"overall": "pass"})
+
+
 def test_a_picked_variant_missing_a_required_output_blocks_the_review_and_copies_nothing(flow):
     """Copied as is, the incomplete variant reached waiting_human and the approval then died on the missing lock file."""
     fix_v1(flow, 1, "param")
@@ -412,11 +429,13 @@ def test_a_picked_variant_missing_a_required_output_blocks_the_review_and_copies
     b = flow.v(2) / "variants/b"
     b.mkdir(parents=True)
     (b / "blockout.md").write_text("b", encoding="utf-8")
+    variant_results(b)
     flow.review(pick="b", **PICKED)
     assert (pick(flow.st)["state"], pick(flow.st)["note"]) == ("blocked", (
         f"PICK b: production/assets/{AID}/blockout/v2/variants/b/ thiếu output bắt buộc: "
         "part_graph.json, parts_lib.py, assembled.glb, sources.json"))
-    assert {p.name: p.read_text(encoding="utf-8") for p in (flow.v(2) / "final").iterdir()} == {o: "x" for o in OUTPUTS}
+    assert {p.name: p.read_text(encoding="utf-8") for p in (flow.v(2) / "final").iterdir() if p.is_file()} == {
+        o: "x" for o in OUTPUTS}
     assert not (flow.v(2) / "variants/a").exists() and not (flow.v(2) / "findings.json").exists()
     flow.call(loop.retry, Namespace(id=AID))
     assert (flow.st["state"], flow.st["versions"]["blockout"]) == ("running", 2)
@@ -429,6 +448,7 @@ def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_varia
     b.mkdir(parents=True)
     for o in OUTPUTS:
         (b / o).write_text("b", encoding="utf-8")
+    variant_results(b)
     out = flow.brief()
     with pytest.raises(ProducerError) as e:
         flow.review(out=out, pick="c", **PICKED)
@@ -436,7 +456,7 @@ def test_pick_copies_the_chosen_variant_into_final_before_ingest_and_keeps_varia
     assert flow.st["state"] == "reviewing"
     flow.review(out=out, pick="b", **PICKED)
     final = flow.v(2) / "final"
-    assert {p.name: p.read_text(encoding="utf-8") for p in final.iterdir()} == {o: "b" for o in OUTPUTS}
+    assert {p.name: p.read_text(encoding="utf-8") for p in final.iterdir() if p.is_file()} == {o: "b" for o in OUTPUTS}
     assert (flow.v(2) / "variants/a/part_graph.json").read_text(encoding="utf-8") == "x"
     assert flow.st["state"] == "waiting_human"
 
@@ -987,6 +1007,72 @@ def test_an_accepted_fail_in_a_step_readme_reaches_the_exceptions_of_the_duyet_2
                                                encoding="utf-8")
     assert assemble.exceptions(flow.st | {"approved": {"blockout": 1}}) == [
         "- blockout: layout.json — bbox lệch 6% do diềm 0.2 m"]
+
+
+def test_a_gate_json_cut_short_counts_as_an_error_and_goes_back_to_the_worker_c5(flow):
+    """A tool killed in the middle of its write leaves half a JSON. Skipped, it read as a pass and the reviewer judged a
+    version whose check never finished."""
+    head = flow.work(raw={"layout.json": '{"tool": "blockout/check_layout", "overall": "pa'}).splitlines()[0]
+    assert head == "house-a: worker DONE (check fail) → blockout/fix. Tiếp: giao worker → `brief house-a`"
+    assert flow.st["direct"] == 1 and "layout.json" in flow.st["note"]
+
+
+def test_accepted_fail_cannot_cover_a_json_that_does_not_parse_c5(flow):
+    acceptable(flow.root, "layout.json")
+    out = flow.brief()
+    (flow.v(1) / "final").mkdir(parents=True, exist_ok=True)
+    (flow.v(1) / "final/README.md").write_text("## NGOẠI LỆ\n- layout.json — bbox lệch 6% do diềm 0.2 m\n", encoding="utf-8")
+    flow.work(out=out, raw={"layout.json": '{"overall": "fa'},
+              extra="ACCEPTED_FAIL: final/review/checks/layout.json — bbox lệch 6% do diềm 0.2 m\n")
+    assert (flow.st["state"], flow.st["direct"]) == ("running", 1)
+    assert f"{AID} · blockout v1 · ACCEPTED_FAIL từ chối · layout.json: JSON không đọc được" in flow.ledger()
+
+
+def test_not_checked_inside_a_json_whose_overall_is_pass_stays_a_pass_c5(flow):
+    """The views measure writes detail.<view> as not_checked on purpose, and a tool writes it when a check does not apply:
+    only a missing file, an unreadable file or an overall of fail or error blocks."""
+    out = flow.brief()
+    write_json(flow.v(1) / "final/review/checks/proportion.json", {"overall": "pass", "checks": [
+        {"check": "proportion.front", "status": "not_checked"}, {"check": "proportion.top", "status": "pass"}]})
+    flow.work(out=out)
+    assert (flow.st["state"], flow.st["direct"]) == ("reviewing", None)
+
+
+def at_step(f, sid):
+    """The blockout flow with the asset moved to `sid`, v1 running: the ingest reads the outputs of that step."""
+    ph = brief_hash(f.text(f.brief()))
+    st = f.st
+    st |= {"stage": sid, "state": "running", "versions": {sid: 1}, "inputs": {sid: {"v1": {"profile": ph}}}}
+    save_st(st)
+    (f.v(1, sid) / "final").mkdir(parents=True, exist_ok=True)
+    return f.v(1, sid), ph
+
+
+def result_files(sid):
+    cfg = load_cfg()
+    step = next(s for s in cfg["steps"] if s["id"] == sid)
+    return step, [o for o in step["outputs"] if o.startswith("final/review/") and o.endswith(".json")]
+
+
+@pytest.mark.parametrize("sid", ["blockout", "views_front", "views_rest", "model", "texture"])
+def test_a_worker_that_left_out_one_result_json_of_its_step_is_blocked_with_the_file_named_c5(flow, sid):
+    """No output list required the gate and check JSON, so a worker that never ran them went straight to the reviewer."""
+    from core.state import outputs_of
+    step, results = result_files(sid)
+    assert results, f"{sid}: pipeline.toml lists no result JSON in outputs"
+    d, ph = at_step(flow, sid)
+    for gone in results:
+        for o in outputs_of(step, flow.st):
+            p = d / o
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text('{"overall": "pass"}' if o.endswith(".json") else "x", encoding="utf-8")
+        (d / gone).unlink()
+        (d / "worker-out.md").write_text(f"STATUS: DONE\nPROFILE_HASH: {ph}\n", encoding="utf-8")
+        flow.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
+        assert (flow.st["state"], flow.st["note"]) == ("blocked", f"thiếu output bắt buộc: {gone}")
+        st = flow.st
+        st |= {"state": "running"}
+        save_st(st)
 
 
 def scope_of(f, out):

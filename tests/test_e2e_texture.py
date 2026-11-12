@@ -106,7 +106,7 @@ def test_the_texture_brief_requires_the_albedo_at_the_card_resolution_and_the_re
     req = [l for l in lines(flow["t1 brief"]["text"]) if l.startswith("- Bắt buộc có")]
     assert req == [f"- Bắt buộc có (tính từ `{A}/texture/v1/`): `final/albedo_2048.png`, `final/texture_spec.json`, "
                    "`final/notes.md`, `final/final_lit_vs_concept.png`, `final/review/renders.json`, "
-                   "`final/review/checks/tex_measure.json`."]
+                   "`final/review/checks/{inputs,tex_measure}.json`."]
 
 
 def test_a_meshy_poll_error_waits_on_the_same_task_and_spends_one_call_of_the_budget(flow):

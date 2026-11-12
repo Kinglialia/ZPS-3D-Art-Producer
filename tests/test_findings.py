@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "zps-3dp-pr
 from core.contract import parse_review  # noqa: E402
 from core.findings import apply, best_version, open_counts, progress  # noqa: E402
 from test_contract import finding, report  # noqa: E402
+from flowkit import put_all  # noqa: E402
 from shared import brief_hash, write_profile  # noqa: E402
 
 P = Path(__file__).resolve().parents[1] / "src" / "zps-3dp-producer" / "scripts" / "producer.py"
@@ -276,8 +277,7 @@ OUTPUTS = ["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb",
 
 def worker_round(tmp, n):
     v = tmp / f"production/assets/house-a/blockout/v{n}"
-    for o in OUTPUTS:
-        (v / o).write_text("x", encoding="utf-8")
+    put_all(v / "final", "blockout", [o.removeprefix("final/") for o in OUTPUTS], "x", files=False)
     h = brief_hash((v / "brief-worker.md").read_text(encoding="utf-8"))
     (v / "worker-out.md").write_text(f"STATUS: DONE\nPROFILE_HASH: {h}\nFIXED: F1\n", encoding="utf-8")
     head, line = run(tmp, "ingest", "house-a").splitlines()

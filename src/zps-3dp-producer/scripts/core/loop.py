@@ -228,6 +228,7 @@ def readme_exceptions(d) -> str:
 
 def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -> tuple[dict, list[str]]:
     """D31.3: which failed JSON the worker may leave failed. Returns ({failed path: (name, why)}, refusals)."""
+    from .briefs import unreadable
     ok, refused, notes = {}, [], readme_exceptions(d)
     for f, why in claims:
         hit = next((b for b in bad if b == f or b.endswith("/" + f.removeprefix("./"))), None)
@@ -236,6 +237,8 @@ def accept_fails(step: dict, d, bad: list[str], claims: list[tuple[str, str]]) -
             refused.append(f"{f}: không phải JSON fail trong final/review/{{gates,checks}}/, join.json, unwrap.json")
         elif name in HARD_GATES:
             refused.append(f"{name}: gate cứng, không bao giờ được ACCEPTED_FAIL")
+        elif unreadable(Path(hit)):
+            refused.append(f"{name}: JSON không đọc được, không có kết quả để chấp nhận")
         elif name not in step["acceptable"]:
             refused.append(f"{name}: không có trong acceptable của bước {step['id']}")
         elif not re.search(r"\d", why):

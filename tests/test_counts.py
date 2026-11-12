@@ -13,7 +13,7 @@ import yaml
 
 from shared import SCRIPTS, brief_hash
 from test_intake import dump, make_asset, mutated
-from test_loop import AID, OUTPUTS, flow  # noqa: F401  (flow is the blockout-only fixture)
+from test_loop import AID, OUTPUTS, flow, write_results  # noqa: F401  (flow is the blockout-only fixture)
 
 import check_counts
 from core import loop
@@ -181,6 +181,7 @@ def worker_round(flow, g):  # noqa: F811
     for o in OUTPUTS:
         (vd.parent / "final" / o).write_text("x", encoding="utf-8")
     (vd.parent / "final/part_graph.json").write_text(json.dumps(g), encoding="utf-8")
+    write_results(vd.parent / "final")
     vd.write_text(f"STATUS: DONE\nPROFILE_HASH: {brief_hash(flow.text(out))}\n", encoding="utf-8")
     return out, flow.call(loop.ingest, Namespace(id=AID, agent_id="w1"))
 

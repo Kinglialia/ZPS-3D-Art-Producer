@@ -12,7 +12,7 @@ import pytest
 
 from shared import P, brief_hash
 from core import briefs, loop
-from test_loop import AID, flow  # noqa: F401
+from test_loop import AID, flow, write_results  # noqa: F401
 
 
 def cli(root, *args, runtime=None, prod=None, ok=True):
@@ -80,6 +80,7 @@ def worker_report(flow, out):
     rep = flow.root / out["report"]
     for o in ("part_graph.json", "parts_lib.py", "assembled.glb", "sources.json", "blockout.md"):
         (rep.parent / "final" / o).write_text("x", encoding="utf-8")
+    write_results(rep.parent / "final")
     rep.write_text(f"STATUS: DONE\nPROFILE_HASH: {brief_hash(flow.text(out))}\n", encoding="utf-8")
 
 

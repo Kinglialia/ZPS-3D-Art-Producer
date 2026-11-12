@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from flowkit import put_all
 from shared import P, finding, fixed_line, pilot_project, report, run, views_only
 
 AID = "pilot-house"
@@ -54,11 +55,8 @@ class Flow:
     def work(self, name, failing=False):
         out = self.brief(name + " brief")
         vd = (self.root / out["report"]).parent
-        for o in OUTPUTS[self.st()["stage"]]:
-            (vd / "final" / o).parent.mkdir(parents=True, exist_ok=True)
-            (vd / "final" / o).write_text(f"{o} {name}\n", encoding="utf-8")
+        put_all(vd / "final", self.st()["stage"], OUTPUTS[self.st()["stage"]], name)
         if failing:
-            (vd / "final/review/checks").mkdir(parents=True)
             (vd / "final/review/checks/measure.json").write_text(json.dumps({"tool": "views/measure", "overall": "fail"}))
             (vd / "final/README.md").write_text("## NGOẠI LỆ\n- measure.json — IoU front 0.81 < 0.85 do bóng đổ\n",
                                                 encoding="utf-8")

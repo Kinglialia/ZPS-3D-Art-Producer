@@ -6,7 +6,9 @@
 # review_inputs: bước trong inputs mà brief reviewer trỏ tới `final/` (mặc định: inputs).
 # concept: file trong _approved/<id>/ bước cần đọc; {id} = mã asset (mặc định: mọi file bắt buộc). review_concept: của reviewer (mặc định: concept).
 # regions: `region` của finding mới mở đầu bằng một trong các tên này, vd `back: mép mái`.
-# outputs, lock: {id} = mã asset, {res} = texture_res của thẻ (mặc định 2048). lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
+# outputs, lock: {id} = mã asset, {res} = texture_res của thẻ (mặc định 2048). outputs gồm cả JSON kết quả mà một lần chạy
+#   đúng của bước luôn ghi: thiếu một file thì ingest dừng, nêu tên file. Không ghi JSON chỉ có ở một chế độ hay một
+#   vòng: meshy.json (một chế độ), inputs.json của views và model (vòng sửa của hai bước này không chạy lại). lock: file duyệt bước khóa bằng sha256 vào status.json `locked` (D20.7).
 # issues: bước trong inputs mà brief chép dòng ISSUES của report worker bản đã duyệt (D20.3).
 # pilot: brief ghi PILOT: deliver/<pilot_asset>/ để tool so với pilot (D21.7, D22.10).
 # script: bước không có agent; `P brief` in lệnh chạy script (scripts/<script>), script ghi report-script.md.
@@ -63,7 +65,10 @@ uses = ["blender"]
 top_fix = ["structure", "param"]
 counts_gate = true
 sheet = ["final/review/game_cam.png", "final/review/lineup.png", "final/review/foot_front_*.png", "final/review/renders/*.png"]
-outputs = ["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb", "final/sources.json", "final/blockout.md"]
+outputs = ["final/part_graph.json", "final/parts_lib.py", "final/assembled.glb", "final/sources.json", "final/blockout.md",
+           "final/review/checks/inputs.json", "final/review/checks/schema.json", "final/review/checks/materials.json",
+           "final/review/checks/layout.json", "final/review/checks/base.json", "final/review/checks/markers.json",
+           "final/review/checks/support.json", "final/review/checks/proportion.json"]
 
 [[steps]]
 id = "views_front"
@@ -79,7 +84,7 @@ views_set = true
 inputs = ["blockout"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
 outputs = ["final/front.png", "final/guides/views.json", "final/concept_colors.json", "final/bg_color.json",
-           "final/report/report.json", "final/report/VIEWS.md"]
+           "final/report/report.json", "final/report/VIEWS.md", "final/review/checks/measure.json"]
 
 [[steps]]
 id = "views_rest"
@@ -96,7 +101,8 @@ inputs = ["blockout", "views_front"]
 concept = ["concept_albedo.png", "asset-card.yaml", "{id}.material.md"]
 regions = ["back", "left", "right", "top"]
 outputs = ["final/back.png", "final/left.png", "final/right.png", "final/top.png", "final/README.md",
-           "final/report/report.json", "final/report/VIEWS.md", "final/report/VIEWS_sheet.png"]
+           "final/report/report.json", "final/report/VIEWS.md", "final/report/VIEWS_sheet.png",
+           "final/review/checks/measure.json", "final/review/checks/package.json"]
 
 [[steps]]
 id = "model"
@@ -117,7 +123,11 @@ sheet = ["final/review/lit_*.png", "final/review/clay_lit_concept.png", "final/r
          "final/review/lineup.png", "final/review/renders/*.png"]
 lock = "final/{id}-untextured.glb"
 outputs = ["final/{id}-untextured.glb", "final/{id}.blend", "final/part_graph.json", "final/parts_lib.py",
-           "final/spec.json", "final/model.md", "final/review/model_sheet.png", "final/review/renders/renders.json"]
+           "final/spec.json", "final/model.md", "final/review/model_sheet.png", "final/review/renders/renders.json",
+           "final/review/join.json", "final/review/unwrap.json", "final/review/checks/detail.json",
+           "final/review/checks/mesh.json", "final/review/checks/uv_edge.json", "final/review/checks/qa_mesh_check.json",
+           "final/review/checks/qa_uv_check.json", "final/review/checks/qa_export_check.json",
+           "final/review/checks/qa_screen_tris_check.json"]
 
 [[steps]]
 id = "texture"
@@ -139,7 +149,7 @@ issues = ["model"]
 codex_batch = false
 pilot = true
 outputs = ["final/albedo_{res}.png", "final/texture_spec.json", "final/notes.md", "final/final_lit_vs_concept.png",
-           "final/review/renders.json", "final/review/checks/tex_measure.json"]
+           "final/review/renders.json", "final/review/checks/inputs.json", "final/review/checks/tex_measure.json"]
 
 [[steps]]
 id = "assemble"
