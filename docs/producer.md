@@ -265,7 +265,7 @@ Sau 3 lần lỗi ở một trong hai trường hợp: `STATUS: BLOCKED`, Produc
 4. **Kiểm GLB hiển thị đúng:** render một bộ nhỏ (3/4 trước, camera game) từ chính file GLB đã xuất, so pixel với render cùng góc của bước `texture`. Lệch quá ngưỡng → fail. Lý do: bắt lỗi phát sinh khi xuất (color space, alpha, unlit) mà render trong Blender không thấy.
 5. Ghép gói cuối: `model/`, `texture/` (chép `albedo` và `notes.md` từ `final/` của bước `texture`), `review/` (sheet DUYỆT 1, render và `final_lit_vs_concept.png` của bước `texture`, ảnh so ở điểm 4, report reviewer).
 6. Ghép `README.md` từ report các bước: dòng đầu là trạng thái và ngày; cách làm (chế độ texture, số lần gọi Meshy tính từ file budget); ngoại lệ (NGOẠI LỆ, TEXTURE NOTE, mục "Blockout tự quyết"); việc còn mở; những gì chưa kiểm (engine, camera chưa chốt, % tam giác nhỏ).
-   **"Việc còn mở"** (D27.8) chỉ lấy finding còn mở trong `findings.json` của **version được duyệt** ở từng bước. Một ghi chú của bước trước rời khỏi danh sách khi worker bước sau ghi nó ở `RESOLVED_NOTES` và reviewer bước đó xác nhận (mục 6.2). Run 4: README liệt kê "3 hàng ván mặt sau" dù model đã dựng. Code hiện tại (`1620c40`) mới làm một trường hợp: bỏ finding `note_texture` khi review texture đã duyệt có `texture_note=pass`.
+   **"Việc còn mở"** (D27.8) chỉ lấy finding còn mở trong `findings.json` của **version được duyệt** ở từng bước. Một ghi chú của bước trước rời khỏi danh sách khi worker bước sau ghi nó ở `RESOLVED_NOTES` và reviewer bước đó xác nhận (mục 6.2). Run 4: README liệt kê "3 hàng ván mặt sau" dù model đã dựng.
 7. Pass → `waiting_human` (DUYỆT 2). Fail ở bất kỳ điểm nào → `blocked`, Producer báo anh kèm điểm fail.
 
 Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding để trang duyệt hiện được.
@@ -282,7 +282,6 @@ Mỗi điểm fail ghi vào `assemble/vN/report-script.md` theo dạng finding �
 - Script ghi mỗi lần dự phòng vào ledger: sự kiện `report_fallback`, kèm vai trò và bước.
 - Settings của project có rule allow cho lệnh ghi dưới `production/`, để bớt lần bị chặn (bản Claude: `templates/settings.snippet.json`).
 - Ngoài đường dự phòng, tin nhắn trả về vẫn chỉ gồm `VERDICT` và `COUNTS` (D22.6).
-- Code hiện tại (`170aadc`) bắt reviewer luôn trả report bằng chữ và Producer luôn lưu hộ. Code phải đổi theo mục này. Hai dòng đánh dấu và cách `ingest` đọc chúng (`170aadc`, `39c8ebf`) giữ cho đường dự phòng.
 
 ### 6.6 Không có thời gian chết (D33)
 
@@ -332,7 +331,7 @@ production/                            KHU 2 — LÀM VIỆC. Chỉ script và a
   rubrics/<loại>.md
   assets/<id>/
     status.json, brief.md, rubric.md, feedback.md, feedback/
-    <bước>/vN/{final, work, review, findings.json, brief-*.md, report-*.md}
+    <bước>/vN/{final, work, review, findings.json, brief-*.md, worker-out.md, review-out.md}
     texture/budget-<mesh_hash>.json
 
 deliver/<id>/                          KHU 3 — KẾT QUẢ CUỐI ĐÃ DUYỆT
@@ -448,14 +447,14 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 |---|---|---|
 | `producer.py`, contract, schema, script kiểm, tool của agent | ✓ | |
 | Prompt của từng agent (`agents/*.md`) | ✓ | |
-| Cách gọi agent, resume, hook, tool gửi file, đường dẫn | | `adapters/claude.md`, `adapters/codex.md` |
+| Cách gọi agent, resume, hook, tool gửi file, đường dẫn | | `editions/claude/adapter.md`, `editions/codex/adapter.md` |
 
 - Spec agent viết trung lập với runtime: "sub-agent của runtime", không "sub-agent Claude" (D22.9).
 - Adapter ghi cách quy đổi tên chung `opus`, `sonnet`, `haiku` sang model thật của runtime. Ledger ghi model thật đã dùng ở mỗi lần giao (D22.9).
-- Claude Code: subagent qua Task; resume qua SendMessage; hook SessionStart; gửi file qua `SendUserFile`; Review Board `local+remote` dùng được (đã thử 2026-11-08).
+- Claude Code: subagent qua tool Agent; resume qua SendMessage; hook SessionStart và SubagentStop; gửi file qua `SendUserFile`; Review Board `local+remote` dùng được (đã thử 2026-11-08).
 - Codex: gọi agent qua `collaboration.spawn_agent`, resume qua `collaboration.send_message` (cần thử, `docs/coding-checklist.md`). Quyền mạng cấp ở phiên gốc. Review Board chỉ `local`.
 - **Blender trong bản Codex** (D25.D): trên macOS Blender bị crash bên trong sandbox của Codex. Theo `installer/codex_rules.py` của kit, bản Codex có installer ghi file rules chỉ cho phép đúng các lệnh `<Blender> -b --python <script đã cài>.py …` của Producer và kit chạy ngoài sandbox. Mọi lệnh khác vẫn chạy trong sandbox. Thư mục skill chỉ đọc trong sandbox, nên agent không sửa được danh sách script được phép. Chạy lại installer sau mỗi lần nâng cấp.
-- **Eval kích hoạt** (D25.E, theo `evals/triggers.json` của kit): mỗi skill và agent có bộ câu mẫu kèm kết quả mong đợi (kích hoạt hay không), gồm các câu âm trùng với kit, ví dụ "ZPS - 3D Artist dựng model cái thùng" không được kích hoạt `zps-3dp-step-model`. Build chạy bộ eval này.
+- **Eval kích hoạt** (D25.E, theo `evals/triggers.json` của kit): mỗi skill và agent có bộ câu mẫu kèm kết quả mong đợi (kích hoạt hay không), gồm các câu âm trùng với kit, ví dụ "ZPS - 3D Artist dựng model cái thùng" không được kích hoạt `zps-3dp-step-model`. Build chạy phần tĩnh của bộ eval (đủ mục, đúng format, quy tắc giao brief). Phần chạy thật tốn lượt model và không nằm trong build (`docs/EDITIONS.md`, mục Eval kích hoạt).
 - Sửa prompt agent chỉ sửa một chỗ. Adapter không được chứa quy tắc nghiệp vụ.
 - Thứ tự làm giữ như D6.4: bản Claude, chạy thử, rồi bản Codex. Chạy A/B khi cả hai bản đã qua một asset trọn vẹn.
 
@@ -473,7 +472,7 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 
 **Ledger ghi thời gian và token theo vai trò** (D27.3):
 - Mỗi lần giao ghi `role` (worker, reviewer, script), thời điểm giao, thời điểm `ingest`, token và thời lượng của subagent.
-- Producer truyền token và thời lượng mà runtime báo vào `P ingest` qua tham số mới. Hiện tại `P ingest` chỉ có `--tokens <N>` (một số cho lần giao).
+- `P ingest` đọc token (tách `input`, `output`, `cache_read`, `cache_creation`) và thời lượng từ transcript của runtime, rồi lưu vào `status.json` ngay lúc ingest (D41.4). Producer không truyền số vào lệnh. Số Producer của bước được ghi khi bước được duyệt. Transcript mất về sau thì report vẫn đủ số.
 - Runtime không báo số thì ledger ghi "không có số", không ghi 0.
 - Script tính thêm **khoảng chờ Producer** = thời điểm giao lần sau − thời điểm ingest lần trước.
 - `P stats <id>` in bảng theo bước: thời gian worker, reviewer, chờ Producer, chờ anh; token worker, reviewer, Producer. Thời gian bước tính từ lần giao worker đầu tới lúc bước được duyệt.
