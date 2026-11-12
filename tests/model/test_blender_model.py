@@ -126,6 +126,11 @@ def built(tmp_path_factory):
     for q in ("mesh_check", "uv_check", "export_check", "screen_tris_check"):
         rc[q] = blender(f"asset_checks/{q}.py", "--input", glb, "--spec", f / "spec.json",
                         "--out", f / f"review/checks/qa_{q}.json")[0]
+    (f / "work").mkdir()
+    (f / "work/spec_limit.json").write_text(json.dumps(read(f / "spec.json") | {"screen_tris": {"max_small_ratio": 1.0}}),
+                                            encoding="utf-8")
+    blender("asset_checks/screen_tris_check.py", "--input", glb, "--spec", f / "work/spec_limit.json",
+            "--out", f / "work/screen_limit.json")
     blender("self_build/render_views.py", "--work", f, "--mode", "critic", "--outdir", f / "review/renders")
     rc["render"] = blender("render_review.py", "--final", f, "--concept", PILOT / "_approved/pilot-house/concept_shadow.png",
                            "--size", "256")[0]
@@ -236,6 +241,14 @@ def test_kit_qa_passes_the_unwelded_join_and_duplicate_vertices_stay_info_checkl
     overall, c = checks(f / "review/checks/qa_mesh_check.json")
     assert (overall, c["pilot-house.duplicate_verts"]) == ("pass", ("info", 0))
     assert [checks(f / f"review/checks/qa_{q}.json")[0] for q in ("uv_check", "export_check")] == ["pass", "pass"]
+
+
+def test_screen_tris_runs_at_the_fixed_game_camera_so_a_limit_blocks(built):
+    """docs/agents/3d-artist.md §10: a profile limit blocks. Without distance_m the kit calibrated the camera and
+    reported info whatever the limit; the fixed distance of make_spec shows the asset about target_px_height tall."""
+    cam = read(built["final"] / "review/checks/qa_screen_tris_check.json")["data"]["camera"]
+    assert (cam["mode"], abs(cam["asset_px_height"] / 400 - 1) < 0.1) == ("fixed", True)
+    assert checks(built["final"] / "work/screen_limit.json")[1]["screen.small_tri_ratio"][0] == "pass"
 
 
 def test_an_inlay_flush_with_the_base_top_is_reported_as_z_fighting(built):

@@ -10,12 +10,17 @@ Other numbers follow D13, later wins: skill default < preset < profile `override
   model.uv_stretch {max_ratio 2.0, max_share 0.05} for check_uv_edge.py uv.stretch (provisional);
   model.bevel: card `bevel`, else profile `style.bevel`, else none (D27.10). none = false; toon = the preset's
   bevel.toon numbers (radius_m, segments). Nothing else turns bevel on, notes and overrides included.
+Game camera (sources.json camera): fixed, so screen_tris_check can block with screen_tris.max_small_ratio
+(docs/agents/3d-artist.md §10). distance_m puts the asset model.target_px_height px tall on a 1080 px screen.
+The asset's height on screen is H cos(el) + (|W sin(az)| + |D cos(az)|) sin(el) metres, the bbox seen from the camera;
+model.px_per_m = target_px_height / that height, the scale of thumb.png. Without a camera: target_px_height / H.
 spec["sources"] names the layer of every number ("mặc định" = skill default).
 Keeps `sun` and `concept_cam` of an existing F/spec.json: the worker sets them at A7.
 Prints one line. Exit 0, 2 on error.
 """
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -31,9 +36,10 @@ DEFAULTS = {"texture_res": 2048, "detail": {"relief_min_px": 3, "alpha_min_px": 
 KEPT = ("sun", "concept_cam")
 USED = ("tris_cap", "texture_res", "uv.padding_px", "uv.texel_min_px_per_m", "detail.relief_min_px", "detail.alpha_min_px",
         "bevel", "camera.target_px_height", "screen_tris_max_small_ratio", "uv_stretch.max_ratio", "uv_stretch.max_share",
-        "dimensions")
+        "dimensions", "px_per_m")
 DIM_TOLERANCE = 0.02
 PADDING_AT = 2048
+SCREEN = [1920, 1080]
 
 
 def yaml_load(path):
@@ -71,6 +77,13 @@ def bevel(card, prof, preset):
     return {"style": style, **preset["bevel"][style]}, f"{src}; số: preset bevel.{style}"
 
 
+def screen_height_m(dims, cam):
+    """Metres of the bbox along the screen's up axis, seen from the camera (orthographic estimate)."""
+    w, d, h = dims
+    az, el = math.radians(cam.get("azimuth_deg", 0)), math.radians(cam.get("elevation_deg", 35))
+    return h * math.cos(el) + (abs(w * math.sin(az)) + abs(d * math.cos(az))) * math.sin(el)
+
+
 def build(a):
     s = common.read_json(os.path.join(a.blockout, "sources.json"))
     card, prof, preset = yaml_load(a.card), yaml_load(a.profile), yaml_load(a.preset)
@@ -97,6 +110,10 @@ def build(a):
         dims = [float(x) for x in common.read_json(os.path.join(a.blockout, "assembly.json"))["data"]["union"]["extents"]]
         src["dimensions"] = "assembly.json union (includes_base: false)"
     cam = dict(s.get("camera") or {})
+    tpx = p["camera"]["target_px_height"]
+    seen_h = screen_height_m(dims, cam) if cam else dims[2]
+    src["px_per_m"] = ("camera.target_px_height / chiều cao bbox trên màn hình ở camera game" if cam
+                       else "camera.target_px_height / chiều cao (sources.json không có camera)")
     spec = {
         "asset": aid, "objects": [aid],
         "budget": {"max_tris_total": cap, "max_materials_total": 1},
@@ -107,15 +124,16 @@ def build(a):
         "export": {"path": f"{aid}-untextured.glb", "skip_export": True},
         "model": {"texel_min_px_per_m": float(p["uv"]["texel_min_px_per_m"]), **p["detail"], "bevel": bev,
                   "uv_stretch": p["uv_stretch"],
-                  "target_px_height": p["camera"]["target_px_height"],
-                  "px_per_m": round(p["camera"]["target_px_height"] / dims[2], 2),
+                  "target_px_height": tpx, "px_per_m": round(tpx / seen_h, 2),
                   "character_h": s["character_h"], "door_h": s.get("door_h")},
         "sources": {k: src[k] for k in USED if k in src} | {"camera": "sources.json camera",
                                                               "character_h": "sources.json", "door_h": "sources.json"},
     }
     if cam:
+        fov = math.radians(cam.get("fov_v_deg", 40))
         spec["camera"] = {"type": "persp", **{k: cam[k] for k in ("azimuth_deg", "elevation_deg", "fov_v_deg") if k in cam},
-                          "target_px_height": p["camera"]["target_px_height"]}
+                          "target_px_height": tpx, "screen": SCREEN,
+                          "distance_m": round(seen_h * SCREEN[1] / (2 * math.tan(fov / 2) * tpx), 3)}
     if p.get("screen_tris_max_small_ratio") is not None:
         spec["screen_tris"] = {"max_small_ratio": p["screen_tris_max_small_ratio"]}
     out = os.path.join(a.final, "spec.json")

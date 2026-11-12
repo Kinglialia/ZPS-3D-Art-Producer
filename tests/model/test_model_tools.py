@@ -85,11 +85,11 @@ def spec_of(final, **over):
 
 @pytest.fixture
 def make_spec(tmp_path):
-    def run(card=None, profile=None, old=None):
+    def run(card=None, profile=None, old=None, sources=SOURCES):
         b, f = tmp_path / "blockout", tmp_path / "final"
         b.mkdir(exist_ok=True)
         f.mkdir(exist_ok=True)
-        (b / "sources.json").write_text(json.dumps(SOURCES), encoding="utf-8")
+        (b / "sources.json").write_text(json.dumps(sources), encoding="utf-8")
         (tmp_path / "card").mkdir(exist_ok=True)
         (tmp_path / "card/asset-card.yaml").write_text(yaml.safe_dump(CARD | (card or {})), encoding="utf-8")
         (tmp_path / "profile.yaml").write_text(yaml.safe_dump(PROFILE | (profile or {})), encoding="utf-8")
@@ -111,17 +111,34 @@ def test_the_spec_takes_geometry_from_sources_json_and_the_rest_from_preset_with
         "dimensions_m": {"pilot-house": [4.0, 4.0, 3.7]}, "dimensions_tolerance": 0.02, "height_m": 3.7,
         "pivot": "bottom_center",
         "uv": {"resolution": 2048, "min_padding_px": 16, "allow_overlap": False, "allow_out_of_bounds": False},
-        "camera": {"type": "persp", "azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40, "target_px_height": 400},
+        "camera": {"type": "persp", "azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40, "target_px_height": 400,
+                   "screen": [1920, 1080], "distance_m": 19.752},
         "model": {"texel_min_px_per_m": 64.0, "relief_min_px": 3, "alpha_min_px": 16, "bevel": False,
                   "uv_stretch": {"max_ratio": 2.0, "max_share": 0.05},
-                  "target_px_height": 400, "px_per_m": 108.11, "character_h": 1.6, "door_h": 1.8},
+                  "target_px_height": 400, "px_per_m": 75.11, "character_h": 1.6, "door_h": 1.8},
         "sources": {"tris_cap": "preset tiers.standard", "texture_res": "mặc định", "uv.padding_px": "preset",
                     "uv.texel_min_px_per_m": "preset", "detail.relief_min_px": "mặc định",
                     "detail.alpha_min_px": "mặc định", "bevel": "mặc định", "camera.target_px_height": "preset",
                     "screen_tris_max_small_ratio": "preset", "uv_stretch.max_ratio": "mặc định",
                     "uv_stretch.max_share": "mặc định", "dimensions": "sources.json layout",
+                    "px_per_m": "camera.target_px_height / chiều cao bbox trên màn hình ở camera game",
                     "camera": "sources.json camera", "character_h": "sources.json", "door_h": "sources.json"}}
     assert "screen_tris" not in s and "sun" not in s
+
+
+@pytest.mark.parametrize("layout, px_per_m, distance_m", [((4.0, 4.0, 3.7), 75.11, 19.752), ((4.0, 4.0, 0.5), 147.94, 10.029)])
+def test_px_per_m_is_the_thumbnail_scale_and_the_camera_distance_puts_the_asset_at_target_px(
+        make_spec, layout, px_per_m, distance_m):
+    """From 35 deg above, a 4 x 4 x 0.5 m slab is 2.7 m tall on screen, not 0.5 m: 400 / 0.5 = 800 px/m made a 4 mm
+    bump look like 3 px, while the thumbnail showed it at 0.6 px. The same screen height sets the fixed distance, so
+    screen_tris_check measures at the game size and its limit can block."""
+    _, s = make_spec(sources=SOURCES | {"layout": SOURCES["layout"] | dict(zip("wdh", layout))})
+    assert (s["model"]["px_per_m"], s["camera"]["distance_m"]) == (px_per_m, distance_m)
+
+
+def test_without_a_camera_px_per_m_falls_back_to_the_real_height(make_spec):
+    _, s = make_spec(sources={k: v for k, v in SOURCES.items() if k != "camera"})
+    assert ("camera" in s, s["model"]["px_per_m"]) == (False, 108.11)
 
 
 def test_a_card_size_changed_after_blockout_approval_never_reaches_the_model_numbers_d22_13(make_spec):
