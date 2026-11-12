@@ -207,7 +207,7 @@ def test_duyet_2_copies_the_package_to_deliver_and_logs_the_estimate_record(flow
     assert out[1].startswith("Lệnh xóa D29: ")  # D29.3: the user's DUYỆT 2 arms the deletion; tests/test_purge.py
     assert pick(flow["approve a2"]["st"], "approved", "rejected")["rejected"]["assemble"] == [1, 2]
     assert flow["deliver before"] is False
-    assert flow["deliver"] == ["README.md", "model/pilot-house.blend", "model/pilot-house.glb", "review/compare.json",
+    assert flow["deliver"] == ["README.md", "RUN-REPORT.md", "model/pilot-house.blend", "model/pilot-house.glb", "review/compare.json",
                                "texture/albedo_2048.png", "texture/notes.md"]
     rec = flow["estimates"]
     assert [(r["method"], r["credits"], r["asset"]) for r in rec] == [("self", 20.0, AID)]

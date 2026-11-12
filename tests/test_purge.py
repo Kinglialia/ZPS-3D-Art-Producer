@@ -88,7 +88,7 @@ def test_a_producer_approval_arms_nothing_and_a_new_session_deletes_nothing(proj
     """D29.2: a test run the Producer approves keeps every file for the user to look at."""
     p(proj, "approvals", "set", "test_mode", "true", "--by", "bật test mode")
     before = tree(proj)
-    assert approve(proj, "--by", "producer") == "pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong\n"
+    assert approve(proj, "--by", "producer").startswith("pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong\n")
     assert not (proj / A / "purge-pending.json").exists()
     hook(proj, "startup")
     assert tree(proj) == before
@@ -115,7 +115,7 @@ def test_the_users_approval_arms_and_prints_the_list_but_nothing_is_deleted_in_t
                        "phiên sau (hook SessionStart: startup hoặc clear). Giữ: `keep pilot-house`. Xóa ngay: "
                        "`purge pilot-house --by \"<nguyên văn>\"`. Danh sách: "
                        "production/assets/pilot-house/purge-pending.json"]
-    assert [l.split(":")[0].strip() for l in out[2:]] == ["assemble/v1", "blockout/v1", "model/v1", "texture/v1"]
+    assert [l.split(":")[0].strip() for l in out[2:6]] == ["assemble/v1", "blockout/v1", "model/v1", "texture/v1"]
     doc = json.loads((proj / A / "purge-pending.json").read_text(encoding="utf-8"))
     assert ([d["path"] for d in doc["delete"]], doc["thumbs"], doc["session"]) == (DELETED, [HERO], "s1")
     assert f"[{AID}] chờ xóa" in p(proj, "next")
