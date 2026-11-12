@@ -11,7 +11,7 @@ import heartbeat
 
 from . import stats
 from .loop import NO_NUMBER
-from .state import ASSETS, DELIVER, RUNTIME, all_status, load_cfg, load_st, now, rel, write_atomic
+from .state import ASSETS, DELIVER, all_status, load_cfg, load_st, now, rel, write_atomic
 
 NAME = "RUN-REPORT.md"
 DASH = "—"
@@ -19,10 +19,13 @@ SHARED = "*"
 SESSION = "model của phiên"
 HEAD = ("Bước", "Thời gian bước", "Worker", "Reviewer", "Chờ Producer", "Chờ anh", "Token worker", "Token reviewer",
         "Token Producer", "Version", "Vòng sửa", "Lần giao", "Gọi Codex", "Credit Meshy", "Kẹt", "Model")
-PRODUCER_WHY = {stats.NOT_SUPPORTED: "bản Codex chưa đọc được transcript của Producer",
-                NO_NUMBER: "không thấy transcript của phiên Producer"}
+PRODUCER_WHY = {NO_NUMBER: "không thấy transcript của phiên Producer"}
 NO_MESSAGE = "transcript của Producer không có message trong khoảng của bước"
-NO_CODEX_COUNT = "version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec"
+NO_CODEX_COUNT = "version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec hay tool ảnh"
+CODEX_NOTE = ("Token bản Codex: mỗi dòng `token_count` của rollout cộng `last_token_usage.total_tokens`. Số đó là "
+              "`input_tokens` + `output_tokens`; `input_tokens` gồm `cached_input_tokens` và `cache_write_input_tokens`, "
+              "`output_tokens` gồm `reasoning_output_tokens`. Dòng lặp lại cùng `total_token_usage` chỉ tính một lần. "
+              "Thời lượng: dòng đầu tới dòng cuối của rollout sub-agent trong khoảng lần giao.")
 NOT_INGESTED = "lần giao chưa ingest"
 OVERLAP_NO_TRANSCRIPT = "hai asset chạy cùng lúc và không còn transcript để tính mỗi message một lần"
 
@@ -119,8 +122,6 @@ def render(head: str, rows: list[Row], total: Row, extra: list[str]) -> list[str
 
 
 def worker_reason(x: dict) -> str:
-    if RUNTIME == "codex":
-        return "bản Codex không có transcript"
     if not x.get("ingested"):
         return NOT_INGESTED
     if "usage" not in x:
@@ -223,6 +224,12 @@ def budget_credits(aid: str, sid: str) -> list[float | None]:
     return out or [0.0]
 
 
+def image_calls(vd) -> int | None:
+    """D46: a `codex exec` start (Claude edition) or a checked image tool try (Codex edition) is one image call."""
+    ns = [heartbeat.starts(vd, t) for t in (heartbeat.CODEX_EXEC, heartbeat.IMAGE_TOOL)]
+    return None if None in ns else sum(ns)
+
+
 def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others: list[dict], steps: list[dict]) -> Row | None:
     sid = step["id"]
     mine = [x for x in disp if x["step"] == sid]
@@ -252,8 +259,7 @@ def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others:
     r.calls = len(mine)
     r.stalls = sum(1 for x in st.get("stalls") or [] if x["step"] == sid)
     if "codex_image" in step["uses"]:
-        r.codex = metric([heartbeat.starts(ASSETS / st["id"] / sid / f"v{k}", heartbeat.CODEX_EXEC)
-                          for k in range(1, r.versions + 1)])
+        r.codex = metric([image_calls(ASSETS / st["id"] / sid / f"v{k}") for k in range(1, r.versions + 1)])
         if r.codex.miss:
             note(r, NO_CODEX_COUNT, "Gọi Codex")
     if "meshy" in step["uses"]:
@@ -264,11 +270,15 @@ def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others:
 
 
 def asset_rows(st: dict, cfg: dict, others: list[dict], usage) -> list[Row]:
-    disp = st.get("dispatches") or []
-    if RUNTIME != "codex":
-        disp = stats.reread(disp)
+    disp = stats.reread(st.get("dispatches") or [])
     waits = stats.waits(disp)
     return [r for s in cfg["steps"] if (r := step_row(s, st, disp, waits, usage, others, cfg["steps"]))]
+
+
+def codex_note(sts: list[dict]) -> list[str]:
+    """The fields a Codex number sums, once, when a stored split came from a rollout."""
+    return [CODEX_NOTE] if any(isinstance(x.get("usage"), dict) and x["usage"].get("format") == "codex"
+                               for s in sts for x in s.get("dispatches") or []) else []
 
 
 def total_of(label: str, rows: list[Row]) -> Row:
@@ -291,7 +301,8 @@ def table(st: dict, cfg: dict | None = None, others: list[dict] | None = None, u
         return [f"{st['id']}: chưa giao lần nào"]
     total = total_of("Tổng", rows)
     who = ", ".join(dict.fromkeys(i for r in rows for i in r.shared))
-    return render(HEAD[0], rows, total, [f"{SHARED} Token Producer tính chung với {who}."] if who else [])
+    return render(HEAD[0], rows, total, ([f"{SHARED} Token Producer tính chung với {who}."] if who else [])
+                  + codex_note([st]))
 
 
 def batch(sts: list[dict], cfg: dict | None = None, usage=None) -> list[str]:
@@ -310,8 +321,8 @@ def batch(sts: list[dict], cfg: dict | None = None, usage=None) -> list[str]:
     if why:
         note(total, why, "Token Producer")
     shared = [f"{r.label}: {', '.join(r.shared)}" for r in per if r.shared]
-    return render("Asset", per, total, [f"{SHARED} Token Producer tính chung: " + "; ".join(shared)
-                                        + ". Tổng lô tính mỗi message một lần."] if shared else [])
+    return render("Asset", per, total, ([f"{SHARED} Token Producer tính chung: " + "; ".join(shared)
+                                         + ". Tổng lô tính mỗi message một lần."] if shared else []) + codex_note(sts))
 
 
 def batch_producer(sts: list[dict], steps: list[dict], usage, overlap: bool) -> tuple[Metric, str | None]:

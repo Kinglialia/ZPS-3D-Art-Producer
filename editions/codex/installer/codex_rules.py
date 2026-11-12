@@ -12,7 +12,9 @@ A Codex rule matches only the start of a command, so each rule ends where the pr
 gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and preflight has no
 options, and in the Codex edition run_tool.py refuses scripts/ and the NETWORK_SCRIPTS and AGENT_CODE tools itself.
 Its --blender must equal the preflight Blender, but a worker can edit that file, so the rule pins --blender too.
-run_tool.py refuses a flag given twice, so the pinned --blender is the one that runs. Scripts that call paid or network services (NETWORK_SCRIPTS) never match. Scripts that run code the agent
+run_tool.py refuses a flag given twice, so the pinned --blender is the one that runs. Scripts that call paid or network services (NETWORK_SCRIPTS) never match.
+gen_image_codex.py stays in that list: this edition runs only its --direct check, which writes under production*/ and
+runs inside the sandbox with no rule (D46). Scripts that run code the agent
 wrote (AGENT_CODE: graph.py loads <work>/parts_lib.py, custom_mesh.py runs custom_parts.py) never match either. Any other command still runs in the sandbox
 or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
 

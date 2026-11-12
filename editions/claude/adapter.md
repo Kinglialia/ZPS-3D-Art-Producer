@@ -6,7 +6,11 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 - Tạo subagent bằng tool Agent: `subagent_type` = khóa `agent` của `P brief`, `model` = khóa `model`, prompt đúng như `SKILL.md`.
 - File agent nằm ở `.claude/agents/<agent>.md`. Claude Code chỉ nạp agent mới khi mở phiên.
-- Dừng agent: subagent chạy nền thì dừng bằng tool TaskStop, `task_id` là id của agent đó. Subagent chạy thường: chỉ người dùng dừng được (Esc).
+- Dừng agent: mục Dừng agent.
+
+## Dừng agent
+
+- Subagent chạy nền thì dừng bằng tool TaskStop, `task_id` là id của agent đó. Subagent chạy thường: chỉ người dùng dừng được (Esc).
 
 ## Resume
 

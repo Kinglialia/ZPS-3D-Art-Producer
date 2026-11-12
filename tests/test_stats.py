@@ -99,15 +99,22 @@ def test_a_transcript_without_any_usage_line_or_a_step_without_messages_shows_no
     assert [r.split(" | ")[-2] for r in rows[2:]] == ["không có số", "40", "40"]
 
 
-def test_an_unreadable_transcript_shows_no_number_and_the_codex_edition_says_not_supported(tmp_path, monkeypatch):
+def test_an_unreadable_transcript_shows_no_number_in_either_edition(tmp_path, monkeypatch):
     monkeypatch.setattr(session, "OUT", tmp_path / "session.json")
     (tmp_path / "session.json").write_text(json.dumps({"transcripts": [str(tmp_path / "gone.jsonl")]}), encoding="utf-8")
     assert stats.producer_usage() == "không có số"
     (tmp_path / "session.json").write_text("{broken", encoding="utf-8")
     assert stats.producer_usage() == "không có số"
     assert stats.table(CFG, ST, stats.producer_usage())[2].endswith(" | 15000 | không có số | 1 |")
-    monkeypatch.setattr(stats, "RUNTIME", "codex")
-    assert stats.table(CFG, ST, stats.producer_usage())[2].endswith(" | 15000 | chưa hỗ trợ | 1 |")
+    rollout = tmp_path / "rollout-main.jsonl"
+    last = {"input_tokens": 900, "cached_input_tokens": 700, "output_tokens": 100, "total_tokens": 1000}
+    rollout.write_text(json.dumps({"timestamp": "2026-11-10T02:00:00.000Z", "type": "session_meta", "payload": {}}) + "\n"
+                       + json.dumps({"timestamp": "2026-11-10T02:05:00.000Z", "type": "event_msg", "payload": {
+                           "type": "token_count", "info": {"total_token_usage": last, "last_token_usage": last}}}) + "\n",
+                       encoding="utf-8")
+    (tmp_path / "session.json").write_text(json.dumps({"transcripts": [str(rollout)]}), encoding="utf-8")
+    assert stats.producer_usage() == [(session.local("2026-11-10T02:05:00.000Z"), 1000)], (
+        "D46: the Codex edition reads its rollout; 'chưa hỗ trợ' is gone")
 
 
 def hook(root, payload, **kw):

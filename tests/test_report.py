@@ -74,7 +74,7 @@ def test_one_row_per_step_with_real_numbers_a_total_and_the_overlap_mark_x4_x6_a
         "| 3 | 1 | 6 | không có số | 20 | 1 | opus / sonnet |",
         "",
         "không có số (Token worker): không thấy transcript của subagent.",
-        "không có số (Gọi Codex): version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec.",
+        "không có số (Gọi Codex): version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec hay tool ảnh.",
         "* Token Producer tính chung với a2."]
 
 
@@ -90,10 +90,11 @@ def test_the_codex_column_counts_the_codex_exec_starts_of_every_version_of_the_s
     none. A version without the log is no number, never zero."""
     beats(tmp_path, "a1", "texture", 1, "codex exec", "blender render", "codex exec", "codex exec")
     assert report.table(A1, CFG, [], LIVE)[3].split(" | ")[12] == "3"
-    beats(tmp_path, "a1", "texture", 2, "blender render")
-    assert report.table(A1 | {"versions": {"blockout": 2, "texture": 2}}, CFG, [], LIVE)[3].split(" | ")[12] == "3"
+    beats(tmp_path, "a1", "texture", 2, "blender render", "image tool", "image tool")
+    assert report.table(A1 | {"versions": {"blockout": 2, "texture": 2}}, CFG, [], LIVE)[3].split(" | ")[12] == "5", (
+        "D46: a checked image tool try of the Codex edition is an image call too")
     st = A1 | {"versions": {"blockout": 2, "texture": 3}}
-    assert report.table(st, CFG, [], LIVE)[3].split(" | ")[12] == "3 (+1 không có số)"
+    assert report.table(st, CFG, [], LIVE)[3].split(" | ")[12] == "5 (+1 không có số)"
 
 
 def test_a_step_that_never_used_codex_or_meshy_shows_a_dash_not_a_zero(meshy20):
@@ -102,17 +103,22 @@ def test_a_step_that_never_used_codex_or_meshy_shows_a_dash_not_a_zero(meshy20):
     assert "*" not in "".join(rows)
 
 
-def test_the_codex_edition_has_no_transcript_and_says_so_once_below_the_table(meshy20, monkeypatch):
-    monkeypatch.setattr(report, "RUNTIME", "codex")
+def test_a_codex_dispatch_without_a_rollout_has_no_number_and_one_with_a_rollout_names_the_codex_fields_d46(
+        meshy20):
     st = asset("a1", [d("blockout", "worker", "2026-11-10 09:00:00", "2026-11-10 09:10:00", "review", tokens=None,
                         usage=None),
                       d("blockout", "reviewer", "2026-11-10 09:10:30", "2026-11-10 09:12:30", "waiting_human",
                         tokens=None, usage=None, scope="full")])
-    rows = report.table(st, CFG, [], stats.NOT_SUPPORTED)
+    rows = report.table(st, CFG, [], "không có số")
     assert rows[2] == ("| blockout | chưa duyệt | 10m00s | 2m00s | 0m30s | — | không có số | không có số | không có số "
                        "| 0 | 0 | 2 | — | — | 0 | model của phiên / model của phiên |")
-    assert rows[5:] == ["không có số (Token worker, Token reviewer): bản Codex không có transcript.",
-                        "không có số (Token Producer): bản Codex chưa đọc được transcript của Producer."]
+    assert rows[5:] == ["không có số (Token worker, Token reviewer): không thấy transcript của subagent.",
+                        "không có số (Token Producer): không thấy transcript của phiên Producer."]
+    st["dispatches"][0] |= {"tokens": 2500, "usage": {"input": 350, "output": 500, "cache_read": 1600,
+                                                      "cache_creation": 50, "duration_ms": 9500, "format": "codex"}}
+    rows = report.table(st, CFG, [], "không có số")
+    assert rows[-1] == report.CODEX_NOTE and "`last_token_usage.total_tokens`" in rows[-1]
+    assert report.CODEX_NOTE not in report.table(A1, CFG, [], LIVE), "a Claude transcript needs no Codex note"
 
 
 def test_a_dispatch_from_before_this_version_names_its_own_reason(meshy20):

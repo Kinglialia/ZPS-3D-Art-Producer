@@ -1,5 +1,6 @@
 """production/session.json (D30.10): what the SessionStart hook received on stdin. `source` of the last start, and
-the transcript of every main session, so `P stats` can count Producer tokens across `/clear`."""
+the transcript of every main session, so `P stats` can count Producer tokens across `/clear`. The token readers take a
+Claude Code transcript and a Codex rollout (D46)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -58,35 +59,87 @@ def local(ts: str) -> dt.datetime:
     return dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
 
 
-USAGE = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+SPLIT = {"input_tokens": "input", "output_tokens": "output", "cache_read_input_tokens": "cache_read",
+         "cache_creation_input_tokens": "cache_creation"}
+CODEX = "codex"
+
+
+def codex_split(u: dict) -> dict:
+    """D46: a Codex `last_token_usage` in the four columns. `input_tokens` holds the cached and cache-write tokens and
+    `output_tokens` the reasoning tokens, so the four add up to `total_tokens`."""
+    read, write = int(u.get("cached_input_tokens") or 0), int(u.get("cache_write_input_tokens") or 0)
+    return {"input": int(u.get("input_tokens") or 0) - read - write, "output": int(u.get("output_tokens") or 0),
+            "cache_read": read, "cache_creation": write}
+
+
+def responses(rows: list[dict]):
+    """(key, line, split) for each API response of one transcript. The format comes from the line: a Claude Code
+    `assistant` line with `message.usage`, or a Codex rollout `event_msg` of type `token_count` (D46). Claude Code
+    repeats a message on each content block, and Codex repeats a `token_count` with the same running total: the key
+    and the total let each response count once. Codex also counts `last_token_usage`, not the running total, because a
+    forked thread starts with the total of its parent."""
+    total = None
+    for d in rows:
+        p = d.get("payload")
+        try:
+            if d.get("type") == "event_msg" and isinstance(p, dict) and p.get("type") == "token_count":
+                info = p.get("info") or {}
+                if not isinstance(info.get("last_token_usage"), dict) or info.get("total_token_usage") == total:
+                    continue
+                total = info.get("total_token_usage")
+                key = (CODEX, d.get("timestamp"), json.dumps(total, sort_keys=True))
+                yield key, d, codex_split(info["last_token_usage"])
+            elif d.get("type") == "assistant" and isinstance((m := d.get("message")), dict) and isinstance(
+                    m.get("usage"), dict):
+                yield m.get("id") or d.get("requestId") or d.get("uuid"), d, {
+                    v: int(m["usage"].get(k) or 0) for k, v in SPLIT.items()}
+        except (TypeError, ValueError, AttributeError):
+            continue
+
+
+def rows_of(raw: list[str]) -> list[dict]:
+    out = []
+    for line in raw:
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(d, dict):
+            out.append(d)
+    return out
+
+
+def rollout(rows: list[dict]) -> bool:
+    """A Codex rollout opens with `session_meta`."""
+    return bool(rows) and rows[0].get("type") == "session_meta"
+
+
+def sub_rollout(rows: list[dict]) -> bool:
+    return rollout(rows) and isinstance((rows[0].get("payload") or {}).get("source"), dict) and "subagent" in rows[0][
+        "payload"]["source"]
 
 
 def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int]] | None:
-    """Tokens of each main-session API message: the four usage fields, as a subagent's total counts them. Claude Code
-    writes one line per content block with the same message id and usage, so a message counts once. Lines of
-    subagents (`isSidechain`) and lines that do not parse are skipped; a transcript that cannot be read gives None."""
+    """Tokens of each main-session API response, the four columns added up. Lines of subagents (`isSidechain`, a
+    sub-agent rollout) and lines that do not parse are skipped; a transcript that cannot be read gives None."""
     out, seen = [], set()
     for p in paths:
         try:
-            lines = open(p, encoding="utf-8", errors="replace").read().splitlines()
+            rows = rows_of(open(p, encoding="utf-8", errors="replace").read().splitlines())
         except OSError:
             return None
-        for line in lines:
+        if sub_rollout(rows):
+            continue
+        for key, d, part in responses(rows):
+            if d.get("isSidechain") or (key is not None and key in seen):
+                continue
             try:
-                d = json.loads(line)
-                if not isinstance(d, dict) or d.get("isSidechain") or d.get("type") != "assistant":
-                    continue
-                m = d["message"]
-                key = m.get("id") or d.get("requestId") or d.get("uuid")
-                if (key is not None and key in seen) or not isinstance(m.get("usage"), dict):
-                    continue
-                n = sum(int(m["usage"].get(k) or 0) for k in USAGE)
                 at = local(d["timestamp"])
-            except (ValueError, KeyError, TypeError, AttributeError):
+            except (KeyError, TypeError, ValueError, AttributeError):
                 continue
             if key is not None:
                 seen.add(key)
-            out.append((at, n))
+            out.append((at, sum(part.values())))
     return out
 
 
@@ -104,22 +157,20 @@ def subagent_dirs() -> list[Path]:
 
 def lines_of(p: Path) -> list[dict]:
     try:
-        raw = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        return rows_of(p.read_text(encoding="utf-8", errors="replace").splitlines())
     except OSError:
         return []
-    out = []
-    for line in raw:
-        try:
-            d = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(d, dict):
-            out.append(d)
-    return out
 
 
 def asks_for(d: dict, brief: str) -> bool:
-    """A prompt line of the Producer: a user line, not a tool result or a reminder, that names the brief."""
+    """A prompt line of the Producer that names the brief: a Claude Code user line, not a tool result or a reminder; in
+    a Codex rollout, the task a parent sent (`agent_message`) or a user message the thread did not inherit."""
+    p = d.get("payload")
+    if d.get("type") == "response_item" and isinstance(p, dict):
+        if not (p.get("type") == "agent_message" or p.get("type") == "message" and p.get("role") == "user"
+                and not (d.get("metadata") or {}).get("inherited_user_message")):
+            return False
+        return brief in " ".join(str(x.get("text", "")) for x in p.get("content") or [] if isinstance(x, dict))
     if d.get("type") != "user" or d.get("isMeta"):
         return False
     c = (d.get("message") or {}).get("content")
@@ -143,44 +194,36 @@ def agent_files(agent_id: str | None, brief: str | None, path: str | None = None
     return [p for d in dirs for p in sorted(d.glob("agent-*.jsonl")) if any(asks_for(x, brief) for x in lines_of(p))]
 
 
-SPLIT = {"input_tokens": "input", "output_tokens": "output", "cache_read_input_tokens": "cache_read",
-         "cache_creation_input_tokens": "cache_creation"}
-
-
 def agent_usage(files: list[Path], start: str, end: str | None) -> dict | None:
-    """The usage of one dispatch from its transcript: messages between the dispatch and the ingest only, as a resumed
-    worker keeps one cumulative transcript. Each API message counts once, also across copies of the file. The four
-    usage fields stay apart, with the duration in ms. Nothing in the window, or nothing readable: None, shown as
-    "không có số"."""
+    """The usage of one dispatch from its transcript: responses between the dispatch and the ingest only, as a resumed
+    worker keeps one cumulative transcript. Each API response counts once, also across copies of the file. The four
+    usage fields stay apart, with the duration in ms (first to last line in the window); a Codex rollout adds
+    `format: codex`. Nothing in the window, or nothing readable: None, shown as "không có số"."""
     lo = dt.datetime.fromisoformat(start)
     hi = dt.datetime.fromisoformat(end) + dt.timedelta(seconds=1) if end else None  # stamps keep whole seconds
-    seen, split, times = set(), dict.fromkeys(SPLIT.values(), 0), []
+
+    def inside(d: dict) -> bool:
+        try:
+            at = local(d["timestamp"])
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return False
+        return lo <= at and (hi is None or at <= hi)
+    seen, split, times, codex = set(), dict.fromkeys(SPLIT.values(), 0), [], False
     for p in files:
-        for d in lines_of(p):
-            try:
-                at = local(d["timestamp"])
-            except (KeyError, TypeError, ValueError, AttributeError):
-                continue
-            if at < lo or (hi is not None and at > hi):
-                continue
-            times.append(at)
-            m = d.get("message") if d.get("type") == "assistant" else None
-            if not isinstance(m, dict) or not isinstance(m.get("usage"), dict):
-                continue
-            key = m.get("id") or d.get("requestId") or d.get("uuid")
-            if key is not None and key in seen:
-                continue
-            try:
-                part = {v: int(m["usage"].get(k) or 0) for k, v in SPLIT.items()}
-            except (TypeError, ValueError):
+        rows = lines_of(p)
+        times += [local(d["timestamp"]) for d in rows if inside(d)]
+        for key, d, part in responses(rows):
+            if not inside(d) or (key is not None and key in seen):
                 continue
             if key is not None:
                 seen.add(key)
+            codex = codex or isinstance(key, tuple)
             for k, n in part.items():
                 split[k] += n
     if not seen:
         return None
-    return split | {"duration_ms": round((max(times) - min(times)).total_seconds() * 1000)}
+    return split | {"duration_ms": round((max(times) - min(times)).total_seconds() * 1000)} | (
+        {"format": CODEX} if codex else {})
 
 
 def agent_numbers(files: list[Path], start: str, end: str | None) -> tuple[int | None, int | None]:

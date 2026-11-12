@@ -525,6 +525,57 @@ def test_the_codex_edition_merges_no_claude_settings(dist, tmp_path):
     assert [p.name for p in tmp_path.rglob("settings*.json")] == []
 
 
+CODEX_P = (".agents/skills/zps-3dp-producer-codex/scripts/.deps/venv/bin/python "
+           ".agents/skills/zps-3dp-producer-codex/scripts/producer.py")
+
+
+def test_the_codex_hook_commands_run_the_installed_producer_with_its_venv_d46(dist, tmp_path):
+    """Codex runs a hook command from the project root; a path that does not exist after install runs nothing."""
+    hooks = json.loads((tree(dist, "codex") / "installer/codex_hooks.json").read_text(encoding="utf-8"))["hooks"]
+    assert {ev: [h["command"] for g in gs for h in g["hooks"]] for ev, gs in hooks.items()} == {
+        "SessionStart": [f"{CODEX_P} next --session"], "SubagentStop": [f"{CODEX_P} on-stop"],
+        "Stop": [f"{CODEX_P} on-main-stop"]}
+    assert hooks["SessionStart"][0]["matcher"] == "startup|resume|clear|compact|fork", "/new is `clear`: a new rollout"
+    assert install(dist, tmp_path, edition="codex").returncode == 0
+    assert (tmp_path / CODEX_P.split(" ")[1]).is_file()
+    assert not (tree(dist, "claude") / "installer/codex_hooks.json").exists()
+
+
+def test_install_merges_the_codex_hooks_into_project_codex_hooks_json_and_keeps_the_users_hooks_d46(dist, tmp_path):
+    h = tmp_path / ".codex/hooks.json"
+    h.parent.mkdir()
+    mine = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo my-stop"}]}],
+                      "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo pre"}]}]}}
+    h.write_text(json.dumps(mine), encoding="utf-8")
+    r = install(dist, tmp_path, edition="codex")
+    assert r.returncode == 0, r.stdout + r.stderr
+    got = json.loads(h.read_text(encoding="utf-8"))["hooks"]
+    assert got["PreToolUse"] == mine["hooks"]["PreToolUse"]
+    assert [h_["command"].rsplit(" ", 1)[-1] for g in got["Stop"] for h_ in g["hooks"]] == ["my-stop", "on-main-stop"]
+    assert [h_["command"] for g in got["SubagentStop"] for h_ in g["hooks"]] == [f"{CODEX_P} on-stop"]
+    assert "tin hook một lần" in r.stdout and list(json.loads(h.read_text(encoding="utf-8"))) == ["hooks"]
+    before = h.read_bytes()
+    again = install(dist, tmp_path, edition="codex")
+    assert (again.returncode, h.read_bytes()) == (0, before)
+    assert f"{h.resolve()}: đã đủ hook, không đổi\n" in again.stdout
+    assert not (tmp_path / ".claude").exists()
+    claude = tmp_path / "c"
+    claude.mkdir()
+    assert install(dist, claude).returncode == 0 and not (claude / ".codex").exists()
+
+
+def test_a_codex_hooks_file_that_does_not_parse_is_never_touched_d46(dist, tmp_path):
+    h = tmp_path / ".codex/hooks.json"
+    h.parent.mkdir()
+    h.write_text("{ half typed", encoding="utf-8")
+    r = install(dist, tmp_path, edition="codex")
+    assert (r.returncode, h.read_text(encoding="utf-8")) == (2, "{ half typed")
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    r = install(dist, fresh, "--dry-run", edition="codex")
+    assert (r.returncode, (fresh / ".codex").exists()) == (0, False) and "(thử) không ghi" in r.stdout
+
+
 def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_them_d30_7(dist, tmp_path):
     assert install(dist, tmp_path).returncode == 0
     s = tmp_path / ".claude/settings.json"

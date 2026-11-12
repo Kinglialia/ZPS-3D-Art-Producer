@@ -8,14 +8,18 @@ Hai bản build từ cùng `src/` (D6.4, D24.5). Bảng dưới là mọi khác 
 | Tên skill và agent | `zps-3dp-<tên>` | `zps-3dp-<tên>-codex` |
 | Tiêu đề `SKILL.md` | `# ZPS-3DP · <Tên>` | `# ZPS-3DP · <Tên> - Codex` |
 | File agent | Chép phẳng vào `.claude/agents/<agent>.md` | Ở lại `agents/` trong skill; `P brief` in thêm `agent_file` |
-| Adapter (`references/runtime.md`) | `editions/claude/adapter.md`: tool Agent, SendMessage, hook SessionStart, `SendUserFile`, `/clear` | `editions/codex/adapter.md`: `spawn_agent` với `agent_file`, `send_message`, không hook, Blender ngoài sandbox, `/new` |
+| Adapter (`references/runtime.md`) | `editions/claude/adapter.md`: tool Agent, SendMessage, `SendUserFile`, `/clear` | `editions/codex/adapter.md`: `spawn_agent` với `agent_file`, `followup_task`, Blender ngoài sandbox, `/new` |
+| Dừng agent | TaskStop (agent chạy nền) | `interrupt_agent`; không có tool đóng agent |
+| Hook SessionStart, SubagentStop, Stop | `templates/settings.snippet.json` → `.claude/settings.json` | `installer/codex_hooks.json` → `.codex/hooks.json`; chỉ chạy khi project được tin (D46). Không hook: `P next --session` khi mở phiên, luật của `SKILL.md` là chỗ chặn duy nhất |
+| Token và thời lượng | Transcript Claude Code (`subagents/agent-<id>.jsonl`) | Rollout Codex (`token_count`, `last_token_usage`) của phiên chính và của sub-agent (D46) |
 | `models` (ledger ghi giá trị này) | `opus`, `sonnet`, `haiku` (Claude Code chọn model thật) | `null`: model của phiên, tới khi chạy thật |
 | Skill chỉ gọi tường minh | `disable-model-invocation: true` | `agents/openai.yaml` với `allow_implicit_invocation: false` |
 | `agents/openai.yaml` | Không | Có: tên hiển thị |
-| `templates/settings.snippet.json` | Có | Bỏ |
+| `templates/settings.snippet.json` (allow rule, `env`, hook) | Có | Bỏ; hook ở `installer/codex_hooks.json` |
 | Rules Blender | Không cần | `installer/codex_rules.py` ghi `$CODEX_HOME/rules/zps-3dp-producer.rules` |
 | Review Board | `local`, `local+remote` | `local` |
-| `runtime.json` (script đọc) | `runtime: claude` | `runtime: codex`, `suffix: -codex`, `agent_file: true` |
+| Gen ảnh view và texture | `gen_image_codex.py` gọi `codex exec` | Worker gọi thẳng tool ảnh của phiên, rồi `gen_image_codex.py --direct` kiểm file (D46) |
+| `runtime.json` (script đọc) | `runtime: claude`, `image_gen: codex_exec` | `runtime: codex`, `suffix: -codex`, `agent_file: true`, `image_gen: direct` |
 
 ## Build và cài
 
@@ -52,7 +56,7 @@ python3 dist/zps-3dp-codex-v0.7.0/installer/codex_rules.py           # xem trư�
 python3 dist/zps-3dp-codex-v0.7.0/installer/codex_rules.py --write   # ghi file rules
 ```
 
-Rule chỉ cho phép `<Blender> -b --python <script đã cài>.py -- …`, `<Blender> -b --python-exit-code 1 --python <script đã cài>.py -- …`, `assemble.py --blender <Blender> -- …` và `producer.py preflight` bằng python venv của skill. Codex chỉ so phần đầu lệnh, nên mỗi rule dừng ở chỗ chương trình thôi đọc option: Blender chuyển phần sau `--` cho script, `assemble.py` chỉ đọc tham số vị trí sau `--`, `preflight` không có option (kit ở chỗ khác: biến `PRODUCER_KIT`). `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py` không bao giờ khớp. `self_build/assembly.py`, `param_fit.py` chạy `parts_lib.py` trong thư mục làm việc, mà agent ghi được file này, nên cũng không khớp. `build_parts.py` khớp: nó chỉ chạy `custom_lib.py` và dựng lưới từ JSON bằng `mesh_from_json.py`, không chạy `custom_parts.py` do agent viết (D32.2). `custom_mesh.py` chạy file đó bằng Python của tool, trong sandbox, và tự dừng khi chạy trong Blender. Rule không khớp `custom_mesh.py`. Chạy lại sau mỗi lần nâng cấp, rồi khởi động lại Codex.
+Rule chỉ cho phép `<Blender> -b --python <script đã cài>.py -- …`, `<Blender> -b --python-exit-code 1 --python <script đã cài>.py -- …`, `assemble.py --blender <Blender> -- …` và `producer.py preflight` bằng python venv của skill. Codex chỉ so phần đầu lệnh, nên mỗi rule dừng ở chỗ chương trình thôi đọc option: Blender chuyển phần sau `--` cho script, `assemble.py` chỉ đọc tham số vị trí sau `--`, `preflight` không có option (kit ở chỗ khác: biến `PRODUCER_KIT`). `meshy_call.py`, `gen_image_codex.py`, `gen_api.py`, `generate_image.py` không bao giờ khớp; `gen_image_codex.py --direct` chạy trong sandbox, không cần rule. `self_build/assembly.py`, `param_fit.py` chạy `parts_lib.py` trong thư mục làm việc, mà agent ghi được file này, nên cũng không khớp. `build_parts.py` khớp: nó chỉ chạy `custom_lib.py` và dựng lưới từ JSON bằng `mesh_from_json.py`, không chạy `custom_parts.py` do agent viết (D32.2). `custom_mesh.py` chạy file đó bằng Python của tool, trong sandbox, và tự dừng khi chạy trong Blender. Rule không khớp `custom_mesh.py`. Chạy lại sau mỗi lần nâng cấp, rồi khởi động lại Codex.
 
 **Part `custom` chỉ gọi hàm của hai file** (D27.13, D32). Quy tắc này áp cho cả hai bản, nên bảng khác biệt ở trên không có dòng cho nó. Skill Producer kèm `custom_lib.py`, chỉ chứa hàm chung có tham số. Hàm riêng của một asset nằm trong `production/assets/<id>/custom_parts.py`, agent viết: Python thuần, chỉ `math`, kiểm danh sách trắng trước khi chạy, chạy ngoài Blender và ra lưới JSON (D32.2). File giữ sau DUYỆT 2 (D32.3). Hai bản giữ giống nhau để so A/B.
 

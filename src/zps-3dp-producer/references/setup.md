@@ -7,7 +7,7 @@ Cần Python 3.11+ (`python3 --version`). Script cần PyYAML, nên chạy trong
 1. Trong repo bộ skill: `python3 build.py`. Lệnh tạo `dist/zps-3dp-claude-v<ver>/` và `dist/zps-3dp-codex-v<ver>/`, và dừng khi một kiểm tĩnh sai.
 2. `python3 dist/zps-3dp-<runtime>-v<ver>/install.py --project <thư mục project>`. Lệnh chép hai skill (`zps-3dp-producer`, `zps-3dp-project-setup`) vào thư mục skill của runtime. Bản Claude Code chép thêm file agent vào thư mục agent của project. Thư mục `agents/` trong skill giữ `tools/` và `references/` của từng agent; file agent đọc chúng qua dòng `TOOLS:` của brief, nên bản chép phẳng vẫn đúng đường dẫn. Cài lại thì skill cũ được thay, các thư mục `.deps/` được giữ.
 3. Chạy một lần: `bash .claude/skills/zps-3dp-producer/scripts/setup_deps.sh` (tạo `scripts/.deps/venv` với pyyaml, pytest, Pillow, numpy). Rồi `bash .../agents/<agent>/tools/setup_deps.sh` cho bốn agent bước (`zps-3dp-step-blockout`, `-views`, `-model`, `-texture`). Từ đây `P` là python của venv chạy `producer.py`.
-4. Làm các việc của runtime trong `references/runtime.md`: hook mở phiên và quyền (Claude Code), rules Blender ngoài sandbox (Codex).
+4. Làm các việc của runtime trong `references/runtime.md`: hook mở phiên và quyền (Claude Code); rules Blender ngoài sandbox và tin hook của project một lần (Codex).
 5. Thêm vào file hướng dẫn luôn được nạp của project (Claude Code: `CLAUDE.md`; Codex: `AGENTS.md`), để skill được dùng kể cả khi người dùng chỉ nói "tiếp tục":
    ```markdown
    Project này dùng skill zps-3dp-producer để điều phối art. Mọi việc về asset, concept trong _approved, feedback, tiến độ: dùng skill zps-3dp-producer, bắt đầu từ output của `producer.py next`.
@@ -78,7 +78,7 @@ v0.8.0 gộp hai bước `views_front`, `views_rest` thành một bước `views
 
 - Thấy pipeline không chạy: bấm Esc, rồi bảo Producer chạy `P next`. Asset kẹt: `P stall <id>`; asset `blocked` hoặc `waiting_human` vì kẹt: `P retry <id>`. Trạng thái nằm trong file, nên không mất gì.
 - Hook `SubagentStop` (`P on-stop`) ghi xuống đĩa mỗi lần subagent dừng, kể cả khi Producer không nhận thông báo. `install.py` gộp hook này và biến `env` Bash timeout (`BASH_DEFAULT_TIMEOUT_MS` 600000, `BASH_MAX_TIMEOUT_MS` 3600000) vào settings của project; `P preflight` báo khi thiếu.
-- Hook `Stop` (`P on-main-stop`) từ chối cho phiên chính dừng khi còn report chưa ingest (cả `report-script.md` của bước script), hoặc còn dòng giao việc chưa giao. `install.py` gộp hook này cùng các hook trên; hook `Stop` của người dùng vẫn giữ. Bản Codex không có hook này.
+- Hook `Stop` (`P on-main-stop`) từ chối cho phiên chính dừng khi còn report chưa ingest (cả `report-script.md` của bước script), hoặc còn dòng giao việc chưa giao. `install.py` gộp hook này cùng các hook trên; hook `Stop` của người dùng vẫn giữ. Bản Codex: `install.py` gộp ba hook vào `.codex/hooks.json`; Codex chỉ chạy chúng khi project được tin (`references/runtime.md`).
 - Ngưỡng kẹt và chế độ giao: `dispatch`, `watch` trong `policy.yaml`. Thời gian thường lệ mặc định mỗi bước: `usual_min` trong `pipeline.toml`.
 
 ## Review page

@@ -680,6 +680,19 @@ Lý do: bước view tốn 2 worker, 2 reviewer và 3 đến 4 ảnh Codex. Mesh
 5. **Vòng lấy bằng chứng có sẵn trên đĩa không cần model** (D31.1 đã làm; D38.5 thêm sheet cho bước view).
 6. Không đổi code và đổi model trong cùng một pilot. Lý do: không tách được nguyên nhân.
 
+## D46 — Bản Codex: gọi thẳng tool ảnh, nối hook, token từ rollout (v0.8.0; anh chốt 2026-11-13)
+
+Lý do: anh chốt 2026-11-13: "bản codex thì view và texture tự gọi trực tiếp skill gen ảnh, không giống kiểu claude phải gọi sang Codex". Codex 0.164.0 cũng có hook và ghi token vào rollout, nên bản Codex không còn cần các luật bù cũ.
+
+1. **Gen ảnh trực tiếp.** Worker views và texture gọi tool tạo ảnh của phiên Codex, chép PNG từ `$CODEX_HOME/generated_images/` vào `--out`, rồi chạy `gen_image_codex.py --direct` để kiểm file. Không có `codex exec` lồng, nên không cần duyệt mạng cho ảnh. `runtime.json` ghi `image_gen: direct` (Codex) hoặc `codex_exec` (Claude). Mỗi lần kiểm ghi một dòng `start` của `image tool` vào `heartbeat.log`. Cột "Gọi Codex" của report đếm cả dòng đó.
+2. **Hook.** `install.py` gộp `installer/codex_hooks.json` vào `<project>/.codex/hooks.json`: SessionStart, SubagentStop, Stop, cùng ba lệnh với bản Claude. Merge chỉ thêm, giữ hook của người dùng; chạy lại không đổi gì. Codex chỉ chạy hook của project khi anh tin project một lần.
+3. **Một dạng output cho cả hai runtime.** `P on-main-stop` từ chối bằng mã 2 và một dòng stderr. `P on-stop` không in gì ra stdout. `P next --session` in chữ thường làm ngữ cảnh.
+4. **Token từ rollout.** Script nhận dạng file theo nội dung, nên một đường code đọc cả transcript Claude và rollout Codex. Mỗi dòng `token_count` cộng `last_token_usage`; dòng lặp lại cùng `total_token_usage` tính một lần. Cột input = `input_tokens` − `cached_input_tokens` − `cache_write_input_tokens`; cache đọc = `cached_input_tokens`; cache ghi = `cache_write_input_tokens`; output = `output_tokens` (gồm reasoning). Bốn cột cộng lại bằng `total_tokens`. Producer: rollout chính của SessionStart; mỗi lần giao: rollout sub-agent mà SubagentStop ghi.
+5. **Hook Stop đọc rollout.** Lệnh `spawn_agent`, `followup_task` hoặc `send_message` nêu brief, sau lúc giao, là dấu dòng giao việc đã gửi.
+6. **`P stall` chờ agent cũ dừng trên cả hai runtime.** Không có hook thì `stall_min` im lặng sau lần xin dừng là đủ. Lý do: giao ngay cho agent mới có thể cho hai agent ghi cùng một vN.
+7. **Đã chạy thật 2026-11-13 (`codex exec` 0.164.0):** tên và tham số tool sub-agent (`spawn_agent` có `task_name`, `message`, `agent_type`, `model`, `reasoning_effort`, `fork_turns`; `wait_agent`, `followup_task`, `send_message`, `interrupt_agent`, `list_agents`; không có tool đóng agent). `followup_task` tới agent đã xong giữ ngữ cảnh: dùng cho vòng sửa. `spawn_agent` nhận `model` và `reasoning_effort`. Tool ảnh trên `gpt-6-astra` nhận `prompt` và `referenced_image_paths`, ra 1536x1024 cho ảnh ngang và đúng 1024x1536 khi prompt ghi "PORTRAIT, 2:3, 1024x1536"; `cp` từ `generated_images` chạy được trong sandbox `workspace-write`. Hook của project chưa tin không chạy. `codex exec --json` in `usage` của luồng chính trong `turn.completed`.
+8. **Chưa chạy thật:** ba hook trong project đã tin (bước tin trong giao diện chưa kiểm); giá trị `agent_type` và `agent_id` mà hook SubagentStop đưa, và `interrupt_agent` có nhận id đó không; matcher SessionStart; thư mục làm việc của lệnh hook; số token của một rollout thật qua bộ đọc của script (tên trường đã đối chiếu với rollout thật, số trong test là số giả).
+
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.
 - Gom rubric của 4 reviewer thành file agent khi viết code (rubric đã nằm trong spec từng agent).

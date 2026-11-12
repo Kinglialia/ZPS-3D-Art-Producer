@@ -6,9 +6,8 @@ import datetime as dt
 
 from . import session
 from .loop import NO_NUMBER
-from .state import RUNTIME, load_cfg, load_st
+from .state import load_cfg, load_st
 
-NOT_SUPPORTED = "chưa hỗ trợ"
 NOT_APPROVED = "chưa duyệt"
 WAITS_ON_PRODUCER = ("todo", "review", "fix", "evidence")
 ROUNDS = ("first", "fix", "final")
@@ -108,9 +107,7 @@ def producer_tokens(usage, start: dt.datetime, end: dt.datetime | None) -> str:
 
 
 def producer_usage() -> list[tuple[dt.datetime, int]] | str:
-    """D30.10: the main-session transcripts the SessionStart hook recorded; the Codex edition has no such hook yet."""
-    if RUNTIME == "codex":
-        return NOT_SUPPORTED
+    """D30.10, D46: the main-session transcripts or rollouts the SessionStart hook recorded."""
     paths = (session.load() or {}).get("transcripts") or []
     usage = session.main_usage(paths) if paths else None
     return usage or NO_NUMBER
@@ -171,8 +168,7 @@ def stall_rows(cfg: dict, st: dict) -> list[str]:
 
 def run(a):
     st = load_st(a.id)
-    if RUNTIME != "codex":
-        st = st | {"dispatches": reread(st.get("dispatches") or [])}
+    st = st | {"dispatches": reread(st.get("dispatches") or [])}
     cfg = load_cfg()
     print("\n".join(table(cfg, st, producer_usage()) + stall_rows(cfg, st)) if st.get("dispatches")
           else f"{a.id}: chưa giao lần nào")

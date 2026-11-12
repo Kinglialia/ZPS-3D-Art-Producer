@@ -25,8 +25,8 @@ IGNORE = shutil.ignore_patterns(".deps", "__pycache__", "*.pyc", ".DS_Store", ".
 DESC_MAX = 300
 FIXED = ("Bước pipeline của zps-3dp-producer. Chỉ chạy khi Producer giao file brief. "
          "Không dùng khi người dùng gọi trực tiếp.")
-ADAPTER_SECTIONS = {"Gọi agent", "Resume", "Model", "Token", "Hook mở phiên", "Gửi file", "Đường dẫn", "Sandbox",
-                    "Phiên mới", "Review Board", "Ảnh"}
+ADAPTER_SECTIONS = {"Gọi agent", "Dừng agent", "Resume", "Model", "Token", "Hook mở phiên", "Gửi file", "Đường dẫn",
+                    "Sandbox", "Phiên mới", "Review Board", "Ảnh"}
 KIT_SKILL = re.compile(r"\bzps-(?!3dp-)[a-z0-9]+(?:-[a-z0-9]+)*")
 CASE_KEYS = {"query", "should_trigger", "kind", "why"}
 

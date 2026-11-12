@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          { "type": "command", "command": ".agents/skills/zps-3dp-producer-codex/scripts/.deps/venv/bin/python .agents/skills/zps-3dp-producer-codex/scripts/producer.py next --session" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".agents/skills/zps-3dp-producer-codex/scripts/.deps/venv/bin/python .agents/skills/zps-3dp-producer-codex/scripts/producer.py on-stop" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": ".agents/skills/zps-3dp-producer-codex/scripts/.deps/venv/bin/python .agents/skills/zps-3dp-producer-codex/scripts/producer.py on-main-stop" }
+        ]
+      }
+    ]
+  }
+}

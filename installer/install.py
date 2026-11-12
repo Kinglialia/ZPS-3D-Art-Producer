@@ -4,9 +4,11 @@
 Usage: python3 install.py --project <project folder> [--dry-run]
 A skill folder that exists is replaced except its .deps/ folders (venvs), so an upgrade drops the files a new version
 removed and keeps the installed dependencies. Run setup_deps.sh after the first install.
-The Claude edition then merges templates/settings.snippet.json into <install_root>/../settings.json (D30.7): it prints
-the diff first, only appends, and a second run changes nothing. --dry-run prints the diff and writes nothing."""
+The Claude edition then merges templates/settings.snippet.json into <install_root>/../settings.json (D30.7); the Codex
+edition merges installer/codex_hooks.json into <project>/.codex/hooks.json (D46). Both print the diff first, only
+append, keep the user's other hooks, and a second run changes nothing. --dry-run prints the diff and writes nothing."""
 import argparse
+import difflib
 import importlib.util
 import json
 import shutil
@@ -54,22 +56,57 @@ def main() -> int:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(src, dst)
     skill = proj / m["install_root"] / m["producer"]
-    rc = merge_settings(m, proj, skill, a.dry_run)
+    rc = merge_settings(m, proj, skill, a.dry_run) or merge_hooks(m, proj, a.dry_run)
     print(f"Tiếp: bash {skill / 'scripts/setup_deps.sh'} và setup_deps.sh của từng agent trong {skill / 'agents'}"
           + ("; rồi python3 installer/codex_rules.py --write" if (HERE / "installer").is_dir() else ""))
     return rc
 
 
-def merge_settings(m: dict, proj: Path, skill: Path, dry_run: bool) -> int:
-    """Only an edition that ships the snippet has runtime settings to merge."""
-    src = HERE / "skills" / m["producer"]
-    snippet = src / "templates" / "settings.snippet.json"
-    if not snippet.is_file():
-        return 0
-    spec = importlib.util.spec_from_file_location("settings_merge", src / "scripts" / "settings_merge.py")
+def settings_merge(m: dict):
+    path = HERE / "skills" / m["producer"] / "scripts" / "settings_merge.py"
+    spec = importlib.util.spec_from_file_location("settings_merge", path)
     sm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sm)
-    return sm.install(proj / Path(m["install_root"]).parent / "settings.json", snippet, skill, dry_run)
+    return sm
+
+
+def merge_settings(m: dict, proj: Path, skill: Path, dry_run: bool) -> int:
+    """Only an edition that ships the snippet has runtime settings to merge."""
+    snippet = HERE / "skills" / m["producer"] / "templates" / "settings.snippet.json"
+    if not snippet.is_file():
+        return 0
+    return settings_merge(m).install(proj / Path(m["install_root"]).parent / "settings.json", snippet, skill, dry_run)
+
+
+def merge_hooks(m: dict, proj: Path, dry_run: bool) -> int:
+    """D46: the Codex hooks, with the hook part of the settings merge. Codex runs project hooks only in a trusted
+    project, so the user trusts it once."""
+    snippet = HERE / "installer" / "codex_hooks.json"
+    if not snippet.is_file():
+        return 0
+    sm, path = settings_merge(m), proj / ".codex" / "hooks.json"
+    try:
+        cur = sm.read(path)
+    except ValueError as ex:
+        print(f"{path}: {ex}. Không ghi hook; sửa file rồi chạy lại.")
+        return 2
+    # The merge reads an allow list; a hooks file has none, so the empty one adds nothing.
+    new = sm.merge(cur, json.loads(snippet.read_text(encoding="utf-8")) | {"permissions": {"allow": []}})
+    if new == cur:
+        print(f"{path}: đã đủ hook, không đổi")
+        return 0
+    old_text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    new_text = json.dumps(new, ensure_ascii=False, indent=2) + "\n"
+    diff = difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True), str(path), str(path))
+    print("".join(diff), end="")
+    if dry_run:
+        print(f"(thử) không ghi {path}")
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new_text, encoding="utf-8")
+    print(f"đã ghi {path}. Codex chỉ chạy hook này khi project được tin (trust): mở Codex trong project và tin hook "
+          "một lần.")
+    return 0
 
 
 if __name__ == "__main__":

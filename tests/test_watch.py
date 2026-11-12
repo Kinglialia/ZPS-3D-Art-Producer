@@ -407,14 +407,16 @@ def test_a_file_change_after_the_stop_was_asked_proves_the_agent_alive_and_the_l
     assert len(f.st()["dispatches"]) == 1 and f.st()["dispatches"][0]["stop_asked_at"] > ago(1)
 
 
-def test_the_codex_runtime_has_no_stop_hook_so_the_ladder_never_waits_for_a_stop_record(tmp_path, monkeypatch):
+def test_the_codex_runtime_waits_for_the_old_agent_to_stop_like_claude_so_two_agents_never_write_one_vn_d46(
+        tmp_path, monkeypatch):
+    """Codex 0.164.0 has `interrupt_agent` and a SubagentStop hook. Without trusted hooks there is no stop record, and
+    the silent stall_min after the ask still moves the ladder on, so the wait never hangs."""
     monkeypatch.setenv("PRODUCER_RUNTIME", "codex")
     f, out, j = project(tmp_path)
     vd = (tmp_path / out["report"]).parent
-    edit_job(f, agent_id="a1", at=ago(40))
-    age(vd, 30)
-    assert "nudge 1/1" in f.p("stall", "pilot-house")
-    edit_job(f, nudged_at=ago(11))
+    stop_asked(f, vd)
+    assert len(f.st()["dispatches"]) == 1
+    edit_job(f, stop_asked_at=ago(11))
     age(vd, 30)
     assert j.loads(f.p("stall", "pilot-house").strip().splitlines()[-1])["resume"] is None
     assert len(f.st()["dispatches"]) == 2
@@ -687,13 +689,14 @@ def test_the_hook_reads_the_transcript_the_stop_payload_names_and_a_heartbeat_to
 
 
 def test_each_runtime_adapter_says_whether_a_hook_guards_the_end_of_the_turn_d39_1():
-    """Codex has no Stop hook, so its Producer has only the prose rule: the adapter must say so, or the owner reads a
-    guard that does not exist."""
+    """D46: Codex has a Stop hook too, but only in a trusted project: the Codex adapter must name the hook and the
+    prose rule that guards a project without it, or the owner reads a guard that may not run."""
     editions = SKILL.parents[1] / "editions"
     claude = (editions / "claude/adapter.md").read_text(encoding="utf-8")
     codex = (editions / "codex/adapter.md").read_text(encoding="utf-8")
     assert "hook Stop (`P on-main-stop`)" in claude and "mã 2" in claude
-    assert "Không có hook Stop" in codex and "on-main-stop" in codex
+    assert "hook Stop (`P on-main-stop`)" in codex and "mã 2" in codex
+    assert "Không có hook (project chưa tin)" in codex and "chỗ chặn duy nhất" in codex
 
 
 def skill_md():

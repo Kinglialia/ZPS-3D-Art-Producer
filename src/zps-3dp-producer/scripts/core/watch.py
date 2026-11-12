@@ -14,7 +14,7 @@ from pathlib import Path
 import heartbeat
 
 from . import policy
-from .state import ROOT, RUNTIME, all_status, die, ledger, load_cfg, load_st, rel, save_st, stamp, step_of, vdir
+from .state import ROOT, all_status, die, ledger, load_cfg, load_st, rel, save_st, stamp, step_of, vdir
 
 ROLE_OF = {"running": "worker", "evidence_running": "worker", "reviewing": "reviewer"}
 REPORT = {"brief-worker.md": "worker-out.md", "brief-review.md": "review-out.md"}
@@ -164,8 +164,9 @@ def stall(a):
     """D33.11 `P stall <id>`: the next rung of the one stall rule. Nudge (max_nudges times, needs the agent id), then one
     new agent with the same brief, then waiting_human with an offer labelled "chưa chấm". The new agent goes out only
     once the old one stopped (D39.4): SubagentStop recorded it, or a stall_min passed with no heartbeat and no file change
-    since this rung asked to stop it. The Codex runtime has no SubagentStop hook and does not wait. The script picks the
-    rung and logs it; the Producer only sends.
+    since this rung asked to stop it. The script picks the rung and logs it; the Producer only sends. Both runtimes
+    wait the same way (D46): a Codex project without trusted hooks has no stop record, and the silent stall_min still
+    ends the wait.
     --agent-id: the id of the stuck subagent, from its launch; on-stop also records it."""
     from .briefs import run
     from .loop import INGEST_DISPATCH, UNREVIEWED, apply_pending, dispatch_next, move, next_action, offer
@@ -193,7 +194,7 @@ def stall(a):
     who = rec.get("agent_id") or "chưa rõ id"
     asked = rec.get("stop_asked_at")
     alive_since = asked and c["life"] and c["life"] > at(asked)
-    if not (rec.get("redispatch_of") or rec.get("stopped") or RUNTIME == "codex" or asked and not alive_since):
+    if not (rec.get("redispatch_of") or rec.get("stopped") or asked and not alive_since):
         rec["stop_asked_at"] = stamp()
         save_st(st)
         print(f"{a.id}: kẹt ({c['why']}) → chưa giao lại: agent {who} chưa dừng. Dừng agent {who} trước, rồi "
@@ -321,12 +322,19 @@ def match(hook: dict) -> tuple[dict, dict] | None:
 
 def on_stop(text: str) -> str | None:
     """D33.9: hook SubagentStop → `P on-stop`. Records on disk that the subagent stopped and whether its report exists,
-    so a lost notification loses nothing. Never fails the hook: exit 2 would keep the subagent running."""
+    so a lost notification loses nothing. Never fails the hook: exit 2 would keep the subagent running. A Codex
+    sub-agent runs as a plain agent that reads its role file, so its `agent_type` is not ours: a rollout transcript is
+    matched by the brief alone (D46)."""
+    from . import session
     try:
         hook = json.loads(text)
     except ValueError:
         return None
-    if not isinstance(hook, dict) or not str(hook.get("agent_type") or "").startswith("zps-3dp-") or not ROOT.is_dir():
+    if not isinstance(hook, dict) or not ROOT.is_dir():
+        return None
+    path = hook.get("agent_transcript_path")
+    if not (str(hook.get("agent_type") or "").startswith("zps-3dp-")
+            or isinstance(path, str) and path and session.rollout(session.lines_of(Path(path)))):
         return None
     hit = match(hook)
     if hit is None:
@@ -347,22 +355,37 @@ def on_stop(text: str) -> str | None:
 
 
 def cmd_on_stop(_a):
+    """Codex 0.164.0 takes plain text on the stdout of a Stop hook as invalid, so the line goes to stderr with exit 0:
+    one form for both runtimes and both stop events (D46)."""
     try:
         text = sys.stdin.read() if sys.stdin and not sys.stdin.isatty() else ""
         msg = on_stop(text)
     except Exception as ex:  # noqa: BLE001 — a hook must never block the subagent
         msg = f"on-stop lỗi: {ex}"
     if msg:
-        print(msg)
+        print(msg, file=sys.stderr)
 
 
 SENDERS = ("Agent", "Task", "SendMessage")
+CODEX_SENDERS = ("spawn_agent", "followup_task", "send_message")
+
+
+def calls(d: dict) -> list[str]:
+    """The input of each subagent call in one transcript line, as text: the tool_use blocks of a Claude Code assistant
+    line, or a Codex rollout `function_call` (its `arguments` are a JSON string)."""
+    p = d.get("payload")
+    if d.get("type") == "response_item" and isinstance(p, dict) and p.get("type") == "function_call":
+        return [str(p.get("arguments"))] if p.get("name") in CODEX_SENDERS else []
+    blocks = (d.get("message") or {}).get("content") if d.get("type") == "assistant" else None
+    return [json.dumps(b.get("input"), ensure_ascii=False) for b in blocks if isinstance(b, dict)
+            and b.get("type") == "tool_use" and b.get("name") in SENDERS] if isinstance(blocks, list) else []
 
 
 def sent_to_agent(paths: list[str], rec: dict) -> bool:
-    """D39.1: a main-session transcript holds an Agent, Task or SendMessage call that names the brief of this dispatch,
-    made at or after it. `P brief` records a dispatch when it prints the line, so only the call shows it was sent. A
-    transcript that cannot be read, or none known, counts as sent: an unknown must never refuse a stop."""
+    """D39.1: a main-session transcript holds a subagent call (Agent, Task, SendMessage; Codex spawn_agent,
+    followup_task, send_message) that names the brief of this dispatch, made at or after it. `P brief` records a
+    dispatch when it prints the line, so only the call shows it was sent. A transcript that cannot be read, or none
+    known, counts as sent: an unknown must never refuse a stop."""
     from . import session
     if not paths:
         return True
@@ -379,13 +402,9 @@ def sent_to_agent(paths: list[str], rec: dict) -> bool:
             try:
                 d = json.loads(line)
                 when = session.local(d["timestamp"])
-                blocks = d["message"]["content"]
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
-            if d.get("type") != "assistant" or when < since or not isinstance(blocks, list):
-                continue
-            if any(isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in SENDERS
-                   and brief in json.dumps(b.get("input"), ensure_ascii=False) for b in blocks):
+            if isinstance(d, dict) and when >= since and any(brief in x or quoted in x for x in calls(d)):
                 return True
     return False
 
@@ -434,8 +453,9 @@ def on_main_stop(text: str) -> str | None:
 
 
 def cmd_on_main_stop(_a) -> int:
-    """Exit 2 and one line on stderr refuse the stop (Claude Code 2.1.318 feeds stderr to the model and goes on); every
-    other outcome, a failure of this hook too, exits 0 and allows it."""
+    """Exit 2 and one line on stderr refuse the stop: Claude Code 2.1.318 and Codex 0.164.0 both feed stderr to the
+    model and go on, so one form serves both. Every other outcome, a failure of this hook too, exits 0 with no output
+    and allows it."""
     try:
         why = on_main_stop(sys.stdin.read() if sys.stdin and not sys.stdin.isatty() else "")
     except Exception:  # noqa: BLE001 — a hook that fails must allow the stop
