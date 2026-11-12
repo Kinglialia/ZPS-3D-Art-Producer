@@ -701,6 +701,15 @@ def test_a_black_code_with_no_concept_colour_is_not_unpainted_and_is_reported_as
     assert c["seam.unpainted_left_out"] == ("info", {"groove": 0, "no_concept": {"TIMBER": int(walls.sum())}})
 
 
+def test_black_faces_that_no_part_explains_still_count_as_unpainted(tmp_path):
+    """Faces of no part have no code at all, so nothing says they may be black: a hole there is still a hole."""
+    full = model_final(tmp_path / "full", RES)
+    tm, walls = wall_texels(full)
+    img = np.where((tm.inside & ~walls)[..., None], 0, base_fill(full, tmp_path))
+    _, c, _ = measure(model_final(tmp_path / "model", RES, parts=("walls",)), tmp_path, img)
+    assert c["seam.unpainted_share"][0] == "fail", c["seam.unpainted_share"]
+
+
 def test_a_baked_highlight_is_reported_as_info_not_as_a_failure(m, tmp_path):
     tm, walls = wall_texels(m)
     lab = tex.lab(base_fill(m, tmp_path))

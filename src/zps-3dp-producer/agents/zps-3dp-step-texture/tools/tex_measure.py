@@ -193,7 +193,7 @@ def measure(a, lim, top_l):
     p90 = tex.seam_spread(img, idx, gid)
     checks.append(tex.check("seam.p90_dE", "pass" if p90 <= lim["seam_p90"] else "fail", round(p90, 2), lim["seam_p90"]))
     near_black = [c for c in concept if tex.hex_rgb(concept[c]).max() < 2 * UNPAINTED_BELOW]
-    no_concept = sorted(set(codes) - set(concept))
+    no_concept = sorted(set(codes) - set(concept) - {id_map.UNKNOWN})
     black = tm.inside & (img.max(-1) < UNPAINTED_BELOW)
     live = tm.inside & ~np.isin(code, near_black + no_concept) & ~groove
     dark = float(black[live].mean()) if live.any() else 0.0
