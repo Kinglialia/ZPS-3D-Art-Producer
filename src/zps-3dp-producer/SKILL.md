@@ -168,6 +168,8 @@ Khi dừng lại, chạy `P dashboard`, rồi báo đúng hai phần:
 1. Bảng ngắn: asset | trạng thái | việc người dùng cần làm.
 2. Các quyết định bạn tự đưa ra trong session này (`P ledger --rulings`), mỗi dòng kèm cái giá nếu sai. Đây là nơi duy nhất người dùng thấy được những gì bạn đã quyết thay họ.
 
+Khi một asset `done`, script in bảng thời gian và token ngay sau dòng duyệt. Dán nguyên bảng vào chat, cả các dòng lý do dưới bảng. Không tự tính lại, không đổi số, không ước lượng chỗ "không có số". Cần xem lại thì chạy `P report <id>`; lô thì `P report`.
+
 ## Tham khảo
 
 - `references/setup.md`: cài đặt lần đầu, project mới, hook, quyền, cách sửa pipeline. Đọc khi cài, khi mở project mới, hoặc khi người dùng muốn đổi workflow.
