@@ -23,7 +23,7 @@ GUARDED = [
         "build_model", "check_detail", "check_inputs", "check_mesh", "check_uv_edge", "gate_all", "join_mesh", "make_spec",
         "qa_all", "render_all", "render_review", "unwrap")),
     *(f"agents/zps-3dp-step-texture/tools/{n}.py" for n in (
-        "base_fill", "check_inputs", "check_meshy", "crop_edit", "id_map", "project_views", "render_paint_views",
+        "base_fill", "check_inputs", "check_meshy", "crop_edit", "id_map", "make_paint_prompts", "project_views", "render_paint_views",
         "render_texture", "seam_fix", "tex_measure", "texture_complexity", "tone_fix")),
     *(f"agents/zps-3dp-step-views/tools/{n}.py" for n in (
         "check_inputs", "check_package", "concept_colors", "diff_guides", "make_prompt", "measure", "pick_bg", "pick_size",
