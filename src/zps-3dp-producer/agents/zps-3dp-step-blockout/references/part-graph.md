@@ -1,6 +1,6 @@
 # Hợp đồng `blockout-1`
 
-`part_graph.json` là hợp đồng giữa Blockout và 3D Artist (`docs/agents/blockout.md` §9). `check_schema.py` kiểm mọi mục dưới đây. `graph.py` của kit dựng hình.
+`part_graph.json` là hợp đồng giữa Blockout và 3D Artist. `check_schema.py` kiểm mọi mục dưới đây. `graph.py` của kit dựng hình.
 
 ## Cấp file
 
@@ -15,7 +15,7 @@
 ```
 
 - Mọi kích thước là tên trong `params`. Part không ghi số trực tiếp trong `dims`. Số thực ghi `1.0`, không ghi `1` (số nguyên là số segment).
-- `fixed_params`: danh sách tên. Kích thước lấy từ MAP-LAYOUT hoặc `size_m`, `door_h`, `character_h` nằm ở đây. Mỗi số đếm của thẻ (`counts`, dòng `COUNTS:` của brief) là một param cùng tên với khóa ở đây, ví dụ `"doors": 1`; gate so giá trị này với thẻ. Ghi lý do vào `_fixed_reason`. `param_fit.py` không đổi các param này; `check_fix.py` báo fail nếu một vòng sửa đổi chúng.
+- `fixed_params`: danh sách tên. Kích thước lấy từ MAP-LAYOUT hoặc `size_m`, và chiều cao thước (`door_h`, `character_h`) nằm ở đây. Mỗi số đếm của thẻ (`counts`, dòng `COUNTS:` của brief) là một param cùng tên với khóa ở đây, ví dụ `"legs": 4`; gate so giá trị này với thẻ. Ghi lý do vào `_fixed_reason`. `param_fit.py` không đổi các param này; `check_fix.py` báo fail nếu một vòng sửa đổi chúng.
 
 ## Mỗi part
 
@@ -23,11 +23,11 @@
 |---|---|---|
 | `name` | có | duy nhất |
 | `primitive` | có (trừ `mirror_of`) | `box` (dims w,d,h), `wedge` (dims w,d,h; dốc lên về +Y), `cylinder` (dims radius,height), `custom` |
-| `dims` / `fn` + `args` | có | `custom`: tên một hàm trong `FUNCTIONS` của `tools/custom_lib.py`, hoặc một hàm của `custom_parts.py` của asset (`check_schema` kiểm); hàm chung trả `bmesh`, hàm của asset trả `(verts, faces)`, đặt tâm tại bbox; 3 arg đầu là w,d,h hoặc ghi thêm `dims`. Mỗi arg là một số hoặc tên một param |
+| `dims` / `fn` + `args` | có | `custom`: tên một hàm trong `FUNCTIONS` của `tools/custom_lib.py`, hoặc một hàm của `custom_parts.py` của asset (`check_schema` kiểm); mọi hàm trả `(verts, faces)`, đặt tâm tại bbox; 3 arg đầu là w,d,h hoặc ghi thêm `dims`. Mỗi arg là một số hoặc tên một param |
 | `attach` | có | `null` chỉ cho part đầu tiên (gốc) |
 | `material` | có | mã trong `sources.json` `materials` |
 | `role` | có | `mass` (khối chính) hoặc `marker` (mốc đo, nhô ≥ 2 cm) |
-| `tag` | không | `base` (nền), `roof` (mái), hoặc một khóa `counts` của thẻ (D30.6: số part có tag đó là số đếm) |
+| `tag` | không | `base` (phần đế), `roof` (phần phủ phía trên, cần part đỡ bên dưới), hoặc một khóa `counts` của thẻ (số part có tag đó là số đếm) |
 | `segments` | không | 8–24 (số hoặc tên param nguyên) |
 | `axis` | không | `X`, `Y`, `Z` (cylinder, mặc định Z) |
 | `rotation_deg` | không | 0, 90, 180, 270 |
@@ -47,26 +47,33 @@
 
 `offset_uv` theo thứ tự: mặt ±X → (Y, Z); mặt ±Y → (X, Z); mặt ±Z → (X, Y). −1/+1 là sát mép mặt cha.
 
-Mặt trước nhìn về −Y. Bên trái của chính công trình là +X (quy ước view của kit).
+Mặt trước nhìn về −Y. Bên trái của chính vật là +X (quy ước view của kit).
 
-Quy tắc dựng (từ `self_build.md` của kit): bevel 1–2 segment; tránh hai mặt trùng phẳng khi một part nằm trong part khác (lệch khoảng 0.001 m); không vật liệu, không texture.
+Quy tắc dựng: bevel 1–2 segment; tránh hai mặt trùng phẳng khi một part nằm trong part khác (lệch khoảng 0.001 m); không vật liệu, không texture.
 
 ## `sources.json`
 
-Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material_sha256}`, `layout.{w, d, h, includes_base, source}`, `door_h`, `door_h_source`, `character_h`, `materials` (danh sách mã), `camera` (`null` hoặc `{azimuth_deg, elevation_deg, fov_v_deg}`). Ví dụ ở `docs/agents/blockout.md` §2.
+`init_sources.py` điền phần tính được; phần còn lại là `TODO` để bạn điền, và `check_inputs.py` từ chối `TODO`. Khóa `check_inputs.py` đòi: `files.{layout, layout_sha256, material, material_sha256}`, `layout.{w, d, h, includes_base, source}`, `door_h`, `door_h_source`, `character_h`, `materials` (danh sách mã), `camera` (`null` hoặc `{azimuth_deg, elevation_deg, fov_v_deg}`).
+
+```json
+{"files": {"layout": "<path>", "layout_sha256": "...", "material": "<path>", "material_sha256": "..."},
+ "layout": {"w": 2.0, "d": 1.0, "h": 0.8, "includes_base": true, "source": "<dòng trích>"},
+ "door_h": 0.7, "door_h_source": "<dòng trích, hoặc cách đo trên concept>", "character_h": 1.6,
+ "materials": ["WOOD", "METAL"], "camera": {"azimuth_deg": 0, "elevation_deg": 35, "fov_v_deg": 40}}
+```
 
 - `has_map: true`: `files.layout` là `_approved/<id>/<id>.layout.md`.
-- `has_map: false`: `files.layout` là `_approved/<id>/asset-card.yaml`; `layout.w/d/h` bằng `size_m`; `character_h` từ `scale_refs` của profile; `door_h` từ `scale_overrides` của thẻ, hoặc đo trên concept với `character_h` làm thước, cách đo ghi vào `door_h_source`. Asset không có cửa (prop): `door_h: null`, `door_h_source` ghi lý do, ví dụ "không có cửa".
+- `has_map: false`: `files.layout` là `_approved/<id>/asset-card.yaml`; `layout.w/d/h` bằng `size_m`; `character_h` từ `scale_refs` của profile; `door_h` từ `scale_overrides` của thẻ, hoặc đo trên concept với `character_h` làm thước, cách đo ghi vào `door_h_source`. Asset không có vật làm thước: `door_h: null`, `door_h_source` ghi lý do (ví dụ "tảng đá, không có vật làm thước").
 - Hàm `custom` nhận mọi param dạng số thực: ép `int(...)` cho số đoạn, số cạnh.
 
-## Hàm `custom` (D32)
+## Hàm `custom`
 
 - Hàm chung trong `tools/custom_lib.py` (đọc docstring để biết tham số):
   - `bevel_box(w, d, h, r, seg, mask)`: hộp bo các cạnh chọn theo `mask`.
-- Hàm riêng của asset (D32.2): file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Python thuần, chỉ `import math`; mỗi hàm trả `(verts, faces)`. Check danh sách trắng (`project_parts.static_errors`): chỉ phép tính, tên do file định nghĩa, `math` và vài builtin số học; không class, `with`, `open`, `exec`, `eval`, `getattr`, import khác, tên `__…__`. Tên không trùng hàm chung. Chỉ thêm hàm, không sửa hàm một version đã dùng.
-- `RUN custom_mesh.py --work <w>` chạy file đó ngoài Blender và ghi mỗi part một lưới JSON vào `vN/work/custom_mesh/<part>.json` (graph khác `final/`: thư mục con, ví dụ `custom_mesh/variants/b/`). JSON ghi `fn`, `args` và sha256 của file. Trong Blender, `build_parts.py` chỉ dựng lưới từ JSON bằng `tools/mesh_from_json.py`; JSON thiếu, khác `args` hoặc khác sha256 → dừng dựng, báo lệnh cần chạy. `param_fit` không chỉnh param truyền vào hàm của asset.
+- Hàm riêng của asset: file dòng `CUSTOM_PARTS:` của brief (`production/assets/<id>/custom_parts.py`). Python thuần, chỉ `import math`; mỗi hàm trả `(verts, faces)`. Check danh sách trắng (`project_parts.static_errors`): chỉ phép tính, tên do file định nghĩa, `math` và vài builtin số học; không class, `with`, `open`, `exec`, `eval`, `getattr`, import khác, tên `__…__`. Tên không trùng hàm chung. Chỉ thêm hàm, không sửa hàm một version đã dùng.
+- `RUN custom_mesh.py --work <w>` chạy file đó ngoài Blender và ghi mỗi part một lưới JSON vào `vN/work/custom_mesh/<part>.json` (graph khác `final/`: thư mục con, ví dụ `custom_mesh/variants/b/`). JSON ghi `fn`, `args` và sha256 của file. `build_parts.py` chỉ dựng lưới từ JSON bằng `tools/mesh_from_json.py`, trong venv, không cần Blender; JSON thiếu, khác `args` hoặc khác sha256 → dừng dựng, báo lệnh cần chạy. `param_fit` không chỉnh param truyền vào hàm của asset.
 - `build_parts.py` chép `custom_lib.py` vào `parts_lib.py` cạnh graph. Reviewer đọc `custom_parts.py` của asset như bằng chứng.
-- File của asset giữ cả sau DUYỆT 2, như file nguồn dạng text (D32.3). Lưới JSON nằm trong `work/`, D29 xóa cùng `work/`.
+- File của asset giữ cả sau DUYỆT 2, như file nguồn dạng text. Lưới JSON nằm trong `work/` và bị xóa cùng `work/`.
 - Hai mặt trùng khít tuyệt đối làm gate union lỗi: để lệch 1 mm khi acceptance cho phép.
 - `includes_base: false`: `check_layout.py` bỏ các part `tag: base` khi đo bbox.
 
@@ -76,15 +83,17 @@ Mọi tool ghi một file JSON cùng dạng kit (`lib/common.write_result`): `ov
 
 | File | Ghi bởi |
 |---|---|
-| `final/assembly.json`, `final/parts/`, `final/assembled.glb` | `assembly.py` |
-| `final/review/gates/<part>.json` | `gates.py --out` |
-| `final/review/checks/<tên>.json`, `fix_<F>.json` | `check_*.py` |
+| `final/assembly.json`, `final/parts/`, `final/assembled.glb` | `gate_all.py` (qua `build_parts.py assembly`) |
+| `final/review/gates/<part>.json` | `gate_all.py` (qua `gates.py`; xóa gate cũ trước) |
+| `final/review/checks/<tên>.json` | `gate_all.py` (mọi `check_*.py`; `proportion` chạy lại ở `prep_overlay.py`) |
+| `final/review/checks/fix_<Fid>.json` | `check_fix.py` |
+| `V/work/spec.json`, `V/work/masks/` | `prep_overlay.py` |
 | `final/review/renders/` (`renders.json`, `clay_*`, `normal_*`, `parts_*`, `overlay_*`) | `render_critic.py --outdir` |
-| `final/review/review.json`, `game_cam.png`, `lineup.png`, `foot_front_*.png` | `render_review.py` |
+| `final/review/review.json`, `game_cam.png`, `lineup.png`, `foot_front_*.png`, `mat_left.png`, `mat_right.png`, `mat_back.png` (`mat_top.png` với `--top`) | `render_review.py` (ảnh `mat_*` do `render_sides.py` vẽ: mỗi part một màu theo mã vật liệu) |
 
 ## `blockout.md`
 
-Review page hiện ba dòng đầu (bỏ dòng trống) làm tóm tắt. Dòng đầu: `# Blockout <id> v<N>`. Hai dòng sau là mục 1 và 2, mỗi mục một dòng. Các mục khác theo sau, đúng thứ tự:
+Review page hiện ba dòng đầu (bỏ dòng trống) làm tóm tắt. Dòng đầu: `# Blockout <id> v<N>`. Hai dòng sau là mục 1 và 2, mỗi mục một dòng. Các mục khác theo sau, đúng thứ tự, mỗi mục một tiêu đề `## <số>. <tên>`. `blockout_md.py` dựng khung này, ghi mục 2, 3 và 8 từ file JSON, và để `TODO` ở mục còn lại. Bạn viết mục 1, 4, 5, 6, 7, và mục 9 từ v02:
 
 1. Thành phần đếm trên concept (ví dụ "4 trụ, 1 cửa, 3 thùng" hoặc "1 thân, 3 cành, 2 tảng đá").
 2. Bbox so với MAP-LAYOUT (`has_map: true`) hoặc `size_m` của thẻ asset (`has_map: false`).
