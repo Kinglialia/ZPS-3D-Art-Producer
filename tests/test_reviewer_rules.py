@@ -1,34 +1,35 @@
 """D27.11: rules every step reviewer carries in its agent file. Pilot run: `back.png` had 2 board rows for 3 and passed as a
 `note_texture`; a texture fix of F6 erased the lid-gap ink line that `preserve` did not name."""
+import json
 from pathlib import Path
 
 import pytest
+
+from test_loop import flow  # noqa: F401  (the blockout-only fixture)
 
 AGENTS = Path(__file__).resolve().parents[1] / "src/zps-3dp-producer/agents"
 PRESERVE = ('- `preserve` nêu tên các chi tiết nằm cạnh vùng sửa có thể bị đụng tới (ví dụ "nét mực mép mái", '
             '"chân bàn trái", "gốc cây"), không ghi chung chung "giữ phần còn lại".')
 COUNT = {
-    "blockout": "- Sai số lượng thành phần so với concept (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là `structure`, "
-                "không bao giờ là ghi chú.",
-    "clay": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
-            "`structure`, không bao giờ là ghi chú.",
     "texture": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
                "`repaint` (vẽ sai) hoặc `fix_uv_mesh` (mesh sai), không bao giờ là `note`.",
     "views": "- Sai số lượng thành phần so với concept hoặc `blockout.md` (số cửa sổ, số chân bàn, số cành, số tảng đá): luôn là "
              "`regen`, không bao giờ là `note_texture`.",
 }
+KEPT = {"views"}  # K08 (Q10) trimmed the three reviewers below; views is K25's file and still holds its lines
+STEPS = ["blockout", "clay", "texture", "views"]
 
 
 @pytest.mark.parametrize("step", sorted(COUNT))
 def test_each_step_reviewer_files_a_wrong_part_count_as_a_fix_and_names_what_preserve_keeps(step):
     rows = (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8").splitlines()
-    assert (COUNT[step] in rows, PRESERVE in rows) == (True, True)
+    assert (COUNT[step] in rows, PRESERVE in rows) == (True, step in KEPT)
 
 
 FALLBACK = "Lệnh ghi file bị chặn: trả cả report giữa dòng `--- report ---` và dòng `--- end ---`."
 
 
-@pytest.mark.parametrize("step", sorted(COUNT))
+@pytest.mark.parametrize("step", STEPS)
 def test_each_step_reviewer_writes_its_report_file_and_replies_two_lines_with_text_only_as_fallback_d27_5(step):
     """D22.6 stays: a report saved by the Producer passes through its context, so text is the exception."""
     body = (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8")
@@ -81,7 +82,85 @@ SCOPE = ("- `REVIEW_SCOPE` ở đầu brief. `full`: chấm đủ mọi key rubr
          "thêm một lượt `full`.")
 
 
-@pytest.mark.parametrize("step", sorted(COUNT))
+@pytest.mark.parametrize("step", STEPS)
 def test_each_step_reviewer_knows_what_a_fix_round_judges_and_when_its_pass_is_final_d31_2_d38_3(step):
     """The brief carries only the REVIEW_SCOPE line, so the role file holds what each scope judges."""
     assert SCOPE in (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8").splitlines()
+
+
+TRIMMED = ["blockout", "clay", "texture"]
+
+
+def reviewer(step):
+    return (AGENTS / f"zps-3dp-check-{step}.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("step", TRIMMED)
+def test_a_reviewer_file_holds_no_line_that_the_brief_states_or_the_script_decides_q10(step):
+    """The brief is the format authority: it carries preserve, COMPARE, COUNTS and the PRIOR words. The script decides
+    the approval, so a rule about approval by delegation only gave the reviewer a second thing to get wrong."""
+    text = reviewer(step)
+    gone = ["Duyệt theo ủy quyền", "ủy quyền", "Không ghi `COUNTS`", "Vòng sửa: so ảnh cùng góc", "`resolved` chỉ khi ảnh mới chứng minh",
+            "- `preserve` nêu tên", "- Finding có id `F<n>`, giữ id qua các vòng. `FINDINGS` chỉ ghi finding mới"]
+    assert [g for g in gone if g in text] == []
+
+
+def test_the_brief_that_replaces_those_lines_states_them(flow):  # noqa: F811
+    from test_loop import fix_v1
+    fix_v1(flow)
+    out = flow.work()
+    rv = flow.text(json.loads(out.splitlines()[-1]))
+    for stated in ("- `preserve`: tên chi tiết", "Không ghi COUNTS", "FINDINGS chỉ ghi finding mới", "PRIOR: thay `?` bằng",
+                   "COMPARE: so ảnh cùng góc"):
+        assert stated in rv, stated
+
+
+@pytest.mark.parametrize("step", TRIMMED)
+def test_a_reviewer_file_has_one_image_rule_that_covers_sheet_pages_and_crops_q10(step):
+    rows = [r for r in reviewer(step).splitlines() if r.startswith("- Ảnh: ")]
+    assert len(rows) == 1 and "`sheet-2.png`" in rows[0] and "không mở ảnh lẻ trong `final/`" in rows[0]
+    text = reviewer(step)
+    assert "Mở từng ảnh bằng tool, theo nhãn." not in text and "Brief có sheet: không mở ảnh lẻ" not in text
+    assert "xin ảnh <nhãn ô> box x0,y0,x1,y1" in text and "…_crop" in text
+
+
+@pytest.mark.parametrize("step", ["blockout", "clay"])
+def test_the_param_rule_names_the_priorities_the_script_fills_q10(step):
+    """The script fills every open finding of the kind with a priority in BATCH_PRIO; `preference` and `unclear` are not
+    filled. The old line said every open `param` finding."""
+    from core import findings
+    assert f"`param` mọi finding `param` đang mở mức {', '.join(findings.BATCH_PRIO)}: chỉ ghi loại, script điền id." in reviewer(step)
+
+
+@pytest.mark.parametrize("step", TRIMMED)
+def test_a_reviewer_file_keeps_only_the_decision_tags_a_test_of_the_watch_pins_q10(step):
+    import re
+    assert sorted(set(re.findall(r"\bD\d+(?:\.\d+)*\b", reviewer(step)))) == ["D33.2", "D33.8"]
+
+
+@pytest.mark.parametrize("step, dead", [
+    ("clay", ["`detail.json` `detail.more_tris` fail là fail", "`mesh.coplanar_overlap` > 0 là fail", "`join.json` `join.removed_faces_seen` fail là fail",
+              "`qa_mesh_check.json` báo mặt ngược là fail"]),
+    ("texture", ["`light.*` fail trong `tex_measure.json` là fail", "`material.dE_concept.*` fail là fail", "`seam.*` fail là fail"]),
+])
+def test_a_rubric_clause_that_fails_a_key_on_a_failed_json_is_gone_because_that_json_never_reaches_the_reviewer_q7(step, dead):
+    """A failed check returns to the worker before a review (D31.3), so the reviewer can never see these JSON failed."""
+    assert [d for d in dead if d in reviewer(step)] == []
+
+
+def test_the_clay_reviewer_names_the_two_keys_the_script_fills_and_when_it_does_not_q7():
+    text = reviewer("clay")
+    assert "6. `density`: script điền `pass` khi `detail.vs_pilot` nằm trong 0,5–2 (brief nêu)." in text
+    assert "7. `blockout_match`: script điền `pass` khi bbox, `fixed_params` và kích thước, pivot của mesh đều pass (brief nêu)." in text
+
+
+def test_the_rubric_templates_say_four_to_eight_criteria_because_two_steps_have_eight():
+    import re
+    rubrics = AGENTS.parent / "templates/rubrics"
+    most = 0
+    for f in sorted(rubrics.glob("*.md")):
+        for sec in re.split(r"\n## ", f.read_text(encoding="utf-8"))[1:]:
+            most = max(most, len(re.findall(r"^- [a-z0-9_]+:", sec, re.M)))
+    assert most == 8
+    assert "Giữ 4–8 tiêu chí mỗi bước" in (rubrics / "default.md").read_text(encoding="utf-8")
+    assert "4–7" not in "".join(f.read_text(encoding="utf-8") for f in rubrics.glob("*.md"))

@@ -3,7 +3,7 @@
 
 <!-- Người dùng duyệt xong: đổi dòng đầu thành `status: approved`. Asset tạo mới sẽ vào thẳng todo.
      Mỗi bước một mục `## <bước>`; brief của bước chỉ đọc mục đó. Mỗi tiêu chí một dòng `- key: tiêu chí pass/fail`.
-     Key (a-z, 0-9, _) dùng trong dòng RUBRIC của báo cáo. Giữ 4–7 tiêu chí mỗi bước, chỉ những gì đo được bằng ảnh
+     Key (a-z, 0-9, _) dùng trong dòng RUBRIC của báo cáo. Giữ 4–8 tiêu chí mỗi bước, chỉ những gì đo được bằng ảnh
      preview hoặc số liệu, kèm tham chiếu tài liệu art direction khi có.
      Gu thẩm mỹ thuần túy không đưa vào đây: đó là quyền duyệt cuối của người dùng. -->
 
