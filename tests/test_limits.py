@@ -40,27 +40,35 @@ def next_lines(capsys):
     return [l for l in capsys.readouterr().out.splitlines() if l.startswith("[")]
 
 
-def test_a_slot_is_held_by_every_open_worker_dispatch_of_a_step_that_uses_the_resource_c17(proj):
-    """C17: a pid file lives only while a tool runs, so counting live pid files when the Producer dispatches capped
-    nothing: a worker that thinks holds none, and the next worker went out. A slot is now held from a worker's dispatch
-    to its ingest. A reviewer, an ingested worker and a pid file hold none."""
-    pid_file(proj, "x-live", os.getpid())
-    assert (limits.used(load_cfg(), "blender", all_status()), limits.used(load_cfg(), "meshy", all_status())) == (
-        0, 0)
+def test_a_slot_is_held_by_an_open_worker_dispatch_or_a_live_process_and_one_asset_counts_once_c17(proj):
+    """C17: a pid file lives only while a tool runs, so a count of live pid files alone, read when the Producer
+    dispatched, let a second worker out while the first one thought. A slot is now held from a worker's dispatch to its
+    ingest, and also by a live process of a script step or another tool. A worker inside Blender is one asset, not two.
+    A dead or broken pid file, a reviewer and an ingested worker hold none."""
+    def n(r="blender"):
+        return limits.used(load_cfg(), r, all_status())
+    pid_file(proj, "y-dead", dead_pid())
+    (proj / "production/pids/blender/z-junk.pid").write_text("not a pid", encoding="utf-8")
+    assert (n(), n("meshy")) == (0, 0)
     briefs.run(Namespace(id="a-hut"))
-    assert limits.used(load_cfg(), "blender", all_status()) == 1
+    assert n() == 1
+    pid_file(proj, f"a-hut-{os.getpid()}", os.getpid())
+    assert n() == 1
+    pid_file(proj, "x-live", os.getpid())
+    assert n() == 2
     st = load_st("a-hut")
     st["dispatches"][-1]["ingested"] = st["dispatches"][-1]["at"]
     st["state"] = "review"
     save_st(st)
-    assert limits.used(load_cfg(), "blender", all_status()) == 0
+    (proj / f"production/pids/blender/a-hut-{os.getpid()}.pid").unlink()
+    assert n() == 1
 
 
 def test_next_offers_dispatch_only_while_a_slot_is_free_and_counts_its_own_offers(proj, capsys):
     assert next_lines(capsys) == ["[a-hut] blockout/todo → giao worker → `brief a-hut`",
                                   "[b-barn] blockout/todo → chờ slot blender"]
     pid_file(proj, "x-live", os.getpid())
-    assert next_lines(capsys)[0] == "[a-hut] blockout/todo → giao worker → `brief a-hut`"
+    assert next_lines(capsys)[0] == "[a-hut] blockout/todo → chờ slot blender"
 
 
 def test_a_running_worker_holds_its_slot_while_it_thinks_without_a_blender_process_c17(proj, capsys):

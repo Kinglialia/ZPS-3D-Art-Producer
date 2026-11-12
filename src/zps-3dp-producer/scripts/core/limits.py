@@ -26,12 +26,22 @@ def alive(pid: int) -> bool:
 
 
 def used(cfg: dict, resource: str, sts: list[dict]) -> int:
-    """C17: a slot is held by every open worker dispatch of a step that uses the resource, from its dispatch to its
-    ingest. A pid file lives only while a tool runs, so counting them when the Producer dispatches capped nothing."""
+    """C17: assets that hold a slot. An open worker dispatch of a step that uses the resource holds it from dispatch to
+    ingest: a pid file lives only while a tool runs, so a worker that thinks holds none. A live pid file in
+    production/pids/<resource>/ also holds it (a script step, a tool still running); its owner is the file name, less
+    the `-<pid>` that run_tool.py and assemble.py add, so a worker in Blender counts once."""
     from .watch import job
     uses = {s["id"]: s["uses"] for s in cfg["steps"]}
-    return sum(1 for s in sts if not s.get("broken") and (r := job(s)) and r["role"] == "worker"
-               and resource in uses.get(r["step"], ()))
+    owners = {s["id"] for s in sts if not s.get("broken") and (r := job(s)) and r["role"] == "worker"
+              and resource in uses.get(r["step"], ())}
+    for p in (ROOT / "pids" / resource).glob("*.pid"):
+        try:
+            pid = int(p.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            continue
+        if alive(pid):
+            owners.add(p.stem.removesuffix(f"-{pid}"))
+    return len(owners)
 
 
 def slots(cfg: dict, sts: list[dict]) -> dict[str, int]:
