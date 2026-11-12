@@ -1,13 +1,15 @@
 """The built model has the width : height ratio of the concept in every orthographic view, within 10 %. Bbox only.
 
 Usage: python3 tools/check_proportion.py --work <dir> [--spec <spec.json>] [--out <json>]
-Per view in spec concept.views (front, back, left, right, top; --spec defaults to <dir>/../work/spec.json): the model box
-comes from the union bbox in assembly.json, the concept box from the mask file the spec names. The concept has no scale,
+Per view in spec concept.views (front, back, left, right, top): the model box comes from the union bbox in
+assembly.json, the concept box from the mask file the spec names. --spec defaults to <vN>/work/spec.json of the version
+folder, also for a graph in <vN>/variants/<b|c>/. The concept has no scale,
 so only the ratio of the two box sides is compared: fail when (model / concept - 1) is beyond +-0.10. Other views (the
 3/4 view) are not checked. No spec, or no mask file for a view: that view is not_checked.
 Writes <dir>/review/checks/proportion.json. Exit 0 pass/not_checked, 1 fail, 2 error.
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
@@ -34,8 +36,18 @@ def concept_ratio(path, background):
     return None if box is None else float(box[1] - box[0] + 1) / float(box[3] - box[2] + 1)
 
 
+def default_spec(work):
+    """<vN>/work/spec.json for a graph in <vN>/final/ or <vN>/variants/<b|c>/; beside the graph's folder if outside vN."""
+    d = os.path.abspath(work)
+    while os.path.dirname(d) != d:
+        if re.fullmatch(r"v\d+", os.path.basename(d)):
+            return os.path.join(d, "work", "spec.json")
+        d = os.path.dirname(d)
+    return os.path.join(os.path.abspath(work), "..", "work", "spec.json")
+
+
 def run(a, graph, rows, sources):
-    spec_path = a.spec or os.path.join(a.work, "..", "work", "spec.json")
+    spec_path = a.spec or default_spec(a.work)
     if not os.path.isfile(spec_path):
         return [common.check("proportion.spec", "not_checked", note=f"no spec.json with concept masks at {spec_path}")], \
             {}, "not_checked"

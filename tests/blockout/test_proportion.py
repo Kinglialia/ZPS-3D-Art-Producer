@@ -96,6 +96,15 @@ def test_the_spec_defaults_to_the_one_the_worker_writes_beside_final(tmp_path):
     assert (r.returncode, statuses(res)["proportion.front"]) == (1, "fail")
 
 
+def test_a_param_variant_reads_the_spec_of_its_version_so_it_is_not_skipped_as_not_checked(tmp_path):
+    """A variant lives in vN/variants/b/, a sibling of final/: its spec is still vN/work/spec.json."""
+    (tmp_path / "v1" / "work").mkdir(parents=True)
+    spec_for(tmp_path / "v1" / "work", front=(400, 450))
+    work = write_build(tmp_path / "v1" / "variants" / "b")
+    r, res = run_proportion(tmp_path, work)
+    assert (r.returncode, statuses(res)["proportion.front"]) == (1, "fail")
+
+
 def test_a_stale_assembly_fails_instead_of_comparing_an_old_build(tmp_path):
     work = write_build(tmp_path / "w", stale=True)
     r, res = run_proportion(tmp_path, work, spec_for(tmp_path, front=(400, 370)))
