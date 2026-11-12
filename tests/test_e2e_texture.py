@@ -13,7 +13,7 @@ from flowkit import AID, A, PROJECT_KEY, SHELL_KEY, counts, mf, to_texture
 from shared import P
 
 SKILL = P.parents[1]
-BRIEF_MAX = 4416
+BRIEF_MAX = 4096
 
 
 def sha12(root, v):

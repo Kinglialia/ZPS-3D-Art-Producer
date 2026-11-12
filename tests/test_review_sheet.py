@@ -381,7 +381,7 @@ def test_the_filled_key_bullet_fits_in_what_the_heaviest_model_review_brief_leav
     bullet, paths left out; the new sheet line is shorter than the old one, so 60 bytes cover its pages."""
     bullet = briefs.prefill_line({"density": ("pass", "detail.json"), "blockout_match": ("pass", "detail.json, qa_mesh_check.json")})
     assert len(bullet.encode()) <= 220
-    assert 3981 + len(bullet.encode()) + 1 + 60 < 4416
+    assert 3981 + len(bullet.encode()) + 1 + 60 < 4288
 
 
 def prefilled_review(flow, monkeypatch):  # noqa: F811
