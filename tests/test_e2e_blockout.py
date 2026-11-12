@@ -100,8 +100,8 @@ def flow(tmp_path_factory):
     pilot_project(root)
     blockout_only(root)
     p = root / "production/pipeline.toml"  # D31.3: this flow lets the blockout worker accept a failed layout check
-    p.write_text(p.read_text(encoding="utf-8").replace('top_fix = ["structure", "param"]\n',
-                                                         'top_fix = ["structure", "param"]\nacceptable = ["layout.json"]\n', 1),
+    p.write_text(p.read_text(encoding="utf-8").replace(
+        'acceptable = ["proportion.json", "base.json", "gates/*.json#gate5.health"]\n', 'acceptable = ["layout.json"]\n', 1),
                  encoding="utf-8")
     f.save("intake list", f.p("intake"))
     f.save("intake", f.p("intake", AID))
