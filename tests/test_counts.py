@@ -22,7 +22,7 @@ from core.state import load_st, save_st
 # A synthetic project vocabulary: slats of a table top, and its legs.
 KEYS = {"top_slats": "số thanh mặt bàn", "legs": "số chân bàn"}
 CARD = {"type": "prop", "counts": {"top_slats": 3, "legs": 4}}
-HOW = "mỗi khóa: param cùng tên trong fixed_params, hoặc đúng N part có tag: <khóa>"
+HOW = "mỗi khóa: param cùng tên trong fixed_params mà part dùng, hoặc đúng N part có tag: <khóa>"
 
 
 def graph(slats=3, legs=4, fixed=("top_w", "top_slats")):
@@ -79,6 +79,34 @@ def test_a_count_written_as_a_literal_fails_and_says_both_ways_to_carry_it(tmp_p
         "counts.top_slats": ("fail", ["0 part có tag: top_slats, thẻ top_slats = 3: đặt param top_slats = 3 vào params "
                                       "và fixed_params, hoặc gắn tag: top_slats cho đúng 3 part"]),
         "counts.legs": ("pass", [])})
+
+
+def test_a_fixed_param_with_the_right_value_that_no_part_reads_fails_because_the_graph_can_still_build_another_number(tmp_path):
+    """Pilot review: `windows: 4` passed through a fixed param of value 4 while the graph built 2 windows, because no part
+    read the param. A count that nothing reads says nothing about the mesh."""
+    g = graph()
+    g["params"]["windows"] = 4
+    g["fixed_params"].append("windows")
+    g["parts"] += [{"name": f"win_{i}", "primitive": "box", "dims": ["top_w"] * 3} for i in range(2)]
+    assert counts_of(tmp_path, {"counts": {"windows": 4}}, g) == ("fail", {"counts.windows": ("fail", [
+        "param windows = 4 nhưng không part nào dùng nó (dims, args, segments, attach): hàm hoặc part dựng số đó phải "
+        "nhận param windows, hoặc gắn tag: windows cho đúng 4 part"])})
+
+
+@pytest.mark.parametrize("part", [
+    {"primitive": "box", "dims": ["top_w", "top_w", "n"]},
+    {"primitive": "custom", "fn": "f", "args": ["top_w", "top_w", "top_w", "n"]},
+    {"primitive": "cylinder", "dims": ["top_w", "top_w"], "segments": "n"},
+    {"primitive": "box", "dims": ["top_w"] * 3, "attach": {"type": "inset_into", "to": "top", "inset": "n"}},
+    {"primitive": "box", "dims": ["top_w"] * 3, "attach": {"type": "inset_into", "to": "top", "depth": "n"}},
+    {"primitive": "box", "dims": ["top_w"] * 3, "attach": {"type": "on_top", "to": "top", "offset_uv": ["n", 0.0]}},
+])
+def test_a_fixed_param_that_a_part_reads_in_any_field_of_the_part_graph_passes(tmp_path, part):
+    g = graph(legs=0)
+    g["params"]["n"] = 4
+    g["fixed_params"].append("n")
+    g["parts"].append({"name": "x"} | part)
+    assert counts_of(tmp_path, {"counts": {"n": 4}}, g)[1] == {"counts.n": ("pass", [])}
 
 
 def test_a_count_of_zero_passes_when_no_part_has_the_tag(tmp_path):

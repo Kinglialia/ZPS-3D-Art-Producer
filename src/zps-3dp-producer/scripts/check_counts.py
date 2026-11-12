@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Card `counts` against the part graph (D30.6, D32.5, D34.3): `check_counts.py <final/> <asset-card.yaml>`.
 Writes <final>/review/checks/counts.json; `P ingest` runs it for every step with `counts_gate` in pipeline.toml.
-  counts.<key>  when `fixed_params` lists a param named <key>, that param equals the card's number; otherwise the
-                number of parts with `tag: <key>` equals it (no such part counts 0). A count written as a literal in a
-                part's args, or kept in a param a fix round may change, fails.
+  counts.<key>  when `fixed_params` lists a param named <key>, that param equals the card's number and some part reads
+                it (dims, args, segments, attach inset, depth or offset_uv); otherwise the number of parts with
+                `tag: <key>` equals it (no such part counts 0). A count written as a literal in a part's args, kept in a
+                param a fix round may change, or kept in a param no part reads, fails.
 Every key of the card is compared. The keys a project uses are its profile's `counts_keys` (D34.3): check_card.py warns
 about a key outside that list, and this gate still compares it, so a mistyped key cannot pass unchecked.
 Prints one line. Exit 0 pass or not_checked, 1 fail."""
@@ -17,13 +18,32 @@ from pathlib import Path
 from root_guard import require_root
 
 TOOL = "producer/check_counts"
-HOW = "mỗi khóa: param cùng tên trong fixed_params, hoặc đúng N part có tag: <khóa>"
+HOW = "mỗi khóa: param cùng tên trong fixed_params mà part dùng, hoặc đúng N part có tag: <khóa>"
+
+
+def read_names(graph: dict) -> set:
+    """Every string a part gives where a number or a param name goes."""
+    out = set()
+    for p in graph.get("parts") or []:
+        if not isinstance(p, dict):
+            continue
+        att = p.get("attach") if isinstance(p.get("attach"), dict) else {}
+        uv = att.get("offset_uv")
+        out.update(x for x in [*(p.get("dims") or []), *(p.get("args") or []), p.get("segments"), att.get("inset"),
+                               att.get("depth"), *(uv if isinstance(uv, list) else [])] if isinstance(x, str))
+    return out
 
 
 def check_key(graph: dict, key: str, want) -> dict:
     params, fixed = graph.get("params") or {}, set(graph.get("fixed_params") or [])
     if key in fixed and key in params:
-        bad = [] if params[key] == want else [f"param {key} = {params[key]}, thẻ {key} = {want}"]
+        if params[key] != want:
+            bad = [f"param {key} = {params[key]}, thẻ {key} = {want}"]
+        elif key not in read_names(graph):
+            bad = [f"param {key} = {want} nhưng không part nào dùng nó (dims, args, segments, attach): hàm hoặc part "
+                   f"dựng số đó phải nhận param {key}, hoặc gắn tag: {key} cho đúng {want} part"]
+        else:
+            bad = []
     else:
         n = sum(1 for p in graph.get("parts") or [] if isinstance(p, dict) and p.get("tag") == key)
         loose = f" (param {key} có nhưng không nằm trong fixed_params)" if key in params else ""
