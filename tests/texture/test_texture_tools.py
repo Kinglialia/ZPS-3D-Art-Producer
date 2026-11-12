@@ -680,3 +680,19 @@ def test_faces_with_a_mirrored_uv_island_are_listed_for_every_code(tmp_path):
     assert c["uv.mirrored_faces"] == ("info", 4)
     assert r["data"]["uv_mirrored"] == {"count": 4, "faces": [2, 3, 10, 11], "by_code": {"STONE": 2, "TIMBER": 2}}
 
+
+
+def test_renders_json_names_the_albedo_it_was_rendered_from_by_sha256_so_a_later_edit_shows_d36_11(tmp_path):
+    import hashlib
+
+    import render_texture
+    albedo = tmp_path / "albedo_128.png"
+    out = tmp_path / "renders.json"
+    shas = []
+    for colour in (90, 91):
+        Image.new("RGB", (8, 8), (colour,) * 3).save(albedo)
+        render_texture.write_renders(out, albedo, {"azimuth_deg": 45}, {})
+        doc = json.loads(out.read_text())
+        shas.append(doc["albedo_sha256"])
+        assert doc["albedo_sha256"] == hashlib.sha256(albedo.read_bytes()).hexdigest() and doc["albedo"] == "albedo_128.png"
+    assert shas[0] != shas[1]

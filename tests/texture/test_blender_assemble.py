@@ -74,6 +74,8 @@ def build_base(t, spec):
                  "--", "--glb", glb, "--albedo", tf / f"albedo_{RES}.png", "--spec", mf / "spec.json",
                  "--concept", concept / "concept_shadow.png", "--final", tf, "--size", 256)
     assert rc == 0, out
+    assert json.loads((tf / "review/renders.json").read_text())["albedo_sha256"] == hashlib.sha256(
+        (tf / f"albedo_{RES}.png").read_bytes()).hexdigest()
     (tf / "notes.md").write_text("# Texture box v1\nVẼ MỚI\n", encoding="utf-8")
     (tf / "texture_spec.json").write_text(json.dumps({"proposed": "paint", "used": "paint"}), encoding="utf-8")
     st = {"id": AID, "title": "Box", "stage": "assemble", "state": "running", "concept_dir": str(concept),

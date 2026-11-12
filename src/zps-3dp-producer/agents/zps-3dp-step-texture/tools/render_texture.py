@@ -11,10 +11,12 @@ Set mode (texture worker): the albedo on the locked mesh, Workbench, view transf
   views: 34_front (az 45, el 30), close_front (az 0, el 10, the front half), 34_back (az 225, el 30), game (spec camera)
   thumb.png     the unlit game view, model.target_px_height px tall
   final_lit_vs_concept.png  concept_shadow | lit from spec `concept_cam` under `sun`
-  Writes F/review/renders.json: label -> {file, camera {matrix, type, ortho_scale|angle_y, clip, w, h}}.
+  Writes F/review/renders.json: label -> {file, camera {matrix, type, ortho_scale|angle_y, clip, w, h}}, and the sha256
+  of the albedo file it rendered as `albedo_sha256`: a render of an older albedo is told by it (D36.11).
 Camera mode (assemble.py): imports the GLB with its own material and image, as an engine reads it, and renders the
 labels in --views with the recorded cameras and the same shading. Exit 0, 1 on error.
 """
+import hashlib
 import json
 import math
 import os
@@ -204,9 +206,15 @@ def render_set(bpy, a):
         thumb(files["unlit_game"]["file"], os.path.join(out, "thumb.png"), int(spec["model"]["target_px_height"]))
         files["thumb"] = {"file": os.path.join(out, "thumb.png"), "camera": None}
     rel = {k: dict(r, file=os.path.relpath(r["file"], a.final)) for k, r in files.items()}
-    with open(os.path.join(out, "renders.json"), "w", encoding="utf-8") as fh:
-        json.dump({"albedo": os.path.basename(a.albedo), "sun": sun, "renders": rel}, fh, indent=1)
+    write_renders(os.path.join(out, "renders.json"), a.albedo, sun, rel)
     return [tex.check("render.files", "info", len(rel))], rel
+
+
+def write_renders(path, albedo, sun, rel):
+    with open(albedo, "rb") as fh:
+        sha = hashlib.sha256(fh.read()).hexdigest()
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"albedo": os.path.basename(albedo), "albedo_sha256": sha, "sun": sun, "renders": rel}, fh, indent=1)
 
 
 def render_cameras(bpy, a):
