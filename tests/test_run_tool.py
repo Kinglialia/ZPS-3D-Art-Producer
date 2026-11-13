@@ -459,7 +459,7 @@ def test_outside_the_codex_edition_a_blender_crash_is_a_tool_error_and_codex_san
 
 
 def test_a_plain_tool_inside_the_codex_sandbox_still_runs_because_only_blender_needs_the_rule(rt):
-    rt.mp.setenv("CODEX_SANDBOX", "seatbelt")
+    codex(rt).mp.setenv("CODEX_SANDBOX", "seatbelt")
     rt.tool("ok.py", "")
     assert rt.run("ok.py")[:2] == (0, "ok pass\n")
 
