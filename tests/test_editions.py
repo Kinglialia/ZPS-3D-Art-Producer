@@ -293,7 +293,22 @@ def test_the_codex_rule_lets_blender_run_installed_scripts_and_nothing_else_row_
     assert not (codex_project / "rules").exists(), "preview mode must not write the rules file"
     preview = Path(r.stdout.split("Preview only: ", 1)[1].splitlines()[0]).read_text(encoding="utf-8")
     assert [n for n in ("meshy_call.py", "gen_image_codex.py", "gen_api.py") if n in preview] == []
-    assert preview.count("prefix_rule(") == 5 and f'"{codex_project / "bin/Blender"}", "-b", "--python", [' in preview
+    assert preview.count("prefix_rule(") == 4 and f'"{codex_project / "bin/Blender"}", "-b", "--python", [' in preview
+    assert '/producer.py", "preflight"' not in preview, "preflight runs inside the sandbox, where its probes work"
+
+
+def test_an_empty_codex_home_puts_the_rules_file_under_the_home_codex_folder_as_preflight_reads_it(codex_project, dist,
+                                                                                                    tmp_path):
+    """preflight and core.state.codex_link read `CODEX_HOME or ~/.codex`; a default that kept an empty CODEX_HOME would
+    write the file where preflight never looks."""
+    home = tmp_path / "home"
+    env = os.environ | {"PATH": f"{codex_project / 'bin'}{os.pathsep}{os.environ['PATH']}", "CODEX_HOME": "",
+                        "HOME": str(home)}
+    r = subprocess.run([sys.executable, str(tree(dist, "codex") / "installer/codex_rules.py"), "--skills-root",
+                        str(codex_project / ".agents/skills"), "--blender", str(codex_project / "bin/Blender")],
+                       cwd=codex_project, env=env, capture_output=True, text=True)
+    assert r.stdout.splitlines()[-1] == f"Run with --write to install it as {home / '.codex/rules/zps-3dp-producer.rules'}."
+    assert not (home / ".codex").exists()
 
 
 def test_two_codex_rule_previews_at_once_write_two_files_so_one_run_never_tests_the_other_runs_rules(codex_project, dist):
@@ -322,7 +337,7 @@ def test_the_codex_rule_ends_each_command_where_the_program_stops_reading_option
         [py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"],
         [py, spawner, "house-a", "--version", "1", "--profile-hash", "h", "--blender", "/tmp/evil.sh"],
         [py, spawner, "--blender", "/tmp/evil.sh", "--", "house-a", "1", "abc123"],
-        [py, prod, "preflight"])] == ["allow", None, None, None, "allow", None, None, "allow"]
+        [py, prod, "preflight"])] == ["allow", None, None, None, "allow", None, None, None]
 
 
 
@@ -444,8 +459,7 @@ def test_with_a_space_in_the_project_path_every_program_word_of_a_rule_is_the_li
     prod, link = link_of(spaced_project)
     pats = patterns(preview_of(r))
     assert [p[:2] for p in pats[2:]] == [[f"{link}/scripts/run_tool.py", "--blender"],
-                                         [f"{link}/scripts/.deps/venv/bin/python", [f"{link}/scripts/assemble.py"]],
-                                         [f"{link}/scripts/.deps/venv/bin/python", f"{link}/scripts/producer.py"]]
+                                         [f"{link}/scripts/.deps/venv/bin/python", [f"{link}/scripts/assemble.py"]]]
     assert all(p[-2][0].startswith(f"{prod}/") for p in pats[:2]) and shlex.quote(str(link)) == str(link)
     assert f"Link: {link} -> {prod} (made by --write)" in r.stdout and not link.is_symlink()
 
@@ -482,7 +496,7 @@ def test_a_blender_path_with_a_space_gets_no_direct_blender_rule_but_still_the_r
     assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
     prod = codex_project / ".agents/skills/zps-3dp-producer-codex"
     assert [p[0] for p in patterns(preview_of(r))] == [str(prod / "scripts/run_tool.py"),
-                                                       *[str(prod / "scripts/.deps/venv/bin/python")] * 2]
+                                                       str(prod / "scripts/.deps/venv/bin/python")]
     assert f"Note: {b} needs quotes, so no direct Blender rule is written" in r.stdout
 
 

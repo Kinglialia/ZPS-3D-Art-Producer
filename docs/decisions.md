@@ -697,7 +697,8 @@ Lý do: anh chốt 2026-11-13: "bản codex thì view và texture tự gọi tr�
    - `run_tool.py … bl` và `assemble.py` thấy `CODEX_SANDBOX` thì dừng trước khi mở Blender và in dòng chạy lại. Phát hiện sau crash vẫn giữ.
    - Brief bản Codex có dòng `RUN_MODE` ngay sau `RUN:` khi có `--blender`: các dạng lệnh cấm. Brief bản Claude không đổi.
    - `P preflight` bản Codex tắt `blender` tới khi file rules nêu `run_tool.py` của brief và link có mặt; `preflight.json` ghi `codex_rules`.
-   - Chưa chạy thật: sandbox đọc được link và file rules dưới `~/.codex` không. `P` trong `SKILL.md` là đường dẫn tương đối, rule của `P preflight` nêu đường dẫn tuyệt đối: chưa kiểm hai cái khớp nhau không.
+   - `P preflight` không có rule (REV, 2026-11-13). `P` trong `SKILL.md` là đường dẫn tương đối, nên một rule nêu đường dẫn tuyệt đối không bao giờ khớp. Preflight không cần rule: `codex features list` và `blender --version` chạy được trong sandbox.
+   - Chưa chạy thật: sandbox đọc được link và file rules dưới `~/.codex` không.
 
 ## Chưa chốt
 - Skill MapLayout (mới) và việc sửa Concept Artist (Material Handoff, `asset-card.yaml`, ghi chú real/texture_only, phần khuất). Ngoài scope, xem `out-of-scope-changes.md`.

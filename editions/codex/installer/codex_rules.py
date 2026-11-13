@@ -7,10 +7,9 @@ installer/codex_rules.py (v0.10.4). The rule allows only these literal commands:
   <Blender> -b --python-exit-code 1 --python <installed Producer script>.py -- ...
   <Producer venv python> <scripts/assemble.py> --blender <Blender> -- ...   (it starts Blender itself)
   <scripts/run_tool.py> --blender <Blender> ...                             (the RUN line of a brief; it starts Blender)
-  <Producer venv python> <scripts/producer.py> preflight                    (it starts Blender and the kit preflight)
 A Codex rule matches only the start of a command, so each rule ends where the program stops reading options: Blender
-gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and preflight has no
-options, and in the Codex edition run_tool.py refuses scripts/ and the NETWORK_SCRIPTS and AGENT_CODE tools itself.
+gives the arguments after `--` to the script, assemble.py reads only positionals after `--`, and in the Codex edition
+run_tool.py refuses scripts/ and the NETWORK_SCRIPTS and AGENT_CODE tools itself.
 Its --blender must equal the preflight Blender, but a worker can edit that file, so the rule pins --blender too.
 run_tool.py refuses a flag given twice, so the pinned --blender is the one that runs. Scripts that call paid or network services (NETWORK_SCRIPTS) never match.
 gen_image_codex.py stays in that list: this edition runs only its --direct check, which writes under production*/ and
@@ -121,8 +120,6 @@ def render(blender: str, allowed: list[str], venv_py: Path | None, prod: Path) -
     if venv_py:
         out.append(rule([str(venv_py), [str(prod / s) for s in SPAWNERS], "--blender", blender, "--"],
                         "ZPS-3DP Producer: assemble.py starts Blender itself, so it must run outside the sandbox."))
-        out.append(rule([str(venv_py), str(prod / "scripts/producer.py"), "preflight"],
-                        "ZPS-3DP Producer: P preflight starts Blender and the kit preflight."))
     return "\n".join(out)
 
 
@@ -151,7 +148,7 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
         cases += [([py, spawner, "--blender", blender, "--", "house-a", "1", "abc123"], "allow"),
                   ([py, spawner, "house-a", "--version", "1", "--blender", "/tmp/evil.sh"], None),
                   ([py, spawner, "--blender", "/tmp/evil.sh", "--", "house-a", "1", "abc123"], None),
-                  ([py, str(prod / "scripts/producer.py"), "preflight"], "allow"),
+                  ([py, str(prod / "scripts/producer.py"), "preflight"], None),
                   ([py, str(prod / "scripts/producer.py"), "brief", "house-a"], None),
                   ([py, str(prod / "scripts/meshy_call.py"), "texture"], None),
                   ([py, str(prod / "scripts/gen_image_codex.py"), "--model", "m"], None),
@@ -169,7 +166,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skills-root", type=Path, default=Path(".agents/skills"))
     ap.add_argument("--blender")
-    ap.add_argument("--rules-dir", type=Path, default=Path(os.environ.get("CODEX_HOME", "~/.codex")) / "rules")
+    ap.add_argument("--rules-dir", type=Path, default=Path(os.environ.get("CODEX_HOME") or "~/.codex") / "rules")
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
     root = a.skills_root.expanduser().resolve()
