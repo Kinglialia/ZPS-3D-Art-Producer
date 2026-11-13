@@ -17,6 +17,10 @@ gen_image_codex.py stays in that list: this edition runs only its --direct check
 runs inside the sandbox with no rule (D46). Scripts that run code the agent
 wrote (AGENT_CODE: graph.py loads <work>/parts_lib.py, custom_mesh.py runs custom_parts.py) never match either. Any other command still runs in the sandbox
 or asks the user. The skills folder is read-only inside the sandbox, so an agent cannot change the allowed scripts.
+A rule matches only a bare first word, never a quoted one (measured 2026-11-13). When the Producer folder needs quotes
+(a space in the project path), the rules name it through $CODEX_HOME/zps-3dp/<12 hex of sha1 of the folder>, a link
+that --write makes or repairs and that the briefs use too (core.state.rule_dir). The direct Blender rules keep the real
+script paths, because a later word may be quoted; when Blender itself needs quotes, those two rules are left out.
 
 Usage (run outside Codex, from the project, after install.py):
   python3 installer/codex_rules.py            # preview the file and self-test it, write nothing
@@ -26,9 +30,11 @@ Run it again after each upgrade: the file lists the installed scripts. Restart C
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -78,11 +84,36 @@ def rule(pattern: list, why: str) -> str:
     return f'prefix_rule(\n    pattern = [{head}],\n    decision = "allow",\n    justification = {q(why)},\n)\n'
 
 
+def needs_quotes(p) -> bool:
+    return shlex.quote(str(p)) != str(p)
+
+
+def link_of(prod: Path) -> Path:
+    """Where the briefs name a Producer folder whose path needs quotes. Same formula as core.state.codex_link, which this
+    script cannot import: it runs outside the skill."""
+    return (Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser() / "zps-3dp"
+            / hashlib.sha1(str(prod).encode()).hexdigest()[:12])
+
+
+def make_link(link: Path, prod: Path) -> bool:
+    """Create or repair the link. Never replace a real file or folder."""
+    if link.is_symlink():
+        if link.resolve() == prod:
+            return True
+        link.unlink()
+    elif link.exists():
+        return False
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(prod, target_is_directory=True)
+    return True
+
+
 def render(blender: str, allowed: list[str], venv_py: Path | None, prod: Path) -> str:
+    """prod is the Producer folder as the briefs name it: the link when the real path needs quotes."""
     why = ("ZPS-3DP Producer: Blender crashes inside the Codex sandbox on macOS (Metal GPU check). "
            "Allow headless Blender to run only the installed Producer scripts.")
     out = [MARK, ""]
-    for prefix in (["-b", "--python"], ["-b", "--python-exit-code", "1", "--python"]):
+    for prefix in (["-b", "--python"], ["-b", "--python-exit-code", "1", "--python"]) if not needs_quotes(blender) else ():
         out.append(rule([blender, *prefix, allowed, "--"], why))
     out.append(rule([str(prod / "scripts/run_tool.py"), "--blender", blender],
                     "ZPS-3DP Producer: run_tool.py runs a worker's tool and starts Blender itself, so it must run outside the sandbox."))
@@ -105,7 +136,7 @@ def self_test(path: Path, blender: str, allowed: list[str], venv_py: Path | None
              ([blender, "-b", "--python", allowed[0], "--python", "/tmp/evil.py", "--"], None),
              ([blender, "-b", "--python-exit-code", "1", "--python", allowed[-1], "--python-expr", "print(1)"], None),
              ([blender, "-b", "--python-expr", "print(1)"], None),
-             ([blender, "-b", "--python", "/tmp/other.py", "--"], None)]
+             ([blender, "-b", "--python", "/tmp/other.py", "--"], None)] if not needs_quotes(blender) else []
     cases += [([blender, "-b", "--python", n, "--", "generate"], None) for n in scripts(root, network=True)]
     cases += [([blender, "-b", "--python", n, "--", "--work", "w"], None) for n in agent_code(root)]
     cases.append((["codex", "exec", "-s", "workspace-write", "--skip-git-repo-check", "-"], None))
@@ -150,25 +181,38 @@ def main() -> int:
         print(f"No installed Producer scripts in {root}. Run install.py first.")
         return 2
     prod = root / PRODUCER
+    link = link_of(prod) if needs_quotes(prod) else None
+    if link and needs_quotes(link):
+        print(f"{link} needs quotes too: set CODEX_HOME to a folder whose path has no space or quote. Nothing written.")
+        return 2
+    base = link or prod
     venv_py = prod / "scripts/.deps/venv/bin/python"
     if not venv_py.exists():
         print(f"Note: {venv_py} does not exist yet. Run setup_deps.sh, then run this script again.")
         venv_py = None
-    text = render(blender, allowed, venv_py, prod)
+    if needs_quotes(blender):
+        print(f"Note: {blender} needs quotes, so no direct Blender rule is written; run_tool.py and assemble.py still run it.")
+    rule_py = base / "scripts/.deps/venv/bin/python" if venv_py else None
+    text = render(blender, allowed, rule_py, base)
     target = a.rules_dir.expanduser() / FILE
     fd, name = tempfile.mkstemp(prefix=f"{FILE}.", suffix=".preview")
     os.close(fd)
     tmp = Path(name)
     tmp.write_text(text, encoding="utf-8")
-    result = self_test(tmp, blender, allowed, venv_py, prod, root)
+    result = self_test(tmp, blender, allowed, rule_py, base, root)
     print(f"Blender: {blender}\nProducer scripts: {len(allowed)}\nvenv rules: {'yes' if venv_py else 'no'}\n{result}")
     if "FAILED" in result:
         return 1
+    if link:
+        print(f"Link: {link} -> {prod}" + ("" if a.write else " (made by --write)"))
     if not a.write:
         print(f"Preview only: {tmp}\nRun with --write to install it as {target}.")
         return 0
     if target.exists() and MARK not in target.read_text(encoding="utf-8"):
         print(f"{target} exists and was not written by this script. Nothing written.")
+        return 1
+    if link and not make_link(link, prod):
+        print(f"{link} exists and is not a link. Move it away, then run this script again. Nothing written.")
         return 1
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")

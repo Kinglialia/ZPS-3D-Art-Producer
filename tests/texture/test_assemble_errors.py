@@ -2,6 +2,7 @@
 still write a BLOCKED report, so `ingest` moves the asset to blocked and `retry` can run it again."""
 import hashlib
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -168,3 +169,17 @@ def test_a_blender_that_dies_in_the_codex_sandbox_prints_the_exact_line_to_run_a
     assert r.returncode == 1
     assert "sandbox của Codex" in r.stderr and "\n" + shlex.join(cmd) + "\n" in r.stderr
     assert "Blender chết trong sandbox của Codex" in rep.read_text(encoding="utf-8")
+
+
+def test_inside_the_codex_sandbox_assemble_blocks_before_blender_starts_and_prints_the_line_to_run_again(tmp_path):
+    """Blender always dies in the sandbox (measured 2026-11-13); Codex sets CODEX_SANDBOX only there."""
+    rep = project(tmp_path)
+    exe = tmp_path / "Blender"
+    exe.write_text(f"#!/bin/sh\ntouch {tmp_path / 'ran'}\n", encoding="utf-8")
+    exe.chmod(0o755)
+    cmd = [sys.executable, str(SCRIPTS / "assemble.py"), "--blender", str(exe), "--", AID, "1", "abc123"]
+    r = subprocess.run(cmd, cwd=tmp_path, env=os.environ | {"CODEX_SANDBOX": "seatbelt"}, capture_output=True, text=True)
+    assert (r.returncode, (tmp_path / "ran").exists()) == (1, False)
+    assert "sandbox của Codex" in r.stderr and "\n" + shlex.join(cmd) + "\n" in r.stderr
+    text = rep.read_text(encoding="utf-8")
+    assert text.startswith("STATUS: BLOCKED\n") and "sandbox của Codex" in text.splitlines()[2]

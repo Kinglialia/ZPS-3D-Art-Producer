@@ -14,7 +14,7 @@ from .contract import FALLBACK, NONE, parse_worker
 from .hashes import ad_text
 from .loop import current_v, log_wait, move, next_action, open_dispatch, review_base, set_aside
 from .state import (ASSETS, DELIVER, EDITION, ROOT, SKILL_DIR, agent_file, agent_name, die, ledger, load_cfg, load_st,
-                    model_of, outputs_of, rel, save_st, stamp, step_of, vdir)
+                    model_of, outputs_of, rel, rule_dir, rule_path, save_st, stamp, step_of, vdir)
 
 
 def image_gen(preset: Path) -> dict:
@@ -44,8 +44,14 @@ def pilot_line(prof: dict) -> str:
 
 def run_line(step, n: int, t: Path, blender: str | None, aid: str) -> str:
     """D36.1: everything fixed for the dispatch; the worker adds `[bl] <tool> <args>` (scripts/run_tool.py)."""
-    return "RUN: " + shlex.join([str(SKILL_DIR / "scripts" / "run_tool.py"), *(["--blender", blender] if blender else []),
+    return "RUN: " + shlex.join([str(rule_dir(SKILL_DIR) / "scripts" / "run_tool.py"),
+                                 *(["--blender", blender] if blender else []),
                                  "--agent", t.parent.name, "--version-dir", rel(vdir(aid, step["id"], n))])
+
+
+RUN_MODE = ("RUN_MODE: gõ dòng RUN thành cả lệnh, chỉ thêm `[bl] <tool> <tham số>` ở cuối: không gì đứng trước, không dấu "
+            "nháy quanh từ đầu, không pipe, không `&&`, không `;`, không `cd`, không chuyển hướng như `2>&1` (run_tool.py "
+            "đã ghi log). Sai dạng thì lệnh chạy trong sandbox, nơi Blender chết.")
 
 
 GEN_MODE = ("GEN_MODE: lệnh GEN_IMAGE không vẽ, chỉ kiểm ảnh. Với từng cặp --prompt/--out: gọi tool ảnh `image_gen` "
@@ -60,8 +66,10 @@ def tools_line(st, step, pf: dict | None, preset: Path, gen: bool = True, extra:
                cfg: dict | None = None, n: int | None = None) -> list[str]:
     t = SKILL_DIR / "agents" / agent_name(step.get("agent")) / "tools"
     blender = (((pf or {}).get('blender') or {}).get('path') or 'blender') if "blender" in step["uses"] else None
+    has_run = t.is_dir() and n is not None
     out = ([f"TOOLS: {t}"] if t.is_dir() else []) + ([f"BLENDER: {blender}"] if blender else []) + (
-        [run_line(step, n, t, blender, st['id'])] if t.is_dir() and n is not None else []) + list(extra)
+        [run_line(step, n, t, blender, st['id'])] if has_run else []) + (
+        [RUN_MODE] if has_run and blender and EDITION.get("runtime") == "codex" else []) + list(extra)
     if gen and "codex_image" in step["uses"] and EDITION.get("image_gen") == "direct":
         out += [f"GEN_IMAGE: {SKILL_DIR / 'scripts' / 'gen_image_codex.py'}", "GEN_ARGS: --direct", GEN_MODE]
     elif gen and "codex_image" in step["uses"]:
@@ -821,8 +829,8 @@ def run(a):
         hashes.record_inputs(cfg, st, i, n, ph)
         if step["script"]:
             blender = ((pf or {}).get("blender") or {}).get("path") or "blender"
-            cmd = [sys.executable, str(SKILL_DIR / "scripts" / step["script"]), "--blender", blender, "--", a.id, str(n),
-                   ph]
+            cmd = [str(rule_path(Path(sys.executable), SKILL_DIR)), str(rule_dir(SKILL_DIR) / "scripts" / step["script"]),
+                   "--blender", blender, "--", a.id, str(n), ph]
             out = {"role": "script", "command": shlex.join(cmd), "report": rel(d / "report-script.md")}
         else:
             bp = d / "brief-worker.md"

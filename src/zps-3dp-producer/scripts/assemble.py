@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from core import findings  # noqa: E402
 from core.contract import unwrap  # noqa: E402
 import heartbeat  # noqa: E402
-from core.state import ROOT, SKILL_DIR, load_st, now, texture_res, vdir  # noqa: E402
+from core.state import ROOT, SKILL_DIR, load_st, now, rule_path, texture_res, vdir  # noqa: E402
 from root_guard import require_root  # noqa: E402
 
 SCRIPTS = SKILL_DIR / "scripts"
@@ -70,10 +70,14 @@ def blender(exe: str, script: Path, vd: Path, *args) -> tuple[int, str]:
     except subprocess.TimeoutExpired:
         return 1, f"Blender quá {BLENDER_TIMEOUT_S} s: {script.name}"
     if heartbeat.sandbox_crash(r):
-        print(heartbeat.SANDBOX_HELP.format(cmd=shlex.join([sys.executable, os.path.abspath(sys.argv[0]), *sys.argv[1:]])),
-              file=sys.stderr)
-        raise Fail("Blender chết trong sandbox của Codex: chạy lại đúng dòng lệnh in ở stderr")
+        sandbox_stop("Blender chết trong sandbox của Codex")
     return r.returncode, r.stdout + r.stderr
+
+
+def sandbox_stop(why: str):
+    line = [rule_path(Path(sys.executable), SKILL_DIR), rule_path(Path(os.path.abspath(sys.argv[0])), SKILL_DIR)]
+    print(heartbeat.SANDBOX_HELP.format(cmd=shlex.join([*map(str, line), *sys.argv[1:]])), file=sys.stderr)
+    raise Fail(f"{why}: chạy lại đúng dòng lệnh in ở stderr")
 
 
 def fail_point(kind: str, region: str, evidence: str, consequence: str, repair: str, acceptance: str) -> dict:
@@ -233,6 +237,8 @@ def readme(st, mv, tv, mf, tf, res, qa, data) -> str:
 
 
 def run(a, d: Path) -> tuple[list[dict], dict]:
+    if os.environ.get("CODEX_SANDBOX"):
+        sandbox_stop("lệnh chạy trong sandbox của Codex, nơi Blender không mở được")
     st = load_st(a.id)
     fails, data = [], {}
     mv, tv = st["approved"].get("model"), st["approved"].get("texture")

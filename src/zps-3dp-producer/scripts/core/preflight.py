@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -11,11 +12,13 @@ from pathlib import Path
 
 import settings_merge
 
-from .state import EDITION, ROOT, SKILL_DIR, SUFFIX, locked, now, rel, runtime_guard, write_atomic
+from .state import (EDITION, ROOT, SKILL_DIR, SUFFIX, codex_link, locked, now, rel, rule_dir, runtime_guard,
+                    write_atomic)
 
 OUT = ROOT / "preflight.json"
 KIT_SIBLING = SKILL_DIR.parent / f"zps-3d-artist{SUFFIX}" / "tools" / "preflight.py"
 SNIPPET = SKILL_DIR / "templates" / "settings.snippet.json"
+RULES_FILE = "zps-3dp-" "producer.rules"  # split so build.py does not suffix it: codex_rules.py FILE keeps the bare name
 
 
 def run(cmd: list[str], timeout: int) -> tuple[int | None, str]:
@@ -110,6 +113,35 @@ def settings_gap(b: dict | None) -> dict | None:
     return {"file": rel(d / "settings.json"), "missing": settings_merge.missing(have, want)}
 
 
+def codex_rules() -> dict | None:
+    """Codex edition (D46): Blender runs only through installer/codex_rules.py's rules, so the rules file must name the
+    run_tool.py of the briefs, and a skill path that needs quotes needs its link. None in another edition."""
+    if EDITION.get("runtime") != "codex":
+        return None
+    f = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser() / "rules" / RULES_FILE
+    link = None if shlex.quote(str(SKILL_DIR)) == str(SKILL_DIR) else codex_link(SKILL_DIR)
+    run_tool = (link or SKILL_DIR) / "scripts" / "run_tool.py"
+    try:
+        text = f.read_text(encoding="utf-8")
+    except OSError:
+        text = None
+    return {"file": str(f), "present": text is not None, "run_tool": str(run_tool),
+            "names_run_tool": text is not None and json.dumps(str(run_tool)) in text,
+            "link": str(link) if link else None, "link_ok": rule_dir(SKILL_DIR) == link if link else None}
+
+
+def rules_ok(r: dict | None) -> bool:
+    return r is None or (r["names_run_tool"] and r["link_ok"] is not False)
+
+
+def rules_why(r: dict) -> str:
+    why = ([f"không có {r['file']}"] if not r["present"] else
+           [f"{r['file']} không nêu {r['run_tool']}"] if not r["names_run_tool"] else []) + (
+        [f"thiếu link {r['link']} → {SKILL_DIR}"] if r["link_ok"] is False else [])
+    return (f"rule Codex chưa cho Blender ra ngoài sandbox ({', '.join(why)}) → từ gốc project chạy "
+            "`python3 installer/codex_rules.py --write` của bản build, rồi khởi động lại Codex")
+
+
 def run_preflight(a):
     """The probes run outside the global lock (`blender --version` may take 120 s); only the final write takes it."""
     runtime_guard()
@@ -120,10 +152,11 @@ def run_preflight(a):
     cli = codex_direct(codex) if direct else codex_cli(codex)
     k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
     image = cli is not None and (cli["image_generation"] if direct else not cli["missing_flags"])
-    feats = {"blender": b is not None, "codex_image": image, "meshy": has_meshy_key(ef)}
+    rules = codex_rules()
+    feats = {"blender": b is not None and rules_ok(rules), "codex_image": image, "meshy": has_meshy_key(ef)}
     gap = settings_gap(b)
     doc = {"at": now(), "features": feats, "blender": b, "codex": codex, "codex_cli": cli, "env_file": ef, "kit": k} | (
-        {"settings": gap} if gap else {})
+        {"settings": gap} if gap else {}) | ({"codex_rules": rules} if rules else {})
     with locked(create=True):
         write_atomic(OUT, json.dumps(doc, ensure_ascii=False, indent=2))
     on, down = [f for f, v in feats.items() if v], [f for f, v in feats.items() if not v]
@@ -136,6 +169,8 @@ def run_preflight(a):
     if cli and cli.get("missing_flags"):
         parts.append(f"codex-cli {cli['version']} thiếu flag {', '.join(cli['missing_flags'])} của `codex exec` "
                      "→ cài codex-cli đã test (0.164.0) rồi chạy lại `preflight`")
+    if b is not None and not rules_ok(rules):
+        parts.append(rules_why(rules))
     parts.append(f"kit {k['overall']}" if "overall" in k else "không có kit preflight.py")
     if gap and (gap["missing"]["allow"] or gap["missing"]["hooks"] or gap["missing"]["env"]):
         lack = ([f"{len(gap['missing']['allow'])} allow rule"] if gap["missing"]["allow"] else []) + [

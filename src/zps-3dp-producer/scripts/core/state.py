@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import contextlib
 import datetime as dt
+import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import sys
 import threading
@@ -89,6 +91,27 @@ def runtime_guard():
     m = re.fullmatch(r"production-(\w+)", ROOT.name)
     if m and m[1] in RUNTIMES and RUNTIME in RUNTIMES and m[1] != RUNTIME:
         die(f"{ROOT} là thư mục của runtime {m[1]}, phiên này là {RUNTIME}: đặt PRODUCER_ROOT=production-{RUNTIME}")
+
+
+def codex_link(skill: Path) -> Path:
+    """Where installer/codex_rules.py --write links a skill folder whose path needs shell quotes (same formula there)."""
+    return (Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser() / "zps-3dp"
+            / hashlib.sha1(str(skill).encode()).hexdigest()[:12])
+
+
+def rule_dir(skill: Path) -> Path:
+    """The skill folder as a Codex rule names it. A rule never matches a quoted program word (D46), so a path that
+    needs quotes goes through codex_link when that link points at the skill; otherwise the real path."""
+    if shlex.quote(str(skill)) == str(skill):
+        return skill
+    link = codex_link(skill)
+    return link if link.is_symlink() and link.resolve() == skill.resolve() else skill
+
+
+def rule_path(p: Path, skill: Path) -> Path:
+    """p under the skill folder, spelled through rule_dir; p itself when nothing changes."""
+    base, real = rule_dir(skill), p.parent.resolve() / p.name  # the venv python is a link out of the skill
+    return base / real.relative_to(skill) if base != skill and real.is_relative_to(skill) else p
 
 
 def agent_name(short: str) -> str:

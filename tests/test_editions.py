@@ -240,6 +240,25 @@ print("{}")
 
 @pytest.fixture
 def codex_project(dist, tmp_path):
+    return codex_install(dist, tmp_path)
+
+
+@pytest.fixture
+def spaced_project(dist, tmp_path):
+    """The pilot machine keeps projects under a folder with spaces; Blender stays where the app installs it."""
+    b = plain_blender(tmp_path.resolve() / "my project")
+    b.parent.mkdir()
+    b.write_text("#!/bin/sh\necho 'Blender 5.2.3'\n", encoding="utf-8")
+    b.chmod(0o755)
+    return codex_install(dist, (tmp_path / "my project").resolve())
+
+
+def plain_blender(project: Path) -> Path:
+    return project.parent / "bin/Blender"
+
+
+def codex_install(dist, tmp_path):
+    tmp_path.mkdir(exist_ok=True)
     cli(sys.executable, tree(dist, "codex") / "install.py", tmp_path, "--project", str(tmp_path))
     venv = tmp_path / ".agents/skills/zps-3dp-producer-codex/scripts/.deps/venv/bin/python"
     venv.parent.mkdir(parents=True)
@@ -254,11 +273,18 @@ def codex_project(dist, tmp_path):
     return tmp_path
 
 
-def rules(project, dist, *args, path=True):
-    env = os.environ | {"PATH": f"{project / 'bin'}{os.pathsep}{os.environ['PATH']}" if path else "/usr/bin:/bin"}
+def codex_home(project: Path) -> Path:
+    """Beside the project, so a project path with a space does not give CODEX_HOME one."""
+    return project.with_name(project.name.replace(" ", "_") + "-codex-home")
+
+
+def rules(project, dist, *args, path=True, home=None, blender=None, rules_dir=None):
+    env = os.environ | {"PATH": f"{project / 'bin'}{os.pathsep}{os.environ['PATH']}" if path else "/usr/bin:/bin",
+                        "CODEX_HOME": str(home or codex_home(project))}
     return subprocess.run([sys.executable, str(tree(dist, "codex") / "installer/codex_rules.py"), "--skills-root",
-                           str(project / ".agents/skills"), "--blender", str(project / "bin/Blender"), "--rules-dir",
-                           str(project / "rules"), *args], cwd=project, env=env, capture_output=True, text=True)
+                           str(project / ".agents/skills"), "--blender", str(blender or project / "bin/Blender"),
+                           "--rules-dir", str(rules_dir or project / "rules"), *args], cwd=project, env=env, capture_output=True,
+                          text=True)
 
 
 def test_the_codex_rule_lets_blender_run_installed_scripts_and_nothing_else_row_91(codex_project, dist):
@@ -377,6 +403,132 @@ def test_the_codex_rule_is_written_only_on_write_and_never_over_a_foreign_file(c
 def test_without_the_codex_cli_the_rule_is_not_tested_and_the_output_says_so(codex_project, dist):
     r = rules(codex_project, dist, path=False)
     assert (r.returncode, "codex CLI not found: rule not tested" in r.stdout) == (0, True)
+
+
+def rules_module():
+    spec = importlib.util.spec_from_file_location("codex_rules", REPO / "editions/codex/installer/codex_rules.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def patterns(text: str) -> list:
+    import ast
+    return [ast.literal_eval(m.group(1)) for m in re.finditer(r"pattern = (\[.*?\]),\n    decision", text, re.S)]
+
+
+def preview_of(r) -> str:
+    return Path(r.stdout.split("Preview only: ", 1)[1].splitlines()[0]).read_text(encoding="utf-8")
+
+
+def link_of(project: Path) -> tuple[Path, Path]:
+    import hashlib
+    prod = project / ".agents/skills/zps-3dp-producer-codex"
+    return prod, codex_home(project) / "zps-3dp" / hashlib.sha1(str(prod).encode()).hexdigest()[:12]
+
+
+def test_the_skill_and_the_rules_script_put_the_link_of_a_skill_folder_at_the_same_path(tmp_path, monkeypatch):
+    """codex_rules.py runs outside the skill and cannot import it, so the two copies of the formula must agree."""
+    from core.state import codex_link
+    monkeypatch.setenv("CODEX_HOME", str(codex_home(tmp_path / "my project")))
+    prod, link = link_of(tmp_path / "my project")
+    assert rules_module().link_of(prod) == codex_link(prod) == link
+
+
+def test_with_a_space_in_the_project_path_every_program_word_of_a_rule_is_the_link_and_preview_makes_no_link(
+        spaced_project, dist):
+    """Codex never matches a quoted first word (measured 2026-11-13), so a program path with a space never leaves the
+    sandbox. Later words may be quoted: the direct Blender rules keep the real script paths."""
+    r = rules(spaced_project, dist, blender=plain_blender(spaced_project))
+    assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
+    prod, link = link_of(spaced_project)
+    pats = patterns(preview_of(r))
+    assert [p[:2] for p in pats[2:]] == [[f"{link}/scripts/run_tool.py", "--blender"],
+                                         [f"{link}/scripts/.deps/venv/bin/python", [f"{link}/scripts/assemble.py"]],
+                                         [f"{link}/scripts/.deps/venv/bin/python", f"{link}/scripts/producer.py"]]
+    assert all(p[-2][0].startswith(f"{prod}/") for p in pats[:2]) and shlex.quote(str(link)) == str(link)
+    assert f"Link: {link} -> {prod} (made by --write)" in r.stdout and not link.is_symlink()
+
+
+def test_write_makes_the_link_repairs_a_stale_one_and_never_replaces_a_real_folder(spaced_project, dist):
+    prod, link = link_of(spaced_project)
+    assert rules(spaced_project, dist, "--write").returncode == 0
+    assert (link.is_symlink(), link.resolve()) == (True, prod)
+    link.unlink()
+    link.symlink_to(spaced_project / "bin", target_is_directory=True)
+    assert rules(spaced_project, dist, "--write").returncode == 0 and link.resolve() == prod
+    link.unlink()
+    link.mkdir()
+    (link / "mine.txt").write_text("mine", encoding="utf-8")
+    r = rules(spaced_project, dist, "--write")
+    assert (r.returncode, link.is_symlink(), (link / "mine.txt").read_text(encoding="utf-8")) == (1, False, "mine")
+    assert f"{link} exists and is not a link" in r.stdout
+
+
+def test_a_codex_home_with_a_space_cannot_hold_the_link_so_the_rules_script_stops_with_exit_2(spaced_project, dist,
+                                                                                               tmp_path):
+    r = rules(spaced_project, dist, "--write", home=tmp_path / "codex home")
+    assert (r.returncode, (spaced_project / "rules").exists(), (tmp_path / "codex home").exists()) == (2, False, False)
+    assert "CODEX_HOME" in r.stdout
+
+
+def test_a_blender_path_with_a_space_gets_no_direct_blender_rule_but_still_the_run_tool_rule(codex_project, dist):
+    """Blender is the program word of the direct rules, which then can never match; for run_tool.py it is an argument."""
+    b = codex_project / "Blender App/Blender"
+    b.parent.mkdir()
+    b.write_text("#!/bin/sh\n", encoding="utf-8")
+    b.chmod(0o755)
+    r = rules(codex_project, dist, blender=b)
+    assert r.returncode == 0 and "rule test passed" in r.stdout, r.stdout
+    prod = codex_project / ".agents/skills/zps-3dp-producer-codex"
+    assert [p[0] for p in patterns(preview_of(r))] == [str(prod / "scripts/run_tool.py"),
+                                                       *[str(prod / "scripts/.deps/venv/bin/python")] * 2]
+    assert f"Note: {b} needs quotes, so no direct Blender rule is written" in r.stdout
+
+
+def test_the_run_line_of_a_brief_in_a_project_with_a_space_starts_with_the_program_word_of_the_rule(spaced_project,
+                                                                                                     dist):
+    blender = str(plain_blender(spaced_project))
+    assert rules(spaced_project, dist, "--write", blender=blender).returncode == 0
+    sk, home = spaced_project / ".agents/skills/zps-3dp-producer-codex", codex_home(spaced_project)
+    out = subprocess.run([sys.executable, "-c", (
+        "import json, sys; sys.path.insert(0, sys.argv[1]); from core import briefs;"
+        "print(json.dumps(briefs.tools_line({'id': 'a'}, {'id': 'blockout', 'agent': 'step-blockout', 'uses': ['blender']},"
+        " {'blender': {'path': sys.argv[2]}}, None, n=1)))"), str(sk / "scripts"), blender],
+        env=os.environ | {"PRODUCER_ROOT": str(spaced_project / "production"), "CODEX_HOME": str(home)},
+        cwd=spaced_project, capture_output=True, text=True, check=True)
+    lines = json.loads(out.stdout)
+    i = next(i for i, l in enumerate(lines) if l.startswith("RUN: "))
+    words = shlex.split(lines[i].removeprefix("RUN: "))
+    rule = patterns((spaced_project / "rules/zps-3dp-producer.rules").read_text(encoding="utf-8"))[2]
+    assert rule[:3] == [f"{link_of(spaced_project)[1]}/scripts/run_tool.py", "--blender", blender]
+    assert (words[0], lines[i].split(" ")[1], lines[i + 1].startswith("RUN_MODE: ")) == (rule[0], rule[0], True)
+    check = subprocess.run([str(spaced_project / "bin/codex"), "execpolicy", "check", "--rules",
+                            str(spaced_project / "rules/zps-3dp-producer.rules"), "--", *words, "bl", "x.py"],
+                           capture_output=True, text=True)
+    assert json.loads(check.stdout)["decision"] == "allow"
+
+
+def test_the_built_codex_preflight_turns_blender_on_only_once_the_rules_script_wrote_its_file_and_link(spaced_project,
+                                                                                                       dist):
+    """The rules file name must survive the build, which suffixes every skill name in the skill's text."""
+    blender = str(plain_blender(spaced_project))
+    py = spaced_project / ".agents/skills/zps-3dp-producer-codex/scripts/producer.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PRODUCER_ROOT", "PRODUCER_RUNTIME", "PRODUCER_KIT")} | {
+        "BLENDER": blender, "CODEX_HOME": str(codex_home(spaced_project))}
+
+    def preflight():
+        r = subprocess.run([sys.executable, str(py), "preflight"], cwd=spaced_project, env=env, capture_output=True,
+                           text=True)
+        assert r.returncode == 0, r.stderr
+        return r.stdout, json.loads((spaced_project / "production/preflight.json").read_text(encoding="utf-8"))
+    out, pf = preflight()
+    assert (pf["features"]["blender"], "codex_rules.py --write" in out) == (False, True)
+    assert rules(spaced_project, dist, "--write", blender=blender,
+                 rules_dir=codex_home(spaced_project) / "rules").returncode == 0
+    out, pf = preflight()
+    assert (pf["features"]["blender"], pf["codex_rules"]["file"], "codex_rules.py" in out) == (
+        True, str(codex_home(spaced_project) / "rules/zps-3dp-producer.rules"), False)
 
 
 SHELL_WRITE = re.compile(r"heredoc|cat\s*>|\btee\b|<<\s*['\"]?[A-Z]+|python3?\s+-c", re.I)

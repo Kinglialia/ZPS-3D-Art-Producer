@@ -24,8 +24,9 @@ The script starts itself on the python of scripts/.deps/venv.
 Prints one line: `<tool> <pass|fail|error> [path ...]`. fail: a result JSON written during this run has `overall` fail or
 error, or `pass` false (core.briefs.failed_checks), and the paths are those JSON. error: the tool exited non-zero and
 wrote no such JSON, and the path is its log.
-Exit code: 0 pass; 1 fail or error; 2 refused or wrong command, or Blender died in the Codex sandbox (the message gives
-the line to run again)."""
+Exit code: 0 pass; 1 fail or error; 2 refused or wrong command, or a `bl` call in the Codex sandbox (CODEX_SANDBOX set,
+refused before Blender starts) or a Blender that died there: the message gives the line to run again, through
+core.state.rule_dir."""
 from __future__ import annotations
 
 import json
@@ -132,6 +133,11 @@ def written_fails(vd: Path, before: dict[Path, int]) -> list[str]:
     return [x for x in failed_checks(vd) if Path(os.path.abspath(x)) in changed]
 
 
+def sandbox_help(skill: Path, argv: list[str]) -> str:
+    from core.state import rule_dir
+    return heartbeat.SANDBOX_HELP.format(cmd=shlex.join([str(rule_dir(skill) / "scripts" / "run_tool.py"), *argv]))
+
+
 def finish(name: str, overall: str, paths: list[str]) -> int:
     print(" ".join([name, overall, *paths]))
     return 0 if overall == "pass" else 1
@@ -144,6 +150,8 @@ def run(argv: list[str], skill: Path) -> int:
     exe = opts.get("--blender")
     if exe:
         check_blender(exe)
+    if bl and os.environ.get("CODEX_SANDBOX"):
+        raise Refused(sandbox_help(skill, argv))
     pid = vd.parents[3] / "pids" / "blender" / f"{vd.parents[1].name}-{os.getpid()}.pid" if bl else None
     setup = tools / "setup_deps.sh"
     if setup.is_file() and not (tools / ".deps").exists():
@@ -168,7 +176,7 @@ def run(argv: list[str], skill: Path) -> int:
             pid.unlink(missing_ok=True)
     log = write_log(vd, real.stem, p)
     if bl and heartbeat.sandbox_crash(p):
-        raise Refused(heartbeat.SANDBOX_HELP.format(cmd=shlex.join([str(skill / "scripts" / "run_tool.py"), *argv])))
+        raise Refused(sandbox_help(skill, argv))
     fails = written_fails(vd, before)
     overall = "fail" if fails else "error" if p.returncode else "pass"
     return finish(real.stem, overall, fails or ([os.path.relpath(log)] if overall == "error" else []))

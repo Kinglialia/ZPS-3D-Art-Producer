@@ -107,6 +107,7 @@ def rt(tmp_path, monkeypatch, capsys):
     base = tmp_path.resolve()
     monkeypatch.chdir(base)
     monkeypatch.delenv("BLENDER", raising=False)
+    monkeypatch.delenv("CODEX_SANDBOX", raising=False)
     return RT(base, capsys, monkeypatch)
 
 
@@ -428,6 +429,82 @@ def test_a_blender_that_dies_in_the_codex_sandbox_exits_2_with_the_exact_line_to
     assert (rc, out) == (2, "")
     assert "sandbox của Codex" in err and f"\n{line}\n" in err and "codex_rules.py --write" in err
     assert not list(rt.pids.iterdir())
+
+
+def test_a_blender_call_inside_the_codex_sandbox_is_refused_before_blender_starts_with_the_line_to_run_again(rt):
+    """Blender always dies in the sandbox (measured 2026-11-13): starting it there costs a crash and a stack in the log.
+    Codex sets CODEX_SANDBOX only inside; the rule that lets the line out leaves it unset."""
+    rt.mp.setenv("CODEX_SANDBOX", "seatbelt")
+    rt.tool("join_mesh.py", "print('never runs')\n")
+    rc, out, err = rt.run("bl", "join_mesh.py", "--x", "a b", blender=True)
+    line = shlex.join([str(rt.skill / "scripts/run_tool.py"), "--blender", str(rt.bl), "--agent", "zps-3dp-step-model",
+                       "--version-dir", rt.relpath(rt.vd), "bl", "join_mesh.py", "--x", "a b"])
+    assert (rc, out, rt.blender_log.exists(), list(rt.pids.iterdir())) == (2, "", False, [])
+    assert "sandbox của Codex" in err and f"\n{line}\n" in err
+
+
+def test_a_plain_tool_inside_the_codex_sandbox_still_runs_because_only_blender_needs_the_rule(rt):
+    rt.mp.setenv("CODEX_SANDBOX", "seatbelt")
+    rt.tool("ok.py", "")
+    assert rt.run("ok.py")[:2] == (0, "ok pass\n")
+
+
+@pytest.fixture
+def spaced(tmp_path, monkeypatch, capsys):
+    """A project path with a space, as on the pilot machine, and a CODEX_HOME of the test."""
+    base = (tmp_path / "my project").resolve()
+    base.mkdir()
+    monkeypatch.chdir(base)
+    monkeypatch.delenv("BLENDER", raising=False)
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    return RT(base, capsys, monkeypatch)
+
+
+def test_with_a_space_in_the_skill_path_the_line_to_run_again_names_the_link_the_codex_rule_names(spaced):
+    """A Codex rule never matches a quoted first word, so a program path with a space can never leave the sandbox."""
+    from core.state import codex_link
+    link = codex_link(spaced.skill)
+    link.parent.mkdir(parents=True)
+    link.symlink_to(spaced.skill, target_is_directory=True)
+    spaced.mp.setenv("CODEX_SANDBOX", "seatbelt")
+    spaced.tool("join_mesh.py", "print('never runs')\n")
+    rc, _, err = spaced.run("bl", "join_mesh.py", blender=True)
+    first = err.split("\n")[1].split(" ")[0]
+    assert (rc, first, shlex.quote(first)) == (2, f"{link}/scripts/run_tool.py", first)
+
+
+def test_rule_dir_is_the_link_only_when_the_skill_path_needs_quotes_and_the_link_points_at_the_skill(tmp_path,
+                                                                                                    monkeypatch):
+    from core.state import codex_link, rule_dir, rule_path
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    plain, spaced_skill = tmp_path / "plain", tmp_path / "my skill"
+    py = spaced_skill / "scripts/.deps/venv/bin/python"
+    py.parent.mkdir(parents=True)
+    py.symlink_to(sys.executable)
+    plain.mkdir()
+    link = codex_link(spaced_skill)
+    assert (rule_dir(plain), rule_dir(spaced_skill)) == (plain, spaced_skill)
+    link.parent.mkdir(parents=True)
+    link.symlink_to(plain, target_is_directory=True)
+    assert rule_dir(spaced_skill) == spaced_skill
+    link.unlink()
+    link.symlink_to(spaced_skill, target_is_directory=True)
+    assert (rule_dir(spaced_skill), rule_path(py, spaced_skill), rule_path(Path(sys.executable), spaced_skill)) == (
+        link, link / "scripts/.deps/venv/bin/python", Path(sys.executable))
+    assert (link.parent.name, len(link.name), shlex.quote(str(link)) == str(link)) == ("zps-3dp", 12, True)
+
+
+def test_in_the_codex_edition_a_brief_with_blender_tells_the_worker_to_type_the_run_line_as_the_whole_command(
+        briefed, monkeypatch):
+    """A pipe, `&&`, `cd`, a variable or `2>&1` keeps the line in the sandbox, where Blender dies (measured)."""
+    step = {"id": "blockout", "agent": "step-blockout", "uses": ["blender"]}
+    claude = briefs.tools_line({"id": "a-hut"}, step, None, None, n=1)
+    monkeypatch.setattr(briefs, "EDITION", {"runtime": "codex"})
+    codex = briefs.tools_line({"id": "a-hut"}, step, None, None, n=1)
+    plain = briefs.tools_line({"id": "a-hut"}, step | {"uses": []}, None, None, n=1)
+    assert [l.split(":")[0] for l in claude] == ["TOOLS", "BLENDER", "RUN", ""]
+    assert codex[:3] + codex[4:] == claude and [l.split(":")[0] for l in plain] == ["TOOLS", "RUN", ""]
+    assert codex[3] == briefs.RUN_MODE and all(w in codex[3] for w in ("`&&`", "`;`", "`cd`", "`2>&1`", "pipe", "nháy"))
 
 
 def test_a_blender_segfault_of_another_cause_stays_a_tool_error(rt):

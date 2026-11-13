@@ -201,6 +201,83 @@ def test_in_the_codex_edition_codex_image_is_off_with_the_reason_when_the_image_
     assert (res["features"]["codex_image"], res["codex_cli"]) == (False, {"version": "0.164.0", "image_generation": False})
 
 
+RULES_HINT = ("rule Codex chưa cho Blender ra ngoài sandbox ({why}) → từ gốc project chạy "
+              "`python3 installer/codex_rules.py --write` của bản build, rồi khởi động lại Codex")
+
+
+@pytest.fixture
+def codex_ed(proj, direct, monkeypatch, tmp_path):
+    """The Codex edition with a Blender found; CODEX_HOME and the skill folder belong to the test."""
+    from core import preflight
+    proj.tool("blender", "Blender 5.2.3")
+    home = tmp_path / "codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setattr(preflight, "EDITION", {"runtime": "codex", "image_gen": "direct"})
+
+    def skill(name):
+        d = (tmp_path / name).resolve()
+        d.mkdir()
+        monkeypatch.setattr(preflight, "SKILL_DIR", d)
+        return d
+
+    def rules(path):
+        f = home / "rules/zps-3dp-producer.rules"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(f'prefix_rule(\n    pattern = [{json.dumps(str(path))}, "--blender", "/b"],\n)\n', encoding="utf-8")
+        return f
+    return skill, rules, home
+
+
+def test_in_the_codex_edition_blender_is_off_until_the_codex_rules_file_exists(codex_ed, direct):
+    skill, _, home = codex_ed
+    skill("skill")
+    out, res = direct()
+    f = home / "rules/zps-3dp-producer.rules"
+    assert out == ("preflight: tắt blender, codex_image, meshy; không thấy `codex` trên PATH: worker không có tool ảnh "
+                   "→ cài codex-cli rồi chạy lại `preflight`; " + RULES_HINT.format(why=f"không có {f}") +
+                   "; không có kit preflight.py → production/preflight.json\n")
+    assert (res["features"]["blender"], res["blender"]["version"], res["codex_rules"]) == (False, "5.2.3", {
+        "file": str(f), "present": False, "run_tool": str(home.parent / "skill/scripts/run_tool.py"),
+        "names_run_tool": False, "link": None, "link_ok": None})
+
+
+def test_in_the_codex_edition_a_rules_file_of_another_install_keeps_blender_off(codex_ed, direct):
+    skill, rules, _ = codex_ed
+    skill("skill")
+    f = rules("/old/install/scripts/run_tool.py")
+    out, res = direct()
+    assert RULES_HINT.format(why=f"{f} không nêu {res['codex_rules']['run_tool']}") in out
+    assert (res["features"]["blender"], res["codex_rules"]["present"], res["codex_rules"]["names_run_tool"]) == (
+        False, True, False)
+
+
+def test_in_the_codex_edition_a_skill_path_with_a_space_needs_its_link_before_blender_is_on(codex_ed, direct):
+    """Codex never matches a quoted first word: the briefs name the skill through the link, so the rules do too."""
+    from core.state import codex_link
+    skill, rules, _ = codex_ed
+    d = skill("my skill")
+    link = codex_link(d)
+    rules(link / "scripts/run_tool.py")
+    out, res = direct()
+    assert RULES_HINT.format(why=f"thiếu link {link} → {d}") in out
+    assert (res["features"]["blender"], res["codex_rules"]["link"], res["codex_rules"]["link_ok"]) == (
+        False, str(link), False)
+
+
+def test_in_the_codex_edition_blender_is_on_when_the_rules_name_the_run_program_of_the_briefs(codex_ed, direct):
+    from core.state import codex_link
+    skill, rules, home = codex_ed
+    d = skill("my skill")
+    link = codex_link(d)
+    link.parent.mkdir(parents=True)
+    link.symlink_to(d, target_is_directory=True)
+    f = rules(link / "scripts/run_tool.py")
+    out, res = direct()
+    assert out.startswith("preflight: bật blender; tắt codex_image, meshy; ") and "codex_rules.py" not in out
+    assert res["codex_rules"] == {"file": str(f), "present": True, "run_tool": str(link / "scripts/run_tool.py"),
+                                  "names_run_tool": True, "link": str(link), "link_ok": True}
+
+
 def test_in_the_codex_edition_a_missing_codex_turns_codex_image_off_with_the_reason(direct):
     out, res = direct()
     assert out == ("preflight: tắt blender, codex_image, meshy; không thấy `codex` trên PATH: worker không có tool ảnh "
