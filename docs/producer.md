@@ -455,6 +455,7 @@ meshy = 1          # số lần gọi Meshy cùng lúc
 - Mỗi bước khai báo tài nguyên dùng (`uses = ["blender", "codex_image"]`). `P next` chỉ đề xuất giao việc khi còn chỗ; asset chờ hiện "chờ slot <tài nguyên>".
 - Một slot là một lần giao worker còn mở của bước dùng tài nguyên đó, hoặc một file PID còn sống trong `production/pids/<tài nguyên>/`. Một asset chỉ tính một lần.
 - Mỗi runtime có `[limits]` riêng (mục 16). Hai runtime không chạy cùng lúc trên một máy.
+- Bản Codex (D46.1): worker gọi thẳng tool ảnh của phiên, không có `codex exec`. Ở đó `codex_image` giới hạn số worker views và texture mở cùng lúc, không giới hạn số lần gọi ảnh song song trong một worker.
 - `[codex] timeout_s = 900`: giây chờ mỗi lần gọi `codex exec`, tối thiểu 300 (D30.20). Khóa `codex_batch = true` của `[[steps]]` (chỉ texture, mặc định `false`) gộp các paint view vào một lần gọi (D30.22).
 
 ## 13. GUIDELINE.md (D14.7)
@@ -523,9 +524,9 @@ Bộ skill chạy trên **cả Claude Code và Codex**, để so bên nào cho k
 - Script tính thêm **khoảng chờ Producer** = thời điểm giao lần sau − thời điểm ingest lần trước.
 - `P stats <id>` in bảng theo bước: thời gian worker, reviewer, chờ Producer, chờ anh; token worker, reviewer, Producer. Thời gian bước tính từ lần giao worker đầu tới lúc bước được duyệt.
 - **Report khi asset `done`** (D41): script ghi `deliver/<id>/RUN-REPORT.md` và in bảng, trước khi dọn (mục 8). `P report <id>` chạy lại được bất cứ lúc nào. `P report` không có id in bảng theo asset và tổng của lô. Mỗi dòng một bước: thời gian bước, worker, reviewer, chờ Producer, chờ anh, token worker, token reviewer, token Producer, số version, số vòng sửa, số lần giao, số lần gọi Codex, credit Meshy, số lần kẹt, và model của từng lần giao. Dòng cuối là tổng. Producer dán nguyên bảng vào chat, không tự tính lại. `P dashboard` có cột thời gian và token đã dùng.
-- **Chỉ số thật** (D41.3, D41.5): số lấy từ transcript của runtime. Không có số thì ghi "không có số" kèm lý do (không có transcript, bản Codex). Không ước lượng, không chia đều. Hai asset chạy cùng lúc: token Producer của khoảng chồng nhau có ghi chú "tính chung với <id>" và không cộng hai lần vào tổng lô.
+- **Chỉ số thật** (D41.3, D41.5): số lấy từ transcript của runtime. Bản Codex đọc rollout của Codex (D46.4). Không có số thì ghi "không có số" kèm lý do (không có transcript hay rollout). Không ước lượng, không chia đều. Hai asset chạy cùng lúc: token Producer của khoảng chồng nhau có ghi chú "tính chung với <id>" và không cộng hai lần vào tổng lô.
 - **Tách reviewer theo loại vòng** (D31.4): vòng đầu, vòng sửa, vòng chấm cuối (`full`). Lần giao ghi `REVIEW_SCOPE` để script tách được.
-- **Token Producer** (D30.10): hook SessionStart ghi đường dẫn transcript vào `production/session.json`. Script đọc `usage` trong JSONL, bỏ dòng `isSidechain`. Lỗi → "không có số". Bản Codex ghi "chưa hỗ trợ".
+- **Token Producer** (D30.10): hook SessionStart ghi đường dẫn transcript vào `production/session.json`. Script đọc `usage` trong JSONL, bỏ dòng `isSidechain`. Lỗi → "không có số". Bản Codex đọc rollout chính mà hook SessionStart ghi (D46.4).
 - **Model ảnh** (D28.1): `gen_image_codex.py` ghi model đã yêu cầu và model thực tế vào ledger và `inputs` của version. Ledger ghi thêm phiên bản codex-cli của mỗi lần gen (D30.19). Không biết model thực tế → "không có số".
 - Run 4 chỉ có token gộp theo bước, nên chưa biết phần nào phình. Nếu chờ Producer > 15% thời gian bước, xem lại cách điều phối (lý do giữ Producer gọi reviewer: `docs/decisions.md` D27.3).
 

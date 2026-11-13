@@ -5,7 +5,8 @@ still uses CPU or still writes output. A child that hangs (no CPU, no output) wr
 silence and does not take a hung process for a slow one; an 8-minute render that works keeps writing. Standard library
 only: the tools run with different venvs.
 
-Line: `YYYY-MM-DD HH:MM:SS · <tool> · <start|running|done|timeout> · <note>`."""
+Line: `YYYY-MM-DD HH:MM:SS · <tool> · <start|running|done|timeout|fail> · <note>`. `fail`: a try of the direct image
+check (gen_image_codex.py --direct, Codex edition) found no file or a bad one."""
 from __future__ import annotations
 
 import datetime as dt

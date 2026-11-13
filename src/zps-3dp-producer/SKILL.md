@@ -52,7 +52,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 - `policy.yaml` có `dispatch: background` (lô nhiều asset): giao chạy nền, rồi chạy nền một `P wait`. Chỉ một `P wait` tại một thời điểm; script từ chối cái thứ hai. `P wait` thoát khi có report, khi việc kẹt, khi có asset giao được, khi không còn việc chạy, hoặc sau 50 phút; thông báo của lệnh đó mở lượt mới: làm theo dòng nó in.
 - `P next` in dưới mỗi asset đang chạy một dòng `↳` (bước, version, vai trò, thời gian, nhịp tim, hạn chót, `OK` hoặc `KẸT`). Dòng `KẸT` → chạy `P stall <id> --agent-id <id subagent đang chạy>` và làm đúng dòng nó in. Script chọn bậc, bạn không tự chọn:
   - Dòng nudge: gửi đúng câu đó tới agent đó.
-  - Dòng `chưa giao lại: agent X chưa dừng`: dừng agent X (`references/runtime.md`, mục Gọi agent), rồi chạy lại `P stall`. Không dừng được thì để đó: agent im thêm `stall_min` phút (`watch` của `policy.yaml`) thì lần `P stall` sau giao cho agent mới.
+  - Dòng `chưa giao lại: agent X chưa dừng`: dừng agent X (`references/runtime.md`, mục Dừng agent), rồi chạy lại `P stall`. Không dừng được thì để đó: agent im thêm `stall_min` phút (`watch` của `policy.yaml`) thì lần `P stall` sau giao cho agent mới.
   - Dòng JSON: giao như bước 2 của "Giao việc" (agent mới, không resume).
   - Dòng `waiting_human`: báo người dùng.
 
