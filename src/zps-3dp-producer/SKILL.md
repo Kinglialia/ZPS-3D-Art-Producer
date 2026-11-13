@@ -49,6 +49,7 @@ Lặp cho đến khi `P next` không còn hành động nào bạn tự làm đ�
 **Chế độ giao việc**: việc xong hay chưa đọc từ file trên đĩa (`P next`, file report). Chỉ kết thúc lượt để chờ khi đang có một `P wait` chạy nền.
 - Người dùng đổi chế độ: `P approvals set dispatch <foreground|background> --by "<nguyên văn>"`.
 - Mặc định (`dispatch: foreground`, hoặc `policy.yaml` không có khóa này): giao subagent ở chế độ thường, không chạy nền. Cần song song thì giao nhiều subagent trong cùng một lượt.
+- Lệnh tạo subagent trả về ngay và báo agent chạy nền (runtime luôn chạy nền subagent): chạy nền một `P wait` rồi mới kết thúc lượt. Hand-back hay dòng của `P wait`, cái nào đến trước thì làm theo cái đó. Một report chỉ ingest một lần.
 - `policy.yaml` có `dispatch: background` (lô nhiều asset): giao chạy nền, rồi chạy nền một `P wait`. Chỉ một `P wait` tại một thời điểm: cái mới thay cái cũ, cái cũ in một dòng không cần làm gì. `P wait` thoát khi có report, khi việc kẹt, khi có asset giao được, khi không còn việc chạy, khi các lần giao lúc nó bắt đầu đã ingest, hoặc sau 50 phút; thông báo của lệnh đó mở lượt mới: làm theo dòng nó in.
 - `P next` in dưới mỗi asset đang chạy một dòng `↳` (bước, version, vai trò, thời gian, nhịp tim, hạn chót, `OK` hoặc `KẸT`). Dòng `KẸT` → chạy `P stall <id> --agent-id <id subagent đang chạy>` và làm đúng dòng nó in. Script chọn bậc, bạn không tự chọn:
   - Dòng nudge: gửi đúng câu đó tới agent đó.

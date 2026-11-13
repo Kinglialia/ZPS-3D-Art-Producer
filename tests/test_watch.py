@@ -847,3 +847,12 @@ def test_the_brief_of_a_step_with_an_external_command_never_tells_the_worker_to_
     assert "nền" not in block.lower()
     setup = (SKILL / "references/setup.md").read_text(encoding="utf-8")
     assert "chạy nền" not in [l for l in setup.splitlines() if "external_command" in l][0]
+
+
+def test_the_skill_says_what_to_do_when_the_runtime_starts_every_subagent_in_the_background_p6_2():
+    """Pilot 6: the Claude desktop app returned at once from every Agent call, though `dispatch: foreground` expects a
+    blocking call. The Producer must not end the turn with nothing that wakes it, and must not ingest one report twice."""
+    rows = (SKILL / "SKILL.md").read_text(encoding="utf-8").splitlines()
+    assert ("- Lệnh tạo subagent trả về ngay và báo agent chạy nền (runtime luôn chạy nền subagent): chạy nền một `P wait` "
+            "rồi mới kết thúc lượt. Hand-back hay dòng của `P wait`, cái nào đến trước thì làm theo cái đó. Một report chỉ "
+            "ingest một lần.") in rows
