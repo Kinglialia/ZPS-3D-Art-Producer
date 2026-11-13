@@ -22,9 +22,10 @@ HEAD = ("Bước", "Thời gian bước", "Worker", "Reviewer", "Chờ Producer"
 PRODUCER_WHY = {NO_NUMBER: "không thấy transcript của phiên Producer"}
 NO_MESSAGE = "transcript của Producer không có message trong khoảng của bước"
 NO_CODEX_COUNT = "version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec hay tool ảnh"
-CODEX_NOTE = ("Token bản Codex: mỗi dòng `token_count` của rollout cộng `last_token_usage.total_tokens`. Số đó là "
-              "`input_tokens` + `output_tokens`; `input_tokens` gồm `cached_input_tokens` và `cache_write_input_tokens`, "
-              "`output_tokens` gồm `reasoning_output_tokens`. Dòng lặp lại cùng `total_token_usage` chỉ tính một lần. "
+CODEX_NOTE = ("Token bản Codex: mỗi dòng `token_count` của rollout cộng `input_tokens` + `output_tokens` của "
+              "`last_token_usage`; `input_tokens` gồm `cached_input_tokens` và `cache_write_input_tokens`, "
+              "`output_tokens` gồm `reasoning_output_tokens`. Script không dùng `total_tokens`: ở vài dòng số đó lớn hơn "
+              "tổng hai phần. Dòng lặp lại cùng `total_token_usage` chỉ tính một lần. "
               "Thời lượng: dòng đầu tới dòng cuối của rollout sub-agent trong khoảng lần giao.")
 NOT_INGESTED = "lần giao chưa ingest"
 OVERLAP_NO_TRANSCRIPT = "hai asset chạy cùng lúc và không còn transcript để tính mỗi message một lần"

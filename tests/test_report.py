@@ -117,7 +117,8 @@ def test_a_codex_dispatch_without_a_rollout_has_no_number_and_one_with_a_rollout
     st["dispatches"][0] |= {"tokens": 2500, "usage": {"input": 350, "output": 500, "cache_read": 1600,
                                                       "cache_creation": 50, "duration_ms": 9500, "format": "codex"}}
     rows = report.table(st, CFG, [], "không có số")
-    assert rows[-1] == report.CODEX_NOTE and "`last_token_usage.total_tokens`" in rows[-1]
+    assert rows[-1] == report.CODEX_NOTE and "`input_tokens` + `output_tokens` của `last_token_usage`" in rows[-1]
+    assert "cộng `last_token_usage.total_tokens`" not in rows[-1], "session.codex_split sums the two parts, not total_tokens"
     assert report.CODEX_NOTE not in report.table(A1, CFG, [], LIVE), "a Claude transcript needs no Codex note"
 
 

@@ -37,8 +37,8 @@ Cảnh báo ⚠ (concept, thẻ, profile hoặc art direction đổi sau khi ass
 Lặp cho đến khi `P next` không còn hành động nào bạn tự làm được.
 
 **Giao việc** (khi `P next` báo `brief <id>`):
-1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
-2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (`references/runtime.md`, mục Resume), nội dung "Đọc `<brief>` rồi làm.". Brief nói việc của lần này: vòng sửa của worker, hoặc ảnh reviewer đã xin. Nếu không: tạo subagent `agent` (`references/runtime.md`, mục Gọi agent), truyền `model` tường minh khi khác null, prompt đúng như sau:
+1. Chạy `P brief <id>`. Script in một dòng JSON: `role`, `agent` (tên agent đầy đủ, ví dụ `zps-3dp-step-blockout`), `model`, `resume`, `brief`, `report`; bản Codex thêm `agent_file`, và `reasoning_effort` ở dòng worker views và texture. Profile sai thì script từ chối: nạp skill `zps-3dp-project-setup`. `P next` ghi "chờ slot <tài nguyên>" thì chưa giao asset đó.
+2. Nếu `resume` có giá trị: gửi tiếp cho đúng subagent đó (`references/runtime.md`, mục Resume), nội dung "Đọc `<brief>` rồi làm.". Brief nói việc của lần này: vòng sửa của worker, hoặc ảnh reviewer đã xin. Nếu không: tạo subagent `agent` (`references/runtime.md`, mục Gọi agent), truyền `model` và `reasoning_effort` (khi có) tường minh khi khác null, prompt đúng như sau:
    > Đọc `<brief>` trước tiên: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 
    Lời giao việc chỉ gồm file role và brief: file role là agent `agent` (Codex: `agent_file`), brief là prompt trên. Không thêm gì vào prompt. Không hướng dẫn cách ghi file: không heredoc, không `cat >`, không `tee`, không python. Agent ghi report bằng tool ghi file, theo brief.

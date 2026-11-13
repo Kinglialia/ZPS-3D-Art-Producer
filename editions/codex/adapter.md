@@ -8,6 +8,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
   > Vai của bạn nằm trong `<agent_file>`: đọc file đó trước tiên. Rồi đọc `<brief>`: đó là toàn bộ yêu cầu của bạn. Ghi báo cáo đầy đủ vào `<report>`. Chỉ trả về các dòng brief yêu cầu.
 - Không truyền `agent_type`: sub-agent là agent thường và đọc file vai. `agent_file` là khóa của `P brief`. Dòng `tools:` trong file agent không áp dụng trên Codex.
 - Các tool sub-agent (đã chạy thật): `spawn_agent(task_name, message, agent_type, model, reasoning_effort, fork_turns)`, `wait_agent(timeout_ms)`, `followup_task(target, message)`, `send_message(target, message)`, `interrupt_agent(target)`, `list_agents(path_prefix)`.
+- Không bao giờ truyền `fork_turns`: agent fork nhận cả context của Producer, nên tốn token và brief không còn là toàn bộ yêu cầu.
 - `target` là giá trị `task_name` mà `spawn_agent` trả về (một đường dẫn, ví dụ `/root/<task_name>`; đã đối chiếu rollout thật). `list_agents` in tên các agent. Truyền giá trị đó làm `--agent-id` của `P ingest`.
 - Sub-agent dùng chung quyền mạng và sandbox của phiên gốc. `production/` và `production-*/` nằm trong thư mục project, nên sandbox `workspace-write` cho ghi report ở đó mà không cần thêm writable root.
 - Dừng agent: mục Dừng agent.
@@ -25,7 +26,7 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 
 ## Model
 
-- `P brief` in `model` và `reasoning_effort`. Có giá trị thì truyền đúng giá trị đó vào `model` và `reasoning_effort` của `spawn_agent` (đã chạy thật). `null` thì không truyền: sub-agent chạy bằng model của phiên, ledger ghi "model của phiên".
+- `P brief` in `model`. Dòng worker views và texture in thêm `reasoning_effort`; dòng khác không có khóa này. Có giá trị thì truyền đúng giá trị đó vào `model` và `reasoning_effort` của `spawn_agent` (đã chạy thật). `null` hay không có khóa thì không truyền: sub-agent chạy bằng model của phiên, ledger ghi "model của phiên".
 
 ## Token
 

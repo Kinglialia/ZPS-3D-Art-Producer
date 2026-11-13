@@ -73,7 +73,8 @@ CODEX = "codex"
 
 def codex_split(u: dict) -> dict:
     """D46: a Codex `last_token_usage` in the four columns. `input_tokens` holds the cached and cache-write tokens and
-    `output_tokens` the reasoning tokens, so the four add up to `total_tokens`."""
+    `output_tokens` the reasoning tokens, so the four add up to `input_tokens` + `output_tokens`. A few real rows have
+    a larger `total_tokens`, which is not counted."""
     read, write = int(u.get("cached_input_tokens") or 0), int(u.get("cache_write_input_tokens") or 0)
     return {"input": int(u.get("input_tokens") or 0) - read - write, "output": int(u.get("output_tokens") or 0),
             "cache_read": read, "cache_creation": write}
