@@ -622,6 +622,7 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
     p = ".claude/skills/zps-3dp-producer/scripts/.deps/venv/bin/python .claude/skills/zps-3dp-producer/scripts/producer.py"
     assert json.loads(s.read_text(encoding="utf-8")) == {
         "permissions": {"allow": ["Bash(git status:*)", f"Bash({p}:*)",
+                                  f"Bash({sk}/scripts/.deps/venv/bin/python {sk}/scripts/producer.py:*)",
                                   f"Bash({sk}/scripts/run_tool.py:*)",
                                   f"Bash({sk}/scripts/.deps/venv/bin/python {sk}/scripts/assemble.py:*)", f"Bash({bl}:*)",
                                   f"Bash({sk}/agents/zps-3dp-step-texture/tools/.deps/venv/bin/python "
@@ -641,6 +642,17 @@ def test_install_appends_the_producer_rules_and_hook_to_project_settings_and_kee
     again = install(dist, tmp_path)
     assert (again.returncode, s.read_bytes()) == (0, before)
     assert f"{s.resolve()}: đã đủ rule và hook, không đổi\n" in again.stdout and "+++" not in again.stdout
+
+
+def test_the_p_rule_also_matches_the_absolute_form_of_the_command_p6_2(dist, tmp_path):
+    """Pilot 6: a project rule of the owner asks for absolute paths in Bash, and the only `P` rule matched the relative
+    form, so every `P` call asked for permission or broke the project rule. Both forms now match."""
+    assert install(dist, tmp_path).returncode == 0
+    sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
+    allow = json.loads((tmp_path / ".claude/settings.json").read_text(encoding="utf-8"))["permissions"]["allow"]
+    command = f"{sk}/scripts/.deps/venv/bin/python {sk}/scripts/producer.py next"
+    assert [r for r in allow if r.startswith("Bash(") and command.startswith(r[5:-3])] == [
+        f"Bash({sk}/scripts/.deps/venv/bin/python {sk}/scripts/producer.py:*)"]
 
 
 def test_the_meshy_and_blender_rules_match_the_command_lines_a_texture_brief_gives_the_worker(dist, tmp_path):
@@ -774,9 +786,9 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
         assert r.returncode == 0, r.stderr
         return r.stdout, json.loads((tmp_path / "production/preflight.json").read_text(encoding="utf-8"))["settings"]
     out, gap = preflight()
-    assert (".claude/settings.json thiếu 10 allow rule, hook SessionStart, hook SubagentStop, hook Stop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
+    assert (".claude/settings.json thiếu 11 allow rule, hook SessionStart, hook SubagentStop, hook Stop, env BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS "
             "(Bash timeout, D33.4) → chạy lại install.py của bản cài") in out
-    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (10, ["SessionStart", "SubagentStop", "Stop"])
+    assert (len(gap["missing"]["allow"]), list(gap["missing"]["hooks"])) == (11, ["SessionStart", "SubagentStop", "Stop"])
     sk = tmp_path.resolve() / ".claude/skills/zps-3dp-producer"
     assert [r for r in gap["missing"]["allow"] if "run_tool" in r or "assemble.py" in r] == [
         f"Bash({sk}/scripts/run_tool.py:*)",
