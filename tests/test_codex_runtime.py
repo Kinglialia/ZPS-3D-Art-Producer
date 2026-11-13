@@ -7,6 +7,8 @@ import re
 import subprocess
 import sys
 
+import pytest
+
 from core import session, watch
 from flowkit import AID, Flow
 from shared import P, fixed_line, pilot_project
@@ -184,6 +186,8 @@ def test_a_codex_rollout_names_the_brief_only_in_the_task_a_parent_sent_or_a_use
     assert session.asks_for(msg("user"), b) is True
     assert session.asks_for(msg("user", inherited_user_message=True), b) is False
     assert session.asks_for(msg("assistant"), b) is False
+    assert session.asks_for(task("x", f"đọc `{b}`") | {"metadata": {"inherited_user_message": True}}, b) is False, (
+        "a forked worker inherits the Producer's items, and an inherited agent_message is the Producer's own task")
     assert watch.calls(call("x", "spawn_agent", message=b)) == [json.dumps({"message": b})]
     assert watch.calls(call("x", "wait_agent", timeout_ms=1)) == []
 
@@ -219,3 +223,89 @@ def test_the_session_start_hook_of_a_sub_agent_thread_prints_nothing_and_records
         assert r.stdout.startswith("[producer] Dùng skill zps-3dp-producer"), tp.name
     doc = json.loads((tmp_path / "production/session.json").read_text(encoding="utf-8"))
     assert doc["transcripts"] == [str(main), str(claude)]
+
+
+def edition(monkeypatch, runtime):
+    monkeypatch.setattr(session, "EDITION", {"runtime": runtime} if runtime else {})
+
+
+def claude_line(ts, kind="assistant", text="hi", mid="m1", inp=10, out=5):
+    if kind == "user":
+        return {"type": "user", "timestamp": ts, "message": {"role": "user", "content": text}}
+    return {"type": "assistant", "timestamp": ts, "message": {"id": mid, "usage": {"input_tokens": inp, "output_tokens": out}}}
+
+
+@pytest.mark.parametrize("runtime, want", [("claude", ["claude"]), ("codex", ["codex"]), (None, ["claude", "codex"])])
+def test_each_edition_counts_producer_tokens_only_from_its_own_transcript_format_and_the_source_tree_from_both(
+        tmp_path, monkeypatch, runtime, want):
+    """Both editions can share production/: the Codex SessionStart hook adds its rollout to session.json, and the Claude
+    edition counted the token_count rows of that rollout as Claude Producer tokens."""
+    edition(monkeypatch, runtime)
+    codex = write(tmp_path / "rollout-main.jsonl", [meta("2026-11-13T03:00:00.000Z"), tok(
+        "2026-11-13T03:01:00.000Z", u(1000, 800, 500), u(1000, 800, 500))])
+    claude = write(tmp_path / "claude.jsonl", [claude_line("2026-11-13T04:00:00.000Z")])
+    rows = {"codex": (session.local("2026-11-13T03:01:00.000Z"), 1500),
+            "claude": (session.local("2026-11-13T04:00:00.000Z"), 15)}
+    assert session.main_usage([str(claude), str(codex)]) == [rows[k] for k in want]
+
+
+@pytest.mark.parametrize("runtime, want", [("claude", 10), ("codex", 2500), (None, 2510)])
+def test_each_edition_counts_dispatch_tokens_only_from_its_own_transcript_format(tmp_path, monkeypatch, runtime, want):
+    edition(monkeypatch, runtime)
+    at = "2026-11-13 10:00:00"
+    sub = sub_rollout(tmp_path / "rollout-sub.jsonl", at, "b.md")
+    claude = write(tmp_path / "agent-a1.jsonl", [claude_line(utc(at, 3), mid="m2", inp=7, out=3)])
+    assert session.agent_numbers([claude, sub], at, "2026-11-13 10:30:00")[0] == want
+
+
+@pytest.mark.parametrize("runtime, kept", [("claude", ["claude", "missing"]), ("codex", ["codex", "missing"]),
+                                           (None, ["codex", "claude", "missing"])])
+def test_the_session_start_hook_records_only_its_own_format_and_prints_nothing_for_the_other(tmp_path, monkeypatch,
+                                                                                              runtime, kept):
+    """A transcript that is not written yet has no format: it is recorded, as before."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "production").mkdir()
+    edition(monkeypatch, runtime)
+    paths = {"codex": write(tmp_path / "rollout-main.jsonl", [meta("2026-11-13T03:00:00.000Z")]),
+             "claude": write(tmp_path / "claude.jsonl", [claude_line("2026-11-13T04:00:00.000Z", "user")]),
+             "missing": tmp_path / "not-yet.jsonl"}
+    got = {n: session.record(json.dumps({"session_id": "s1", "source": "startup", "transcript_path": str(p)}))
+           for n, p in paths.items()}
+    assert [n for n, d in got.items() if d is session.SUB] == [n for n in paths if n not in kept]
+    assert session.load()["transcripts"] == [str(paths[n]) for n in kept]
+
+
+@pytest.mark.parametrize("runtime, refused", [("claude", ["claude"]), ("codex", ["codex"]), (None, ["claude", "codex"])])
+def test_a_stop_hook_given_a_transcript_of_the_other_edition_allows_the_stop(tmp_path, monkeypatch, runtime, refused):
+    f, out = flow(tmp_path)
+    at = f.st()["dispatches"][-1]["at"]
+    monkeypatch.chdir(tmp_path)
+    edition(monkeypatch, runtime)
+    paths = {"claude": write(tmp_path / "claude.jsonl", [claude_line(utc(at, -60), "user")]),
+             "codex": write(tmp_path / "rollout-main.jsonl", [meta(utc(at, -60))])}
+    stop = BASE | {"hook_event_name": "Stop", "turn_id": "t1", "stop_hook_active": False}
+    assert [n for n, p in paths.items() if watch.on_main_stop(json.dumps(stop | {"transcript_path": str(p)}))] == refused
+
+
+@pytest.mark.parametrize("runtime", ["claude", "codex", None])
+@pytest.mark.parametrize("fmt", ["claude", "codex"])
+def test_a_subagent_stop_hook_records_a_stop_only_from_a_transcript_of_its_own_edition(tmp_path, monkeypatch, runtime,
+                                                                                       fmt):
+    f, out = flow(tmp_path)
+    at = f.st()["dispatches"][-1]["at"]
+    tr = (sub_rollout(tmp_path / "rollout-sub.jsonl", at, out["brief"]) if fmt == "codex" else
+          write(tmp_path / "agent-a1.jsonl", [claude_line(utc(at, 1), "user", f"Đọc `{out['brief']}` trước tiên.")]))
+    monkeypatch.chdir(tmp_path)
+    edition(monkeypatch, runtime)
+    got = watch.on_stop(json.dumps(BASE | {"hook_event_name": "SubagentStop", "agent_id": "a1", "agent_transcript_path": str(
+        tr), "agent_type": "zps-3dp-step-blockout" if fmt == "claude" else "default"}))
+    assert (got is not None, "stopped" in f.st()["dispatches"][-1]) == (runtime in (None, fmt),) * 2
+
+
+def test_a_main_transcript_line_whose_message_is_not_an_object_is_skipped_not_a_crash(tmp_path):
+    """A crash in the Stop hook allows the stop, so a bad line before the real call would hide a dispatch not sent."""
+    rec = {"at": "2026-11-13 10:00:00", "brief": "production/assets/a1/blockout/v1/brief-worker.md"}
+    p = tmp_path / "main.jsonl"
+    p.write_text(json.dumps({"type": "assistant", "timestamp": utc(rec["at"], 5), "message": f"`{rec['brief']}`"}) + "\n"
+                 + json.dumps(call(utc(rec["at"], 6), "spawn_agent", message=rec["brief"])) + "\n", encoding="utf-8")
+    assert watch.sent_to_agent([str(p)], rec) is True

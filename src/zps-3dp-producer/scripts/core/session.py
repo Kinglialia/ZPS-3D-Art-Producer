@@ -9,7 +9,7 @@ import select
 import sys
 from pathlib import Path
 
-from .state import ROOT, stamp, write_atomic
+from .state import EDITION, ROOT, stamp, write_atomic
 
 OUT = ROOT / "session.json"
 WAIT_S = 1.0
@@ -26,14 +26,15 @@ def load() -> dict | None:
 
 def record(text: str) -> dict | None:
     """Only a project that has production/ gets the file: `next` runs unlocked and must not create the root. A Codex
-    sub-agent thread gets SUB and no file: the hook is project-wide, and a worker is not the Producer."""
+    sub-agent thread gets SUB and no file: the hook is project-wide, and a worker is not the Producer. A transcript of
+    the other edition's format gets SUB too (foreign)."""
     try:
         hook = json.loads(text)
     except ValueError:
         return None
     if not isinstance(hook, dict):
         return None
-    if sub_thread(hook.get("transcript_path")):
+    if sub_thread(hook.get("transcript_path")) or foreign(head(hook.get("transcript_path"))):
         return SUB
     if not ROOT.is_dir():
         return None
@@ -125,26 +126,39 @@ def sub_rollout(rows: list[dict]) -> bool:
         "payload"]["source"]
 
 
+def foreign(rows: list[dict]) -> bool:
+    """The transcript is of the other edition's format: the Codex edition reads only Codex rollouts, the Claude edition
+    only Claude Code transcripts, the source tree both. Both editions can share production/, so session.json and a
+    hook can name the other runtime's file. No rows give no format, so a file not written yet is not foreign."""
+    rt = EDITION.get("runtime")
+    return bool(rows and rt) and rollout(rows) != (rt == "codex")
+
+
+def head(path) -> list[dict]:
+    """The first record of a hook's transcript, all that a hook reads to tell its kind; [] when it cannot be read."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return rows_of([f.readline()])
+    except (OSError, TypeError, ValueError):
+        return []
+
+
 def sub_thread(path) -> bool:
     """The hook's `transcript_path` is a Codex sub-agent rollout. Only its first record counts; a path that cannot be
     read is not one."""
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return sub_rollout(rows_of([f.readline()]))
-    except (OSError, TypeError, ValueError):
-        return False
+    return sub_rollout(head(path))
 
 
 def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int]] | None:
     """Tokens of each main-session API response, the four columns added up. Lines of subagents (`isSidechain`, a
-    sub-agent rollout) and lines that do not parse are skipped; a transcript that cannot be read gives None."""
+    sub-agent rollout), transcripts of the other edition and lines that do not parse are skipped; a transcript that cannot be read gives None."""
     out, seen = [], set()
     for p in paths:
         try:
             rows = rows_of(open(p, encoding="utf-8", errors="replace").read().splitlines())
         except OSError:
             return None
-        if sub_rollout(rows):
+        if sub_rollout(rows) or foreign(rows):
             continue
         for key, d, part in responses(rows):
             if d.get("isSidechain") or (key is not None and key in seen):
@@ -180,12 +194,13 @@ def lines_of(p: Path) -> list[dict]:
 
 def asks_for(d: dict, brief: str) -> bool:
     """A prompt line of the Producer that names the brief: a Claude Code user line, not a tool result or a reminder; in
-    a Codex rollout, the task a parent sent (`agent_message`) or a user message the thread did not inherit. Codex
-    0.164.0 keeps the `spawn_agent` message as plain text in the `encrypted_content` item of the `agent_message`."""
+    a Codex rollout, the task a parent sent (`agent_message`) or a user message, never an item the thread inherited
+    (a forked worker inherits every item of the Producer). Codex 0.164.0 keeps the `spawn_agent` message as plain text
+    in the `encrypted_content` item of the `agent_message`."""
     p = d.get("payload")
     if d.get("type") == "response_item" and isinstance(p, dict):
-        if not (p.get("type") == "agent_message" or p.get("type") == "message" and p.get("role") == "user"
-                and not (d.get("metadata") or {}).get("inherited_user_message")):
+        if (d.get("metadata") or {}).get("inherited_user_message") or not (
+                p.get("type") == "agent_message" or p.get("type") == "message" and p.get("role") == "user"):
             return False
         return brief in " ".join(str(x.get("text") or x.get("encrypted_content") or "") for x in p.get("content") or []
                                  if isinstance(x, dict))
@@ -229,6 +244,8 @@ def agent_usage(files: list[Path], start: str, end: str | None) -> dict | None:
     seen, split, times, codex = set(), dict.fromkeys(SPLIT.values(), 0), [], False
     for p in files:
         rows = lines_of(p)
+        if foreign(rows):
+            continue
         times += [local(d["timestamp"]) for d in rows if inside(d)]
         for key, d, part in responses(rows):
             if not inside(d) or (key is not None and key in seen):

@@ -324,7 +324,7 @@ def on_stop(text: str) -> str | None:
     """D33.9: hook SubagentStop → `P on-stop`. Records on disk that the subagent stopped and whether its report exists,
     so a lost notification loses nothing. Never fails the hook: exit 2 would keep the subagent running. A Codex
     sub-agent runs as a plain agent that reads its role file, so its `agent_type` is not ours: a rollout transcript is
-    matched by the brief alone (D46)."""
+    matched by the brief alone (D46). A transcript of the other edition's format is not ours (session.foreign)."""
     from . import session
     try:
         hook = json.loads(text)
@@ -333,6 +333,8 @@ def on_stop(text: str) -> str | None:
     if not isinstance(hook, dict) or not ROOT.is_dir():
         return None
     path = hook.get("agent_transcript_path")
+    if session.foreign(session.head(path)):
+        return None
     if not (str(hook.get("agent_type") or "").startswith("zps-3dp-")
             or isinstance(path, str) and path and session.rollout(session.lines_of(Path(path)))):
         return None
@@ -401,10 +403,10 @@ def sent_to_agent(paths: list[str], rec: dict) -> bool:
                 continue
             try:
                 d = json.loads(line)
-                when = session.local(d["timestamp"])
+                when, sent = session.local(d["timestamp"]), calls(d)
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
-            if isinstance(d, dict) and when >= since and any(brief in x or quoted in x for x in calls(d)):
+            if when >= since and any(brief in x or quoted in x for x in sent):
                 return True
     return False
 
@@ -435,14 +437,15 @@ def main_stop_reason(sts: list[dict], exists, sent) -> str | None:
 def on_main_stop(text: str) -> str | None:
     """D39.1: hook Stop of the main session → `P on-main-stop`. Reads the disk only and prints nothing when the stop is
     allowed. Allowed too: the turn already goes on because this hook refused (`stop_hook_active`, else a loop), a
-    project with no production folder, and a Codex sub-agent thread (the hook is project-wide)."""
+    project with no production folder, a Codex sub-agent thread (the hook is project-wide), and a transcript of the
+    other edition's format (session.foreign)."""
     from . import session
     try:
         hook = json.loads(text)
     except ValueError:
         return None
     if not isinstance(hook, dict) or hook.get("stop_hook_active") or not ROOT.is_dir() or session.sub_thread(
-            hook.get("transcript_path")):
+            hook.get("transcript_path")) or session.foreign(session.head(hook.get("transcript_path"))):
         return None
     paths = [p for p in [hook.get("transcript_path"), *((session.load() or {}).get("transcripts") or [])]
              if isinstance(p, str) and p]
