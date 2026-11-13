@@ -112,7 +112,7 @@ def test_the_main_stop_hook_exits_2_with_one_line_on_stderr_to_refuse_and_exits_
     brief = f"production/assets/{AID}/blockout/v1/brief-worker.md"
     st |= {"stage": "blockout", "state": "running", "versions": {"blockout": 1},
            "dispatches": [{"step": "blockout", "v": 1, "role": "worker", "at": "2026-11-12 09:00:00", "brief": brief,
-                           "agent_id": "ag7"}]}
+                           "agent_id": "ag7", "stopped": "report"}]}
     st_path.write_text(json.dumps(st), encoding="utf-8")
     report = proj / f"production/assets/{AID}/blockout/v1/worker-out.md"
     report.parent.mkdir(parents=True)
