@@ -115,9 +115,14 @@ def count(p: dict) -> int:
     return len(p["delete"]) + len(p["other"])
 
 
-def notice(p: dict | None) -> str:
-    """D40.4: the one line the command prints and the DUYỆT 2 button shows. No plan, no size."""
-    return f"Sẽ xóa {count(p)} file, {size(p['bytes'])}; {NO_REDO}." if p else f"Sẽ xóa file trung gian; {NO_REDO}."
+def notice(p: dict | None, about: bool = False) -> str:
+    """D40.4: the one line the command prints and the DUYỆT 2 button shows. No plan, no size. P6-2: the deleted size
+    is the one the result repeats; the shrunk images are counted apart. `about`: said before the approval, when a page
+    or a push can still add files."""
+    if not p:
+        return f"Sẽ xóa file trung gian; {NO_REDO}."
+    th = f", thu nhỏ {len(p['thumbs'])} ảnh" if p["thumbs"] else ""
+    return f"Sẽ xóa {count(p)} file, {'khoảng ' if about else ''}{size(p['bytes'])}{th}; {NO_REDO}."
 
 
 def zip_target(aid: str, explicit: str | None) -> str | None:
@@ -184,7 +189,7 @@ def offer_notice(cfg: dict, st: dict) -> str | None:
     except ProducerError:
         return None
     try:
-        return notice(plan(cfg, st))
+        return notice(plan(cfg, st), about=True)
     except (ProducerError, OSError):
         return notice(None)
 
@@ -246,10 +251,9 @@ def execute(cfg: dict, st: dict, source: str, by: str | None, zp: str | None, p:
     freed = doc["freed_bytes"] = st["purged"]["freed_bytes"] = p["bytes"] + sum(t["before"] - t["after"] for t in th)
     write_atomic(a / MANIFEST, json.dumps(doc, ensure_ascii=False, indent=2))
     save_st(st)
-    ledger(f"{aid} · đã xóa D40 ({source}): {count(p)} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}"
-           + (f" · by: {by}" if by else "") + (f" · nén {zp}" if zp else ""))
-    return (f"[{aid}] đã xóa {count(p)} file, thu nhỏ {len(th)} ảnh, giải phóng {size(freed)}. "
-            f"Manifest: {rel(a / MANIFEST)}")
+    done = f"{count(p)} file ({size(p['bytes'])}), thu nhỏ {len(th)} ảnh (bớt {size(freed - p['bytes'])})"
+    ledger(f"{aid} · đã xóa D40 ({source}): {done}" + (f" · by: {by}" if by else "") + (f" · nén {zp}" if zp else ""))
+    return f"[{aid}] đã xóa {done}. Manifest: {rel(a / MANIFEST)}"
 
 
 def on_approve(cfg: dict, st: dict, zip_path: str | None, report_ok: bool) -> str:
@@ -297,7 +301,7 @@ def on_next(a) -> list[str]:
                 out.append(f"[{aid}] chờ xóa sau DUYỆT 2: {wait}" if (wait := ab_wait(aid)) else
                            f"[{aid}] đã có kết quả so A/B: `purge {aid} --by \"<nguyên văn>\"` để xóa, `keep {aid}` để giữ")
             elif st.get("state") == "waiting_human" and st.get("stage") == "assemble" and not hold(st):
-                out.append(f"[{aid}] DUYỆT 2: {notice(plan(load_cfg(), st))}")
+                out.append(f"[{aid}] DUYỆT 2: {notice(plan(load_cfg(), st), about=True)}")
         except Exception as ex:  # noqa: BLE001 — the hook must still print the asset list
             out.append(f"[{aid}] chưa tính được việc xóa: {ex}")
     return out

@@ -137,9 +137,8 @@ def test_the_users_approval_deletes_in_the_same_command_after_the_report_is_writ
     out = approve(proj).splitlines()
     n, kb = len(gone) + len(SHOW + PUSH + PIDS), f"{size / 1024:.1f} KB"
     assert out[:3] == ["pilot-house: đã duyệt assemble v1 → assemble/done. Tiếp: xong",
-                       f"Sẽ xóa {n} file, {kb}; sau lệnh này không `redo` được.",
-                       f"[pilot-house] đã xóa {n} file, thu nhỏ 1 ảnh, giải phóng "
-                       + out[2].split("giải phóng ")[1]]
+                       f"Sẽ xóa {n} file, {kb}, thu nhỏ 1 ảnh; sau lệnh này không `redo` được.",
+                       f"[pilot-house] đã xóa {n} file ({kb}), thu nhỏ 1 ảnh (bớt " + out[2].split("(bớt ")[1]]
     assert out[2].endswith(". Manifest: production/assets/pilot-house/purge-manifest.json")
     assert (proj / "deliver" / AID / "RUN-REPORT.md").is_file()
     assert not any((proj / A / r).exists() for r in gone)
@@ -148,7 +147,26 @@ def test_the_users_approval_deletes_in_the_same_command_after_the_report_is_writ
     assert all((proj / A / r).exists() for r in SOURCES + [MARK, "status.json", "feedback.md"])
     assert Image.open(proj / A / HERO).size == (1024, 512)
     assert not (proj / A / "purge-pending.json").exists()
-    assert ledger(proj)[-1].startswith(f"pilot-house · đã xóa D40 (approve): {n} file, thu nhỏ 1 ảnh, giải phóng ")
+    assert ledger(proj)[-1].startswith(f"pilot-house · đã xóa D40 (approve): {n} file ({kb}), thu nhỏ 1 ảnh (bớt ")
+
+
+def test_the_three_deletion_messages_share_one_size_and_the_shrink_is_told_apart_p6_2(proj):
+    """Pilot 6 said 98.4 MB at `P next`, 101.7 MB at the approval and 110.7 MB in the result. `P show` wrote a page
+    between the first two, and the result added what the shrunk images saved. `P next` says "khoảng" because files
+    can still change before the approval; the approval line and the result give the same deleted size, and the
+    shrink is a size of its own."""
+    size = total(proj, DELETED + REJECTED, SHOW + PUSH + PIDS)
+    n = len(DELETED + REJECTED + SHOW + PUSH + PIDS)
+    kb = f"{size / 1024:.1f} KB"
+    assert (f"[{AID}] DUYỆT 2: Sẽ xóa {n} file, khoảng {kb}, thu nhỏ 1 ảnh; sau lệnh này không `redo` được."
+            in p(proj, "next").splitlines())
+    out = approve(proj).splitlines()
+    assert out[1] == f"Sẽ xóa {n} file, {kb}, thu nhỏ 1 ảnh; sau lệnh này không `redo` được."
+    man = json.loads((proj / A / "purge-manifest.json").read_text(encoding="utf-8"))
+    shrunk = sum(t["before"] - t["after"] for t in man["thumbnails"])
+    assert out[2] == (f"[{AID}] đã xóa {n} file ({kb}), thu nhỏ 1 ảnh (bớt {shrunk / 1024:.1f} KB). "
+                      f"Manifest: production/assets/{AID}/purge-manifest.json")
+    assert man["freed_bytes"] == size + shrunk
 
 
 def test_the_manifest_lists_the_files_outside_the_asset_and_the_refused_reports_d40_3(proj):
@@ -316,7 +334,7 @@ def test_purge_deletes_now_and_zip_packs_the_files_first(proj):
     z = proj / "keep" / "pilot.zip"
     out = p(proj, "purge", AID, "--by", "xóa luôn đi", "--zip", str(z)).splitlines()
     n = len(DELETED + REJECTED + SHOW + PUSH + PIDS)
-    assert out[1].startswith(f"[pilot-house] đã xóa {n} file, thu nhỏ 1 ảnh") and out[0].startswith(f"Sẽ xóa {n} file, ")
+    assert out[1].startswith(f"[pilot-house] đã xóa {n} file (") and out[0].startswith(f"Sẽ xóa {n} file, ")
     assert not any((proj / A / r).exists() for r in DELETED)
     assert sorted(zipfile.ZipFile(z).namelist()) == sorted(
         [f"{AID}/{r}" for r in DELETED + REJECTED + [HERO]] + [f"production/{r}" for r in SHOW + PUSH + PIDS])
@@ -396,7 +414,7 @@ def test_next_tells_the_producer_what_the_final_approval_deletes_before_it_runs_
     """SKILL.md has the Producer say the size and the no-redo consequence first; this is where it reads them."""
     size = total(proj, DELETED + REJECTED, SHOW + PUSH + PIDS)
     n = len(DELETED + REJECTED + SHOW + PUSH + PIDS)
-    line = f"[{AID}] DUYỆT 2: Sẽ xóa {n} file, {size / 1024:.1f} KB; sau lệnh này không `redo` được."
+    line = f"[{AID}] DUYỆT 2: Sẽ xóa {n} file, khoảng {size / 1024:.1f} KB, thu nhỏ 1 ảnh; sau lệnh này không `redo` được."
     assert line in p(proj, "next").splitlines()
     p(proj, "keep", AID)
     assert not any("DUYỆT 2: Sẽ xóa" in l for l in p(proj, "next").splitlines())
@@ -411,7 +429,7 @@ def test_the_duyet_2_card_carries_the_same_line_only_when_the_approval_will_dele
         return board.asset_view(state.load_cfg(), state.load_st(AID))["purge"]
     n = len(DELETED + REJECTED + SHOW + PUSH + PIDS)
     size = total(proj, DELETED + REJECTED, SHOW + PUSH + PIDS)
-    assert card() == f"Sẽ xóa {n} file, {size / 1024:.1f} KB; sau lệnh này không `redo` được."
+    assert card() == f"Sẽ xóa {n} file, khoảng {size / 1024:.1f} KB, thu nhỏ 1 ảnh; sau lệnh này không `redo` được."
     p(proj, "keep", AID)
     assert card() is None
     st = state.load_st(AID)
