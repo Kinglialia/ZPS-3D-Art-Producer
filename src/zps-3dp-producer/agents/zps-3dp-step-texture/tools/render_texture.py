@@ -82,7 +82,9 @@ def shading(sc, lit, sun=None):
     sh.show_shadows = bool(lit)
     if lit:
         az, el = math.radians(sun["azimuth_deg"]), math.radians(sun["elevation_deg"])
-        sc.display.light_direction = (math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el))
+        # Workbench sends the light along (-x, z, -y) of this vector (workbench_shadow.cc), so the sun sits at
+        # (sin az cos el, -cos az cos el, sin el), the camera convention of raster.camera_dir.
+        sc.display.light_direction = (math.sin(az) * math.cos(el), math.sin(el), math.cos(az) * math.cos(el))
         sh.shadow_intensity = 0.5
     sc.render.film_transparent = not lit
     sc.render.image_settings.color_mode = "RGB" if lit else "RGBA"

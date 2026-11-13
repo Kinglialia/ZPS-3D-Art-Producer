@@ -808,3 +808,16 @@ def test_a_new_concept_or_tier_on_the_same_mesh_is_measured_again(m, tmp_path):
     (tmp_path / "C/asset-card.yaml").write_text(yaml.safe_dump({"tier": "hero"}), encoding="utf-8")
     _, third = complexity_in(tmp_path, "v3", glb)
     assert (third["scores"]["tier"], third["simple"]) == ("hero", False)
+
+
+def test_the_lit_texture_renders_take_the_sun_the_way_the_clay_renders_do_p6_1():
+    """Same rule as render_review.light (tests/model/test_model_tools.py): Workbench sends the light along (-x, z, -y)
+    of light_direction, so a sun from the left at 45 degrees shines toward +X, +Y and down."""
+    from types import SimpleNamespace
+
+    import render_texture
+    sc = SimpleNamespace(display=SimpleNamespace(light_direction=None, shading=SimpleNamespace()),
+                         render=SimpleNamespace(image_settings=SimpleNamespace()))
+    render_texture.shading(sc, True, {"azimuth_deg": -45.0, "elevation_deg": 45.0})
+    x, y, z = sc.display.light_direction
+    assert (-x, z, -y) == pytest.approx((0.5, 0.5, -0.5 ** 0.5))

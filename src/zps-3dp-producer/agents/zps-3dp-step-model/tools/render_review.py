@@ -83,7 +83,9 @@ def figure(height, x, y):
 
 def light(scene, sun):
     az, el = math.radians(sun["azimuth_deg"]), math.radians(sun["elevation_deg"])
-    scene.display.light_direction = (math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el))
+    # Workbench sends the light along (-x, z, -y) of this vector (workbench_shadow.cc), so the sun sits at
+    # (sin az cos el, -cos az cos el, sin el), the camera convention of raster.camera_dir.
+    scene.display.light_direction = (math.sin(az) * math.cos(el), math.sin(el), math.cos(az) * math.cos(el))
     sh = scene.display.shading
     sh.show_shadows, sh.shadow_intensity = True, 0.6
 

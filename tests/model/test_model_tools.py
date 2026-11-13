@@ -603,3 +603,17 @@ def test_the_part_checks_before_the_join_need_no_glb_record(detail):
     spec_of(f)
     assert tool("check_mesh", "--final", f, "--before-join", fresh=False).returncode == 0
     assert tool("check_detail", "--final", f, "--blockout", b, "--pilot", "none", "--before-join", fresh=False).returncode == 0
+
+
+def test_the_sun_turns_into_the_light_workbench_sends_down_and_away_from_the_sun_p6_1():
+    """Workbench reads light_direction (x, y, z) as the world direction (-x, z, -y) the light travels (Blender
+    workbench_shadow.cc; tests/model/test_blender_light.py renders it). Pilot 6: the vector held the sun position, so
+    every clay render was lit from below. A sun from the left in the front view (az -45, el 45) shines toward +X, +Y and
+    down."""
+    from types import SimpleNamespace
+    sys.path[:0] = [str(TOOLS / "lib"), str(TOOLS / "self_build"), str(TOOLS)]
+    import render_review
+    sc = SimpleNamespace(display=SimpleNamespace(light_direction=None, shading=SimpleNamespace()))
+    render_review.light(sc, {"azimuth_deg": -45.0, "elevation_deg": 45.0})
+    x, y, z = sc.display.light_direction
+    assert (-x, z, -y) == pytest.approx((0.5, 0.5, -0.5 ** 0.5))
