@@ -252,49 +252,45 @@ def wake(w: dict) -> list[str]:
                   for s in ready(load_cfg(), all_status(), preflight.load())]
 
 
-def alive(pid: int) -> bool:
-    from .limits import alive as up
-    return up(pid)
+def owner(p: Path) -> int:
+    try:
+        return int(p.read_text(encoding="utf-8").strip() or 0)
+    except (OSError, ValueError):
+        return 0
 
 
-def take_lock():
-    """D33.13: one `P wait` at a time. The lock holds the pid; a lock whose process is gone is taken over."""
-    p = ROOT / LOCK
-    for _ in range(2):
-        try:
-            fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                pid = int(p.read_text(encoding="utf-8").strip() or 0)
-            except (OSError, ValueError):
-                pid = 0
-            if pid and alive(pid):
-                die(f"đã có một `P wait` đang chạy (pid {pid}): không tạo thêm, chờ nó thức dậy")
-            p.unlink(missing_ok=True)
-            continue
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
-        return p
-    die(f"không lấy được {rel(p)}")
+def key(st: dict, rec: dict) -> tuple:
+    return st["id"], rec["step"], rec["v"], rec["role"], rec["at"]
 
 
 def wait(a):
     """D33.13 `P wait`: run in the background by the Producer in `dispatch: background`. Holds no state lock while it
-    sleeps; prints what woke it and exits."""
-    p = take_lock()
+    sleeps; prints what woke it and exits. One wait at a time (P6-1): the lock holds the pid of the newest wait, and an
+    older wait that finds another pid there ends. A wait also ends once the dispatches open at its start are all
+    ingested or ended, so a report the Producer took from the hand-back never wakes it later."""
+    p, me = ROOT / LOCK, os.getpid()
+    p.write_text(str(me), encoding="utf-8")
+    mine = {key(st, rec) for st, rec in running()}
     try:
         end = time.monotonic() + a.max_min * 60
         while True:
+            if (o := owner(p)) not in (me, 0):
+                print(f"`P wait` mới (pid {o}) thay lần chờ này → không cần làm gì")
+                return
             w = policy.watch(policy.load())
             if hits := wake(w):
                 print("\n".join(hits))
+                return
+            if mine and not mine & {key(st, rec) for st, rec in running()}:
+                print("các lần giao `P wait` chờ đã đóng (đã ingest hoặc giao lại) → `next`")
                 return
             if time.monotonic() >= end:
                 print(f"chưa có gì sau {a.max_min} phút → chạy lại `wait`")
                 return
             time.sleep(a.every)
     finally:
-        p.unlink(missing_ok=True)
+        if owner(p) == me:
+            p.unlink(missing_ok=True)
 
 
 def match(hook: dict) -> tuple[dict, dict] | None:

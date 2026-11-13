@@ -482,26 +482,51 @@ def test_the_board_labels_a_stalled_asset_kẹt_d33_17(tmp_path):
         os.chdir(cwd)
 
 
-def test_a_second_p_wait_is_refused_while_one_runs_and_the_first_wakes_on_the_report_d33_13(tmp_path):
-    """Waiting loops must not pile up (D33.13): the lock holds the pid of the one `P wait`."""
+def start_wait(root):
     import subprocess
     import time
     from shared import P
-    f, out, _ = project(tmp_path)
-    first = subprocess.Popen([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=tmp_path,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    lock = tmp_path / "production/wait.lock"
+    w = subprocess.Popen([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=root,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    lock = root / "production/wait.lock"
     end = time.monotonic() + 60
-    while not lock.exists():
-        assert time.monotonic() < end and first.poll() is None, "the first `P wait` never took its lock"
+    while not (lock.exists() and lock.read_text(encoding="utf-8").strip() == str(w.pid)):
+        assert time.monotonic() < end and w.poll() is None, "`P wait` never took its lock"
         time.sleep(0.05)
-    second = subprocess.run([sys.executable, str(P), "wait", "--every", "0.2", "--max-min", "1"], cwd=tmp_path,
-                            capture_output=True, text=True)
-    assert second.returncode == 1 and "đã có một `P wait` đang chạy" in second.stderr
-    (tmp_path / out["report"]).write_text("STATUS: DONE\n", encoding="utf-8")
+    return w
+
+
+def test_a_second_p_wait_takes_over_and_the_first_ends_with_a_line_that_asks_nothing_d33_13_p6_1(tmp_path):
+    """Waiting loops must not pile up (D33.13): the lock holds the pid of the one `P wait`. Pilot 6: the Producer ran
+    `P wait` again after it ingested from the hand-back, and the refusal read like a fault. The new wait owns the lock;
+    the old one sees that at its next look and ends."""
+    f, out, _ = project(tmp_path)
+    first = start_wait(tmp_path)
+    second = start_wait(tmp_path)
     so, _ = first.communicate(timeout=30)
-    assert first.returncode == 0 and "có báo cáo" in so and "→ `ingest pilot-house`" in so
-    assert not lock.exists()
+    assert (first.returncode, so) == (0, f"`P wait` mới (pid {second.pid}) thay lần chờ này → không cần làm gì\n")
+    (tmp_path / out["report"]).write_text("STATUS: DONE\n", encoding="utf-8")
+    so, _ = second.communicate(timeout=30)
+    assert second.returncode == 0 and "có báo cáo" in so and "→ `ingest pilot-house`" in so
+    assert not (tmp_path / "production/wait.lock").exists()
+
+
+def test_a_wait_ends_once_the_dispatches_it_started_on_are_closed_though_a_new_one_runs_p6_1(tmp_path):
+    """Pilot 6: the Producer ingested from the hand-back and dispatched the next agent within one 30 s look, so the
+    wait never saw the report or an empty job list. It ran on for 18 minutes and then woke the Producer for a later
+    report. Ingested or ended, the dispatches it started on are done, and so is the wait."""
+    import json as _j
+    from flowkit import A
+    f, out, _ = project(tmp_path)
+    w = start_wait(tmp_path)
+    p = f.root / A / "status.json"
+    st = _j.loads(p.read_text(encoding="utf-8"))
+    st["dispatches"][-1]["ingested"] = ago(0)
+    st["dispatches"].append(st["dispatches"][-1] | {"at": ago(-1)})
+    st["dispatches"][-1].pop("ingested")
+    p.write_text(_j.dumps(st), encoding="utf-8")
+    so, _ = w.communicate(timeout=30)
+    assert (w.returncode, so) == (0, "các lần giao `P wait` chờ đã đóng (đã ingest hoặc giao lại) → `next`\n")
 
 
 def test_policy_takes_only_known_dispatch_modes_and_watch_numbers_and_falls_back_to_the_template_d33_14_18():
