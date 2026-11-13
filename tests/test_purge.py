@@ -352,7 +352,7 @@ def test_the_heartbeat_log_stays_so_a_report_after_the_purge_still_counts_the_co
     log.write_text("2026-11-10 10:00:00 · codex exec · start\n2026-11-10 10:05:00 · codex exec · start\n", encoding="utf-8")
     approve(proj)
     row = next(l for l in p(proj, "report", AID).splitlines() if l.startswith("| texture |"))
-    assert (log.is_file(), row.split(" | ")[12]) == (True, "2")
+    assert (log.is_file(), row.split(" | ")[15]) == (True, "2")
 
 
 def test_board_links_and_feedback_marks_still_resolve_after_a_purge(proj, monkeypatch):

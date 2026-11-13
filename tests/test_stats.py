@@ -45,8 +45,8 @@ ST = {
         d("model", "reviewer", "2026-11-10 12:20:00", "2026-11-10 12:21:00", "waiting_human", tokens=200),
         d("views", "worker", "2026-11-10 13:00:00"),
     ]}
-USAGE = [(t("2026-11-10 09:05:00"), 1000), (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:50:00"), 7),
-         (t("2026-11-10 12:05:00"), 300), (t("2026-11-10 13:30:00"), 40)]
+USAGE = [(t("2026-11-10 09:05:00"), 100, 900), (t("2026-11-10 09:40:00"), 50, 450), (t("2026-11-10 09:50:00"), 7, 0),
+         (t("2026-11-10 12:05:00"), 30, 270), (t("2026-11-10 13:30:00"), 40, 0)]
 
 
 def test_stats_splits_reviewer_rounds_by_scope_and_times_each_step_from_first_worker_to_approval_d31_4():
@@ -83,8 +83,8 @@ def test_producer_tokens_count_each_main_session_message_once_and_skip_subagent_
         line("s1", side, isSidechain=True), "{not json", json.dumps({"type": "user", "message": {"content": "hi"}}),
         json.dumps({"type": "assistant", "timestamp": side, "message": {"id": "m9"}}),
         line("m2", "2026-11-10T02:07:00.000Z")]) + "\n", encoding="utf-8")
-    assert session.main_usage([str(ok)]) == [(session.local("2026-11-10T02:05:00.000Z"), 79830),
-                                             (session.local("2026-11-10T02:07:00.000Z"), 79830)]
+    assert session.main_usage([str(ok)]) == [(session.local("2026-11-10T02:05:00.000Z"), 24877, 54953),
+                                             (session.local("2026-11-10T02:07:00.000Z"), 24877, 54953)]
     assert session.main_usage([str(ok), str(tmp_path / "gone.jsonl")]) is None
 
 
@@ -95,7 +95,7 @@ def test_a_transcript_without_any_usage_line_or_a_step_without_messages_shows_no
     monkeypatch.setattr(session, "OUT", tmp_path / "session.json")
     (tmp_path / "session.json").write_text(json.dumps({"transcripts": [str(junk)]}), encoding="utf-8")
     assert stats.producer_usage() == "không có số"
-    rows = stats.table(CFG, ST, [(t("2026-11-10 13:30:00"), 40)])
+    rows = stats.table(CFG, ST, [(t("2026-11-10 13:30:00"), 40, 0)])
     assert [r.split(" | ")[-2] for r in rows[2:]] == ["không có số", "40", "40"]
 
 
@@ -113,7 +113,7 @@ def test_an_unreadable_transcript_shows_no_number_in_either_edition(tmp_path, mo
                            "type": "token_count", "info": {"total_token_usage": last, "last_token_usage": last}}}) + "\n",
                        encoding="utf-8")
     (tmp_path / "session.json").write_text(json.dumps({"transcripts": [str(rollout)]}), encoding="utf-8")
-    assert stats.producer_usage() == [(session.local("2026-11-10T02:05:00.000Z"), 1000)], (
+    assert stats.producer_usage() == [(session.local("2026-11-10T02:05:00.000Z"), 300, 700)], (
         "D46: the Codex edition reads its rollout; 'chưa hỗ trợ' is gone")
 
 

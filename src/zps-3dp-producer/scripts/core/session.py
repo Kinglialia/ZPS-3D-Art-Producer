@@ -162,8 +162,14 @@ def sub_thread(path) -> bool:
     return sub_rollout(head(path))
 
 
-def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int]] | None:
-    """Tokens of each main-session API response, the four columns added up. Lines of subagents (`isSidechain`, a
+def new_and_cached(part: dict) -> tuple[int, int]:
+    """P6-2: (new, cache read) of a usage split. New tokens are input, output and cache creation; cache read is the
+    context read back from the prompt cache, most of a long session and much cheaper."""
+    return part["input"] + part["output"] + part["cache_creation"], part["cache_read"]
+
+
+def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int, int]] | None:
+    """(time, new, cache read) of each main-session API response (new_and_cached). Lines of subagents (`isSidechain`, a
     sub-agent rollout), transcripts of the other edition and lines that do not parse are skipped; a transcript that cannot be read gives None."""
     out, seen = [], set()
     for p in paths:
@@ -182,7 +188,7 @@ def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int]] | None:
                 continue
             if key is not None:
                 seen.add(key)
-            out.append((at, sum(part.values())))
+            out.append((at, *new_and_cached(part)))
     return out
 
 

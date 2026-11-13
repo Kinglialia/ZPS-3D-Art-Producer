@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 import heartbeat
 
-from . import stats
+from . import session, stats
 from .loop import NO_NUMBER
 from .state import ASSETS, DELIVER, all_status, load_cfg, load_st, now, rel, write_atomic
 
@@ -17,8 +17,14 @@ NAME = "RUN-REPORT.md"
 DASH = "—"
 SHARED = "*"
 SESSION = "model của phiên"
-HEAD = ("Bước", "Thời gian bước", "Worker", "Reviewer", "Chờ Producer", "Chờ anh", "Token worker", "Token reviewer",
-        "Token Producer", "Version", "Vòng sửa", "Lần giao", "Gọi Codex", "Credit Meshy", "Kẹt", "Model")
+ROLES = ("worker", "reviewer", "Producer")
+HEAD = ("Bước", "Thời gian bước", "Worker", "Reviewer", "Chờ Producer", "Chờ anh",
+        *(f"Token {k} {r}" for r in ROLES for k in ("mới", "cache")), "Version", "Vòng sửa", "Lần giao", "Gọi Codex",
+        "Credit Meshy", "Kẹt", "Model")
+TOKEN_NOTE = ("Token mới = input + output + cache creation: phần runtime tính đủ giá. Token cache = cache read: context đọc "
+              "lại từ cache, giá thấp hơn nhiều. Tổng token của transcript là hai cột cộng lại.")
+OLD_SPLIT = "lần giao từ bản cũ chỉ lưu tổng token, không tách mới và cache"
+OLD_PRODUCER = "bản cũ chỉ lưu tổng token Producer, không tách mới và cache"
 PRODUCER_WHY = {NO_NUMBER: "không thấy transcript của phiên Producer"}
 NO_MESSAGE = "transcript của Producer không có message trong khoảng của bước"
 NO_CODEX_COUNT = "version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec hay tool ảnh"
@@ -66,9 +72,9 @@ class Row:
     reviewer: Metric = field(default_factory=Metric)
     wait_p: Metric = field(default_factory=Metric)
     wait_u: Metric = field(default_factory=Metric)
-    tw: Metric = field(default_factory=Metric)
-    tr: Metric = field(default_factory=Metric)
-    tp: Metric = field(default_factory=Metric)
+    tw: tuple = (Metric(), Metric())
+    tr: tuple = (Metric(), Metric())
+    tp: tuple = (Metric(), Metric())
     codex: Metric = field(default_factory=Metric)
     credit: Metric = field(default_factory=Metric)
     versions: int = 0
@@ -85,7 +91,8 @@ class Row:
             why[k] = list(dict.fromkeys([*why.get(k, []), *cols]))
         return Row(
             self.label, self.span + o.span, self.opened + o.opened, self.worker + o.worker, self.reviewer + o.reviewer,
-            self.wait_p + o.wait_p, self.wait_u + o.wait_u, self.tw + o.tw, self.tr + o.tr, self.tp + o.tp,
+            self.wait_p + o.wait_p, self.wait_u + o.wait_u, *(tuple(a + b for a, b in zip(getattr(self, k), getattr(o, k)))
+                                                             for k in ("tw", "tr", "tp")),
             self.codex + o.codex, self.credit + o.credit, self.versions + o.versions, self.rounds + o.rounds,
             self.calls + o.calls, self.stalls + o.stalls,
             tuple(tuple(dict.fromkeys([*a, *b])) for a, b in zip(self.models, o.models)),
@@ -109,7 +116,8 @@ def model_cell(r: Row) -> str:
 
 def cells(r: Row) -> list[str]:
     return [r.label, span_cell(r), r.worker.cell(stats.clock), r.reviewer.cell(stats.clock), r.wait_p.cell(stats.clock),
-            r.wait_u.cell(stats.clock), r.tw.cell(), r.tr.cell(), r.tp.cell() + (SHARED if r.shared else ""),
+            r.wait_u.cell(stats.clock), *(m.cell() for m in (*r.tw, *r.tr)),
+            *(m.cell() + (SHARED if r.shared else "") for m in r.tp),
             str(r.versions), str(r.rounds), str(r.calls), r.codex.cell(), r.credit.cell(credits), str(r.stalls),
             model_cell(r)]
 
@@ -140,19 +148,37 @@ def seconds_of(xs: list[dict], row: Row, col: str) -> Metric:
     return metric(vals)
 
 
-def tokens_of(xs: list[dict], row: Row, col: str) -> Metric:
+def cols(role: str) -> tuple[str, str]:
+    return f"Token mới {role}", f"Token cache {role}"
+
+
+def note_both(row: Row, reason: str, role: str):
+    for c in cols(role):
+        note(row, reason, c)
+
+
+def tokens_of(xs: list[dict], row: Row, role: str) -> tuple[Metric, Metric]:
+    """P6-2: (new, cache read) of the dispatches from their stored usage split. A record that kept only the total
+    renders with a reason, not a guess."""
+    new, cached = [], []
     for x in xs:
-        if x.get("tokens") is None:
-            note(row, worker_reason(x), col)
-    return metric([x.get("tokens") for x in xs])
+        u = x.get("usage")
+        if isinstance(u, dict):
+            n, c = session.new_and_cached(u)
+        else:
+            n = c = None
+            note_both(row, OLD_SPLIT if x.get("tokens") is not None else worker_reason(x), role)
+        new.append(n)
+        cached.append(c)
+    return metric(new), metric(cached)
 
 
-def window_tokens(usage, start: dt.datetime, end: dt.datetime | None) -> int | str:
-    """Producer tokens in a step window, or the reason there is no number."""
+def window_tokens(usage, start: dt.datetime, end: dt.datetime | None) -> tuple[int, int] | str:
+    """Producer (new, cache read) tokens in a step window, or the reason there is no number."""
     if isinstance(usage, str):
         return PRODUCER_WHY[usage]
-    ns = [n for t, n in usage if t >= start and (end is None or t <= end)]
-    return sum(ns) if ns else NO_MESSAGE
+    ns = [(n, c) for t, n, c in usage if t >= start and (end is None or t <= end)]
+    return (sum(n for n, _ in ns), sum(c for _, c in ns)) if ns else NO_MESSAGE
 
 
 def at(s: str) -> dt.datetime:
@@ -190,7 +216,7 @@ def record_producer(st: dict, sid: str, steps: list[dict]):
         return
     got = window_tokens(stats.producer_usage(), start, end)
     st.setdefault("producer_usage", {})[sid] = got if isinstance(got, str) else {
-        "tokens": got, "from": stamp_of(start), "to": stamp_of(end)}
+        "tokens": sum(got), "new": got[0], "cache_read": got[1], "from": stamp_of(start), "to": stamp_of(end)}
 
 
 def windows(st: dict, steps: list[dict]) -> list[tuple[dt.datetime, dt.datetime]]:
@@ -245,15 +271,15 @@ def step_row(step: dict, st: dict, disp: list[dict], waits: dict, usage, others:
     r.wait_p = Metric(waits[sid], 1) if sid in waits else Metric()
     wu = stats.user_wait(st, sid)
     r.wait_u = Metric(wu, 1) if wu is not None else Metric()
-    r.tw, r.tr = tokens_of(worker, r, "Token worker"), tokens_of(rev, r, "Token reviewer")
+    r.tw, r.tr = tokens_of(worker, r, "worker"), tokens_of(rev, r, "reviewer")
     stored = (st.get("producer_usage") or {}).get(sid) if end else None
-    if isinstance(stored, dict):
-        r.tp = Metric(stored["tokens"], 1)
+    got = (stored["new"], stored["cache_read"]) if isinstance(stored, dict) and "new" in stored else (
+        OLD_PRODUCER if isinstance(stored, dict) else stored if isinstance(stored, str) else window_tokens(usage(), start, end))
+    if isinstance(got, str):
+        r.tp = (Metric(miss=1), Metric(miss=1))
+        note_both(r, got, "Producer")
     else:
-        got = stored if isinstance(stored, str) else window_tokens(usage(), start, end)
-        r.tp = Metric(got, 1) if isinstance(got, int) else Metric(miss=1)
-        if isinstance(got, str):
-            note(r, got, "Token Producer")
+        r.tp = (Metric(got[0], 1), Metric(got[1], 1))
     r.shared = overlapping(start, end or dt.datetime.now(), others, steps)
     r.versions = (st.get("versions") or {}).get(sid, 0)
     r.rounds = max(r.versions - 1, 0)
@@ -302,7 +328,7 @@ def table(st: dict, cfg: dict | None = None, others: list[dict] | None = None, u
         return [f"{st['id']}: chưa giao lần nào"]
     total = total_of("Tổng", rows)
     who = ", ".join(dict.fromkeys(i for r in rows for i in r.shared))
-    return render(HEAD[0], rows, total, ([f"{SHARED} Token Producer tính chung với {who}."] if who else [])
+    return render(HEAD[0], rows, total, [TOKEN_NOTE] + ([f"{SHARED} Token Producer tính chung với {who}."] if who else [])
                   + codex_note([st]))
 
 
@@ -320,25 +346,26 @@ def batch(sts: list[dict], cfg: dict | None = None, usage=None) -> list[str]:
     total.shared = ()
     total.tp, why = batch_producer(sts, cfg["steps"], get, any(r.shared for r in per))
     if why:
-        note(total, why, "Token Producer")
+        note_both(total, why, "Producer")
     shared = [f"{r.label}: {', '.join(r.shared)}" for r in per if r.shared]
-    return render("Asset", per, total, ([f"{SHARED} Token Producer tính chung: " + "; ".join(shared)
+    return render("Asset", per, total, [TOKEN_NOTE] + ([f"{SHARED} Token Producer tính chung: " + "; ".join(shared)
                                          + ". Tổng lô tính mỗi message một lần."] if shared else []) + codex_note(sts))
 
 
-def batch_producer(sts: list[dict], steps: list[dict], usage, overlap: bool) -> tuple[Metric, str | None]:
-    """Each Producer message once. Stored numbers add up exactly only when no two assets overlap; otherwise the
-    transcript says which messages fall in any window, and without it the total has no number."""
+def batch_producer(sts: list[dict], steps: list[dict], usage, overlap: bool) -> tuple[tuple, str | None]:
+    """Each Producer message once, as (new, cache read). Stored numbers add up exactly only when no two assets overlap;
+    otherwise the transcript says which messages fall in any window, and without it the total has no number."""
+    none = (Metric(miss=1), Metric(miss=1))
     stored = [(s.get("producer_usage") or {}).get(sid) if sid in (s.get("approved") or {}) else None
               for s in sts for sid in (x["id"] for x in steps if window_of(s, steps, x["id"]))]
-    if not overlap and stored and all(isinstance(p, dict) for p in stored):
-        return Metric(sum(p["tokens"] for p in stored), 1), None
+    if not overlap and stored and all(isinstance(p, dict) and "new" in p for p in stored):
+        return (Metric(sum(p["new"] for p in stored), 1), Metric(sum(p["cache_read"] for p in stored), 1)), None
     u = usage()
     if isinstance(u, str):
-        return Metric(miss=1), OVERLAP_NO_TRANSCRIPT if overlap else PRODUCER_WHY[u]
+        return none, OVERLAP_NO_TRANSCRIPT if overlap else PRODUCER_WHY[u]
     ws = [w for s in sts for w in windows(s, steps)]
-    ns = [n for t, n in u if any(a <= t <= b for a, b in ws)]
-    return (Metric(sum(ns), 1), None) if ns else (Metric(miss=1), NO_MESSAGE)
+    ns = [(n, c) for t, n, c in u if any(a <= t <= b for a, b in ws)]
+    return ((Metric(sum(n for n, _ in ns), 1), Metric(sum(c for _, c in ns), 1)), None) if ns else (none, NO_MESSAGE)
 
 
 def write(st: dict, lines: list[str] | None = None):

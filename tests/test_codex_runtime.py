@@ -88,8 +88,8 @@ def test_producer_tokens_come_from_the_main_rollout_and_never_from_a_sub_agent_r
         tok("2026-11-13T03:01:01.000Z", u(1000, 800, 500), u(1000, 800, 500)),
         tok("2026-11-13T03:02:00.000Z", u(600, 500, 100), u(1600, 1300, 600))])
     sub = sub_rollout(tmp_path / "rollout-sub.jsonl", "2026-11-13 10:00:00", "b.md")
-    assert session.main_usage([str(main), str(sub)]) == [(session.local("2026-11-13T03:01:00.000Z"), 1500),
-                                                         (session.local("2026-11-13T03:02:00.000Z"), 700)]
+    assert session.main_usage([str(main), str(sub)]) == [(session.local("2026-11-13T03:01:00.000Z"), 700, 800),
+                                                         (session.local("2026-11-13T03:02:00.000Z"), 200, 500)]
 
 
 def flow(tmp_path):
@@ -244,8 +244,8 @@ def test_each_edition_counts_producer_tokens_only_from_its_own_transcript_format
     codex = write(tmp_path / "rollout-main.jsonl", [meta("2026-11-13T03:00:00.000Z"), tok(
         "2026-11-13T03:01:00.000Z", u(1000, 800, 500), u(1000, 800, 500))])
     claude = write(tmp_path / "claude.jsonl", [claude_line("2026-11-13T04:00:00.000Z")])
-    rows = {"codex": (session.local("2026-11-13T03:01:00.000Z"), 1500),
-            "claude": (session.local("2026-11-13T04:00:00.000Z"), 15)}
+    rows = {"codex": (session.local("2026-11-13T03:01:00.000Z"), 700, 800),
+            "claude": (session.local("2026-11-13T04:00:00.000Z"), 15, 0)}
     assert session.main_usage([str(claude), str(codex)]) == [rows[k] for k in want]
 
 

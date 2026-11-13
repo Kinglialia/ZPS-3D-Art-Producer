@@ -25,13 +25,17 @@ def seconds(a: str, b: str) -> float:
 
 
 def reread(disp: list[dict]) -> list[dict]:
-    """D33.22: a dispatch ingested without a number gets it from the subagent transcript now; nothing is saved."""
+    """D33.22: a dispatch ingested without a number, or without the usage split (P6-2), gets it from the subagent
+    transcript now; nothing is saved."""
     out = []
     for x in disp:
-        if x.get("ingested") and x.get("role") != "script" and (x.get("tokens") is None or x.get("duration_ms") is None):
-            t, ms = session.dispatch_numbers(x, x["ingested"])
+        if x.get("ingested") and x.get("role") != "script" and (
+                x.get("tokens") is None or x.get("duration_ms") is None or not isinstance(x.get("usage"), dict)):
+            u = session.dispatch_usage(x, x["ingested"])
+            t, ms = (sum(u[k] for k in session.SPLIT.values()), u["duration_ms"]) if u else (None, None)
             x = x | {"tokens": x["tokens"] if x.get("tokens") is not None else t,
-                     "duration_ms": x["duration_ms"] if x.get("duration_ms") is not None else ms}
+                     "duration_ms": x["duration_ms"] if x.get("duration_ms") is not None else ms} | (
+                {"usage": u} if u and not isinstance(x.get("usage"), dict) else {})
         out.append(x)
     return out
 
@@ -102,11 +106,11 @@ def producer_tokens(usage, start: dt.datetime, end: dt.datetime | None) -> str:
     """A step with dispatches had Producer turns: no message in its window means the transcripts miss them."""
     if isinstance(usage, str):
         return usage
-    ns = [n for t, n in usage if t >= start and (end is None or t <= end)]
+    ns = [n + c for t, n, c in usage if t >= start and (end is None or t <= end)]
     return str(sum(ns)) if ns else NO_NUMBER
 
 
-def producer_usage() -> list[tuple[dt.datetime, int]] | str:
+def producer_usage() -> list[tuple[dt.datetime, int, int]] | str:
     """D30.10, D46: the main-session transcripts or rollouts the SessionStart hook recorded."""
     paths = (session.load() or {}).get("transcripts") or []
     usage = session.main_usage(paths) if paths else None

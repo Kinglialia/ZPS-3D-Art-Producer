@@ -10,9 +10,11 @@ from core import report, stats
 from flowkit import AID, Flow, counts, to_texture
 from shared import pilot_project
 
-HEAD = ("| Bước | Thời gian bước | Worker | Reviewer | Chờ Producer | Chờ anh | Token worker | Token reviewer "
-        "| Token Producer | Version | Vòng sửa | Lần giao | Gọi Codex | Credit Meshy | Kẹt | Model |")
-SEP = "|" + "---|" * 16
+HEAD = ("| Bước | Thời gian bước | Worker | Reviewer | Chờ Producer | Chờ anh | Token mới worker | Token cache worker "
+        "| Token mới reviewer | Token cache reviewer | Token mới Producer | Token cache Producer | Version | Vòng sửa "
+        "| Lần giao | Gọi Codex | Credit Meshy | Kẹt | Model |")
+SEP = "|" + "---|" * 19
+CODEX_COL, NEW_P = 15, 10
 CFG = {"steps": [{"id": "blockout", "uses": ["blender"]}, {"id": "texture", "uses": ["blender", "codex_image", "meshy"]},
                  {"id": "assemble", "uses": ["blender"]}]}
 
@@ -26,6 +28,16 @@ def t(s):
     return dt.datetime.fromisoformat(s)
 
 
+def u(new, cache):
+    """A stored usage split: `new` tokens (input + output + cache creation) and `cache` read tokens."""
+    return {"input": new // 10, "output": new - new // 10 - new // 5, "cache_read": cache, "cache_creation": new // 5,
+            "duration_ms": 0}
+
+
+def msg(at, new, cache):
+    return t(at), new, cache
+
+
 def asset(aid, dispatches, **kw):
     return {"id": aid, "approved": {}, "approved_at": {}, "versions": {}, "dispatches": dispatches} | kw
 
@@ -33,24 +45,25 @@ def asset(aid, dispatches, **kw):
 A1 = asset(
     "a1",
     [d("blockout", "worker", "2026-11-10 09:00:00", "2026-11-10 09:10:00", "review", tokens=50000, duration_ms=590000,
-       usage={}, model="opus"),
-     d("blockout", "reviewer", "2026-11-10 09:10:30", "2026-11-10 09:13:30", "fix", tokens=20000, usage={},
+       usage=u(5000, 45000), model="opus"),
+     d("blockout", "reviewer", "2026-11-10 09:10:30", "2026-11-10 09:13:30", "fix", tokens=20000, usage=u(2000, 18000),
        model="sonnet", scope="full"),
      d("blockout", "worker", "2026-11-10 09:15:30", "2026-11-10 09:25:00", "review", v=2, tokens=30000,
-       duration_ms=540000, usage={}, model="opus"),
+       duration_ms=540000, usage=u(3000, 27000), model="opus"),
      d("blockout", "reviewer", "2026-11-10 09:25:00", "2026-11-10 09:28:00", "waiting_human", v=2, tokens=15000,
-       usage={}, model="sonnet", scope="full"),
+       usage=u(1500, 13500), model="sonnet", scope="full"),
      d("texture", "worker", "2026-11-10 10:00:00", "2026-11-10 10:30:00", "review", tokens=None, usage=None,
        model="opus"),
-     d("texture", "reviewer", "2026-11-10 10:30:00", "2026-11-10 10:35:00", "waiting_human", tokens=5000, usage={},
-       model="sonnet", scope="full")],
+     d("texture", "reviewer", "2026-11-10 10:30:00", "2026-11-10 10:35:00", "waiting_human", tokens=5000,
+       usage=u(500, 4500), model="sonnet", scope="full")],
     approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"}, versions={"blockout": 2, "texture": 1},
     offer_log=[{"key": "k", "step": "blockout", "v": 2, "why": "duyệt", "at": "2026-11-10 09:31",
                 "decision": "approve", "decided": "2026-11-10 09:45"}],
     stalls=[{"step": "blockout", "v": 1, "role": "worker", "at": "2026-11-10 09:05:00", "why": "x", "rung": "nudge"}],
-    producer_usage={"blockout": {"tokens": 1500, "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00"}})
+    producer_usage={"blockout": {"tokens": 1500, "new": 300, "cache_read": 1200, "from": "2026-11-10 09:00:00",
+                                 "to": "2026-11-10 09:45:00"}})
 A2 = asset("a2", [d("texture", "worker", "2026-11-10 10:10:00")])
-LIVE = [(t("2026-11-10 09:30:00"), 99999), (t("2026-11-10 10:05:00"), 700), (t("2026-11-10 10:31:00"), 300)]
+LIVE = [msg("2026-11-10 09:30:00", 9999, 90000), msg("2026-11-10 10:05:00", 100, 600), msg("2026-11-10 10:31:00", 50, 250)]
 
 
 @pytest.fixture
@@ -66,16 +79,45 @@ def test_one_row_per_step_with_real_numbers_a_total_and_the_overlap_mark_x4_x6_a
     window, so the Producer cell carries the mark."""
     assert report.table(A1, CFG, [A2], LIVE) == [
         HEAD, SEP,
-        "| blockout | 45m00s | 18m50s | 6m00s | 2m30s | 14m00s | 80000 | 35000 | 1500 | 2 | 1 | 4 | — | — | 1 "
-        "| opus / sonnet |",
-        "| texture | chưa duyệt | 30m00s | 5m00s | 0m00s | — | không có số | 5000 | 1000* | 1 | 0 | 2 | không có số | 20 "
-        "| 0 | opus / sonnet |",
-        "| Tổng | 45m00s (+1 chưa duyệt) | 48m50s | 11m00s | 2m30s | 14m00s | 80000 (+1 không có số) | 40000 | 2500* "
-        "| 3 | 1 | 6 | không có số | 20 | 1 | opus / sonnet |",
+        "| blockout | 45m00s | 18m50s | 6m00s | 2m30s | 14m00s | 8000 | 72000 | 3500 | 31500 | 300 | 1200 | 2 | 1 | 4 "
+        "| — | — | 1 | opus / sonnet |",
+        "| texture | chưa duyệt | 30m00s | 5m00s | 0m00s | — | không có số | không có số | 500 | 4500 | 150* | 850* | 1 | 0 "
+        "| 2 | không có số | 20 | 0 | opus / sonnet |",
+        "| Tổng | 45m00s (+1 chưa duyệt) | 48m50s | 11m00s | 2m30s | 14m00s | 8000 (+1 không có số) "
+        "| 72000 (+1 không có số) | 4000 | 36000 | 450* | 2050* | 3 | 1 | 6 | không có số | 20 | 1 | opus / sonnet |",
         "",
-        "không có số (Token worker): không thấy transcript của subagent.",
+        "không có số (Token mới worker, Token cache worker): không thấy transcript của subagent.",
         "không có số (Gọi Codex): version không có heartbeat.log, nơi ghi mỗi lần gọi codex exec hay tool ảnh.",
+        report.TOKEN_NOTE,
         "* Token Producer tính chung với a2."]
+
+
+def test_the_token_columns_split_new_tokens_from_cache_reads_and_say_what_each_sums_p6_2(meshy20):
+    """Pilot 6: the report gave the blockout worker 3 771 150 tokens, about 96 % cache reads, under a heading that did
+    not say so; its new tokens were about 189 000. The owner reads cost: new and cache read apart, and one line that
+    names the fields of each."""
+    rows = report.table(A1, CFG, [], LIVE)
+    assert [c.strip() for c in rows[0].split("|")[7:13]] == [
+        "Token mới worker", "Token cache worker", "Token mới reviewer", "Token cache reviewer", "Token mới Producer",
+        "Token cache Producer"]
+    assert rows[2].split(" | ")[6:12] == ["8000", "72000", "3500", "31500", "300", "1200"]
+    assert report.TOKEN_NOTE in rows and "input + output + cache creation" in report.TOKEN_NOTE
+    assert "cache read" in report.TOKEN_NOTE
+
+
+def test_records_that_kept_only_a_total_still_render_and_say_why_they_have_no_split_p6_2(meshy20):
+    """status.json of v0.8.0 and older: a dispatch with `tokens` but no usage split, a Producer step with `tokens` only."""
+    old = asset("a1", [d("blockout", "worker", "2026-11-10 09:00:00", "2026-11-10 09:10:00", "review", tokens=50000)],
+                approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 09:45"}, versions={"blockout": 1},
+                producer_usage={"blockout": {"tokens": 1500, "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00"}})
+    rows = report.table(old, CFG, [], "không có số")
+    assert rows[2].split(" | ")[6:12] == ["không có số", "không có số", "—", "—", "không có số", "không có số"]
+    assert rows[5:7] == [
+        "không có số (Token mới worker, Token cache worker): lần giao từ bản cũ chỉ lưu tổng token, không tách mới và "
+        "cache.",
+        "không có số (Token mới Producer, Token cache Producer): bản cũ chỉ lưu tổng token Producer, không tách mới và "
+        "cache."]
+    assert report.used(old) == ("10m00s", "51500")
 
 
 def beats(root, aid, step, n, *tools):
@@ -89,17 +131,17 @@ def test_the_codex_column_counts_the_codex_exec_starts_of_every_version_of_the_s
     """One line per real `codex exec` start: a batch of four images is one call, a try the wall-time cap stopped is
     none. A version without the log is no number, never zero."""
     beats(tmp_path, "a1", "texture", 1, "codex exec", "blender render", "codex exec", "codex exec")
-    assert report.table(A1, CFG, [], LIVE)[3].split(" | ")[12] == "3"
+    assert report.table(A1, CFG, [], LIVE)[3].split(" | ")[CODEX_COL] == "3"
     beats(tmp_path, "a1", "texture", 2, "blender render", "image tool", "image tool")
-    assert report.table(A1 | {"versions": {"blockout": 2, "texture": 2}}, CFG, [], LIVE)[3].split(" | ")[12] == "5", (
+    assert report.table(A1 | {"versions": {"blockout": 2, "texture": 2}}, CFG, [], LIVE)[3].split(" | ")[CODEX_COL] == "5", (
         "D46: a checked image tool try of the Codex edition is an image call too")
     st = A1 | {"versions": {"blockout": 2, "texture": 3}}
-    assert report.table(st, CFG, [], LIVE)[3].split(" | ")[12] == "5 (+1 không có số)"
+    assert report.table(st, CFG, [], LIVE)[3].split(" | ")[CODEX_COL] == "5 (+1 không có số)"
 
 
 def test_a_step_that_never_used_codex_or_meshy_shows_a_dash_not_a_zero(meshy20):
     rows = report.table(A1, CFG, [], LIVE)
-    assert rows[2].split(" | ")[12:14] == ["—", "—"]
+    assert rows[2].split(" | ")[CODEX_COL:CODEX_COL + 2] == ["—", "—"]
     assert "*" not in "".join(rows)
 
 
@@ -110,10 +152,12 @@ def test_a_codex_dispatch_without_a_rollout_has_no_number_and_one_with_a_rollout
                       d("blockout", "reviewer", "2026-11-10 09:10:30", "2026-11-10 09:12:30", "waiting_human",
                         tokens=None, usage=None, scope="full")])
     rows = report.table(st, CFG, [], "không có số")
-    assert rows[2] == ("| blockout | chưa duyệt | 10m00s | 2m00s | 0m30s | — | không có số | không có số | không có số "
-                       "| 0 | 0 | 2 | — | — | 0 | model của phiên / model của phiên |")
-    assert rows[5:] == ["không có số (Token worker, Token reviewer): không thấy transcript của subagent.",
-                        "không có số (Token Producer): không thấy transcript của phiên Producer."]
+    assert rows[2] == ("| blockout | chưa duyệt | 10m00s | 2m00s | 0m30s | — | " + " | ".join(["không có số"] * 6)
+                       + " | 0 | 0 | 2 | — | — | 0 | model của phiên / model của phiên |")
+    assert rows[5:] == ["không có số (Token mới worker, Token cache worker, Token mới reviewer, Token cache reviewer): "
+                        "không thấy transcript của subagent.",
+                        "không có số (Token mới Producer, Token cache Producer): không thấy transcript của phiên Producer.",
+                        report.TOKEN_NOTE]
     st["dispatches"][0] |= {"tokens": 2500, "usage": {"input": 350, "output": 500, "cache_read": 1600,
                                                       "cache_creation": 50, "duration_ms": 9500, "format": "codex"}}
     rows = report.table(st, CFG, [], "không có số")
@@ -129,9 +173,11 @@ def test_a_dispatch_from_before_this_version_names_its_own_reason(meshy20):
     new = d("blockout", "worker", "2026-11-10 09:11:00", "2026-11-10 09:20:00", "review", v=2, tokens=None, usage=None)
     out = report.table(asset("a1", [old, new]), CFG, [], "không có số")
     assert out[5:] == [
-        "không có số (Token worker): lần giao từ bản cũ không lưu số lúc ingest, và transcript không còn.",
-        "không có số (Token worker): không thấy transcript của subagent.",
-        "không có số (Token Producer): không thấy transcript của phiên Producer."]
+        "không có số (Token mới worker, Token cache worker): lần giao từ bản cũ không lưu số lúc ingest, và transcript "
+        "không còn.",
+        "không có số (Token mới worker, Token cache worker): không thấy transcript của subagent.",
+        "không có số (Token mới Producer, Token cache Producer): không thấy transcript của phiên Producer.",
+        report.TOKEN_NOTE]
 
 
 def producer_messages(monkeypatch, msgs):
@@ -140,13 +186,14 @@ def producer_messages(monkeypatch, msgs):
 
 def test_approval_stores_the_producer_tokens_so_deleting_the_transcript_keeps_them_x2(monkeypatch, meshy20):
     st = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"})
-    producer_messages(monkeypatch, [(t("2026-11-10 08:59:59"), 5), (t("2026-11-10 09:05:00"), 1000),
-                                    (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:46:00"), 7)])
+    producer_messages(monkeypatch, [msg("2026-11-10 08:59:59", 1, 4), msg("2026-11-10 09:05:00", 200, 800),
+                                    msg("2026-11-10 09:40:00", 100, 400), msg("2026-11-10 09:46:00", 1, 6)])
     report.record_producer(st, "blockout", CFG["steps"])
-    assert st["producer_usage"]["blockout"] == {"tokens": 1500, "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00"}
+    assert st["producer_usage"]["blockout"] == {"tokens": 1500, "new": 300, "cache_read": 1200,
+                                                "from": "2026-11-10 09:00:00", "to": "2026-11-10 09:45:00"}
     producer_messages(monkeypatch, "không có số")
     row = report.table(st, CFG, [], "không có số")[2]
-    assert row.split(" | ")[8] == "1500"
+    assert row.split(" | ")[NEW_P:NEW_P + 2] == ["300", "1200"]
 
 
 def test_a_step_without_a_producer_transcript_stores_the_reason_not_a_zero(monkeypatch):
@@ -154,7 +201,7 @@ def test_a_step_without_a_producer_transcript_stores_the_reason_not_a_zero(monke
     producer_messages(monkeypatch, "không có số")
     report.record_producer(st, "blockout", CFG["steps"])
     assert st["producer_usage"] == {"blockout": "không thấy transcript của phiên Producer"}
-    producer_messages(monkeypatch, [(t("2026-11-10 13:00:00"), 5)])
+    producer_messages(monkeypatch, [msg("2026-11-10 13:00:00", 1, 4)])
     report.record_producer(st, "blockout", CFG["steps"])
     assert st["producer_usage"] == {"blockout": "transcript của Producer không có message trong khoảng của bước"}
 
@@ -165,7 +212,8 @@ SCRIPT = {"steps": [*CFG["steps"][:2], {"id": "assemble", "uses": ["blender"], "
 def finished():
     """texture approved 11:00, then the assemble script: its brief goes out at 11:00, the owner decides at 11:20."""
     return asset(
-        "a1", [d("texture", "worker", "2026-11-10 10:00:00", "2026-11-10 10:50:00", "review", tokens=100, usage={})],
+        "a1", [d("texture", "worker", "2026-11-10 10:00:00", "2026-11-10 10:50:00", "review", tokens=100,
+                 usage=u(10, 90))],
         approved={"texture": 1, "assemble": 3}, approved_at={"texture": "2026-11-10 11:00", "assemble": "2026-11-10 11:20"},
         versions={"texture": 1, "assemble": 3},
         offer_log=[{"key": "k", "step": "assemble", "v": 3, "why": "duyệt", "at": "2026-11-10 11:10",
@@ -176,11 +224,12 @@ def test_a_script_step_gets_a_row_from_the_previous_approval_to_its_own_with_the
     """DUYỆT 2 is a step the owner waits on and the Producer works on, so the table shows it. A script has no
     dispatch: its window starts when the step before it was approved."""
     st = finished()
-    producer_messages(monkeypatch, [(t("2026-11-10 11:05:00"), 800), (t("2026-11-10 11:30:00"), 9)])
+    producer_messages(monkeypatch, [msg("2026-11-10 11:05:00", 80, 720), msg("2026-11-10 11:30:00", 1, 8)])
     report.record_producer(st, "assemble", SCRIPT["steps"])
-    assert st["producer_usage"]["assemble"] == {"tokens": 800, "from": "2026-11-10 11:00:00", "to": "2026-11-10 11:20:00"}
+    assert st["producer_usage"]["assemble"] == {"tokens": 800, "new": 80, "cache_read": 720,
+                                                "from": "2026-11-10 11:00:00", "to": "2026-11-10 11:20:00"}
     rows = report.table(st, SCRIPT, [], "không có số")
-    assert rows[3] == "| assemble | 20m00s | — | — | — | 10m00s | — | — | 800 | 3 | 2 | 0 | — | — | 0 | — |"
+    assert rows[3] == "| assemble | 20m00s | — | — | — | 10m00s | — | — | — | — | 80 | 720 | 3 | 2 | 0 | — | — | 0 | — |"
 
 
 def test_a_script_step_that_never_ran_has_no_row(monkeypatch):
@@ -191,10 +240,10 @@ def test_a_script_step_that_never_ran_has_no_row(monkeypatch):
 def test_a_batch_total_reads_each_producer_message_once_when_not_every_step_is_stored_x6(meshy20):
     """a1's texture window and a2's window both hold the 10:31 message of 300 tokens. Added up by asset the batch
     would say 2800; the Producer spoke 2500 tokens."""
-    msgs = [(t("2026-11-10 09:10:00"), 1500), (t("2026-11-10 10:05:00"), 700), (t("2026-11-10 10:31:00"), 300)]
+    msgs = [msg("2026-11-10 09:10:00", 300, 1200), msg("2026-11-10 10:05:00", 100, 600), msg("2026-11-10 10:31:00", 50, 250)]
     out = report.batch([A1, A2], CFG, msgs)
-    cells = {l.split(" | ")[0].lstrip("| "): l.split(" | ")[8] for l in out[2:5]}
-    assert cells == {"a1": "2500*", "a2": "300*", "Tổng lô": "2500"}
+    cells = {l.split(" | ")[0].lstrip("| "): tuple(l.split(" | ")[NEW_P:NEW_P + 2]) for l in out[2:5]}
+    assert cells == {"a1": ("450*", "2050*"), "a2": ("50*", "250*"), "Tổng lô": ("450", "2050")}
 
 
 def test_a_batch_total_stays_right_after_a_redo_because_it_reads_the_transcript_not_a_stored_share_x6(meshy20):
@@ -202,41 +251,47 @@ def test_a_batch_total_stays_right_after_a_redo_because_it_reads_the_transcript_
     so its window now holds a2's whole window and a 10:20 message. A share saved at the first approval would be
     stale; the transcript says each of the four messages once: 1610."""
     a1 = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 10:30"},
-               versions={"blockout": 2}, producer_usage={"blockout": {"tokens": 1610, "from": "2026-11-10 09:00:00",
+               versions={"blockout": 2}, producer_usage={"blockout": {"tokens": 1610, "new": 322, "cache_read": 1288,
+                                                                      "from": "2026-11-10 09:00:00",
                                                                       "to": "2026-11-10 10:30:00"}})
     a2 = asset("a2", [d("blockout", "worker", "2026-11-10 09:30:00", "2026-11-10 09:55:00", "review", tokens=10,
-                        usage={})], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 10:00"},
-               versions={"blockout": 1}, producer_usage={"blockout": {"tokens": 570, "from": "2026-11-10 09:30:00",
+                        usage=u(1, 9))], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 10:00"},
+               versions={"blockout": 1}, producer_usage={"blockout": {"tokens": 570, "new": 114, "cache_read": 456,
+                                                                      "from": "2026-11-10 09:30:00",
                                                                       "to": "2026-11-10 10:00:00"}})
-    msgs = [(t("2026-11-10 09:05:00"), 1000), (t("2026-11-10 09:40:00"), 500), (t("2026-11-10 09:50:00"), 70),
-            (t("2026-11-10 10:20:00"), 40)]
+    msgs = [msg("2026-11-10 09:05:00", 200, 800), msg("2026-11-10 09:40:00", 100, 400), msg("2026-11-10 09:50:00", 14, 56),
+            msg("2026-11-10 10:20:00", 8, 32)]
     out = report.batch([a1, a2], CFG, msgs)
     assert out == [
         "| Asset | " + HEAD.split(" | ", 1)[1], SEP,
-        "| a1 | 90m00s | 18m50s | 6m00s | 2m30s | — | 80000 | 35000 | 1610* | 2 | 1 | 4 | — | — | 0 | opus / sonnet |",
-        "| a2 | 30m00s | 25m00s | — | — | — | 10 | — | 570* | 1 | 0 | 1 | — | — | 0 | model của phiên |",
-        "| Tổng lô | 120m00s | 43m50s | 6m00s | 2m30s | — | 80010 | 35000 | 1610 | 3 | 1 | 5 | — | — | 0 "
-        "| opus, model của phiên / sonnet |",
+        "| a1 | 90m00s | 18m50s | 6m00s | 2m30s | — | 8000 | 72000 | 3500 | 31500 | 322* | 1288* | 2 | 1 | 4 | — | — | 0 "
+        "| opus / sonnet |",
+        "| a2 | 30m00s | 25m00s | — | — | — | 1 | 9 | — | — | 114* | 456* | 1 | 0 | 1 | — | — | 0 | model của phiên |",
+        "| Tổng lô | 120m00s | 43m50s | 6m00s | 2m30s | — | 8001 | 72009 | 3500 | 31500 | 322 | 1288 | 3 | 1 | 5 | — | — "
+        "| 0 | opus, model của phiên / sonnet |",
         "",
+        report.TOKEN_NOTE,
         "* Token Producer tính chung: a1: a2; a2: a1. Tổng lô tính mỗi message một lần."]
 
 
 def test_stored_numbers_add_up_in_a_batch_only_when_no_two_assets_overlap_x6(meshy20):
     a1 = asset("a1", A1["dispatches"][:4], approved={"blockout": 2}, approved_at={"blockout": "2026-11-10 09:45"},
-               versions={"blockout": 2}, producer_usage={"blockout": {"tokens": 1500, "from": "x", "to": "y"}})
+               versions={"blockout": 2}, producer_usage={"blockout": {"tokens": 1500, "new": 300, "cache_read": 1200,
+                                                                      "from": "x", "to": "y"}})
     a3 = asset("a3", [d("blockout", "worker", "2026-11-10 12:00:00", "2026-11-10 12:10:00", "review", tokens=10,
-                        usage={})], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 12:30"},
-               versions={"blockout": 1}, producer_usage={"blockout": {"tokens": 70, "from": "x", "to": "y"}})
+                        usage=u(1, 9))], approved={"blockout": 1}, approved_at={"blockout": "2026-11-10 12:30"},
+               versions={"blockout": 1}, producer_usage={"blockout": {"tokens": 70, "new": 10, "cache_read": 60,
+                                                                      "from": "x", "to": "y"}})
     out = report.batch([a1, a3], CFG, "không có số")
-    assert out[4].split(" | ")[8] == "1570"
+    assert out[4].split(" | ")[NEW_P:NEW_P + 2] == ["310", "1260"]
     assert not any(l.startswith("*") for l in out)
 
 
 def test_a_batch_of_overlapping_assets_without_a_transcript_says_why_instead_of_adding_twice_x6(meshy20):
     out = report.batch([A1, A2], CFG, "không có số")
-    assert out[4].split(" | ")[8] == "không có số"
-    assert ("không có số (Token Producer): hai asset chạy cùng lúc và không còn transcript để tính mỗi message "
-            "một lần.") in out
+    assert out[4].split(" | ")[NEW_P] == "không có số"
+    assert ("không có số (Token mới Producer, Token cache Producer): hai asset chạy cùng lúc và không còn transcript để "
+            "tính mỗi message một lần.") in out
 
 
 def utc_now():
@@ -268,7 +323,7 @@ def test_ingest_stores_the_usage_split_and_the_report_and_stats_survive_the_tran
     main.unlink()
     cfg = {"steps": [{"id": "blockout", "uses": ["blender"]}]}
     row = report.table(f.st(), cfg, [], "không có số")[2].split(" | ")
-    assert row[6] == "3665"
+    assert row[6:8] == ["665", "3000"]
     assert "| 3665 |" in f.p("stats", AID)
 
 
@@ -308,7 +363,8 @@ def test_duyet_2_writes_the_report_to_deliver_and_prints_the_table_after_the_app
 def test_the_e2e_report_says_why_nothing_has_a_producer_number_without_a_producer_transcript_x5(done):
     root, f, out = done
     assert f.st()["producer_usage"]["texture"] == "không thấy transcript của phiên Producer"
-    assert "không có số (Token Producer): không thấy transcript của phiên Producer." in out.splitlines()
+    assert ("không có số (Token mới Producer, Token cache Producer): không thấy transcript của phiên Producer."
+            in out.splitlines())
 
 
 def test_p_report_prints_one_asset_and_rewrites_the_file_and_without_an_id_prints_the_batch_x7(done):
