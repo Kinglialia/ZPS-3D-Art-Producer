@@ -61,6 +61,8 @@ def cmd_next(a):
     if a.session:
         from core import session
         doc = session.from_stdin() or {}
+        if doc is session.SUB:
+            return
         a.source, a.session_id = doc.get("source"), doc.get("session_id")
     show_next(a)
 

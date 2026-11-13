@@ -13,6 +13,7 @@ from .state import ROOT, stamp, write_atomic
 
 OUT = ROOT / "session.json"
 WAIT_S = 1.0
+SUB = {"subagent": True}
 
 
 def load() -> dict | None:
@@ -24,12 +25,17 @@ def load() -> dict | None:
 
 
 def record(text: str) -> dict | None:
-    """Only a project that has production/ gets the file: `next` runs unlocked and must not create the root."""
+    """Only a project that has production/ gets the file: `next` runs unlocked and must not create the root. A Codex
+    sub-agent thread gets SUB and no file: the hook is project-wide, and a worker is not the Producer."""
     try:
         hook = json.loads(text)
     except ValueError:
         return None
-    if not isinstance(hook, dict) or not ROOT.is_dir():
+    if not isinstance(hook, dict):
+        return None
+    if sub_thread(hook.get("transcript_path")):
+        return SUB
+    if not ROOT.is_dir():
         return None
     seen = [p for p in ((load() or {}).get("transcripts") or []) if isinstance(p, str)]
     tp = hook.get("transcript_path")
@@ -117,6 +123,16 @@ def rollout(rows: list[dict]) -> bool:
 def sub_rollout(rows: list[dict]) -> bool:
     return rollout(rows) and isinstance((rows[0].get("payload") or {}).get("source"), dict) and "subagent" in rows[0][
         "payload"]["source"]
+
+
+def sub_thread(path) -> bool:
+    """The hook's `transcript_path` is a Codex sub-agent rollout. Only its first record counts; a path that cannot be
+    read is not one."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return sub_rollout(rows_of([f.readline()]))
+    except (OSError, TypeError, ValueError):
+        return False
 
 
 def main_usage(paths: list[str]) -> list[tuple[dt.datetime, int]] | None:

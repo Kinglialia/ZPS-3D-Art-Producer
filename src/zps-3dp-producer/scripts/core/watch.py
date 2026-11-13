@@ -434,14 +434,15 @@ def main_stop_reason(sts: list[dict], exists, sent) -> str | None:
 
 def on_main_stop(text: str) -> str | None:
     """D39.1: hook Stop of the main session → `P on-main-stop`. Reads the disk only and prints nothing when the stop is
-    allowed. Allowed too: the turn already goes on because this hook refused (`stop_hook_active`, else a loop), and a
-    project with no production folder."""
+    allowed. Allowed too: the turn already goes on because this hook refused (`stop_hook_active`, else a loop), a
+    project with no production folder, and a Codex sub-agent thread (the hook is project-wide)."""
     from . import session
     try:
         hook = json.loads(text)
     except ValueError:
         return None
-    if not isinstance(hook, dict) or hook.get("stop_hook_active") or not ROOT.is_dir():
+    if not isinstance(hook, dict) or hook.get("stop_hook_active") or not ROOT.is_dir() or session.sub_thread(
+            hook.get("transcript_path")):
         return None
     paths = [p for p in [hook.get("transcript_path"), *((session.load() or {}).get("transcripts") or [])]
              if isinstance(p, str) and p]

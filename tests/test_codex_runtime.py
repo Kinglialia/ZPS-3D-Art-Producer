@@ -186,3 +186,36 @@ def test_a_codex_rollout_names_the_brief_only_in_the_task_a_parent_sent_or_a_use
     assert session.asks_for(msg("assistant"), b) is False
     assert watch.calls(call("x", "spawn_agent", message=b)) == [json.dumps({"message": b})]
     assert watch.calls(call("x", "wait_agent", timeout_ms=1)) == []
+
+
+def test_the_stop_hook_allows_the_stop_of_a_sub_agent_thread_that_the_main_thread_would_be_refused(tmp_path):
+    """The Codex Stop hook is project-wide: if Codex fires it in a worker thread, the Producer's "not yet sent" line
+    must not keep the worker from stopping."""
+    f, out = flow(tmp_path)
+    at = f.st()["dispatches"][-1]["at"]
+    main, sub = write(tmp_path / "rollout-main.jsonl", [meta(utc(at, -60))]), sub_rollout(
+        tmp_path / "rollout-sub.jsonl", at, out["brief"])
+    stop = BASE | {"hook_event_name": "Stop", "turn_id": "t1", "stop_hook_active": False}
+    got = {n: hook(tmp_path, ["on-main-stop"], stop | {"transcript_path": str(p)})
+           for n, p in (("main", main), ("sub", sub), ("missing", tmp_path / "gone.jsonl"))}
+    assert {n: (r.returncode, r.stdout, r.stderr[:24]) for n, r in got.items()} == {
+        "main": (2, "", f"Còn dòng giao việc của {AID}"[:24]), "sub": (0, "", ""), "missing": (0, "", "")}
+
+
+def test_the_session_start_hook_of_a_sub_agent_thread_prints_nothing_and_records_nothing(tmp_path):
+    """A worker that got the Producer's `next` text as context could take the Producer's job."""
+    subprocess.run([sys.executable, str(P), "init", "--project", "Pilot", "--concepts", "concepts"], cwd=tmp_path,
+                   check=True, capture_output=True)
+    sub = sub_rollout(tmp_path / "rollout-sub.jsonl", "2026-11-13 10:00:00", "b.md")
+    start = BASE | {"hook_event_name": "SessionStart", "source": "startup"}
+    r = hook(tmp_path, ["next", "--session"], start | {"transcript_path": str(sub)})
+    assert (r.returncode, r.stdout, (tmp_path / "production/session.json").exists()) == (0, "", False)
+    main = write(tmp_path / "rollout-main.jsonl", [meta("2026-11-13T03:00:00.000Z")])
+    claude = tmp_path / "claude.jsonl"
+    claude.write_text(json.dumps({"type": "user", "sessionId": "s1", "message": {"role": "user", "content": "hi"}}) + "\n",
+                      encoding="utf-8")
+    for tp in (main, claude):
+        r = hook(tmp_path, ["next", "--session"], start | {"transcript_path": str(tp)})
+        assert r.stdout.startswith("[producer] Dùng skill zps-3dp-producer"), tp.name
+    doc = json.loads((tmp_path / "production/session.json").read_text(encoding="utf-8"))
+    assert doc["transcripts"] == [str(main), str(claude)]
