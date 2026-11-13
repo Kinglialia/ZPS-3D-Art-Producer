@@ -48,6 +48,18 @@ def record(text: str) -> dict | None:
     return doc
 
 
+def record_if_missing(text: str):
+    """P6-1: the SessionStart of the session that runs `P init` comes before production/ exists. The Stop and
+    SubagentStop payloads name the same main transcript, so the first of them after init writes the file. A payload
+    without a transcript writes nothing, and a hook never fails on it."""
+    try:
+        tp = json.loads(text).get("transcript_path")
+        if isinstance(tp, str) and tp and load() is None:
+            record(text)
+    except (ValueError, AttributeError, OSError):
+        pass
+
+
 def from_stdin() -> dict | None:
     """A hand-typed `next --session` has a terminal or nothing on stdin; it must not hang there."""
     s = sys.stdin

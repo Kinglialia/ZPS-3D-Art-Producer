@@ -332,6 +332,7 @@ def on_stop(text: str) -> str | None:
         return None
     if not isinstance(hook, dict) or not ROOT.is_dir():
         return None
+    session.record_if_missing(text)
     path = hook.get("agent_transcript_path")
     if session.foreign(session.head(path)):
         return None
@@ -447,6 +448,7 @@ def on_main_stop(text: str) -> str | None:
     if not isinstance(hook, dict) or hook.get("stop_hook_active") or not ROOT.is_dir() or session.sub_thread(
             hook.get("transcript_path")) or session.foreign(session.head(hook.get("transcript_path"))):
         return None
+    session.record_if_missing(text)
     paths = [p for p in [hook.get("transcript_path"), *((session.load() or {}).get("transcripts") or [])]
              if isinstance(p, str) and p]
 

@@ -145,6 +145,29 @@ def test_the_session_start_hook_records_its_source_and_every_main_transcript_so_
                                "transcripts": ["/t/a.jsonl", "/t/b.jsonl"]}
 
 
+def test_the_first_stop_after_init_records_the_session_that_started_before_production_existed_p6_1(tmp_path):
+    """Pilot 6: SessionStart ran before `P init` made production/, so session.json never came and ingest had no token
+    numbers. The Stop and SubagentStop payloads name the main transcript too: the first one that finds production/ and
+    no session.json records it. A folder that is not a project gets no file, and a stop never replaces the file."""
+    def stop(cmd, payload):
+        subprocess.run([sys.executable, str(P), cmd], cwd=tmp_path, input=json.dumps(payload), capture_output=True,
+                       text=True, check=True)
+    main = {"hook_event_name": "Stop", "stop_hook_active": False, "session_id": "s1", "transcript_path": "/t/a.jsonl"}
+    stop("on-main-stop", main)
+    assert not (tmp_path / "production").exists()
+    subprocess.run([sys.executable, str(P), "init", "--project", "Pilot", "--concepts", "concepts"], cwd=tmp_path,
+                   check=True, capture_output=True)
+    stop("on-main-stop", main)
+    assert saved(tmp_path) == {"session_id": "s1", "source": None, "transcript_path": "/t/a.jsonl",
+                               "transcripts": ["/t/a.jsonl"]}
+    stop("on-main-stop", main | {"session_id": "s2", "transcript_path": "/t/b.jsonl"})
+    assert saved(tmp_path)["transcripts"] == ["/t/a.jsonl"]
+    (tmp_path / "production/session.json").unlink()
+    stop("on-stop", {"hook_event_name": "SubagentStop", "session_id": "s3", "transcript_path": "/t/c.jsonl",
+                     "agent_type": "general-purpose", "agent_id": "x", "agent_transcript_path": "/t/c/agent-x.jsonl"})
+    assert saved(tmp_path)["transcripts"] == ["/t/c.jsonl"]
+
+
 def test_a_hand_run_or_broken_hook_input_leaves_session_json_alone_and_next_still_prints(tmp_path):
     subprocess.run([sys.executable, str(P), "init", "--project", "Pilot", "--concepts", "concepts"], cwd=tmp_path,
                    check=True, capture_output=True)
