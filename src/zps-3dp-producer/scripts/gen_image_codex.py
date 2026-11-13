@@ -47,7 +47,8 @@ the ledger line keep the reason.
 --direct (the Codex edition, runtime.json `image_gen: direct`): the worker makes each image with its own image tool and
 saves it at --out; this run starts no `codex exec` and only checks. --model, --reasoning and --pid-file are then not
 needed; --batch and --approve-for-me are refused. The record <dir/name>.json keeps `attempts` across runs: a file whose
-record is ok and whose sha256 is unchanged is not counted again; an accepted file saved over starts a new record. Each
+record is ok and whose sha256 is unchanged is not counted again; an accepted file saved over starts a new record, and so
+does a failed record whose `checked` time is before the last worker dispatch of its version in status.json. Each
 counted try writes a `start` line and a `done` or `fail` line of heartbeat.IMAGE_TOOL to vN/heartbeat.log and one
 ledger line. A missing file is a failed try, with the text of --tool-error "<error>" when the worker passes it (same
 limits as above). Direct only: with --size WxH, an aspect ratio off by more than 2 % fails, and the right ratio at
@@ -379,8 +380,22 @@ def fit(out: Path, rec: dict, want: str | None) -> str | None:
     return None
 
 
+def worker_dispatch(out: Path) -> str | None:
+    """`at` of the last worker dispatch of the version that holds `out`, from status.json; None outside a version."""
+    if not (where := version_of(out)):
+        return None
+    root, aid, sid, n = where
+    try:
+        disp = json.loads((root / "assets" / aid / "status.json").read_text(encoding="utf-8")).get("dispatches") or []
+        return max((x["at"] for x in disp if (x.get("step"), x.get("v"), x.get("role")) == (sid, n, "worker")),
+                   default=None)
+    except (OSError, ValueError, AttributeError, KeyError, TypeError):
+        return None
+
+
 def direct_try(a, j: dict):
-    """One check of a file the worker saved; the record of an earlier run carries the count (D36.12 limits)."""
+    """One check of a file the worker saved; the record of an earlier run carries the count (D36.12 limits), unless it
+    failed before the current worker dispatch of its version: `P retry` keeps vN and the worker's file names."""
     out, rec_path = j["out"], j["out"].with_suffix(".json")
     try:
         old = json.loads(rec_path.read_text(encoding="utf-8"))
@@ -390,14 +405,14 @@ def direct_try(a, j: dict):
         if old["status"] == "ok" and out.is_file() and old.get("sha256") == sha256(out):
             j["rec"] = old
             return
-        if old["status"] != "ok":
+        if old["status"] != "ok" and not ((at := worker_dispatch(out)) and str(old.get("checked") or "") < at):
             j["rec"] = old
     rec = j["rec"]
     if rec["attempts"] >= rec["limit"]:
         return
     j["counted"], vd = True, heartbeat.vdir_of(out)
     heartbeat.write(vd, heartbeat.IMAGE_TOOL, "start")
-    rec["attempts"] += 1
+    rec["attempts"], rec["checked"] = rec["attempts"] + 1, time.strftime("%Y-%m-%d %H:%M:%S")
     if not out.is_file():
         err = f"tool: {a.tool_error}" if a.tool_error else "không có file ảnh"
     else:

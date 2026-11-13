@@ -924,3 +924,93 @@ def test_direct_mode_keeps_a_file_out_of_tries_failed_so_a_worker_that_ignored_e
     paint(direct.dir / "front-1.png")
     r = direct()
     assert (r["rc"], r["records"]["front"]["attempts"], (direct.dir / "front-1.png").exists()) == (1, 3, False)
+
+
+@pytest.fixture
+def retried(tmp_path):
+    """A direct gen in views v1 of a Producer root whose status.json lists the dispatches that `P brief` wrote."""
+    path = fake_codex.install(tmp_path / "bin")
+    root = tmp_path / "production"
+    st_file = root / "assets/hut/status.json"
+    st_file.parent.mkdir(parents=True)
+    (root / "pipeline.toml").touch()
+    gen_dir = root / "assets/hut/views/v1/work/gen"
+    gen_dir.mkdir(parents=True)
+    (tmp_path / "front.md").write_text(REQUEST, encoding="utf-8")
+    out, rec_file = gen_dir / "front-1.png", gen_dir / "front-1.json"
+    env = {**os.environ, "PATH": path, "FAKE_CODEX_LOG": str(tmp_path / "calls.jsonl")}
+    env.pop("PRODUCER_ROOT", None)
+
+    def run(extra=()):
+        p = subprocess.run([sys.executable, str(GEN), "--direct", "--prompt", str(tmp_path / "front.md"), "--out", str(out),
+                            *extra], capture_output=True, text=True, env=env, cwd=tmp_path)
+        return p.returncode, json.loads(rec_file.read_text(encoding="utf-8"))
+
+    def dispatch(at, step="views", v=1, role="worker"):
+        st = json.loads(st_file.read_text(encoding="utf-8")) if st_file.exists() else {"id": "hut", "inputs": {}}
+        st.setdefault("dispatches", []).append({"step": step, "v": v, "role": role, "at": at})
+        st_file.write_text(json.dumps(st), encoding="utf-8")
+
+    def backdate(checked):
+        rec = json.loads(rec_file.read_text(encoding="utf-8"))
+        rec["checked"] = checked
+        rec_file.write_text(json.dumps(rec), encoding="utf-8")
+    run.out, run.dispatch, run.backdate = out, dispatch, backdate
+    return run
+
+
+def test_direct_mode_counts_from_one_again_after_p_retry_dispatched_the_worker_of_the_same_version_again(retried):
+    """`P retry` after a BLOCKED worker keeps vN and the worker names its files as before, so a record out of tries
+    from the earlier dispatch would refuse every image of the new worker."""
+    retried.dispatch("2026-01-01 10:00:00")
+    assert [retried()[0] for _ in range(4)] == [3, 3, 1, 1]
+    retried.backdate("2026-01-01 10:30:00")
+    retried.dispatch("2026-01-01 11:00:00")
+    rc, rec = retried()
+    assert (rc, rec["attempts"], rec["errors"]) == (3, 1, ["không có file ảnh"])
+    assert [retried()[0] for _ in range(2)] == [3, 1], "the new dispatch has its own 3 tries, no more"
+
+
+def test_direct_mode_lets_the_new_worker_pass_after_a_quota_stop_and_p_retry(retried):
+    retried.dispatch("2026-01-01 10:00:00")
+    assert retried(extra=["--tool-error", "usage limit reached, try again later"])[0] == 1
+    retried.backdate("2026-01-01 10:30:00")
+    paint(retried.out)
+    assert retried()[0] == 1, "no new dispatch yet: the quota stop holds"
+    retried.dispatch("2026-01-01 11:00:00")
+    paint(retried.out)
+    rc, rec = retried()
+    assert (rc, rec["status"], rec["attempts"], rec["limit"]) == (0, "ok", 1, 3)
+
+
+def test_direct_mode_keeps_the_count_when_the_newer_dispatch_is_of_another_version_or_the_reviewer(retried):
+    retried.dispatch("2026-01-01 10:00:00")
+    assert [retried()[0] for _ in range(3)] == [3, 3, 1]
+    retried.backdate("2026-01-01 10:30:00")
+    retried.dispatch("2026-01-01 11:00:00", v=2)
+    retried.dispatch("2026-01-01 11:00:00", role="reviewer")
+    retried.dispatch("2026-01-01 11:00:00", step="texture")
+    paint(retried.out)
+    rc, rec = retried()
+    assert (rc, rec["attempts"], retried.out.exists()) == (1, 3, False)
+
+
+def test_direct_mode_takes_a_failed_record_without_a_check_time_as_older_than_the_worker_dispatch(retried):
+    """A record written before the check time existed must not block the first real run after the upgrade."""
+    retried.dispatch("2026-01-01 10:00:00")
+    assert [retried()[0] for _ in range(3)] == [3, 3, 1]
+    rec = json.loads(retried.out.with_suffix(".json").read_text(encoding="utf-8"))
+    rec.pop("checked", None)
+    retried.out.with_suffix(".json").write_text(json.dumps(rec), encoding="utf-8")
+    assert retried()[1]["attempts"] == 1
+
+
+def test_direct_mode_keeps_an_accepted_image_and_its_count_under_a_newer_dispatch(retried):
+    retried.dispatch("2026-01-01 10:00:00")
+    assert retried()[0] == 3
+    paint(retried.out)
+    assert retried()[0] == 0
+    retried.backdate("2026-01-01 10:30:00")
+    retried.dispatch("2026-01-01 11:00:00")
+    rc, rec = retried()
+    assert (rc, rec["status"], rec["attempts"], rec["checked"]) == (0, "ok", 2, "2026-01-01 10:30:00")
