@@ -336,6 +336,10 @@ def ready(a):
             print(f"{aid}: bỏ qua (state={st['state']})")
             continue
         st["state"], st["note"] = "todo", ""
+        rub = ASSETS / aid / "rubric.md"
+        if rub.is_file() and not rubric_approved(rub):
+            text = re.sub(r"\A\s*<!--\s*status:[^\n]*-->[ \t]*\n?", "", rub.read_text(encoding="utf-8"))
+            rub.write_text("<!-- status: approved -->\n" + text, encoding="utf-8")
         save_st(st)
         ledger(f"{aid} · ready")
         print(f"{aid}: → todo")

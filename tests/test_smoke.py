@@ -54,3 +54,16 @@ def test_init_keeps_existing_files(tmp_path):
     out = run(tmp_path, "init", "--project", "Other", "--concepts", "concepts")
     assert "giữ nguyên production/pipeline.toml" in out
     assert pt.read_text(encoding="utf-8").endswith("# edited\n")
+
+
+def test_ready_marks_the_rubric_of_the_asset_approved_so_it_agrees_with_its_state_p6_1(tmp_path):
+    """Pilot 6: intake copied the draft type rubric; the owner approved the type rubric and `ready` moved the asset to
+    todo, but its own rubric.md still said `status: draft` on line 1. `ready` is the approval of this asset's brief
+    and rubric, so the copy says so; the criteria under it stay as they are."""
+    run(tmp_path, "init", "--project", "Pilot", "--concepts", "concepts")
+    run(tmp_path, "new", "house-a", "--title", "House A")
+    rub = tmp_path / "production/assets/house-a/rubric.md"
+    before = rub.read_text(encoding="utf-8").splitlines()
+    assert before[0] == "<!-- status: draft -->"
+    run(tmp_path, "ready", "house-a")
+    assert rub.read_text(encoding="utf-8").splitlines() == ["<!-- status: approved -->", *before[1:]]
