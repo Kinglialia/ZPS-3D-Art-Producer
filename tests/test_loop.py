@@ -873,6 +873,17 @@ def test_a_waive_while_the_reviewer_judges_applies_at_its_ingest_and_the_last_ma
     assert "waive_pending" not in flow.st or flow.st["waive_pending"] == {}
 
 
+def test_a_waive_at_an_offer_drops_the_id_from_the_open_list_the_producer_reads_p6_2(flow):
+    """Pilot 6: after the owner waived F3 and F4 at an ESCALATE, the result line and `P next` still said `còn mở: F3,
+    F4`."""
+    flow.work()
+    flow.review(verdict="ESCALATE", top_fix=None, findings=[finding("F1", "minor", "param"), finding("F2", "minor", "param")])
+    assert flow.st["note"] == "reviewer ESCALATE; còn mở: F1, F2"
+    assert waive(flow, "F1").endswith("Tiếp: chờ người dùng: reviewer ESCALATE; còn mở: F2 (review page)\n")
+    waive(flow, "F2")
+    assert flow.st["note"] == "reviewer ESCALATE"
+
+
 def test_waive_of_an_id_that_is_not_open_is_refused(flow, monkeypatch):
     held_fix(flow, monkeypatch)
     with pytest.raises(ProducerError) as e:

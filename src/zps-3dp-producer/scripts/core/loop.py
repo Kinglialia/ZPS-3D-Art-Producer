@@ -541,7 +541,7 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
         move(st, event)
         q = texture.ask_regen(st, n, True, f"meshy_regen {', '.join(rv['top_fix']['ids'])}") if kind == "meshy_regen" else None
         ids = ", ".join(findings.open_of(findings.load(aid, sid, best)))
-        offer(st, sid, n if q else best, rv["verdict"], note=q or reason + (f"; còn mở: {ids}" if ids else ""),
+        offer(st, sid, n if q else best, rv["verdict"], note=q or reason + (f"{OPEN_NOTE}{ids}" if ids else ""),
               label=NOT_PASSED)
     elif event == "served":
         move(st, event)
@@ -684,6 +684,9 @@ def dispatch_next(cfg: dict, st: dict, states: tuple = INGEST_DISPATCH):
 WAIVE_BY = {"user": "người dùng", "producer": "Producer"}
 
 
+OPEN_NOTE = "; còn mở: "
+
+
 def waive(a):
     """D30.1 `P waive <id> F<n> "lý do"`: in any state. The finding closes as `waived` now, or at the next ingest while a
     reviewer judges a brief that still lists it. Waiving the last blocking finding of the version a fix round, an
@@ -715,6 +718,9 @@ def waive(a):
             st |= {"rereview": target, "evidence": None, "direct": None, "offer": None, "label": "",
                    "note": f"chấm lại v{target} sau waive {a.fid}"}
             msg += f"; v{target} hết lỗi chặn → reviewer chấm lại v{target}, không gọi worker"
+        elif here and OPEN_NOTE in (st.get("note") or "") and st["state"] == "waiting_human":
+            ids = ", ".join(findings.open_of(findings.load(a.id, sid, st.get("offer") or top)))
+            st["note"] = st["note"].split(OPEN_NOTE)[0] + (f"{OPEN_NOTE}{ids}" if ids else "")
     save_st(st)
     ledger(f"{a.id} · {sid} {a.fid} · waive bởi {WAIVE_BY[a.by]} · {why}")
     print(f"{a.id}: waive {sid} {a.fid} ({WAIVE_BY[a.by]}): {msg} → {st['stage']}/{st['state']}. Tiếp: {next_action(st)}")
