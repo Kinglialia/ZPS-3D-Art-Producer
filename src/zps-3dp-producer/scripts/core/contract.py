@@ -65,12 +65,12 @@ def parse_contract(text: str, keys: set[str], errs: list[str] | None = None) -> 
             cur = k if k in BLOCKS and k not in out else None
             last = k if k not in BLOCKS and k not in out else None
             lost = None
-            out.setdefault(k, [f"- {i}: {s}" for i, s in re.findall(rf"({FID})\s*=\s*(\w+)", m.group(3))] if k in BLOCKS
-                           else m.group(3).strip())
+            out.setdefault(k, [f"- {i}: {s}" for i, s in re.findall(rf"({FID})\s*=\s*(\w+)", m.group(3))]
+                           if k == "PRIOR" else [] if k in BLOCKS else m.group(3).strip())
             quiet = bool(cur) and m.group(3).strip().lower() in NONE - {""}
         elif not line.strip():
             continue
-        elif cur and quiet and line[:1].isspace():
+        elif cur and quiet and line[:1].isspace() and not (HEAD.match(line.strip()) or PRIOR.match(line.strip())):
             continue
         elif cur and (line.startswith("-") or line[:1].isspace()):
             quiet = False

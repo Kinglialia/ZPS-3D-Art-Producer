@@ -319,6 +319,14 @@ def test_indented_notes_under_findings_none_are_left_out_but_a_finding_after_the
     assert (errs, list(rv["findings"])) == ([], ["F1"])
 
 
+def test_an_indented_finding_under_findings_none_still_counts_and_is_refused_for_its_indent_p6_1():
+    """Notes under `FINDINGS: none` are left out, but a line in the shape of a finding is no note: dropping it would
+    lose a finding without a word."""
+    text = report(findings=["  - F3 [major] structure", "    region: mái"]).replace("FINDINGS:\n", "FINDINGS: none\n")
+    _, errs = parse_review(text)
+    assert errs[0] == "dòng FINDINGS sai format: - F3 [major] structure"
+
+
 def test_escalate_carries_its_reason_and_options_on_one_key_so_the_producer_can_ask_the_user_p6_1():
     rv, errs = parse_review(report(verdict="ESCALATE", top_fix=None, findings=["none"],
                                    extra="ESCALATE: đèn render sai, không chấm được shadow_read; 1) sửa tool; 2) duyệt\n"))
