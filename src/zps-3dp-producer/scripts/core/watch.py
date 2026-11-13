@@ -21,6 +21,7 @@ REPORT = {"brief-worker.md": "worker-out.md", "brief-review.md": "review-out.md"
 NUDGE = "Tiếp tục, báo trạng thái"
 LOCK = "wait.lock"
 WALK_MAX = 20000
+REPORT_QUIET_S = 180  # pilot 6: workers went on for 100–150 s after their report; provisional
 
 
 def at(s: str) -> dt.datetime:
@@ -144,6 +145,28 @@ def check(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> dict:
             "quiet_s": (now - since).total_seconds(), "late": f"quá hạn chót, {sign}" if late and why is None else None}
 
 
+def changed_after_report(st: dict, rec: dict) -> dt.datetime | None:
+    """P6-2: when vN changed more than a second after the report and the agent has no stop record, the time of that
+    change: the agent wrote its report early and still works."""
+    rep = report_of(rec)
+    if rec.get("stopped") or rep is None or not rep.exists():
+        return None
+    t = touched(vdir(st["id"], rec["step"], rec["v"]))
+    return t if t and t.timestamp() > rep.stat().st_mtime + 1 else None
+
+
+def finished(st: dict, rec: dict, now: dt.datetime | None = None) -> bool:
+    """P6-2: the report is on disk and its agent is done: SubagentStop recorded the stop, or, with no hook, nothing
+    under vN changed for REPORT_QUIET_S after the report."""
+    rep = report_of(rec)
+    if rep is None or not rep.exists():
+        return False
+    if rec.get("stopped"):
+        return True
+    last = touched(vdir(st["id"], rec["step"], rec["v"])) or dt.datetime.fromtimestamp(rep.stat().st_mtime)
+    return ((now or dt.datetime.now()) - last).total_seconds() > REPORT_QUIET_S
+
+
 def line(st: dict, rec: dict, w: dict, now: dt.datetime | None = None) -> str:
     """D33.15: one line per running job."""
     c = check(st, rec, w, now)
@@ -245,7 +268,8 @@ def wake(w: dict) -> list[str]:
     for st, rec in jobs:
         rep = report_of(rec)
         if rep is not None and rep.exists():
-            out.append(f"{st['id']}: có báo cáo {rel(rep)} → `ingest {st['id']}`")
+            if finished(st, rec):
+                out.append(f"{st['id']}: có báo cáo {rel(rep)} → `ingest {st['id']}`")
         elif (c := check(st, rec, w))["stalled"]:
             out.append(f"{st['id']}: kẹt ({c['why']}) → `stall {st['id']}`")
     return out + [f"{s['id']}: giao được ngay ({s['stage']}/{s['state']}) → `brief {s['id']}`"
@@ -408,16 +432,16 @@ def sent_to_agent(paths: list[str], rec: dict) -> bool:
     return False
 
 
-def main_stop_reason(sts: list[dict], exists, sent) -> str | None:
+def main_stop_reason(sts: list[dict], exists, sent, done=None) -> str | None:
     """D39.1: why the main session may not stop now, as one line that names the command to run, else None.
     (a) an open dispatch whose report is on disk and not ingested, or the report of a script step that runs (a script
     step records no dispatch); (b) an open dispatch with no sign of a subagent, so the line `P brief` printed was never
-    sent. A subagent that runs without a report is waited for (background mode),
-    and an asset that waits for the human has no open dispatch."""
+    sent. A subagent that runs without a report is waited for (background mode), and so is one whose report is on disk
+    while it still runs (`done`, P6-2). An asset that waits for the human has no open dispatch."""
     open_jobs = [(st, rec) for st in sts if not st.get("broken") and (rec := job(st))]
     for st, rec in open_jobs:
         rep = report_of(rec)
-        if rep is not None and exists(rep):
+        if rep is not None and exists(rep) and (done is None or done(st, rec)):
             return f"Còn report chưa ingest: chạy `P ingest {st['id']} --agent-id {rec.get('agent_id') or '<id subagent>'}`"
     for st in sts:
         n = (st.get("versions") or {}).get(st.get("stage"))
@@ -451,7 +475,7 @@ def on_main_stop(text: str) -> str | None:
     def sent(st: dict, rec: dict) -> bool:
         beat = heartbeat.last(vdir(st["id"], rec["step"], rec["v"]))
         return bool(beat and beat[0] >= at(rec["at"])) or sent_to_agent(paths, rec)
-    return main_stop_reason(all_status(), Path.exists, sent)
+    return main_stop_reason(all_status(), Path.exists, sent, finished)
 
 
 def cmd_on_main_stop(_a) -> int:

@@ -2105,13 +2105,13 @@ def test_the_report_of_a_resumed_reviewer_is_seen_by_every_watcher_so_a_finished
     st = flow.st
     rec = watch.job(st)
     assert str(watch.report_of(rec)) == out["report"]
-    assert watch.wake(policy.watch(policy.load()))[0] == f"{AID}: có báo cáo {out['report']} → `ingest {AID}`"
     assert watch.main_stop_reason([st], Path.exists, lambda s, r: True) == (
         f"Còn report chưa ingest: chạy `P ingest {AID} --agent-id <id subagent>`")
     rec["agent_id"] = "r1"
     save_st(st)
     watch.on_stop(json.dumps({"agent_type": "zps-3dp-check-blockout", "agent_id": "r1"}))
     assert watch.job(flow.st)["stopped"] == "report"
+    assert watch.wake(policy.watch(policy.load()))[0] == f"{AID}: có báo cáo {out['report']} → `ingest {AID}`"
     assert watch.check(flow.st, watch.job(flow.st), policy.watch(policy.load()))["stalled"] is False
     old = {"step": "blockout", "v": 1, "role": "worker", "brief": f"production/assets/{AID}/blockout/v1/brief-worker.md"}
     assert str(watch.report_of(old)) == f"production/assets/{AID}/blockout/v1/worker-out.md"

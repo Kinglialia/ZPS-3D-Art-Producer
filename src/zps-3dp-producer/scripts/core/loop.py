@@ -629,6 +629,10 @@ def ingest(a):
     h = HANDLERS.get(st["state"]) or die(f"{a.id}: state={st['state']}, không có báo cáo nào đang chờ")
     role = "reviewer" if st["state"] == "reviewing" else "script" if step["script"] else "worker"
     rec = open_dispatch(st, sid, n, role)
+    from .watch import changed_after_report
+    if rec is not None and (t := changed_after_report(st, rec)):
+        die(f"{a.id}: {role} chưa dừng: v{n} còn đổi file lúc {t:%H:%M:%S}, sau report. Không ingest lúc này: chờ subagent "
+            f"trả về rồi `ingest {a.id}`")
     event, reason = h(cfg, st, step, vdir(a.id, sid, n), n, a)
     if applied := apply_pending(cfg, st, sid, n):
         reason = "; ".join(x for x in (reason, applied) if x)

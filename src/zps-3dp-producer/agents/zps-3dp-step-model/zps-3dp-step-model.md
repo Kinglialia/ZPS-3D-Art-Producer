@@ -41,7 +41,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ): mỗi mục `<khóa> = N` c
 ## Quy tắc
 
 - Không chạy lệnh nền: mọi lệnh Bash chạy ở tiền cảnh và chờ xong trong lượt. Không chờ thông báo, không tự viết vòng lặp canh file. Lệnh tool đi qua `RUN`, với `timeout: 3600000` cho Bash.
-- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc.
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: sau đó không chạy lệnh, không sửa file. File này là tín hiệu xong việc.
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
 - Chi tiết cần hàm mới: dùng primitive và hàm chung trước. Không đủ thì thêm hàm vào file `CUSTOM_PARTS:` của brief: Python thuần, chỉ `import math`, mỗi hàm trả `(verts, faces)`, không trùng tên hàm chung. Chỉ thêm hàm: không sửa, không xóa hàm mà một version đã dùng (bản cũ dựng lại từ graph của nó). Ghi tên hàm mới và lý do vào `model.md`.
 - Không weld, không boolean. Không thêm `max_duplicate_verts` vào `spec.json`.

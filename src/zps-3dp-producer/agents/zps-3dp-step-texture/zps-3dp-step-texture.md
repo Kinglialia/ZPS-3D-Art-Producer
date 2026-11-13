@@ -48,7 +48,7 @@ Vòng xin bằng chứng: chỉ render ảnh brief xin vào `V/review/evidence-<
 ## Quy tắc
 
 - Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`, `MESHY`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings).
-- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc.
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: sau đó không chạy lệnh, không sửa file. File này là tín hiệu xong việc.
 - Thiếu file brief chỉ định: `STATUS: NEEDS_CONTEXT`. Nhân vật, sinh vật: `STATUS: BLOCKED`.
 - Lớp Meshy hỏng cả style hoặc phần lớn bề mặt, không sửa được: `UNFIXABLE: yes`, lý do ở `ISSUES`. Script hỏi người dùng có gọi Meshy thêm một lần không.
 - Không vẽ thẳng lên atlas UV: chỉ sửa theo crop hoặc vẽ trên paint view. Không chiếu ảnh của bước views lên model.

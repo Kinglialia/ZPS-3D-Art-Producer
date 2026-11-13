@@ -57,7 +57,7 @@ Brief có dòng "Bản đã duyệt trước của bước này" (`P` = thư m�
 ## Quy tắc
 
 - Không chạy lệnh nền: mọi lệnh Bash chạy ở foreground và chờ xong trong lượt, không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài (`RUN`, `GEN_IMAGE`) chạy với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings).
-- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc.
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: sau đó không chạy lệnh, không sửa file. File này là tín hiệu xong việc.
 - Thiếu file brief chỉ định (`check_inputs` fail): `STATUS: NEEDS_CONTEXT`.
 - Front đổi (gen mới, gen lại, không chép từ `P`): gen lại mọi view của `VIEWS`, vì front là chuẩn màu của cả bộ.
 - Nguồn mâu thuẫn (thẻ với `blockout.md`): theo `blockout.md`, ghi cả hai vào `VIEWS.md`.

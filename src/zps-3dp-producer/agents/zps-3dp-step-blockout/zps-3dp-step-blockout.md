@@ -42,7 +42,7 @@ Brief có dòng `COUNTS:` (số đếm của thẻ): mỗi mục `<khóa> = N` c
 ## Quy tắc
 
 - Không chạy lệnh nền: mọi lệnh Bash chạy và chờ xong trong lượt (không chạy nền, không `nohup`, `disown`), không chờ thông báo, không tự viết vòng lặp canh file. Lệnh dài đi qua `RUN`, với `timeout: 3600000` cho Bash (`BASH_MAX_TIMEOUT_MS` của settings).
-- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc.
+- Ghi `<report>` là việc cuối cùng trước khi trả kết quả: sau đó không chạy lệnh, không sửa file. File này là tín hiệu xong việc.
 - Thiếu concept, hoặc thiếu `<id>.layout.md` khi `has_map: true`: `STATUS: NEEDS_CONTEXT`. Vùng không có mã vật liệu: báo, không đoán mã.
 - Mô tả không có phần khuất hoặc kích thước: tự quyết theo quy tắc mặc định của dự án (`hidden_side_rules`), ghi từng chỗ vào "Blockout tự quyết".
 - Kích thước trong MAP-LAYOUT hoặc `size_m` có vấn đề: chỉ báo trong `ISSUES`, không sửa.

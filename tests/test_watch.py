@@ -25,7 +25,8 @@ def test_every_worker_and_reviewer_role_file_forbids_background_commands_and_wri
     for f in ROLES:
         text = f.read_text(encoding="utf-8")
         assert "Không chạy lệnh nền" in text and "không chờ thông báo" in text.lower(), f.name
-        assert ("Ghi `<report>` là việc cuối cùng trước khi trả kết quả: file này là tín hiệu xong việc." in text
+        assert ("Ghi `<report>` là việc cuối cùng trước khi trả kết quả: sau đó không chạy lệnh, không sửa file. File "
+                "này là tín hiệu xong việc." in text
                 and "D33" not in text), f.name
 
 
@@ -505,6 +506,7 @@ def test_a_second_p_wait_takes_over_and_the_first_ends_with_a_line_that_asks_not
     second = start_wait(tmp_path)
     so, _ = first.communicate(timeout=30)
     assert (first.returncode, so) == (0, f"`P wait` mới (pid {second.pid}) thay lần chờ này → không cần làm gì\n")
+    edit_job(f, stopped="report")
     (tmp_path / out["report"]).write_text("STATUS: DONE\n", encoding="utf-8")
     so, _ = second.communicate(timeout=30)
     assert second.returncode == 0 and "có báo cáo" in so and "→ `ingest pilot-house`" in so
@@ -527,6 +529,49 @@ def test_a_wait_ends_once_the_dispatches_it_started_on_are_closed_though_a_new_o
     p.write_text(_j.dumps(st), encoding="utf-8")
     so, _ = w.communicate(timeout=30)
     assert (w.returncode, so) == (0, "các lần giao `P wait` chờ đã đóng (đã ingest hoặc giao lại) → `next`\n")
+
+
+def test_a_report_wakes_the_wait_only_once_its_agent_stopped_or_vn_stayed_quiet_after_it_p6_2(tmp_path):
+    """Pilot 6: the blockout worker wrote its report, `P wait` woke, the Producer ingested and the reviewer graded,
+    while the worker went on for two minutes (build_parts, prep_overlay, blockout_md) on the same v1. The stop record
+    of SubagentStop says the agent is done; without a hook, vN quiet for REPORT_QUIET_S after the report says so."""
+    import os
+    import time
+    from core import watch
+    from flowkit import A
+    f, out, _ = project(tmp_path)
+    (tmp_path / out["report"]).write_text("STATUS: DONE\n", encoding="utf-8")
+    assert f.p("wait", "--every", "0.05", "--max-min", "0.01").startswith("chưa có gì sau")
+    assert watch.REPORT_QUIET_S == 180
+    age(f.root / A / "blockout/v1", 4)
+    assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
+    (tmp_path / out["report"]).touch()
+    edit_job(f, stopped="report")
+    assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
+
+
+def test_ingest_refuses_a_report_while_its_agent_still_changes_vn_and_takes_it_once_the_agent_stopped_p6_2(tmp_path):
+    import os
+    import time
+    f, out, _ = project(tmp_path)
+    rep = tmp_path / out["report"]
+    rep.write_text("STATUS: DONE\n", encoding="utf-8")
+    t = time.time()
+    os.utime(rep, (t - 60, t - 60))
+    (rep.parent / "work").mkdir(exist_ok=True)
+    (rep.parent / "work/blockout.md").write_text("sửa sau report", encoding="utf-8")
+    err = f.p("ingest", "pilot-house", ok=False)
+    assert "worker chưa dừng: v1 còn đổi file lúc " in err and "chờ subagent trả về rồi `ingest pilot-house`" in err
+    assert rep.is_file()
+    edit_job(f, stopped="report")
+    assert "thiếu PROFILE_HASH" in f.p("ingest", "pilot-house", ok=False)
+
+
+def test_the_stop_hook_lets_the_turn_end_while_the_agent_of_a_report_on_disk_still_runs_p6_2():
+    from core import watch
+    assert watch.main_stop_reason([asset()], lambda p: str(p) == REPORT, lambda st, rec: True,
+                                  lambda st, rec: False) is None
+    assert stop_reason([asset()], {REPORT}).startswith("Còn report chưa ingest")
 
 
 def test_policy_takes_only_known_dispatch_modes_and_watch_numbers_and_falls_back_to_the_template_d33_14_18():
@@ -566,6 +611,7 @@ def test_a_report_that_failed_the_contract_is_not_a_finished_job_for_wait_or_the
     report, again and again. The rejected report is set aside; the job is back to running."""
     f, out, _ = project(tmp_path)
     (tmp_path / out["report"]).write_text("STATUS: DONE\nOUTPUT: final/\n", encoding="utf-8")
+    edit_job(f, stopped="report")
     assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
     assert "thiếu PROFILE_HASH" in f.p("ingest", "pilot-house", ok=False)
     edit_job(f, stopped="report", deadline=ago(-60))
@@ -676,7 +722,8 @@ def test_the_hook_allows_the_stop_when_it_already_continued_once_or_there_is_no_
     monkeypatch.chdir(tmp_path)
     assert watch.on_main_stop(_j.dumps({"hook_event_name": "Stop", "stop_hook_active": False})) is None
     (tmp_path / "production/assets/a1").mkdir(parents=True)
-    (tmp_path / "production/assets/a1/status.json").write_text(_j.dumps(asset(agent_id="ag7")), encoding="utf-8")
+    (tmp_path / "production/assets/a1/status.json").write_text(_j.dumps(asset(agent_id="ag7", stopped="report")),
+                                                               encoding="utf-8")
     rep = tmp_path / REPORT
     rep.parent.mkdir(parents=True)
     rep.write_text("done", encoding="utf-8")
