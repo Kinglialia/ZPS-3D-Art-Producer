@@ -562,8 +562,27 @@ def test_ingest_refuses_a_report_while_its_agent_still_changes_vn_and_takes_it_o
     (rep.parent / "work/blockout.md").write_text("sửa sau report", encoding="utf-8")
     err = f.p("ingest", "pilot-house", ok=False)
     assert "worker chưa dừng: v1 còn đổi file lúc " in err and "chờ subagent trả về rồi `ingest pilot-house`" in err
+    assert "hoặc chạy nền `P wait` rồi kết thúc lượt" in err
     assert rep.is_file()
     edit_job(f, stopped="report")
+    assert "thiếu PROFILE_HASH" in f.p("ingest", "pilot-house", ok=False)
+
+
+def test_without_a_stop_record_ingest_takes_a_report_once_vn_stayed_quiet_so_wait_and_ingest_never_disagree_p6_2(
+        tmp_path):
+    """No hook (Codex without trusted hooks, or a stop that matched no dispatch): after REPORT_QUIET_S of quiet `P wait`
+    says ingest, so ingest must take the report, though vN changed after it."""
+    import os
+    import time
+    f, out, _ = project(tmp_path)
+    rep = tmp_path / out["report"]
+    rep.write_text("STATUS: DONE\n", encoding="utf-8")
+    late = rep.parent / "work/blockout.md"
+    late.parent.mkdir(exist_ok=True)
+    late.write_text("sửa sau report", encoding="utf-8")
+    age(rep.parent, 4)
+    os.utime(rep, (time.time() - 600, time.time() - 600))
+    assert "có báo cáo" in f.p("wait", "--every", "0.05", "--max-min", "0.01")
     assert "thiếu PROFILE_HASH" in f.p("ingest", "pilot-house", ok=False)
 
 
