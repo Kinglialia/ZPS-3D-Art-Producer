@@ -25,7 +25,7 @@ STOP = (signal.SIGTERM, signal.SIGHUP)
 CODEX_EXEC = "codex exec"
 IMAGE_TOOL = "image tool"
 SANDBOX_CRASH = "metal_is_supported"
-SANDBOX_HELP = ("Blender chết lúc khởi động: lệnh đã chạy trong sandbox của Codex, nơi Blender không mở được Metal. "
+SANDBOX_HELP = ("Lệnh đã chạy trong sandbox của Codex, nơi Blender không khởi động được (bước kiểm Metal). "
                 "Chạy lại đúng dòng sau, đứng một mình (không pipe, không &&, không cd, không biến, không thêm gì ở đầu), "
                 "để rule của Codex khớp và cho lệnh ra ngoài sandbox:\n{cmd}\n"
                 "Vẫn lỗi này thì dừng, STATUS: BLOCKED: người dùng chạy `installer/codex_rules.py --write` của bản build "

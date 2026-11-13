@@ -158,28 +158,59 @@ def test_the_readme_drops_a_note_only_when_a_later_approved_reviewer_confirmed_t
     assert assemble.open_work(st) == ["- views v2 F3 [minor] top: rêu: sửa", "- views v2 F4 [minor] front: đinh: sửa"]
 
 
-def test_a_blender_that_dies_in_the_codex_sandbox_prints_the_exact_line_to_run_again(tmp_path):
-    rep = project(tmp_path)
-    exe = tmp_path / "Blender"
-    exe.write_text("#!/bin/sh\necho '7 Blender _ZN7blender3gpu10MTLBackend18metal_is_supportedEv + 364' >&2\nexit 139\n",
-                   encoding="utf-8")
+SANDBOX_STACK = "echo '7 Blender _ZN7blender3gpu10MTLBackend18metal_is_supportedEv + 364' >&2\nexit 139\n"
+
+
+def blender_at(t: Path, body: str) -> Path:
+    exe = t / "Blender"
+    exe.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
     exe.chmod(0o755)
+    return exe
+
+
+def codex_main(t: Path, mp, exe: Path):
+    """assemble.main in process as the Codex edition: its runtime.json says `runtime: codex`."""
+    import assemble
+    mp.chdir(t)
+    mp.setattr(assemble, "EDITION", {"runtime": "codex"})
     cmd = [sys.executable, str(SCRIPTS / "assemble.py"), "--blender", str(exe), "--", AID, "1", "abc123"]
-    r = subprocess.run(cmd, cwd=tmp_path, capture_output=True, text=True)
-    assert r.returncode == 1
-    assert "sandbox của Codex" in r.stderr and "\n" + shlex.join(cmd) + "\n" in r.stderr
+    mp.setattr(sys, "argv", cmd[1:])
+    try:
+        assemble.main()
+    except SystemExit as ex:
+        return ex.code, shlex.join(cmd)
+
+
+def test_a_blender_that_dies_in_the_codex_sandbox_prints_the_exact_line_to_run_again(tmp_path, monkeypatch, capsys):
+    rep = project(tmp_path)
+    code, line = codex_main(tmp_path, monkeypatch, blender_at(tmp_path, SANDBOX_STACK))
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "sandbox của Codex" in err and "\n" + line + "\n" in err
     assert "Blender chết trong sandbox của Codex" in rep.read_text(encoding="utf-8")
 
 
-def test_inside_the_codex_sandbox_assemble_blocks_before_blender_starts_and_prints_the_line_to_run_again(tmp_path):
-    """Blender always dies in the sandbox (measured 2026-11-13); Codex sets CODEX_SANDBOX only there."""
+def test_inside_the_codex_sandbox_assemble_exits_2_before_it_changes_anything_so_the_line_runs_again_as_is(
+        tmp_path, monkeypatch, capsys):
+    """Blender always dies in the sandbox (measured 2026-11-13); Codex sets CODEX_SANDBOX only there. A BLOCKED report
+    here would make `ingest` block the asset, while the help says to run the same line again."""
     rep = project(tmp_path)
-    exe = tmp_path / "Blender"
-    exe.write_text(f"#!/bin/sh\ntouch {tmp_path / 'ran'}\n", encoding="utf-8")
-    exe.chmod(0o755)
-    cmd = [sys.executable, str(SCRIPTS / "assemble.py"), "--blender", str(exe), "--", AID, "1", "abc123"]
-    r = subprocess.run(cmd, cwd=tmp_path, env=os.environ | {"CODEX_SANDBOX": "seatbelt"}, capture_output=True, text=True)
-    assert (r.returncode, (tmp_path / "ran").exists()) == (1, False)
-    assert "sandbox của Codex" in r.stderr and "\n" + shlex.join(cmd) + "\n" in r.stderr
-    text = rep.read_text(encoding="utf-8")
-    assert text.startswith("STATUS: BLOCKED\n") and "sandbox của Codex" in text.splitlines()[2]
+    keep = rep.parent / "final/keep.txt"
+    keep.parent.mkdir(parents=True)
+    keep.write_text("keep", encoding="utf-8")
+    monkeypatch.setenv("CODEX_SANDBOX", "seatbelt")
+    code, line = codex_main(tmp_path, monkeypatch, blender_at(tmp_path, f"touch {tmp_path / 'ran'}\n"))
+    err = capsys.readouterr().err
+    assert (code, (tmp_path / "ran").exists(), rep.exists(), keep.read_text(encoding="utf-8")) == (2, False, False, "keep")
+    assert list((tmp_path / "production").rglob("*.pid")) == []
+    assert "sandbox của Codex" in err and "\n" + line + "\n" in err and "codex_rules.py --write" in err
+
+
+def test_outside_the_codex_edition_codex_sandbox_and_a_metal_crash_give_the_normal_blocked_report(tmp_path):
+    """The sandbox help names installer/codex_rules.py, which only the Codex edition ships."""
+    rep = project(tmp_path)
+    exe = blender_at(tmp_path, SANDBOX_STACK)
+    r = subprocess.run([sys.executable, str(SCRIPTS / "assemble.py"), "--blender", str(exe), "--", AID, "1", "abc123"],
+                       cwd=tmp_path, env=os.environ | {"CODEX_SANDBOX": "seatbelt"}, capture_output=True, text=True)
+    assert (r.returncode, r.stderr) == (1, "")
+    assert rep.read_text(encoding="utf-8").splitlines()[2].startswith("ISSUES: export GLB: assemble_qa ")

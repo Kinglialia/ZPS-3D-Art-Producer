@@ -24,9 +24,9 @@ The script starts itself on the python of scripts/.deps/venv.
 Prints one line: `<tool> <pass|fail|error> [path ...]`. fail: a result JSON written during this run has `overall` fail or
 error, or `pass` false (core.briefs.failed_checks), and the paths are those JSON. error: the tool exited non-zero and
 wrote no such JSON, and the path is its log.
-Exit code: 0 pass; 1 fail or error; 2 refused or wrong command, or a `bl` call in the Codex sandbox (CODEX_SANDBOX set,
-refused before Blender starts) or a Blender that died there: the message gives the line to run again, through
-core.state.rule_dir."""
+Exit code: 0 pass; 1 fail or error; 2 refused or wrong command, or, in the Codex edition only, a `bl` call in the Codex
+sandbox (CODEX_SANDBOX set, refused before Blender starts) or a Blender that died there: the message gives the line to
+run again, through core.state.rule_dir."""
 from __future__ import annotations
 
 import json
@@ -150,7 +150,8 @@ def run(argv: list[str], skill: Path) -> int:
     exe = opts.get("--blender")
     if exe:
         check_blender(exe)
-    if bl and os.environ.get("CODEX_SANDBOX"):
+    codex_bl = bl and is_codex(skill)
+    if codex_bl and os.environ.get("CODEX_SANDBOX"):
         raise Refused(sandbox_help(skill, argv))
     pid = vd.parents[3] / "pids" / "blender" / f"{vd.parents[1].name}-{os.getpid()}.pid" if bl else None
     setup = tools / "setup_deps.sh"
@@ -175,7 +176,7 @@ def run(argv: list[str], skill: Path) -> int:
         if pid:
             pid.unlink(missing_ok=True)
     log = write_log(vd, real.stem, p)
-    if bl and heartbeat.sandbox_crash(p):
+    if codex_bl and heartbeat.sandbox_crash(p):
         raise Refused(sandbox_help(skill, argv))
     fails = written_fails(vd, before)
     overall = "fail" if fails else "error" if p.returncode else "pass"

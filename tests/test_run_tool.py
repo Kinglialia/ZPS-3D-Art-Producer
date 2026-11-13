@@ -418,9 +418,15 @@ def test_the_run_line_names_the_blender_of_the_preflight_and_a_step_without_blen
 SANDBOX_STACK = "6   Blender  0x0000000105cfffd4 _ZN7blender3gpu10MTLBackend18metal_is_supportedEv + 364\n"
 
 
+def codex(rt: RT) -> RT:
+    (rt.skill / "runtime.json").write_text(json.dumps({"runtime": "codex"}), encoding="utf-8")
+    return rt
+
+
 def test_a_blender_that_dies_in_the_codex_sandbox_exits_2_with_the_exact_line_to_run_again_not_a_tool_error(rt):
     """Blender 5.2 segfaults in the Metal check inside the Codex sandbox. A worker who sees `error` repairs its own
     files; the cause is the command shape, so the script names the one line that the Codex rule lets out."""
+    codex(rt)
     rt.tool("join_mesh.py", "print('never runs')\n")
     rt.bl.write_text(f"#!/bin/sh\nprintf '%s' '{SANDBOX_STACK}' >&2\nexit 139\n", encoding="utf-8")
     rc, out, err = rt.run("bl", "join_mesh.py", "--x", "a b", blender=True)
@@ -434,6 +440,7 @@ def test_a_blender_that_dies_in_the_codex_sandbox_exits_2_with_the_exact_line_to
 def test_a_blender_call_inside_the_codex_sandbox_is_refused_before_blender_starts_with_the_line_to_run_again(rt):
     """Blender always dies in the sandbox (measured 2026-11-13): starting it there costs a crash and a stack in the log.
     Codex sets CODEX_SANDBOX only inside; the rule that lets the line out leaves it unset."""
+    codex(rt)
     rt.mp.setenv("CODEX_SANDBOX", "seatbelt")
     rt.tool("join_mesh.py", "print('never runs')\n")
     rc, out, err = rt.run("bl", "join_mesh.py", "--x", "a b", blender=True)
@@ -441,6 +448,14 @@ def test_a_blender_call_inside_the_codex_sandbox_is_refused_before_blender_start
                        "--version-dir", rt.relpath(rt.vd), "bl", "join_mesh.py", "--x", "a b"])
     assert (rc, out, rt.blender_log.exists(), list(rt.pids.iterdir())) == (2, "", False, [])
     assert "sandbox của Codex" in err and f"\n{line}\n" in err
+
+
+def test_outside_the_codex_edition_a_blender_crash_is_a_tool_error_and_codex_sandbox_refuses_nothing(rt):
+    """The sandbox help names installer/codex_rules.py, which only the Codex edition ships."""
+    rt.mp.setenv("CODEX_SANDBOX", "seatbelt")
+    rt.tool("join_mesh.py", "print('never runs')\n")
+    rt.bl.write_text(f"#!/bin/sh\nprintf '%s' '{SANDBOX_STACK}' >&2\nexit 139\n", encoding="utf-8")
+    assert rt.run("bl", "join_mesh.py", blender=True) == (1, f"join_mesh error {rt.relpath(rt.log('join_mesh'))}\n", "")
 
 
 def test_a_plain_tool_inside_the_codex_sandbox_still_runs_because_only_blender_needs_the_rule(rt):
@@ -466,7 +481,7 @@ def test_with_a_space_in_the_skill_path_the_line_to_run_again_names_the_link_the
     link = codex_link(spaced.skill)
     link.parent.mkdir(parents=True)
     link.symlink_to(spaced.skill, target_is_directory=True)
-    spaced.mp.setenv("CODEX_SANDBOX", "seatbelt")
+    codex(spaced).mp.setenv("CODEX_SANDBOX", "seatbelt")
     spaced.tool("join_mesh.py", "print('never runs')\n")
     rc, _, err = spaced.run("bl", "join_mesh.py", blender=True)
     first = err.split("\n")[1].split(" ")[0]
