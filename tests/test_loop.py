@@ -674,7 +674,7 @@ def test_the_review_brief_asks_for_a_report_file_with_text_only_as_fallback_and_
     assert [l for l in text.splitlines() if "review-out" in l or "--- report" in l or "nguyên văn" in l or "Tin nhắn" in l] == [
         f"Ghi report vào `production/assets/{AID}/blockout/v1/review-out.md`. Report mở đầu đúng format, mỗi khóa "
         "một dòng:",
-        "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
+        "- EVIDENCE_OPENED: nhãn cách nhau bằng dấu phẩy, không chứa dấu phẩy hay chấm phẩy. `evidence` của "
         "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. Lệnh ghi file bị chặn: trả cả report giữa "
         "dòng `--- report ---` và dòng `--- end ---`."]

@@ -118,13 +118,19 @@ def test_the_brief_that_replaces_those_lines_states_them(flow):  # noqa: F811
                    "  region: … | viewing_condition: … | evidence: <nhãn trong EVIDENCE_OPENED> …",
                    "  consequence: … | confidence: high|medium|low", "  repair: … | preserve: … | acceptance: …",
                    "preference không chặn PASS", "rubric mâu thuẫn brief → ESCALATE",
-                   "- ESCALATE: thêm dòng `ESCALATE: <lý do; các phương án>`. Ghi chú khác: cuối report, dưới dòng "
-                   "`## Ghi chú`, không trong FINDINGS hay PRIOR.",
+                   "→ ESCALATE kèm `ESCALATE: <lý do; phương án>`.",
                    # The script fills every open finding of a batch kind with a priority in BATCH_PRIO; the old
                    # reviewer line said every open `param` finding. P29 left the rule in the brief only.
                    f"loại lô chỉ ghi loại, script điền mọi finding {'/'.join(findings.BATCH_PRIO)} đang mở của loại đó",
                    "structure 1 id mỗi part, region `<part>: …`", "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK):
         assert stated in rv, stated
+
+
+@pytest.mark.parametrize("step", STEPS)
+def test_each_reviewer_file_gives_free_notes_a_place_outside_the_contract_blocks_p6_1(step):
+    """Pilot 6: with no place for them, four reviewers put notes inside FINDINGS or PRIOR and their reports came back."""
+    assert ("- Ghi chú ngoài các khóa của brief: cuối report, dưới dòng `## Ghi chú`; không đặt trong FINDINGS hay PRIOR."
+            in reviewer(step).splitlines())
 
 
 @pytest.mark.parametrize("step", ["blockout", "clay", "texture"])

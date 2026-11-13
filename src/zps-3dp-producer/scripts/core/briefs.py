@@ -684,7 +684,7 @@ def review_brief(cfg, st, step, n) -> str:
         "```",
         f"- FINDINGS chỉ ghi finding mới, id từ F{nxt}, đủ mọi trường; evidence dẫn nhãn trong EVIDENCE_OPENED. "
         "Không có finding mới: `FINDINGS: none`.",
-        "- EVIDENCE_OPENED: các nhãn cách nhau bằng dấu phẩy; nhãn không chứa dấu phẩy hay chấm phẩy. `evidence` của "
+        "- EVIDENCE_OPENED: nhãn cách nhau bằng dấu phẩy, không chứa dấu phẩy hay chấm phẩy. `evidence` của "
         "finding mới và của PRIOR resolved chép nguyên văn ít nhất một nhãn đó.",
         *([f"- Loại {', '.join(f'`{k}`' for k in notes)}: mức `minor`."] if notes else []),
         "- Sai số thành phần (cửa, chân bàn, đá) so với concept hoặc `blockout.md`: luôn "
@@ -698,14 +698,14 @@ def review_brief(cfg, st, step, n) -> str:
         *([f"- COMPARE: so ảnh cùng góc với v{m}: better|same|worse. resolved cần better; worse thì regressed."]
           if cmp_ids else []),
         "- VERDICT: còn blocker/major → FIX; chỉ còn unclear → FIX với TOP_FIX need_evidence; không còn → PASS; "
-        "người dùng phải chọn gu hoặc rubric mâu thuẫn brief → ESCALATE. preference không chặn PASS.",
+        "người dùng phải chọn gu hoặc rubric mâu thuẫn brief → ESCALATE kèm `ESCALATE: <lý do; phương án>`. "
+        "preference không chặn PASS.",
         "- TOP_FIX chỉ khi FIX: loại của finding nặng nhất" + (f" (cùng mức: {', '.join(tie)} trước)" if tie else "")
         + "; " + "".join(f"{k} " + ("1 id mỗi part, region `<part>: …`" if k == findings.PER_PART else "1 id") + "; "
                           for k in single)
         + "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi "
         "loại, script điền mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- Không ghi COUNTS. Mỗi key unclear trong RUBRIC cần một finding unclear.",
-        NOTES_RULE,
         *([prefill_line(pre)] if pre else []),
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,

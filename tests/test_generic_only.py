@@ -8,7 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # Built by concatenation, so this file does not match its own search.
 NEEDLES = ("woo" + "den-ch" + "est", "woo" + "den_ch" + "est", "rư" + "ơng")
-FIXTURE_DIRS = {"pilot"}
+# pilot6: four reviewer reports of a real run, kept word for word as contract-parser evidence (P6-1); text only.
+FIXTURE_DIRS = {"pilot", "pilot6"}
 MADE_BY = {"tests/fixtures/pilot/_approved/pilot-house/concept_albedo.png": "tests/fixtures/pilot/make_concepts.py",
            "tests/fixtures/pilot/_approved/pilot-house/concept_shadow.png": "tests/fixtures/pilot/make_concepts.py"}
 

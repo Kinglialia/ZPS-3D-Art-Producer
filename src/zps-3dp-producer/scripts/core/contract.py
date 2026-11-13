@@ -54,9 +54,9 @@ def word(s: str) -> str:
 def parse_contract(text: str, keys: set[str], errs: list[str] | None = None) -> dict:
     """First `KEY: value` of each key; the key may be bold, in backticks or in any case. FINDINGS and PRIOR collect
     their `- ` items and indented lines. An indented line after a one-line key continues its value. An unindented prose
-    line, a `##` heading too, ends a block; a finding or PRIOR item after it would be lost, so that is an error. Other
-    lines after it are notes. P6-1: `PRIOR: F1=open; F2=open` on the key line gives the items `- F1: open`, and indented
-    notes right under `FINDINGS: none` are left out."""
+    line, a `##` heading too, ends a block; a finding or a PRIOR item with a status after it would be lost, so that is
+    an error. Other lines after it are notes. P6-1: `PRIOR: F1=open; F2=open` on the key line gives the items
+    `- F1: open`, and indented notes right under `FINDINGS: none` are left out."""
     out, cur, last, lost, quiet = {}, None, None, None, False
     for line in text.splitlines():
         m = KEY.match(line)
@@ -80,7 +80,7 @@ def parse_contract(text: str, keys: set[str], errs: list[str] | None = None) -> 
         else:
             if cur:
                 lost = (cur, line.strip())
-            elif lost and (HEAD.match(line.strip()) or PRIOR.match(line.strip())):
+            elif lost and (HEAD.match(x := line.strip()) or (pm := PRIOR.match(x)) and word(pm.group(2)) in STATUSES):
                 if errs is not None:
                     errs.append(f"dòng không thụt lề trong {lost[0]}: '{lost[1][:60]}'; mục sau nó "
                                 f"'{line.strip()[:30]}' không được đọc")

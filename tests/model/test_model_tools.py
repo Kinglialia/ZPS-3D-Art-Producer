@@ -610,9 +610,12 @@ def test_the_sun_turns_into_the_light_workbench_sends_down_and_away_from_the_sun
     workbench_shadow.cc; tests/model/test_blender_light.py renders it). Pilot 6: the vector held the sun position, so
     every clay render was lit from below. A sun from the left in the front view (az -45, el 45) shines toward +X, +Y and
     down."""
+    import importlib.util
     from types import SimpleNamespace
-    sys.path[:0] = [str(TOOLS / "lib"), str(TOOLS / "self_build"), str(TOOLS)]
-    import render_review
+    sys.path[:0] = [str(TOOLS / "lib"), str(TOOLS / "self_build")]
+    spec = importlib.util.spec_from_file_location("model_render_review", TOOLS / "render_review.py")
+    render_review = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(render_review)
     sc = SimpleNamespace(display=SimpleNamespace(light_direction=None, shading=SimpleNamespace()))
     render_review.light(sc, {"azimuth_deg": -45.0, "elevation_deg": 45.0})
     x, y, z = sc.display.light_direction

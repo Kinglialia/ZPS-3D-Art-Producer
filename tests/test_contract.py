@@ -324,3 +324,13 @@ def test_escalate_carries_its_reason_and_options_on_one_key_so_the_producer_can_
                                    extra="ESCALATE: đèn render sai, không chấm được shadow_read; 1) sửa tool; 2) duyệt\n"))
     assert (errs, rv["escalate"]) == ([], "đèn render sai, không chấm được shadow_read; 1) sửa tool; 2) duyệt")
     assert parse_review(report())[0]["escalate"] is None
+
+
+def test_a_note_that_starts_like_a_prior_line_but_holds_no_status_is_a_note_p6_1():
+    """Pilot 6, texture v2: after a valid PRIOR, a `## Ghi chú` section opened with `- F1: lit_close_front v2 …` (the
+    log keeps only that head; the rest of the line here is made up). Without a status word it is no PRIOR item."""
+    text = report(verdict="PASS", top_fix=None, findings=["none"], prior=["- F1: resolved | evidence: clay_front"])
+    rv, errs = parse_review(text + "\n## Ghi chú\n- F1: lit_close_front v2 sạch hơn v1, hết vệt.\n")
+    assert (errs, rv["prior"]) == ([], {"F1": "resolved"})
+    _, errs = parse_review(text + "\n## Ghi chú\n- F2: open | evidence: clay_front\n")
+    assert errs == ["dòng không thụt lề trong PRIOR: '## Ghi chú'; mục sau nó '- F2: open | evidence: clay_fr' không được đọc"]
