@@ -531,6 +531,24 @@ def test_the_built_codex_preflight_turns_blender_on_only_once_the_rules_script_w
         True, str(codex_home(spaced_project) / "rules/zps-3dp-producer.rules"), False)
 
 
+def test_a_symlinked_blender_is_pinned_by_the_rule_as_the_preflight_finds_it_so_the_run_line_matches(spaced_project,
+                                                                                                        dist):
+    """Homebrew and /usr/local/bin give Blender as a link: the rules script and preflight must write the same string,
+    since the RUN line carries the preflight Blender and the rule pins its own."""
+    link = spaced_project.parent / "bin/blender-link"
+    link.symlink_to(plain_blender(spaced_project))
+    py = spaced_project / ".agents/skills/zps-3dp-producer-codex/scripts/producer.py"
+    env = {k: v for k, v in os.environ.items() if k not in ("PRODUCER_ROOT", "PRODUCER_RUNTIME", "PRODUCER_KIT")} | {
+        "BLENDER": str(link), "CODEX_HOME": str(codex_home(spaced_project))}
+    assert rules(spaced_project, dist, "--write", blender=link,
+                 rules_dir=codex_home(spaced_project) / "rules").returncode == 0
+    run_tool = patterns((codex_home(spaced_project) / "rules/zps-3dp-producer.rules").read_text(encoding="utf-8"))[2]
+    r = subprocess.run([sys.executable, str(py), "preflight"], cwd=spaced_project, env=env, capture_output=True, text=True)
+    pf = json.loads((spaced_project / "production/preflight.json").read_text(encoding="utf-8"))
+    assert (run_tool[1:], pf["blender"]["path"], pf["features"]["blender"]) == (["--blender", str(link)], str(link), True), \
+        r.stdout
+
+
 SHELL_WRITE = re.compile(r"heredoc|cat\s*>|\btee\b|<<\s*['\"]?[A-Z]+|python3?\s+-c", re.I)
 DISPATCH_RULE = ("   Lời giao việc chỉ gồm file role và brief: file role là agent `agent` (Codex: `agent_file`), brief là prompt "
                  "trên. Không thêm gì vào prompt. Không hướng dẫn cách ghi file: không heredoc, không `cat >`, không `tee`, "

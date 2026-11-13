@@ -50,9 +50,10 @@ SPAWNERS = ("scripts/assemble.py",)
 
 
 def find_blender(given):
+    """Keep a link as found: the RUN line prints the preflight Blender unresolved, and the rule must pin that string."""
     for p in (given, os.environ.get("BLENDER"), MAC_BLENDER, shutil.which("blender")):
         if p and os.path.isfile(p) and os.access(p, os.X_OK):
-            return os.path.realpath(p) if os.path.islink(p) else p
+            return p
     return None
 
 

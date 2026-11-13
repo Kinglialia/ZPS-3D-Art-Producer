@@ -202,7 +202,16 @@ def test_in_the_codex_edition_codex_image_is_off_with_the_reason_when_the_image_
 
 
 RULES_HINT = ("rule Codex chưa cho Blender ra ngoài sandbox ({why}) → từ gốc project chạy "
-              "`python3 installer/codex_rules.py --write` của bản build, rồi khởi động lại Codex")
+              "`python3 installer/codex_rules.py --write --blender {blender}` của bản build, rồi khởi động lại Codex")
+REPO = Path(__file__).resolve().parents[1]
+
+
+def rules_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("codex_rules", REPO / "editions/codex/installer/codex_rules.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 @pytest.fixture
@@ -220,10 +229,12 @@ def codex_ed(proj, direct, monkeypatch, tmp_path):
         monkeypatch.setattr(preflight, "SKILL_DIR", d)
         return d
 
-    def rules(path):
+    def rules(path, blender=None, text=None):
+        """The file that codex_rules.py writes for a run_tool.py at `path` and a Blender (default: the one found)."""
         f = home / "rules/zps-3dp-producer.rules"
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(f'prefix_rule(\n    pattern = [{json.dumps(str(path))}, "--blender", "/b"],\n)\n', encoding="utf-8")
+        f.write_text(text or rules_module().render(blender or str(proj.bin / "blender"), ["/s/scripts/a.py"],
+                                                   Path("/s/venv/python"), Path(path).parents[1]), encoding="utf-8")
         return f
     return skill, rules, home
 
@@ -232,13 +243,13 @@ def test_in_the_codex_edition_blender_is_off_until_the_codex_rules_file_exists(c
     skill, _, home = codex_ed
     skill("skill")
     out, res = direct()
-    f = home / "rules/zps-3dp-producer.rules"
+    f, b = home / "rules/zps-3dp-producer.rules", res["blender"]["path"]
     assert out == ("preflight: tắt blender, codex_image, meshy; không thấy `codex` trên PATH: worker không có tool ảnh "
-                   "→ cài codex-cli rồi chạy lại `preflight`; " + RULES_HINT.format(why=f"không có {f}") +
+                   "→ cài codex-cli rồi chạy lại `preflight`; " + RULES_HINT.format(why=f"không có {f}", blender=b) +
                    "; không có kit preflight.py → production/preflight.json\n")
     assert (res["features"]["blender"], res["blender"]["version"], res["codex_rules"]) == (False, "5.2.3", {
         "file": str(f), "present": False, "run_tool": str(home.parent / "skill/scripts/run_tool.py"),
-        "names_run_tool": False, "link": None, "link_ok": None})
+        "names_run_tool": False, "blender": b, "rule_blender": None, "link": None, "link_ok": None})
 
 
 def test_in_the_codex_edition_a_rules_file_of_another_install_keeps_blender_off(codex_ed, direct):
@@ -246,7 +257,7 @@ def test_in_the_codex_edition_a_rules_file_of_another_install_keeps_blender_off(
     skill("skill")
     f = rules("/old/install/scripts/run_tool.py")
     out, res = direct()
-    assert RULES_HINT.format(why=f"{f} không nêu {res['codex_rules']['run_tool']}") in out
+    assert RULES_HINT.format(why=f"{f} không nêu {res['codex_rules']['run_tool']}", blender=res["blender"]["path"]) in out
     assert (res["features"]["blender"], res["codex_rules"]["present"], res["codex_rules"]["names_run_tool"]) == (
         False, True, False)
 
@@ -259,7 +270,7 @@ def test_in_the_codex_edition_a_skill_path_with_a_space_needs_its_link_before_bl
     link = codex_link(d)
     rules(link / "scripts/run_tool.py")
     out, res = direct()
-    assert RULES_HINT.format(why=f"thiếu link {link} → {d}") in out
+    assert RULES_HINT.format(why=f"thiếu link {link} → {d}", blender=res["blender"]["path"]) in out
     assert (res["features"]["blender"], res["codex_rules"]["link"], res["codex_rules"]["link_ok"]) == (
         False, str(link), False)
 
@@ -274,8 +285,37 @@ def test_in_the_codex_edition_blender_is_on_when_the_rules_name_the_run_program_
     f = rules(link / "scripts/run_tool.py")
     out, res = direct()
     assert out.startswith("preflight: bật blender; tắt codex_image, meshy; ") and "codex_rules.py" not in out
+    b = res["blender"]["path"]
     assert res["codex_rules"] == {"file": str(f), "present": True, "run_tool": str(link / "scripts/run_tool.py"),
-                                  "names_run_tool": True, "link": str(link), "link_ok": True}
+                                  "names_run_tool": True, "blender": b, "rule_blender": b, "link": str(link),
+                                  "link_ok": True}
+
+
+def test_in_the_codex_edition_blender_is_off_when_the_run_tool_rule_pins_another_blender_than_the_briefs_print(
+        codex_ed, direct):
+    """The RUN line of a brief carries the preflight Blender: a rule that pins another one never matches it, and every
+    Blender call of a worker would be refused in the sandbox."""
+    skill, rules, _ = codex_ed
+    d = skill("skill")
+    f = rules(d / "scripts/run_tool.py", blender="/Applications/Blender.app/Contents/MacOS/Blender")
+    out, res = direct()
+    b = res["blender"]["path"]
+    why = (f"rule run_tool.py trong {f} ghim --blender /Applications/Blender.app/Contents/MacOS/Blender, "
+           f"brief in --blender {b}")
+    assert RULES_HINT.format(why=why, blender=b) in out
+    assert (res["features"]["blender"], res["codex_rules"]["names_run_tool"], res["codex_rules"]["blender"],
+            res["codex_rules"]["rule_blender"]) == (False, True, b, "/Applications/Blender.app/Contents/MacOS/Blender")
+
+
+def test_in_the_codex_edition_the_blender_must_be_the_one_of_the_run_tool_rule_not_anywhere_in_the_file(codex_ed, direct):
+    """Both strings in the file do not make the rule: here the found Blender is only the program of a direct rule."""
+    skill, rules, _ = codex_ed
+    d = skill("skill")
+    mod, run_tool = rules_module(), str(d / "scripts/run_tool.py")
+    b = direct()[1]["blender"]["path"]
+    rules(run_tool, text=mod.rule([b, "-b", "--python", ["/s/a.py"], "--"], "x") + mod.rule([run_tool, "--blender", "/b"], "y"))
+    _, res = direct()
+    assert (res["features"]["blender"], res["codex_rules"]["rule_blender"]) == (False, "/b")
 
 
 def test_in_the_codex_edition_a_missing_codex_turns_codex_image_off_with_the_reason(direct):

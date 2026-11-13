@@ -1,6 +1,7 @@
 """`P preflight` (docs/producer.md §14 1b, D25.C): what this machine can run, cached in production/preflight.json."""
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -113,9 +114,21 @@ def settings_gap(b: dict | None) -> dict | None:
     return {"file": rel(d / "settings.json"), "missing": settings_merge.missing(have, want)}
 
 
-def codex_rules() -> dict | None:
-    """Codex edition (D46): Blender runs only through installer/codex_rules.py's rules, so the rules file must name the
-    run_tool.py of the briefs, and a skill path that needs quotes needs its link. None in another edition."""
+def patterns(text: str) -> list[list]:
+    """The `pattern` of each prefix_rule that installer/codex_rules.py render() writes."""
+    out = []
+    for m in re.finditer(r"pattern = (\[.*?\]),\n    decision", text, re.S):
+        try:
+            out.append(ast.literal_eval(m.group(1)))
+        except (ValueError, SyntaxError):
+            continue
+    return out
+
+
+def codex_rules(blender: str | None) -> dict | None:
+    """Codex edition (D46): Blender runs only through installer/codex_rules.py's rules, so the rules file must hold the
+    rule [run_tool.py of the briefs, "--blender", the Blender the briefs print], and a skill path that needs quotes
+    needs its link. None in another edition."""
     if EDITION.get("runtime") != "codex":
         return None
     f = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser() / "rules" / RULES_FILE
@@ -125,21 +138,26 @@ def codex_rules() -> dict | None:
         text = f.read_text(encoding="utf-8")
     except OSError:
         text = None
-    return {"file": str(f), "present": text is not None, "run_tool": str(run_tool),
-            "names_run_tool": text is not None and json.dumps(str(run_tool)) in text,
+    mine = [p for p in patterns(text or "") if p[:1] == [str(run_tool)]]
+    pinned = next((p[2] for p in mine if len(p) == 3 and p[1] == "--blender" and isinstance(p[2], str)), None)
+    return {"file": str(f), "present": text is not None, "run_tool": str(run_tool), "names_run_tool": bool(mine),
+            "blender": blender, "rule_blender": pinned,
             "link": str(link) if link else None, "link_ok": rule_dir(SKILL_DIR) == link if link else None}
 
 
 def rules_ok(r: dict | None) -> bool:
-    return r is None or (r["names_run_tool"] and r["link_ok"] is not False)
+    return r is None or (r["names_run_tool"] and r["rule_blender"] == r["blender"] and r["link_ok"] is not False)
 
 
 def rules_why(r: dict) -> str:
     why = ([f"không có {r['file']}"] if not r["present"] else
-           [f"{r['file']} không nêu {r['run_tool']}"] if not r["names_run_tool"] else []) + (
+           [f"{r['file']} không nêu {r['run_tool']}"] if not r["names_run_tool"] else
+           [f"rule run_tool.py trong {r['file']} ghim --blender {r['rule_blender'] or '(không có)'}, brief in "
+            f"--blender {r['blender']}"] if r["rule_blender"] != r["blender"] else []) + (
         [f"thiếu link {r['link']} → {SKILL_DIR}"] if r["link_ok"] is False else [])
     return (f"rule Codex chưa cho Blender ra ngoài sandbox ({', '.join(why)}) → từ gốc project chạy "
-            "`python3 installer/codex_rules.py --write` của bản build, rồi khởi động lại Codex")
+            f"`python3 installer/codex_rules.py --write --blender {shlex.quote(r['blender'])}` của bản build, rồi "
+            "khởi động lại Codex")
 
 
 def run_preflight(a):
@@ -152,7 +170,7 @@ def run_preflight(a):
     cli = codex_direct(codex) if direct else codex_cli(codex)
     k = kit(Path(os.environ["PRODUCER_KIT"]) if os.environ.get("PRODUCER_KIT") else KIT_SIBLING)
     image = cli is not None and (cli["image_generation"] if direct else not cli["missing_flags"])
-    rules = codex_rules()
+    rules = codex_rules(b["path"] if b else None)
     feats = {"blender": b is not None and rules_ok(rules), "codex_image": image, "meshy": has_meshy_key(ef)}
     gap = settings_gap(b)
     doc = {"at": now(), "features": feats, "blender": b, "codex": codex, "codex_cli": cli, "env_file": ef, "kit": k} | (
