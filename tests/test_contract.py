@@ -276,3 +276,51 @@ def test_an_unfilled_template_line_from_the_brief_is_still_rejected_so_no_verdic
 def test_an_unfilled_template_line_in_a_worker_report_is_still_rejected():
     _, errs = parse_worker("STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED\nPROFILE_HASH: abc\nUNFIXABLE: yes|no\n")
     assert errs == ["STATUS phải là BLOCKED|DONE|DONE_WITH_CONCERNS|NEEDS_CONTEXT", "UNFIXABLE phải là yes|no"]
+
+
+PILOT6 = Path(__file__).resolve().parent / "fixtures/pilot6"
+
+
+def pilot6_base(f1="open"):
+    """findings.json of the pilot-6 chair at model v1: F1 unclear (the render light), F2 preference. The evidence round
+    and the re-review judge v1 itself, so no COMPARE is due."""
+    f = dict.fromkeys(FIELDS, "x")
+    return {"version": 1, "base": None, "top_fix": None, "pick": None, "next_id": 3, "findings": {
+        "F1": f | {"priority": "unclear", "kind": "structure", "status": f1, "first_v": 1, "last_v": 1},
+        "F2": f | {"priority": "preference", "kind": "structure", "status": "open", "first_v": 1, "last_v": 1}}}
+
+
+@pytest.mark.parametrize("name, f1, verdict, prior", [
+    ("review-rejected-1.md", "open", "ESCALATE", {"F1": "open", "F2": "open"}),
+    ("review-rejected-2.md", "open", "ESCALATE", {"F1": "open", "F2": "open"}),
+    ("review-rejected-3.md", "open", "ESCALATE", {"F1": "open", "F2": "open"}),
+    ("review-rejected-4.md", "waived", "PASS", {"F2": "open"})])
+def test_the_four_clay_reports_pilot_6_refused_for_form_are_read_as_the_reviewer_meant_them_p6_1(name, f1, verdict, prior):
+    """Pilot 6 sent four clay reports back for form alone (about 90k tokens): PRIOR on one line (`F1=open; F2=open`),
+    an ESCALATE reason under a `##` heading or indented under `FINDINGS: none`, and notes under `## Ghi chú` with
+    `- F1 đã waive` items. None of these lines is a finding or a PRIOR item, so no judgment is lost by ignoring them."""
+    from core import findings
+    rv, errs = parse_review((PILOT6 / name).read_text(encoding="utf-8"))
+    _, more = findings.apply(pilot6_base(f1), rv, {"id": "model", "top_fix": ["structure", "param"]}, 1)
+    assert (errs, more) == ([], [])
+    assert (rv["verdict"], rv["findings"], rv["prior"]) == (verdict, {}, prior)
+
+
+def test_a_finding_after_a_notes_heading_is_still_refused_because_it_would_be_lost_p6_1():
+    text = report(verdict="PASS", top_fix=None, findings=["none"], prior=["- F2: open"])
+    _, errs = parse_review(text + "## Ghi chú\n- F1 đã waive: không ghi PRIOR.\n" + finding("F3") + "\n")
+    assert errs == ["dòng không thụt lề trong PRIOR: '## Ghi chú'; mục sau nó '- F3 [major] structure' không được đọc"]
+
+
+def test_indented_notes_under_findings_none_are_left_out_but_a_finding_after_them_is_read_p6_1():
+    text = report(findings=["  Ghi chú (không phải finding):", "  Lý do: đèn render sai.", finding("F1")]).replace(
+        "FINDINGS:\n", "FINDINGS: none\n")
+    rv, errs = parse_review(text)
+    assert (errs, list(rv["findings"])) == ([], ["F1"])
+
+
+def test_escalate_carries_its_reason_and_options_on_one_key_so_the_producer_can_ask_the_user_p6_1():
+    rv, errs = parse_review(report(verdict="ESCALATE", top_fix=None, findings=["none"],
+                                   extra="ESCALATE: đèn render sai, không chấm được shadow_read; 1) sửa tool; 2) duyệt\n"))
+    assert (errs, rv["escalate"]) == ([], "đèn render sai, không chấm được shadow_read; 1) sửa tool; 2) duyệt")
+    assert parse_review(report())[0]["escalate"] is None

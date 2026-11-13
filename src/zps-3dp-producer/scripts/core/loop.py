@@ -505,6 +505,8 @@ def on_review(cfg, st, step, d, n, a) -> tuple[str, str]:
     event, reason = review_event(rv["verdict"], kind, who != "human", st.get("fix_round", 0), r["max_fix_rounds"],
                                  not base or findings.progress(base, doc), st.get("evidence_used", 0),
                                  reopened_of(st).get(kind, 0))
+    if rv["verdict"] == "ESCALATE" and rv["escalate"]:
+        reason = f"reviewer ESCALATE ({rv['escalate']})"
     if event == "approve" and st.get("pending_redo"):
         event = "await_approval"
     st["evidence"] = None

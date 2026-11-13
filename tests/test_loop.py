@@ -217,6 +217,15 @@ def test_escalate_goes_to_the_human_at_once_without_another_round(flow):
                              "label": "chưa đạt", "note": "reviewer ESCALATE; còn mở: F1"}
 
 
+def test_the_escalate_reason_of_the_report_reaches_the_line_the_producer_reads_and_waits_count_it_as_escalate_p6_1(flow):
+    """Pilot 6: the reviewer had no key for its reason and options, so it wrote them where the contract refused them."""
+    flow.work()
+    flow.review(verdict="ESCALATE", top_fix=None, findings=[finding("F1", "major", "param")],
+                extra="ESCALATE: đèn render sai; 1) sửa tool; 2) duyệt\n")
+    assert flow.st["note"] == "reviewer ESCALATE (đèn render sai; 1) sửa tool; 2) duyệt); còn mở: F1"
+    assert flow.st["offer_log"][-1]["why"] == "reviewer ESCALATE"
+
+
 def test_each_offer_has_its_own_key_so_a_board_click_names_the_offer_it_answers(flow):
     flow.work()
     flow.review(verdict="ESCALATE", top_fix=None, findings=[finding("F1", "major", "param")])
@@ -2057,10 +2066,14 @@ def test_a_crop_served_from_disk_goes_back_to_the_reviewer_that_asked_with_a_sho
     assert flow.text(out).splitlines() == [
         "# Review brief — House A · bước `blockout` · v1 · tiếp", "", "REVIEW_SCOPE: full", "",
         f"Ảnh bạn xin đã có: `{v1}/review/evidence-1/game_cam-crop1.png`.",
-        f"Chấm lại v1 với ảnh này. Report cùng format như lần trước, ghi vào `{v1}/review-out.md`.",
-        "- PRIOR: mọi id đang mở F1, kể cả id bạn vừa ghi. Không ghi COMPARE.",
+        f"Chấm lại v1 với ảnh này. Report cùng format như lần trước, ghi vào `{v1}/review-out.md`. Không ghi COMPARE.",
+        "```", "PRIOR:", "- F1: ? | evidence: ? | acceptance: đỉnh mái 3.2 m trên clay_front", "```",
+        "- PRIOR: thay `?` bằng open|resolved|regressed|superseded. resolved chỉ khi thấy bằng chứng cho acceptance, "
+        "ghi nhãn ảnh đó vào evidence.",
         "- FINDINGS: chỉ finding mới, id từ F2, hoặc `FINDINGS: none`.",
         "- EVIDENCE_OPENED: thêm tên ảnh mới.",
+        "- ESCALATE: thêm dòng `ESCALATE: <lý do; các phương án>`. Ghi chú khác: cuối report, dưới dòng `## Ghi chú`, "
+        "không trong FINDINGS hay PRIOR.",
         "", f"Tin nhắn trả về cho Producer: chỉ dòng VERDICT. {FALLBACK}"]
     assert flow.review(out=out, agent_id="r1", verdict="PASS", top_fix=None, rubric="props=pass",
                        evidence="game_cam, game_cam-crop1", prior=["- F1: resolved | evidence: game_cam-crop1"]) == (

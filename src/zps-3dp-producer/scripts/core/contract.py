@@ -15,7 +15,8 @@ CONFIDENCE = ("high", "medium", "low")
 RUBRIC_VALUES = ("pass", "fail", "unclear", "not_checked")
 PICKS = ("a", "b", "c")
 BLOCKS = {"FINDINGS", "PRIOR"}
-REVIEW_KEYS = {"VERDICT", "RUBRIC", "COUNTS", "TOP_FIX", "EVIDENCE_OPENED", "COMPARE", "PICK", "RESOLVED_CONFIRMED"} | BLOCKS
+REVIEW_KEYS = {"VERDICT", "RUBRIC", "COUNTS", "TOP_FIX", "EVIDENCE_OPENED", "COMPARE", "PICK", "RESOLVED_CONFIRMED",
+               "ESCALATE"} | BLOCKS
 WORKER_KEYS = {"STATUS", "OUTPUT", "RUBRIC", "ISSUES", "PROFILE_HASH", "FIXED", "UNFIXABLE", "RESOLVED_NOTES",
                "ACCEPTED_FAIL"}
 NONE = {"", "-", "—", "none"}
@@ -25,7 +26,6 @@ FID = r"[FH]\d+"
 MARK = r"[*`]*"
 HEAD = re.compile(rf"^-\s*{MARK}({FID}){MARK}\s*\[(\w+)\]\s*{MARK}(\w*){MARK}(.*)$")
 PRIOR = re.compile(rf"^-\s*{MARK}({FID}){MARK}\s*:\s*([^|\s]*)(.*)$")
-ITEM = re.compile(rf"^-\s*{MARK}{FID}\b")
 FIELD = re.compile(rf"^{MARK}({'|'.join(FIELDS)}){MARK}\s*:{MARK}\s*(.*)$", re.I | re.S)
 SPLIT = re.compile(rf"\s*\|\s*(?={MARK}(?:{'|'.join(FIELDS)}){MARK}\s*:)", re.I)
 PAREN = re.compile(r"\([^)]*\)")
@@ -54,8 +54,10 @@ def word(s: str) -> str:
 def parse_contract(text: str, keys: set[str], errs: list[str] | None = None) -> dict:
     """First `KEY: value` of each key; the key may be bold, in backticks or in any case. FINDINGS and PRIOR collect
     their `- ` items and indented lines. An indented line after a one-line key continues its value. An unindented prose
-    line ends a block; a `- F<n>` item after it would be lost, so that is an error."""
-    out, cur, last, lost = {}, None, None, None
+    line, a `##` heading too, ends a block; a finding or PRIOR item after it would be lost, so that is an error. Other
+    lines after it are notes. P6-1: `PRIOR: F1=open; F2=open` on the key line gives the items `- F1: open`, and indented
+    notes right under `FINDINGS: none` are left out."""
+    out, cur, last, lost, quiet = {}, None, None, None, False
     for line in text.splitlines():
         m = KEY.match(line)
         k = m.group(2).upper() if m else None
@@ -63,17 +65,22 @@ def parse_contract(text: str, keys: set[str], errs: list[str] | None = None) -> 
             cur = k if k in BLOCKS and k not in out else None
             last = k if k not in BLOCKS and k not in out else None
             lost = None
-            out.setdefault(k, [] if k in BLOCKS else m.group(3).strip())
+            out.setdefault(k, [f"- {i}: {s}" for i, s in re.findall(rf"({FID})\s*=\s*(\w+)", m.group(3))] if k in BLOCKS
+                           else m.group(3).strip())
+            quiet = bool(cur) and m.group(3).strip().lower() in NONE - {""}
         elif not line.strip():
             continue
+        elif cur and quiet and line[:1].isspace():
+            continue
         elif cur and (line.startswith("-") or line[:1].isspace()):
+            quiet = False
             out[cur].append(line.rstrip())
         elif last and line[:1].isspace():
             out[last] += " " + line.strip()
         else:
             if cur:
                 lost = (cur, line.strip())
-            elif lost and ITEM.match(line.strip()):
+            elif lost and (HEAD.match(line.strip()) or PRIOR.match(line.strip())):
                 if errs is not None:
                     errs.append(f"dòng không thụt lề trong {lost[0]}: '{lost[1][:60]}'; mục sau nó "
                                 f"'{line.strip()[:30]}' không được đọc")
@@ -234,4 +241,5 @@ def parse_review(text: str) -> tuple[dict, list[str]]:
         prior[fid] = s
     return {"verdict": v, "rubric": rubric, "counts": counts, "counts_text": c.get("COUNTS", ""), "top_fix": top_fix,
             "evidence": labels, "compare": compare, "pick": pick, "findings": findings, "prior": prior,
-            "confirmed": note_ids(c, "RESOLVED_CONFIRMED", errs)}, errs
+            "confirmed": note_ids(c, "RESOLVED_CONFIRMED", errs),
+            "escalate": None if c.get("ESCALATE", "").lower() in NONE else c["ESCALATE"]}, errs

@@ -379,6 +379,10 @@ def sheet_of(st, step, n: int, variant: str | None = None) -> Path | None:
 
 
 SUMMARY = "summary.json"
+PRIOR_RULE = ("- PRIOR: thay `?` bằng open|resolved|regressed|superseded. resolved chỉ khi thấy bằng chứng cho acceptance, "
+              "ghi nhãn ảnh đó vào evidence.")
+NOTES_RULE = ("- ESCALATE: thêm dòng `ESCALATE: <lý do; các phương án>`. Ghi chú khác: cuối report, dưới dòng `## Ghi chú`, "
+              "không trong FINDINGS hay PRIOR.")
 BRIEF_BYTES = 4096  # the budget of a reviewer brief, project and install paths left out; the part legend leaves it when it does not fit
 
 
@@ -676,7 +680,7 @@ def review_brief(cfg, st, step, n) -> str:
         "  region: … | viewing_condition: … | evidence: <nhãn trong EVIDENCE_OPENED> …",
         "  consequence: … | confidence: high|medium|low",
         "  repair: … | preserve: … | acceptance: …",
-        *(["PRIOR:", *(f"- {i}: ? | evidence: ? | acceptance: {f['acceptance']}" for i, f in op.items())] if op else []),
+        *(prior_block(op) if op else []),
         "```",
         f"- FINDINGS chỉ ghi finding mới, id từ F{nxt}, đủ mọi trường; evidence dẫn nhãn trong EVIDENCE_OPENED. "
         "Không có finding mới: `FINDINGS: none`.",
@@ -690,8 +694,7 @@ def review_brief(cfg, st, step, n) -> str:
         *([f"- region mở đầu bằng {'|'.join(step['regions'])}, vd `{step['regions'][0]}: mép mái`"
            + "".join(f"; `{k}` nói về đầu ra của `{findings.REOPEN[k]}`, không theo luật này" for k in step["top_fix"]
                      if k in findings.REOPEN) + "."] if step["regions"] else []),
-        *(["- PRIOR: thay `?` bằng open|resolved|regressed|superseded. resolved chỉ khi thấy bằng chứng cho "
-           "acceptance, ghi nhãn ảnh đó vào evidence."] if op else []),
+        *([PRIOR_RULE] if op else []),
         *([f"- COMPARE: so ảnh cùng góc với v{m}: better|same|worse. resolved cần better; worse thì regressed."]
           if cmp_ids else []),
         "- VERDICT: còn blocker/major → FIX; chỉ còn unclear → FIX với TOP_FIX need_evidence; không còn → PASS; "
@@ -702,12 +705,17 @@ def review_brief(cfg, st, step, n) -> str:
         + "loại lô chỉ ghi loại, script điền mọi finding blocker/major/minor đang mở của loại đó; need_evidence chỉ ghi "
         "loại, script điền mọi finding unclear đang mở. PASS hoặc ESCALATE: `TOP_FIX: none`.",
         "- Không ghi COUNTS. Mỗi key unclear trong RUBRIC cần một finding unclear.",
+        NOTES_RULE,
         *([prefill_line(pre)] if pre else []),
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]
     text = "\n".join(lines) + "\n"
     return text.replace(sheet_bullet, short_bullet) if short_bullet and brief_size(text) > BRIEF_BYTES else text
+
+
+def prior_block(op: dict) -> list[str]:
+    return ["PRIOR:", *(f"- {i}: ? | evidence: ? | acceptance: {f['acceptance']}" for i, f in op.items())]
 
 
 def resumed_review_brief(st, step, n, ed) -> str:
@@ -721,10 +729,12 @@ def resumed_review_brief(st, step, n, ed) -> str:
         "",
         f"Ảnh bạn xin đã có: {', '.join(f'`{rel(p)}`' for p in sorted(ed.glob('*.png')))}.",
         f"Chấm lại v{n} với ảnh này. Report cùng format như lần trước, ghi vào "
-        f"`{rel(vdir(st['id'], step['id'], n) / 'review-out.md')}`.",
-        f"- PRIOR: mọi id đang mở {', '.join(findings.open_of(doc))}, kể cả id bạn vừa ghi. Không ghi COMPARE.",
+        f"`{rel(vdir(st['id'], step['id'], n) / 'review-out.md')}`. Không ghi COMPARE.",
+        "```", *prior_block(findings.open_of(doc)), "```",
+        PRIOR_RULE,
         f"- FINDINGS: chỉ finding mới, id từ F{doc['next_id']}, hoặc `FINDINGS: none`.",
         "- EVIDENCE_OPENED: thêm tên ảnh mới.",
+        NOTES_RULE,
         "",
         "Tin nhắn trả về cho Producer: chỉ dòng VERDICT. " + FALLBACK,
     ]

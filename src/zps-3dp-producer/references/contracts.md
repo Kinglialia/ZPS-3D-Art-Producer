@@ -161,9 +161,12 @@ FINDINGS:                            chỉ finding mới, id từ next_id của 
   repair: … | preserve: … | acceptance: …
 PRIOR:                               đúng mọi finding đang mở của bản gốc
 - F<n>: open|resolved|regressed|superseded | evidence: <nhãn>
+ESCALATE: <lý do; các phương án>     chỉ khi ESCALATE; script đưa vào ghi chú chờ người dùng
+## Ghi chú                           tùy chọn, cuối report; script bỏ qua
 ```
 
 `ingest` kiểm:
+- Dung thứ hình thức (P6-1): `PRIOR: F1=open; F2=open` trên dòng khóa đọc như các dòng `- F1: open`; dòng thụt lề ngay dưới `FINDINGS: none` là ghi chú; một dòng không thụt lề (kể cả tiêu đề `##`) kết thúc khối, các dòng sau nó là ghi chú. Một dòng finding (`- F<n> [mức] loại`) hay PRIOR (`- F<n>: trạng thái`) sau dòng đó vẫn bị từ chối, vì nó sẽ bị mất.
 - Finding đủ 8 trường của kit `issue-fields.json` (`region` … `acceptance`). Một trường không được chứa ` | <tên trường>:`.
 - `evidence` của finding mới và của `PRIOR … resolved` chứa ít nhất một nhãn trong `EVIDENCE_OPENED` (so chuỗi con, không phân biệt hoa thường, nhãn có hoặc không có đuôi file).
 - `PRIOR` có đúng các id đang mở (`open`, `regressed`) của bản gốc. Id mới không trùng id cũ.
