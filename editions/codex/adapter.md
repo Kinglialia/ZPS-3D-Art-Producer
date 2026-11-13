@@ -70,7 +70,8 @@ File này chỉ ghi cơ chế của runtime. Quy tắc nghiệp vụ nằm trong
 ## Phiên mới
 
 - Lệnh mở phiên sạch: `/new`.
-- So A/B: mở phiên bằng `PRODUCER_ROOT=production-codex codex` từ gốc project.
+- Project có cả bản Claude (`.claude/skills/` có skill Producer): script tự làm việc trong `production-codex/` và `deliver-codex/`. Không cần biến môi trường, kể cả trên app Codex desktop. Không ghi vào `production/` và `deliver/` của bản Claude.
+- Project chỉ có bản Codex: thư mục là `production/`. `PRODUCER_ROOT=<thư mục>` đặt lúc mở phiên thì thay cả hai mặc định trên.
 
 ## Review Board
 

@@ -796,3 +796,28 @@ def test_preflight_names_the_missing_rules_and_hook_until_the_installer_merged_t
     s.write_text(merged, encoding="utf-8")
     out, gap = preflight()
     assert ("thiếu" in out, gap["missing"]) == (False, {"allow": [], "hooks": {}, "env": {}})
+
+
+def producer_root(dist, edition, project, env=None):
+    """The folder the built edition works in, asked from the project root as every command is."""
+    prod = tree(dist, edition) / "skills" / ("zps-3dp-producer-codex" if edition == "codex" else "zps-3dp-producer")
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import root_guard; print(root_guard.default_root())"
+    e = {k: v for k, v in os.environ.items() if k not in ("PRODUCER_ROOT", "PRODUCER_RUNTIME")} | (env or {})
+    r = subprocess.run([sys.executable, "-c", code, str(prod / "scripts")], cwd=project, env=e, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_codex_works_in_its_own_folder_when_the_claude_edition_shares_the_project_with_no_environment_variable(
+        dist, tmp_path):
+    """The Codex desktop app cannot take PRODUCER_ROOT from a shell. Two editions in one production/ mix their ledgers
+    and hooks, so the Codex edition must leave production/ to Claude by itself."""
+    alone, shared = tmp_path / "alone", tmp_path / "shared"
+    alone.mkdir()
+    (shared / ".claude/skills/zps-3dp-producer").mkdir(parents=True)
+    (shared / ".agents/skills/zps-3dp-producer-codex").mkdir(parents=True)
+    assert producer_root(dist, "codex", shared) == "production-codex"
+    assert producer_root(dist, "codex", alone) == "production"
+    assert producer_root(dist, "claude", shared) == "production"
+    assert producer_root(dist, "codex", shared, {"PRODUCER_ROOT": "production-x"}) == "production-x"
+    assert producer_root(dist, "codex", alone, {"PRODUCER_ROOT": ""}) == "production"

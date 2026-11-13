@@ -18,9 +18,11 @@ try:
 except ModuleNotFoundError:
     sys.exit("LỖI: cần Python 3.11+ (tomllib).")
 
+import root_guard  # noqa: E402
+
 SKILL_DIR = Path(__file__).resolve().parents[2]
 TEMPLATES = SKILL_DIR / "templates"
-ROOT = Path(os.environ.get("PRODUCER_ROOT", "production"))
+ROOT = Path(root_guard.default_root())
 ASSETS = ROOT / "assets"
 ARCHIVE = ROOT / "archive"
 RUNTIMES = ("claude", "codex")

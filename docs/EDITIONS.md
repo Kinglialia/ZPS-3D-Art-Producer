@@ -62,4 +62,4 @@ Rule chỉ cho phép `<Blender> -b --python <script đã cài>.py -- …`, `<Ble
 
 ## So A/B
 
-`PRODUCER_ROOT=production-claude` cho phiên Claude Code, `PRODUCER_ROOT=production-codex` cho phiên Codex. Gói cuối vào `deliver-<runtime>/`. Mọi dòng ledger có cột runtime. Thư mục `production-<runtime>` chỉ nhận lệnh ghi của đúng runtime đó. `ab/` ở gốc project chứa `mapping.json`, `preferences.jsonl`, `judge/`, `compare.md`. Lệnh: `SKILL.md` mục So A/B.
+`PRODUCER_ROOT=production-claude` cho phiên Claude Code, `PRODUCER_ROOT=production-codex` cho phiên Codex. Không đặt biến: bản Claude dùng `production/`; bản Codex dùng `production-codex/` khi project có cả bản Claude (`scripts/root_guard.py default_root`), nên hai bản cài chung một project không dùng chung thư mục và app Codex desktop không cần cấu hình. Gói cuối vào `deliver-<runtime>/`. Mọi dòng ledger có cột runtime. Thư mục `production-<runtime>` chỉ nhận lệnh ghi của đúng runtime đó. `ab/` ở gốc project chứa `mapping.json`, `preferences.jsonl`, `judge/`, `compare.md`. Lệnh: `SKILL.md` mục So A/B.
